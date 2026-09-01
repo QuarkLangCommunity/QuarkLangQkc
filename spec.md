@@ -17,7 +17,7 @@
 ## 2. 词法与程序结构
 
 - 注释 `//`、`/* */`；标识符；整数/浮点/字符串字面量（`\n \t \r \" \\` 转义）。
-- 关键字：`func struct impl interface out(已废弃) return if else while for in true false log try catch macro null`。
+- 关键字：`fn struct impl interface out(已废弃) return if else while for in true false log try catch macro null`。
 - `#` 开头为预处理命令。
 - 程序 = 若干顶层声明 + 可选预制宏声明（`program`/`import`/`pub`） + `macro` 定义。
 
@@ -46,7 +46,7 @@
 
 ## 5. 函数（★ 核心）
 
-- **必须声明返回类型**：`func f(a int, b String) bool { ... }`（main 可省略，视为 `void`）。
+- **必须声明返回类型**：`fn f(a int, b String) bool { ... }`（main 可省略，视为 `void`）。
 - `return expr;`：返回结果并**结束函数**。
 - `log expr;`：记录一条日志并**结束函数**（返回任意值，默认 nil）。
 - **没有 `out`、没有多返回值**；多输出返回 `List<T>` 单值。
@@ -71,7 +71,7 @@ try {
   - mb 是 Sign 接口的**实例**（`mb memorize = memorize::new();`）；
   - `mb.call(prefix)` 输出一个**函数**，该函数接收 `.{in, out}` 两字段记录，返回结果；
   - **原函数放在 prefix 里**（`prefix.fn`）；按 `in` 记忆化，命中直接填 `out`。
-- Sign 接口：`interface { func call(prefix void, rec void) void; } Sign;`——只要求 `call`；任何类型 `impl Sign {...}` 即成为签名类型。
+- Sign 接口：`interface { fn call(prefix void, rec void) void; } Sign;`——只要求 `call`；任何类型 `impl Sign {...}` 即成为签名类型。
 - 内置：`memorize`（类，实现 Sign，`memorize::new()` 建实例，按 in 记忆化）。
 - memorize 的 call 输入为空 → 写作 `@mb()`；带参写作 `@mb(prefix)`。
 
@@ -84,13 +84,13 @@ struct {
 } Point;
 
 impl {
-    func translate(self, dx int, dy int) void {
+    fn translate(self, dx int, dy int) void {
         self.x = self.x + dx;
     }
-    func sum(self) int {
+    fn sum(self) int {
         return self.x + self.y;
     }
-    func new() Point {
+    fn new() Point {
         p Point;
         p.x = 3;
         p.y = 4;
@@ -105,7 +105,7 @@ impl {
 
 ## 9. main 与启动
 
-- `func main(io IOStream)`（可省略返回类型 = void）；可带 `env HashTable<String,String>`、`args List<String>`。
+- `fn main(io IOStream)`（可省略返回类型 = void）；可带 `env HashTable<String,String>`、`args List<String>`。
 - io 注入：`io.println(expr, ...)`、`io.print`、`io.readln()`、`io.setOut(FileOutputStream(path))`、`io.setIn`。
 - IO 执行表：按到达时间 FIFO，读优先于写；并发 IO 由语言层串行化。
 
@@ -153,11 +153,11 @@ macro {模式} {主体}
 ## 13. 示例
 
 ```quark
-func sq(n int) int {
+fn sq(n int) int {
     return n * n;
 }
 
-func main(io IOStream) {
+fn main(io IOStream) {
     mb memorize = memorize::new();
     io.println(sq(41) @mb());          // 1681（记忆化）
     pid int = taskm.spawn();
