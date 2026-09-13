@@ -1,0 +1,32 @@
+// K7/K8/K9/K11：C 风格 for、迭代 for、break、log、io.print
+fn sink(int n) int {
+    log n;
+    return n;
+}
+fn main(IOStream io) {
+    for (int i = 0; i < 3; i = i + 1) {
+        io.print(i, "-");
+    }
+    io.println("");
+    List<int> l = [10, 20, 30];
+    for (int x : l) {
+        io.print(x, " ");
+    }
+    io.println("");
+    int i = 0;
+    while (true) {
+        i = i + 1;
+        if (i > 2) { break; }
+        io.println(i);
+    }
+    for (int k = 0; k < 2; k = k + 1) {
+        for (int j = 0; j < 2; j = j + 1) {
+            if (j == 1) { break; }
+            io.print(k, j);
+        }
+    }
+    io.println("");
+    io.println(l.size());
+    sink(9);
+    io.println("done");
+}

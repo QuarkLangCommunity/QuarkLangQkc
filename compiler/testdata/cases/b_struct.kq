@@ -1,0 +1,47 @@
+// S3/S8/S10/S11/S12：struct 字段/方法/静态方法/space/运算符重载
+type struct { int a; String name; float f; bool ok; } Rec;
+impl {
+    fn new(int a, String n) Rec {
+        Rec r;
+        r.a = a;
+        r.name = n;
+        r.f = 1.5;
+        r.ok = true;
+        return r;
+    }
+    fn describe(Rec self) String { return self.name + "=" + self.a.toString(); }
+    fn bump(Rec self, int d) void { self.a = self.a + d; }
+} Rec;
+type struct { Rec r; int tag; } Wrap;
+impl {
+    fn show(Wrap self) String { return self.r.describe() + "/" + self.tag.toString(); }
+} Wrap;
+space {
+    fn max(int a, int b) int { if (a > b) { return a; } return b; }
+    fn twice(int a) int { return math::max(a, a) + a; }
+} math;
+type struct { int x; int y; } Vec;
+impl {
+    fn __add__(Vec self, Vec o) Vec { Vec r; r.x = self.x + o.x; r.y = self.y + o.y; return r; }
+    fn __eq__(Vec self, Vec o) bool { return self.x == o.x && self.y == o.y; }
+    fn __lt__(Vec self, Vec o) bool { return self.x < o.x; }
+    fn __neg__(Vec self) Vec { Vec r; r.x = 0 - self.x; r.y = 0 - self.y; return r; }
+} Vec;
+fn main(IOStream io) {
+    Rec r = Rec::new(3, "abc");
+    io.println(r.describe(), r.a, r.name, r.f, r.ok);
+    r.bump(4);
+    io.println(r.a);
+    Wrap w = .{r: r, tag: 9};
+    io.println(w.show());
+    io.println(math::max(3, 7), math::twice(5));
+    Vec a = .{x: 1, y: 2};
+    Vec b = .{x: 10, y: 20};
+    Vec c = a + b;
+    io.println(c.x, c.y);
+    io.println(a == b, a == a, a < b, b < a);
+    Vec d = -a;
+    io.println(d.x, d.y);
+    Rec z;
+    io.println(z.a, z.name, z.f, z.ok, z.name == "");
+}

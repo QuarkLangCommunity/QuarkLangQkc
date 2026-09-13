@@ -47,7 +47,7 @@ func cacheDir() string {
 
 // engineVersion 编译器/运行时代次：任何 cgen/宏展开行为变化都必须递增，
 // 避免 IR/二进制缓存返回旧引擎产物（本次踩坑：宏展开模式与 done-bool 修复被缓存吞掉）。
-const engineVersion = "4"
+const engineVersion = "7"
 
 // engineFingerprint 缓存键前缀：引擎代次 + 线程运行时指纹（运行时任何改动自动失效）。
 func engineFingerprint() string {
@@ -122,7 +122,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
-		ir, err = cgen.Transpile(expanded)
+		ir, err = cgen.Transpile(expanded, args[0])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)

@@ -1,0 +1,25 @@
+// T1/E3/E4：float / bool 变量与运算、String/bool 比较、io.print、float.toString
+fn main(IOStream io) {
+    float x = 1.5;
+    float y = 2.0;
+    io.println(x + y, x - y, x * y, x / y, -x);
+    io.println(1.0 / 3.0, 0.1 + 0.2, 3.0 / 2.0);
+    io.println(x > y, x < y, x == 1.5, x != y, x >= y, x <= y);
+    io.println(x.toString());
+    bool b = true;
+    bool c = false;
+    io.println(b, c);
+    io.println(b && !c, b || c, !b);
+    io.println(b == c, b != c, b == b);
+    io.println(b.toString());
+    io.print("p", 1, 1.5, true);
+    io.print("q");
+    io.println("");
+    String s = "abc";
+    String t = "abd";
+    io.println(s == t, s != t, s == "abc", s != "abc");
+    io.println(s < t, s > t, s <= t, s >= t);
+    io.println(s < "ab", "b" > s);
+    float f = 3;
+    io.println(f, f.toString());
+}

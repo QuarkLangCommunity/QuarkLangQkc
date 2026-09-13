@@ -1,0 +1,8 @@
+// 同目录库：pub 函数供 import "mathlib"; 使用（正典语法）。
+pub fn double(int n) int {
+    return n * 2;
+}
+
+pub fn square(int n) int {
+    return n * n;
+}

@@ -1,0 +1,22 @@
+// O：struct 引用语义（赋值/传参别名，与解释器一致）
+type struct { int a; int b; } Point;
+impl {
+    fn seta(Point self, int v) void { self.a = v; }
+    fn geta(Point self) int { return self.a; }
+    fn sum(Point self) int { return self.a + self.b; }
+} Point;
+fn touch(Point p) void { p.a = 42; }
+fn main(IOStream io) {
+    Point p = .{a: 1, b: 2};
+    Point q = p;
+    q.a = 99;
+    io.println(p.a, q.a);
+    p.seta(7);
+    io.println(p.a, q.a);
+    touch(p);
+    io.println(p.a, p.geta(), p.sum());
+    Point z;
+    io.println(z.a, z.b);
+    Point w = .{1, 2};
+    io.println(w.a, w.b, w == p, w == w);
+}

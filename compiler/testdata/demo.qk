@@ -1,0 +1,32 @@
+// qkc -run compiler/testdata/demo.qk
+// 正典语法端到端示例：import + 函数/递归 + 变量 + List + if/while + try/catch。
+import "mathlib";
+
+fn fact(int n) int {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fact(n - 1);
+}
+
+fn main(IOStream io) {
+    int x = 5;
+    io.println("x =", x, "2x =", double(x));
+    io.println("fact(5) =", fact(5), "square(6) =", square(6));
+
+    List<int> l = [1, 2, 3];
+    l.append(4);
+    int total = 0;
+    int i = 0;
+    while (i < l.size()) {
+        total = total + l[i];
+        i = i + 1;
+    }
+    io.println("list total =", total);
+
+    try {
+        int bad = 10 / 0;
+    } catch (void e) {
+        io.println("caught");
+    }
+}

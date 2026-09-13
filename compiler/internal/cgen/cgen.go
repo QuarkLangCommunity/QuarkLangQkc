@@ -1,22 +1,217 @@
-// Package cgen 将 QuarkLang 子集编译为 LLVM IR（跨系统编译器，LLVM 后端）。
-// 支持：变量声明/赋值（int/String）、io.println/print、算术与取模、
-// 比较、&&/||、布尔字面量、if/else、while。
+// Package cgen 将 QuarkLang 编译为 LLVM IR（跨系统编译器，LLVM 后端）。
+//
+// 前端只有一套语法源：internal/lang 的正典 AST（与解释器同源）。本包不再自带
+// 词法/语法分析，流程为：
+//
+//	lang.CompileWithImports(src, filename)  // 词法/语法/类型检查 + import 递归合并
+//	  → lowerProgram（lower.go）            // 正典 AST → cgen IR（不支持即报错）
+//	  → emitter（本文件）                    // cgen IR → LLVM IR
+//
+// 支持与不支持的构造清单见 lower.go 顶部说明；后端未 lower 的构造会返回带
+// 源码位置的明确错误，绝不静默错编。
+//
+// 值模型（与解释器语义对齐）：
+//   - int → i32，bool → i1，float → double，String → i8*
+//   - List<T> / struct 都是**引用**（堆对象指针），与解释器的 *List / *Struct
+//     别名语义一致：赋值/传参复制的是引用，字段/元素修改对所有别名可见
+//   - 结构体字段按声明顺序布局（LLVM 字面/命名结构体），零值 = calloc 清零
 package cgen
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"quarklang/internal/lang"
 )
 
 // Transpile 把 QuarkLang 源码编译为 LLVM IR。
-func Transpile(src string) (string, error) {
-	p := &parser{src: src, pos: 0}
-	if err := p.parseProgram(); err != nil {
+//
+// src 需已完成编译器侧宏展开（见 compiler/main.go 的 expandMacros）；
+// filename 用于 import 解析（同目录 .qk/.qlib，与解释器同一套递归合并语义）
+// 与诊断定位，可为 ""。
+func Transpile(src, filename string) (string, error) {
+	prog, err := lang.CompileWithImports(src, filename)
+	if err != nil {
 		return "", err
 	}
-	e := &emitter{fnMeta: programMeta(p.funcs, p.stmts)}
-	return e.emitProgram(p.funcs, p.stmts, p.structs), nil
+	lp, err := lowerProgram(prog, filename, src)
+	if err != nil {
+		return "", err
+	}
+	e := newEmitter(lp)
+	return e.emitProgram(lp), nil
+}
+
+// ---------- cgen IR ----------
+
+type exprKind int
+
+const (
+	kInt exprKind = iota
+	kFloat
+	kString
+	kBool
+	kIdent
+	kBin
+	kCmp
+	kAndOr
+	kCall
+	kList
+	kIndex
+	kMethod
+	kStructLit
+	kField
+	kToString
+)
+
+// expr 是 cgen IR 表达式。typ 由 lowering 填入语言类型（"?" = 未判定）。
+type expr struct {
+	kind exprKind
+	i    int64
+	f    float64
+	b    bool
+	s    string
+	op   string
+	typ  string
+	l, r *expr
+
+	call   *callExpr   // kCall
+	lst    *listLit    // kList
+	idx    *indexExpr  // kIndex
+	method *methodExpr // kMethod
+	sl     *structLit  // kStructLit
+	field  *fieldExpr  // kField
+
+	sc     strConst // 预注册的字符串常量（kString）
+	strcat bool     // kBin "+" 且为 String 拼接（有 ql_strcat 副作用）
+	line   int      // 运行期错误定位（除零等）
+}
+
+type indexExpr struct {
+	name string // List 变量名
+	i    *expr
+}
+
+type methodExpr struct {
+	recv   *expr
+	name   string // 方法名
+	args   []*expr
+	sig    string // IR 函数名（lowering 解析后填入）
+	isSelf bool   // 实例方法（需要 receiver 实参）
+}
+
+type fieldExpr struct {
+	recv *expr
+	name string
+	typ  string // 接收者的 struct 类型名
+}
+
+type structLit struct {
+	typ    string // 目标 struct 类型名
+	values []*expr
+}
+
+type stmt interface{}
+
+type exprStmt struct{ x *expr }
+type returnStmt struct{ x *expr }
+type printlnStmt struct{ args []*expr }
+type printStmt struct{ args []*expr }
+
+type declStmt struct {
+	name string
+	typ  string
+	init *expr
+}
+
+type assignStmt struct {
+	name string
+	x    *expr
+}
+
+type indexAssignStmt struct {
+	name string
+	idx  *expr
+	x    *expr
+}
+
+type fieldAssignStmt struct {
+	recv  *expr
+	field string
+	x     *expr
+}
+
+type ifStmt struct {
+	cond *expr
+	then []stmt
+	els  []stmt
+}
+
+type whileStmt struct {
+	cond *expr
+	body []stmt
+}
+
+type forStmt struct {
+	init stmt
+	cond *expr
+	step stmt
+	body []stmt
+}
+
+type forInStmt struct {
+	name string
+	typ  string
+	list string
+	body []stmt
+}
+
+type breakStmt struct{}
+
+type tryStmt struct {
+	then  []stmt
+	catch []stmt
+}
+
+type deleteStmt struct{ name string }
+
+type logStmt struct{ x *expr }
+
+type listLit struct {
+	items []*expr
+}
+
+type callExpr struct {
+	name string // IR 函数名
+	args []*expr
+}
+
+type funcParam struct {
+	name string
+	typ  string
+}
+
+type funcDef struct {
+	name      string // IR 函数名（已修饰：Point_sum / math_max / …）
+	params    []funcParam
+	ret       string
+	body      []stmt
+	selfTyp   string // impl 方法 receiver 的 struct 类型名
+	selfParam string // receiver 参数名（self）
+}
+
+type structDef struct {
+	name       string
+	fields     []string
+	fieldTypes []string
+}
+
+// lowered 是正典 AST 降到 cgen IR 后的程序。
+type lowered struct {
+	funcs     []*funcDef // 非 main 函数
+	mainStmts []stmt     // fn main 的函数体
+	structs   []structDef
 }
 
 // ---------- LLVM IR 发射器 ----------
@@ -26,39 +221,95 @@ type strConst struct {
 	size int
 }
 
-type varInfo struct {
-	reg      string
-	isStr    bool
-	isList   bool
-	param    bool // 函数参数：值寄存器，直接使用不 load
-	direct   bool // SSA 直通：单赋值变量直接用寄存器（免 alloca/load/store）
-	isThread bool // thread 变量：i64 tid 槽
-	isStruct bool // struct 参数/变量（值/指针）
+// varSlot 是变量的存储：alloca 槽（reg 是槽指针）或 SSA 直通/参数（reg 是值）。
+type varSlot struct {
+	reg    string
+	typ    string // 语言类型
+	param  bool   // 函数参数：值寄存器
+	direct bool   // SSA 直通（单赋值标量）
+}
+
+type structField struct {
+	name string
+	typ  string
+}
+
+type funcSig struct {
+	name   string
+	params []funcParam
+	ret    string
 }
 
 type emitter struct {
-	fnMeta       map[string]*fnMeta // 函数属性分析（norecurse/mustprogress）
-	b            strings.Builder    // 模块头（printf 声明 + 字符串常量）
-	body         strings.Builder    // 函数体（基本块 + 指令）
-	cur          string             // 当前基本块名
-	blockCount   int
-	vars         map[string]varInfo
-	regCount     int
-	strs         map[string]strConst
-	strCount     int
-	funcReturned bool            // 函数已 ret（后续语句不可达，跳过生成）
-	assigned     map[string]bool // 被赋值变量（SSA 直通判定）
-	runners      []string        // taskm.merge 的 runner 函数名（fn@N）
-	runnerFn     map[string]string
-	curTry       string              // 当前 try 的 catch label（错误检查跳转）
-	structs      map[string][]string // struct 名 → 字段名
-	structVars   map[string]string   // struct 变量名 → alloca 寄存器
-	structTypes  map[string]string   // struct 变量名 → struct 类型名
-	methods      map[string]string   // struct 方法名（Type_method）→ 函数名
+	fnMeta map[string]*fnMeta
+
+	types   strings.Builder // %Point = type { ... } / %List = type { ... }
+	globals strings.Builder // 字符串常量
+	decls   strings.Builder // declare（外部符号）
+	helpers strings.Builder // 运行期助手（按需）
+	bodies  strings.Builder // 函数定义
+
+	body strings.Builder // 当前函数体
+	cur  string
+
+	blockCount int
+	regCount   int
+	strs       map[string]strConst
+	strCount   int
+
+	vars    map[string]varSlot
+	structs map[string][]structField
+	sigs    map[string]*funcSig
+	curRet  string
+	curTry  string
+	breaks  []string
+
+	funcReturned bool
+	term         bool // 当前基本块已由 br/ret/unreachable 封闭
+	assigned     map[string]bool
+
+	emitted        map[string]bool
+	hasList        bool
+	hasEmpty       bool
+	needIntToStr   bool
+	needFloatToStr bool
+	needStrCmp     bool
+	needPanic      bool
+}
+
+func newEmitter(lp *lowered) *emitter {
+	e := &emitter{
+		fnMeta:  programMeta(lp.funcs, lp.mainStmts),
+		vars:    map[string]varSlot{},
+		structs: map[string][]structField{},
+		sigs:    map[string]*funcSig{},
+		strs:    map[string]strConst{},
+	}
+	for _, sd := range lp.structs {
+		fs := make([]structField, 0, len(sd.fields))
+		for i, n := range sd.fields {
+			t := "int"
+			if i < len(sd.fieldTypes) {
+				t = sd.fieldTypes[i]
+			}
+			fs = append(fs, structField{name: n, typ: t})
+		}
+		e.structs[sd.name] = fs
+	}
+	for _, fd := range lp.funcs {
+		e.sigs[fd.name] = &funcSig{name: fd.name, params: fd.params, ret: fd.ret}
+	}
+	return e
 }
 
 func (e *emitter) emitInstr(f string, args ...interface{}) {
-	e.body.WriteString("  " + fmt.Sprintf(f, args...) + "\n")
+	s := fmt.Sprintf(f, args...)
+	e.body.WriteString("  " + s + "\n")
+	// 终结指令（br/ret/unreachable）后当前基本块已封闭：后续语句不可达，
+	// 且同一块内不得再出现第二条终结指令（否则 LLVM 会插入匿名块，SSA 编号错乱）。
+	if strings.HasPrefix(s, "br ") || strings.HasPrefix(s, "ret ") || s == "unreachable" {
+		e.term = true
+	}
 }
 
 func (e *emitter) newBlock() string {
@@ -73,16 +324,7 @@ func (e *emitter) setBlock(name string) {
 		e.body.WriteString("\n" + name + ":\n")
 		e.cur = name
 	}
-}
-
-// toI64 把 i32 寄存器扩展为 i64（字面量直接可用）。
-func (e *emitter) toI64(reg string) string {
-	if strings.HasPrefix(reg, "%") {
-		r := e.newReg()
-		e.emitInstr("%s = sext i32 %s to i64", r, reg)
-		return r
-	}
-	return reg
+	e.term = false
 }
 
 func (e *emitter) newReg() string {
@@ -101,7 +343,7 @@ func (e *emitter) strConst(s string) strConst {
 	e.strCount++
 	c := strConst{name: fmt.Sprintf("@.str%d", e.strCount), size: len(s) + 1}
 	e.strs[s] = c
-	fmt.Fprintf(&e.b, "%s = private unnamed_addr constant [%d x i8] c\"%s\", align 1\n",
+	fmt.Fprintf(&e.globals, "%s = private unnamed_addr constant [%d x i8] c\"%s\", align 1\n",
 		c.name, c.size, llvmEscape([]byte(s)))
 	return c
 }
@@ -127,65 +369,218 @@ func llvmEscape(b []byte) string {
 	return sb.String()
 }
 
-func (e *emitter) emitProgram(funcs []*funcDef, mainStmts []stmt, structs []structDef) string {
-	e.structs = map[string][]string{}
-	e.structVars = map[string]string{}
-	e.structTypes = map[string]string{}
-	e.methods = map[string]string{}
-	for _, sd := range structs {
-		e.structs[sd.name] = sd.fields
-	}
-	for _, fd := range funcs {
-		if fd.selfTyp != "" {
-			e.methods[fd.selfTyp+"_"+strings.TrimPrefix(fd.name, fd.selfTyp+"_")] = fd.name
+// ---------- 类型映射 ----------
+
+// tyName 把语言类型名转成 LLVM 标识符安全的类型名（泛型实例：Box<int> → Box_int_）。
+func tyName(t string) string {
+	var sb strings.Builder
+	for _, r := range t {
+		switch r {
+		case '<', '>', ',', ' ', '[', ']', '&':
+			sb.WriteByte('_')
+		default:
+			sb.WriteRune(r)
 		}
 	}
-	e.b.WriteString("declare i32 @printf(i8* noundef, ...)\n")
-	e.b.WriteString("declare i8* @malloc(i64)\n")
-	e.b.WriteString("declare void @free(i8*)\n")
-	e.b.WriteString("declare i8* @realloc(i8*, i64)\n")
-	e.b.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
-	e.b.WriteString("declare i8* @ql_channel_new(i32)\n")
-	e.b.WriteString("declare i32 @ql_send(i8*, i32)\n")
-	e.b.WriteString("declare i32 @ql_recv(i8*)\n")
-	e.b.WriteString("declare i8* @ql_spawn()\n")
-	e.b.WriteString("declare void @ql_merge(i8*, i8*, i32)\n")
-	e.b.WriteString("declare void @ql_block(i8*)\n")
-	e.b.WriteString("declare i32 @ql_done(i8*)\n")
-	e.b.WriteString("declare i8* @ql_strcat(i8*, i8*)\n\n")
-	e.vars = map[string]varInfo{}
+	return sb.String()
+}
+
+// ensureStruct 保证 struct 类型的 LLVM 定义已发射（按需、幂等）。
+func (e *emitter) ensureStruct(name string) {
+	fields, ok := e.structs[name]
+	if !ok || e.emitted[name] {
+		return
+	}
+	e.emitted[name] = true
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%%%s = type { ", tyName(name))
+	for i, f := range fields {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(e.ir(f.typ))
+	}
+	sb.WriteString(" }\n")
+	e.types.WriteString(sb.String())
+}
+
+
+
+// ensureList 保证 List 类型的 LLVM 定义已发射。
+func (e *emitter) ensureList() {
+	if e.hasList {
+		return
+	}
+	e.hasList = true
+	e.types.WriteString("%List = type { i32*, i32, i32 }\n") // buf, head, tail
+}
+
+// irElem 返回聚合类型的元素类型（GEP 的源类型）：%Point* → %Point；标量原样。
+func (e *emitter) irElem(t string) string {
+	p := e.ir(t)
+	if strings.HasPrefix(p, "%") {
+		return strings.TrimSuffix(p, "*")
+	}
+	return p
+}
+
+// ir 返回语言类型的 LLVM 表示。
+func (e *emitter) ir(t string) string {
+	switch t {
+	case "int":
+		return "i32"
+	case "bool":
+		return "i1"
+	case "float":
+		return "double"
+	case "String":
+		return "i8*"
+	case "void", "":
+		return "void"
+	}
+	if t == "List<int>" || t == "List<String>" || t == "List<float>" || t == "List<bool>" {
+		e.ensureList()
+		return "%List*"
+	}
+	if _, ok := e.structs[t]; ok {
+		e.ensureStruct(t)
+		return "%" + tyName(t) + "*"
+	}
+	return "i32"
+}
+
+// alignOf 返回类型的对齐字节数。
+func (e *emitter) alignOf(t string) int {
+	switch t {
+	case "bool":
+		return 1
+	case "float", "String", "List<int>", "List<String>", "List<float>", "List<bool>":
+		return 8
+	}
+	return 4
+}
+
+// emptyString 返回空串指针（String 的零值：解释器零值 String 打印为 ""，
+// 不能是 null —— printf("%s", NULL) 会打印 "(null)"，strcmp 会崩溃）。
+func (e *emitter) emptyString() string {
+	if !e.hasEmpty {
+		e.hasEmpty = true
+		e.globals.WriteString("@.empty = private unnamed_addr constant [1 x i8] zeroinitializer, align 1\n")
+	}
+	r := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds [1 x i8], [1 x i8]* @.empty, i64 0, i64 0", r)
+	return r
+}
+
+// zeroOf 返回语言类型的零值（按 LLVM 类型）。
+func (e *emitter) zeroOf(t string) string {
+	switch t {
+	case "int":
+		return "0"
+	case "bool":
+		return "false"
+	case "float":
+		return "0.0"
+	case "String":
+		return e.emptyString()
+	}
+	return "null" // List / struct：引用零值 = null
+}
+
+// zeroStructFields 把刚分配（calloc 清零）的 struct 的引用型字段初始化为零值对象：
+// String → 空串；嵌套 struct → 递归分配零值实例（解释器零值 struct 的字段是有效对象）。
+func (e *emitter) zeroStructFields(ptr, typ string, depth int) {
+	if depth > 16 {
+		return
+	}
+	fields := e.structs[typ]
+	for i, f := range fields {
+		if f.typ != "String" && !e.isStruct(f.typ) {
+			continue
+		}
+		g := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(typ), e.irElem(typ), ptr, i)
+		if f.typ == "String" {
+			v := e.emptyString()
+			e.emitInstr("store i8* %s, i8** %s", v, g)
+			continue
+		}
+		obj := e.structAlloc(f.typ)
+		v := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %s", v, obj, e.ir(f.typ))
+		e.zeroStructFields(v, f.typ, depth+1)
+		e.emitInstr("store %s %s, %s* %s", e.ir(f.typ), v, e.ir(f.typ), g)
+	}
+}
+
+// ---------- 程序组装 ----------
+
+func (e *emitter) emitProgram(lp *lowered) string {
+	e.emitted = map[string]bool{}
+	e.decls.WriteString("declare i32 @printf(i8* noundef, ...)\n")
+	e.decls.WriteString("declare i8* @malloc(i64)\n")
+	e.decls.WriteString("declare i8* @calloc(i64, i64)\n")
+	e.decls.WriteString("declare void @free(i8*)\n")
+	e.decls.WriteString("declare i8* @realloc(i8*, i64)\n")
+	e.decls.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
+	e.decls.WriteString("declare i8* @ql_strcat(i8*, i8*)\n")
+	e.decls.WriteString("declare i32 @snprintf(i8*, i64, i8*, ...)\n")
+	e.decls.WriteString("declare i32 @strcmp(i8*, i8*)\n")
+	e.decls.WriteString("declare double @strtod(i8*, i8**)\n")
+	e.decls.WriteString("declare i64 @write(i32, i8*, i64)\n")
+	e.decls.WriteString("declare void @exit(i32)\n\n")
+
+	e.vars = map[string]varSlot{}
 	// 预注册全部字符串常量
 	e.strConst("true")
 	e.strConst("false")
-	for _, fd := range funcs {
+	for _, fd := range lp.funcs {
 		for _, s := range fd.body {
 			e.preRegisterStmt(s)
 		}
 	}
-	for _, s := range mainStmts {
+	for _, s := range lp.mainStmts {
 		e.preRegisterStmt(s)
 	}
 	// 预扫描被赋值变量（决定 SSA 直通）
 	e.assigned = map[string]bool{}
-	for _, fd := range funcs {
+	for _, fd := range lp.funcs {
 		scanAssigned(fd.body, e.assigned)
 	}
-	scanAssigned(mainStmts, e.assigned)
-	// 先生成全部函数体（期间动态字符串常量追加到 e.b），最后统一组装：常量全部先于函数
-	var bodies strings.Builder
-	for _, fd := range funcs {
+	scanAssigned(lp.mainStmts, e.assigned)
+
+	// 先生成全部函数体（期间动态追加字符串常量/类型定义），最后统一组装
+	for _, fd := range lp.funcs {
 		if fd.name != "main" {
-			bodies.WriteString(e.emitFunc(fd))
+			e.bodies.WriteString(e.emitFunc(fd))
 		}
 	}
 	e.cur = "entry"
+	e.curRet = "int" // main 的 LLVM 返回类型是 i32（log/末尾统一 ret i32 0）
 	e.body.Reset()
 	e.funcReturned = false
+	e.term = false
+	e.breaks = nil
+	e.curTry = ""
 	e.body.WriteString("entry:\n")
-	e.emitBlock(mainStmts)
-	e.emitInstr("ret i32 0")
-	bodies.WriteString("define i32 @main()" + fnAttrs("main", e.fnMeta) + " {\n" + e.body.String() + "}\n")
-	return e.b.String() + emitRunners(e.runners) + bodies.String()
+	e.emitBlock(lp.mainStmts)
+	if !e.term {
+		e.emitInstr("ret i32 0")
+	}
+	e.bodies.WriteString("define i32 @main()" + fnAttrs("main", e.fnMeta) + " {\n" + e.body.String() + "}\n")
+
+	helpers := ""
+	if e.needIntToStr {
+		helpers += intToStrHelper
+	}
+	if e.needFloatToStr {
+		helpers += floatToStrHelper
+	}
+	if e.needPanic {
+		helpers += panicHelper
+	}
+	return e.types.String() + e.globals.String() + e.decls.String() +
+		helpers + e.bodies.String()
 }
 
 // emitFunc 生成单个非 main 函数的定义。
@@ -193,44 +588,72 @@ func (e *emitter) emitFunc(fd *funcDef) string {
 	// 注意：regCount 不重置——LLVM 寄存器编号是模块全局递增的
 	e.blockCount = 0
 	e.body.Reset()
-	e.vars = map[string]varInfo{}
+	e.vars = map[string]varSlot{}
+	e.curRet = fd.ret
+	e.curTry = ""
+	e.breaks = nil
+	retTy := e.ir(fd.ret)
 	var sig strings.Builder
-	sig.WriteString("define i32 @" + fd.name + "(")
-	off := 0
-	if fd.selfTyp != "" {
-		// receiver：struct 值参数 {i32 x N}
-		fields := e.structs[fd.selfTyp]
-		typ := "{ "
-		for i := 0; i < len(fields); i++ {
-			if i > 0 {
-				typ += ", "
-			}
-			typ += "i32"
-		}
-		typ += " }"
-		sig.WriteString(typ + " noundef %self")
-		e.vars[fd.selfParam] = varInfo{reg: "self", param: true, isStruct: true}
-		e.structTypes[fd.selfParam] = fd.selfTyp
-		off = 1
-	}
-	for i, p := range fd.params {
-		if i+off > 0 {
+	sig.WriteString("define " + retTy + " @" + fd.name + "(")
+	first := true
+	addParam := func(typ, reg string) {
+		if !first {
 			sig.WriteString(", ")
 		}
-		reg := fmt.Sprintf("%%p%d", i+off)
-		sig.WriteString("i32 noundef " + reg)
-		e.vars[p] = varInfo{reg: reg, param: true}
+		first = false
+		sig.WriteString(typ + " noundef " + reg)
+	}
+	if fd.selfTyp != "" {
+		addParam(e.ir(fd.selfTyp), "%self")
+		e.vars[fd.selfParam] = varSlot{reg: "%self", typ: fd.selfTyp, param: true}
+	}
+	paramRegs := make([]string, 0, len(fd.params))
+	for i, p := range fd.params {
+		reg := fmt.Sprintf("%%p%d", i)
+		addParam(e.ir(p.typ), reg)
+		paramRegs = append(paramRegs, reg)
+		e.vars[p.name] = varSlot{reg: reg, typ: p.typ, param: true}
 	}
 	sig.WriteString(")" + fnAttrs(fd.name, e.fnMeta) + "\n")
 	e.cur = "entry"
 	e.body.WriteString("entry:\n")
+	// 被赋值的参数提升为 alloca 槽：LLVM 的 SSA 参数寄存器不可写
+	promote := func(name, typ, val string) {
+		slot := e.newReg()
+		llt := e.ir(typ)
+		e.emitInstr("%s = alloca %s, align %d", slot, llt, e.alignOf(typ))
+		e.emitInstr("store %s %s, %s* %s", llt, val, llt, slot)
+		e.vars[name] = varSlot{reg: slot, typ: typ}
+	}
+	if fd.selfTyp != "" && e.assigned[fd.selfParam] {
+		promote(fd.selfParam, fd.selfTyp, "%self")
+	}
+	for i, p := range fd.params {
+		if e.assigned[p.name] {
+			promote(p.name, p.typ, paramRegs[i])
+		}
+	}
 	e.funcReturned = false
+	e.term = false
 	e.emitBlock(fd.body)
-	if !e.funcReturned {
-		e.emitInstr("ret i32 0")
+	if !e.funcReturned && !e.term {
+		switch fd.ret {
+		case "int":
+			e.emitInstr("ret i32 0")
+		case "bool":
+			e.emitInstr("ret i1 false")
+		case "float":
+			e.emitInstr("ret double 0.0")
+		case "String":
+			e.emitInstr("ret i8* %s", e.emptyString())
+		default:
+			e.emitInstr("ret void")
+		}
 	}
 	return sig.String() + "{\n" + e.body.String() + "}\n"
 }
+
+// ---------- 语句 ----------
 
 func (e *emitter) preRegisterStmt(s stmt) {
 	switch st := s.(type) {
@@ -245,11 +668,23 @@ func (e *emitter) preRegisterStmt(s stmt) {
 		for _, a := range st.args {
 			e.preRegister(a)
 		}
+	case *printStmt:
+		for _, a := range st.args {
+			e.preRegister(a)
+		}
 	case *exprStmt:
 		e.preRegister(st.x)
 	case *declStmt:
 		e.preRegister(st.init)
 	case *assignStmt:
+		e.preRegister(st.x)
+	case *returnStmt:
+		e.preRegister(st.x)
+	case *indexAssignStmt:
+		e.preRegister(st.idx)
+		e.preRegister(st.x)
+	case *fieldAssignStmt:
+		e.preRegister(st.recv)
 		e.preRegister(st.x)
 	case *ifStmt:
 		e.preRegister(st.cond)
@@ -264,6 +699,23 @@ func (e *emitter) preRegisterStmt(s stmt) {
 		for _, s2 := range st.body {
 			e.preRegisterStmt(s2)
 		}
+	case *forStmt:
+		if st.init != nil {
+			e.preRegisterStmt(st.init)
+		}
+		e.preRegister(st.cond)
+		if st.step != nil {
+			e.preRegisterStmt(st.step)
+		}
+		for _, s2 := range st.body {
+			e.preRegisterStmt(s2)
+		}
+	case *forInStmt:
+		for _, s2 := range st.body {
+			e.preRegisterStmt(s2)
+		}
+	case *logStmt:
+		e.preRegister(st.x)
 	}
 }
 
@@ -276,12 +728,39 @@ func (e *emitter) preRegister(x *expr) {
 	}
 	e.preRegister(x.l)
 	e.preRegister(x.r)
+	if x.call != nil {
+		for _, a := range x.call.args {
+			e.preRegister(a)
+		}
+	}
+	if x.method != nil {
+		e.preRegister(x.method.recv)
+		for _, a := range x.method.args {
+			e.preRegister(a)
+		}
+	}
+	if x.field != nil {
+		e.preRegister(x.field.recv)
+	}
+	if x.lst != nil {
+		for _, it := range x.lst.items {
+			e.preRegister(it)
+		}
+	}
+	if x.sl != nil {
+		for _, v := range x.sl.values {
+			e.preRegister(v)
+		}
+	}
+	if x.idx != nil {
+		e.preRegister(x.idx.i)
+	}
 }
 
 func (e *emitter) emitBlock(stmts []stmt) {
 	for _, s := range stmts {
-		if e.funcReturned {
-			return // ret 之后的语句不可达，跳过
+		if e.funcReturned || e.term {
+			return // 终结指令之后的语句不可达，跳过
 		}
 		e.emitStmt(s)
 	}
@@ -292,523 +771,822 @@ func (e *emitter) emitStmt(s stmt) {
 	case *exprStmt:
 		e.compileExpr(st.x) // 副作用求值，结果丢弃
 	case *returnStmt:
-		// 尾调用优化：return f(args) → tail call（尾递归栈 O(1)，LLVM 消除帧）
-		if st.x.kind == kCall && st.x.call != nil && st.x.call.name != "sum" && st.x.call.name != "clock" {
-			c := st.x
-			argRegs := make([]string, 0, len(c.call.args))
-			for _, a := range c.call.args {
-				av, _ := e.compileExpr(a)
-				argRegs = append(argRegs, av)
-			}
-			r := e.newReg()
-			e.body.WriteString(r)
-			e.body.WriteString(" = tail call i32 @" + c.call.name)
-			if len(argRegs) > 0 {
-				e.body.WriteString("(i32 " + strings.Join(argRegs, ", i32 ") + ")\n")
-			} else {
-				e.body.WriteString("()\n")
-			}
-			e.emitInstr("ret i32 %s", r)
-			e.funcReturned = true
-			break
-		}
-		v, _ := e.compileExpr(st.x)
-		e.emitInstr("ret i32 %s", v)
-		e.funcReturned = true
+		e.emitReturn(st)
 	case *printlnStmt:
-		e.emitPrintln(st)
+		e.emitPrint(st.args, true)
+	case *printStmt:
+		e.emitPrint(st.args, false)
 	case *declStmt:
-		if st.typ == "List<int>" {
-			// List<int> = [a, b, c]：List 编译为 {i32*, i32}（ptr + len），支持 size()/get(i)
-			lit := st.init.lst
-			n := len(lit.items)
-			reg := e.newReg()
-			e.emitInstr("%s = alloca { i32*, i32 }, align 8", reg)
-			mc := e.newReg()
-			e.emitInstr("%s = call i8* @malloc(i64 %d)", mc, n*4)
-			p := e.newReg()
-			e.emitInstr("%s = bitcast i8* %s to i32*", p, mc)
-			for i, it := range lit.items {
-				v, _ := e.compileExpr(it)
-				if i == 0 {
-					e.emitInstr("store i32 %s, i32* %s", v, p)
-				} else {
-					g2 := e.newReg()
-					e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %d", g2, p, i)
-					e.emitInstr("store i32 %s, i32* %s", v, g2)
-				}
-			}
-			pf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 0", pf, reg)
-			e.emitInstr("store i32* %s, i32** %s", p, pf)
-			lf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 1", lf, reg)
-			e.emitInstr("store i32 %d, i32* %s", n, lf)
-			e.vars[st.name] = varInfo{reg: reg, isList: true}
-			break
-		}
-		// thread 变量：t thread = taskm.spawn() → 用户态任务对象（i8*，由运行时线程池承载）
-		if st.typ == "thread" {
-			reg := e.newReg()
-			e.emitInstr("%s = alloca i8*, align 8", reg)
-			rc := e.newReg()
-			e.emitInstr("%s = call i8* @ql_spawn()", rc)
-			e.emitInstr("store i8* %s, i8** %s", rc, reg)
-			e.vars[st.name] = varInfo{reg: reg, isThread: true}
-			break
-		}
-		// struct 变量：Point p = .{1, 2} → alloca {i32 x N} + 字段 store
-		if fields, ok := e.structs[st.typ]; ok {
-			reg := e.newReg()
-			typ := "{ "
-			for i := 0; i < len(fields); i++ {
-				if i > 0 {
-					typ += ", "
-				}
-				typ += "i32"
-			}
-			typ += " }"
-			e.emitInstr("%s = alloca %s, align 8", reg, typ)
-			if st.init != nil && st.init.kind == kStructLit {
-				for i, v := range st.init.sl.values {
-					val, _ := e.compileExpr(v)
-					f := e.newReg()
-					e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", f, typ, typ, reg, i)
-					e.emitInstr("store i32 %s, i32* %s", val, f)
-				}
-			}
-			e.structVars[st.name] = reg
-			e.structTypes[st.name] = st.typ
-			e.vars[st.name] = varInfo{reg: reg}
-			break
-		}
-		// channel 变量：c channel = taskm.channel() → 锁队列（i8*）
-		if st.typ == "channel" {
-			reg := e.newReg()
-			e.emitInstr("%s = alloca i8*, align 8", reg)
-			rc := e.newReg()
-			e.emitInstr("%s = call i8* @ql_channel_new(i32 1024)", rc)
-			e.emitInstr("store i8* %s, i8** %s", rc, reg)
-			e.vars[st.name] = varInfo{reg: reg}
-			break
-		}
-		// 先分配再求值：保证 SSA 寄存器编号单调递增
-		if st.typ == "int" && !e.assigned[st.name] && !e.funcReturned {
-			// SSA 直通：单赋值 int 变量直接用寄存器（免 alloca/load/store）
-			v, _ := e.compileExpr(st.init)
-			e.vars[st.name] = varInfo{reg: v, direct: true}
-			break
-		}
-		reg := e.newReg()
-		if st.typ == "String" {
-			e.emitInstr("%s = alloca i8*, align 8", reg)
-			v, _ := e.compileExpr(st.init)
-			e.emitInstr("store i8* %s, i8** %s", v, reg)
-			e.vars[st.name] = varInfo{reg: reg, isStr: true}
-		} else {
-			e.emitInstr("%s = alloca i32, align 4", reg)
-			v, _ := e.compileExpr(st.init)
-			e.emitInstr("store i32 %s, i32* %s", v, reg)
-			e.vars[st.name] = varInfo{reg: reg}
-		}
-	case *tryStmt:
-		oldTry := e.curTry
-		catchL := e.newBlock()
-		afterL := e.newBlock()
-		e.curTry = catchL
-		for _, s := range st.then {
-			e.emitStmt(s)
-		}
-		if !e.funcReturned {
-			e.emitInstr("br label %%%s", afterL) // 正常路径跳过 catch
-		}
-		e.curTry = oldTry
-		e.setBlock(catchL)
-		for _, s := range st.catch {
-			e.emitStmt(s)
-		}
-		if !e.funcReturned {
-			e.emitInstr("br label %%%s", afterL)
-		}
-		e.setBlock(afterL)
-	case *indexAssignStmt:
-		// l[i] = v：取 ptr 字段 + gep + store
-		if info, ok := e.vars[st.name]; ok {
-			pf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 0", pf, info.reg)
-			lp := e.newReg()
-			e.emitInstr("%s = load i32*, i32** %s", lp, pf)
-			i, _ := e.compileExpr(st.idx)
-			i64i := e.toI64(i)
-			g2 := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, lp, i64i)
-			v, _ := e.compileExpr(st.x)
-			e.emitInstr("store i32 %s, i32* %s", v, g2)
-		}
-	case *deleteStmt:
-		// delete variable; —— 编译路径 = free（空闲队列语义由运行时内存管理器承担）
-		info, ok := e.vars[st.name]
-		if !ok {
-			break
-		}
-		if info.isList {
-			pf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 0", pf, info.reg)
-			lp := e.newReg()
-			e.emitInstr("%s = load i32*, i32** %s", lp, pf)
-			c := e.newReg()
-			e.emitInstr("%s = bitcast i32* %s to i8*", c, lp)
-			e.emitInstr("call void @free(i8* %s)", c)
-		} else {
-			c := e.newReg()
-			e.emitInstr("%s = bitcast i32* %s to i8*", c, info.reg)
-			e.emitInstr("call void @free(i8* %s)", c)
-		}
+		e.emitDecl(st)
 	case *assignStmt:
-		info, ok := e.vars[st.name]
-		if !ok {
-			// 编译器侧严格检查：未声明变量
-			e.emitInstr("; undeclared variable %s", st.name)
+		e.emitAssign(st)
+	case *indexAssignStmt:
+		e.emitIndexAssign(st)
+	case *fieldAssignStmt:
+		e.emitFieldAssign(st)
+	case *tryStmt:
+		e.emitTry(st)
+	case *deleteStmt:
+		e.emitDelete(st)
+	case *ifStmt:
+		e.emitIf(st)
+	case *whileStmt:
+		e.emitWhile(st)
+	case *forStmt:
+		e.emitFor(st)
+	case *forInStmt:
+		e.emitForIn(st)
+	case *breakStmt:
+		if len(e.breaks) > 0 {
+			e.emitInstr("br label %%%s", e.breaks[len(e.breaks)-1])
+		}
+	case *logStmt:
+		e.compileExpr(st.x) // 求值（副作用），结果只进日志
+		e.emitRetZero()     // log 记录后立即结束函数（解释器返回 nil）
+	}
+}
+
+// emitRetZero 发射当前函数返回类型的零值返回（log 用）。
+func (e *emitter) emitRetZero() {
+	switch e.curRet {
+	case "int":
+		e.emitInstr("ret i32 0")
+	case "bool":
+		e.emitInstr("ret i1 false")
+	case "float":
+		e.emitInstr("ret double 0.0")
+	case "String":
+		e.emitInstr("ret i8* null")
+	default:
+		e.emitInstr("ret void")
+	}
+	e.funcReturned = true
+}
+
+func (e *emitter) emitReturn(st *returnStmt) {
+	if st.x == nil {
+		e.emitRetZero()
+		return
+	}
+	// 尾调用优化：return f(args) → tail call（尾递归栈 O(1)）
+	if st.x.kind == kCall && st.x.call != nil && st.x.call.name != "sum" && st.x.call.name != "clock" {
+		c := st.x.call
+		argRegs := e.compileArgs(c)
+		retTy := e.ir(e.sigRet(c.name))
+		r := e.newReg()
+		e.body.WriteString(r)
+		e.body.WriteString(" = tail call " + retTy + " @" + c.name + "(" + strings.Join(argRegs, ", ") + ")\n")
+		e.emitInstr("ret %s %s", retTy, r)
+		e.funcReturned = true
+		return
+	}
+	v, vt := e.compileExpr(st.x)
+	v = e.coerce(v, vt, e.curRet)
+	e.emitInstr("ret %s %s", e.ir(e.curRet), v)
+	e.funcReturned = true
+}
+
+// compileArgs 编译调用实参，并按被调函数签名做隐式转换（int → float）。
+// 返回 "类型 寄存器" 形式的列表。
+func (e *emitter) compileArgs(c *callExpr) []string {
+	sig := e.sigs[c.name]
+	out := make([]string, 0, len(c.args))
+	for i, a := range c.args {
+		v, vt := e.compileExpr(a)
+		want := vt
+		if sig != nil && i < len(sig.params) {
+			want = sig.params[i].typ
+		}
+		v = e.coerce(v, vt, want)
+		// 变参（printf 风格）不在此列，本 IR 全部为定参
+		out = append(out, e.ir(want)+" "+v)
+	}
+	return out
+}
+
+// sigRet 返回被调函数的返回类型（无签名时按 i32 假定）。
+func (e *emitter) sigRet(name string) string {
+	if s, ok := e.sigs[name]; ok {
+		return s.ret
+	}
+	return "int"
+}
+
+// coerce 在语言类型间做隐式转换（typecheck 允许的唯一隐式转换：int → float）。
+func (e *emitter) coerce(reg, from, to string) string {
+	if from == to || to == "" || to == "?" {
+		return reg
+	}
+	if from == "int" && to == "float" {
+		r := e.newReg()
+		e.emitInstr("%s = sitofp i32 %s to double", r, reg)
+		return r
+	}
+	return reg
+}
+
+// ---------- 声明 / 赋值 ----------
+
+func (e *emitter) emitDecl(st *declStmt) {
+	switch st.typ {
+	case "int", "bool", "float", "String":
+		// SSA 直通：单赋值标量直接用寄存器（免 alloca/load/store）
+		if !e.assigned[st.name] && st.init != nil && !e.funcReturned {
+			v, vt := e.compileExpr(st.init)
+			e.vars[st.name] = varSlot{reg: e.coerce(v, vt, st.typ), typ: st.typ, direct: true}
 			return
 		}
-		v, _ := e.compileExpr(st.x)
-		if info.isStr {
-			e.emitInstr("store i8* %s, i8** %s", v, info.reg)
+		reg := e.newReg()
+		llt := e.ir(st.typ)
+		e.emitInstr("%s = alloca %s, align %d", reg, llt, e.alignOf(st.typ))
+		v := e.zeroOf(st.typ)
+		if st.init != nil {
+			x, xt := e.compileExpr(st.init)
+			v = e.coerce(x, xt, st.typ)
+		}
+		e.emitInstr("store %s %s, %s* %s", llt, v, llt, reg)
+		e.vars[st.name] = varSlot{reg: reg, typ: st.typ}
+	case "List<int>":
+		e.ensureList()
+		if st.init.kind != kList {
+			// List 变量 / 调用结果：引用语义，直接存指针
+			slot := e.newReg()
+			e.emitInstr("%s = alloca %%List*, align 8", slot)
+			v, _ := e.compileExpr(st.init)
+			e.emitInstr("store %%List* %s, %%List** %s", v, slot)
+			e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
+			return
+		}
+		lit := st.init.lst
+		n := len(lit.items)
+		obj := e.newReg()
+		e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+		lo := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
+		buf := e.newReg()
+		e.emitInstr("%s = call i8* @malloc(i64 %d)", buf, max(1, n)*4)
+		p := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to i32*", p, buf)
+		for i, it := range lit.items {
+			v, vt := e.compileExpr(it)
+			v = e.coerce(v, vt, "int")
+			if i == 0 {
+				e.emitInstr("store i32 %s, i32* %s", v, p)
+			} else {
+				g2 := e.newReg()
+				e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %d", g2, p, i)
+				e.emitInstr("store i32 %s, i32* %s", v, g2)
+			}
+		}
+		bf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, lo)
+		e.emitInstr("store i32* %s, i32** %s", p, bf)
+		tf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
+		e.emitInstr("store i32 %d, i32* %s", n, tf)
+		e.vars[st.name] = varSlot{reg: e.listSlot(lo), typ: st.typ}
+	default:
+		// struct 类型：引用语义（calloc 零值 + 可选字面量字段写入）
+		reg := e.newReg()
+		ptrTy := e.ir(st.typ)
+		e.emitInstr("%s = alloca %s, align 8", reg, ptrTy)
+		var v string
+		if st.init != nil {
+			v, _ = e.compileExpr(st.init)
 		} else {
-			e.emitInstr("store i32 %s, i32* %s", v, info.reg)
+			obj := e.structAlloc(st.typ)
+			v = e.newReg()
+			e.emitInstr("%s = bitcast i8* %s to %s", v, obj, ptrTy)
+			e.zeroStructFields(v, st.typ, 0)
 		}
-	case *ifStmt:
-		thenB, endB := e.newBlock(), e.newBlock()
-		var elseB string
-		if len(st.els) > 0 {
-			elseB = e.newBlock()
+		e.emitInstr("store %s %s, %s* %s", ptrTy, v, ptrTy, reg)
+		e.vars[st.name] = varSlot{reg: reg, typ: st.typ}
+	}
+}
+
+// listSlot 把 List 对象指针存进 alloca 槽（变量引用语义：槽里放指针）。
+func (e *emitter) listSlot(objPtr string) string {
+	slot := e.newReg()
+	e.emitInstr("%s = alloca %%List*, align 8", slot)
+	e.emitInstr("store %%List* %s, %%List** %s", objPtr, slot)
+	return slot
+}
+
+// structAlloc 分配一个清零的 struct 实例（LLVM 布局：GEP null,1 → 真实大小，
+// 避免手算字段对齐导致越界写）。
+func (e *emitter) structAlloc(typ string) string {
+	elem := e.irElem(typ)
+	g := e.newReg()
+	e.emitInstr("%s = getelementptr %s, %s* null, i32 1", g, elem, elem)
+	sz := e.newReg()
+	e.emitInstr("%s = ptrtoint %s* %s to i64", sz, elem, g)
+	obj := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 1, i64 %s)", obj, sz)
+	return obj
+}
+
+func (e *emitter) emitAssign(st *assignStmt) {
+	info, ok := e.vars[st.name]
+	if !ok {
+		e.emitInstr("; undeclared variable %s", st.name)
+		return
+	}
+	v, vt := e.compileExpr(st.x)
+	v = e.coerce(v, vt, info.typ)
+	if info.param || info.direct {
+		// 参数/直通变量本不该被赋值（lowering 的 assigned 分析保证）
+		e.emitInstr("; assignment to register variable %s", st.name)
+		return
+	}
+	llt := e.ir(info.typ)
+	e.emitInstr("store %s %s, %s* %s", llt, v, llt, info.reg)
+}
+
+func (e *emitter) emitIndexAssign(st *indexAssignStmt) {
+	// l[i] = v
+	lo := e.listObj(st.name)
+	head, size := e.listHeadSize(lo)
+	i, it := e.compileExpr(st.idx)
+	i = e.coerce(i, it, "int")
+	e.emitBoundsCheck(i, size, st.idx.line)
+	idx := e.newReg()
+	e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+	lp := e.listBuf(lo)
+	i64 := e.toI64(idx)
+	g2 := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, lp, i64)
+	v, vt := e.compileExpr(st.x)
+	v = e.coerce(v, vt, "int")
+	e.emitInstr("store i32 %s, i32* %s", v, g2)
+}
+
+func (e *emitter) emitFieldAssign(st *fieldAssignStmt) {
+	obj, otyp := e.compileExpr(st.recv)
+	info := e.structs[otyp]
+	fidx := -1
+	var ftyp string
+	for i, f := range info {
+		if f.name == st.field {
+			fidx, ftyp = i, f.typ
+			break
 		}
-		c := e.compileCond(st.cond)
-		if elseB != "" {
-			e.emitInstr("br i1 %s, label %%%s, label %%%s", c, thenB, elseB)
-		} else {
-			e.emitInstr("br i1 %s, label %%%s, label %%%s", c, thenB, endB)
-		}
-		saved := e.funcReturned
-		e.setBlock(thenB)
-		e.emitBlock(st.then)
-		thenRet := e.funcReturned
+	}
+	if fidx < 0 {
+		return
+	}
+	g := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(otyp), e.irElem(otyp), obj, fidx)
+	v, vt := e.compileExpr(st.x)
+	v = e.coerce(v, vt, ftyp)
+	e.emitInstr("store %s %s, %s* %s", e.ir(ftyp), v, e.ir(ftyp), g)
+}
+
+// listObj 取 List 变量的对象指针。
+func (e *emitter) listObj(name string) string {
+	e.ensureList()
+	info, ok := e.vars[name]
+	if !ok {
+		return "null"
+	}
+	if info.param || info.direct {
+		return info.reg
+	}
+	r := e.newReg()
+	e.emitInstr("%s = load %%List*, %%List** %s", r, info.reg)
+	return r
+}
+
+// listBuf 取 List 的缓冲区指针。
+func (e *emitter) listBuf(obj string) string {
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, obj)
+	p := e.newReg()
+	e.emitInstr("%s = load i32*, i32** %s", p, bf)
+	return p
+}
+
+// listHeadSize 取 List 的 head 游标与可见元素个数（tail-head）。
+func (e *emitter) listHeadSize(lo string) (string, string) {
+	hf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, lo)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
+	h := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", h, hf)
+	t := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", t, tf)
+	sz := e.newReg()
+	e.emitInstr("%s = sub i32 %s, %s", sz, t, h)
+	return h, sz
+}
+
+// emitBoundsCheck 对 List 下标（已求值的可见下标 int 寄存器）做运行期检查：
+// 0 <= i < size；越界 → try 内跳 catch，否则运行期错误（与解释器同一文案）。
+func (e *emitter) emitBoundsCheck(i, size string, line int) {
+	lo := e.newReg()
+	e.emitInstr("%s = icmp slt i32 %s, 0", lo, i)
+	hi := e.newReg()
+	e.emitInstr("%s = icmp sge i32 %s, %s", hi, i, size)
+	bad := e.newReg()
+	e.emitInstr("%s = or i1 %s, %s", bad, lo, hi)
+	okB := e.newBlock()
+	badB := e.newBlock()
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, badB, okB)
+	e.setBlock(badB)
+	e.emitIndexPanic(i, size, line)
+	e.setBlock(okB)
+}
+
+// emitIndexPanic 发射 List 越界运行期错误。
+func (e *emitter) emitIndexPanic(i, size string, line int) {
+	if e.curTry != "" {
+		e.emitInstr("br label %%%s", e.curTry)
+		e.emitInstr("unreachable")
+		return
+	}
+	e.needPanic = true
+	e.emitInstr("call void @ql_panic_index(i32 %s, i32 %s, i32 %d)", i, size, line)
+	e.emitInstr("unreachable")
+}
+
+func (e *emitter) emitTry(st *tryStmt) {
+	oldTry := e.curTry
+	catchL := e.newBlock()
+	afterL := e.newBlock()
+	e.curTry = catchL
+	for _, s := range st.then {
+		e.emitStmt(s)
+	}
+	if !e.funcReturned && !e.term {
+		e.emitInstr("br label %%%s", afterL) // 正常路径跳过 catch
+	}
+	e.curTry = oldTry
+	e.setBlock(catchL)
+	for _, s := range st.catch {
+		e.emitStmt(s)
+	}
+	if !e.funcReturned && !e.term {
+		e.emitInstr("br label %%%s", afterL)
+	}
+	e.setBlock(afterL)
+}
+
+func (e *emitter) emitDelete(st *deleteStmt) {
+	info, ok := e.vars[st.name]
+	if !ok {
+		return
+	}
+	if info.typ == "List<int>" {
+		lo := e.listObj(st.name)
+		p := e.listBuf(lo)
+		c := e.newReg()
+		e.emitInstr("%s = bitcast i32* %s to i8*", c, p)
+		e.emitInstr("call void @free(i8* %s)", c)
+		c2 := e.newReg()
+		e.emitInstr("%s = bitcast %%List* %s to i8*", c2, lo)
+		e.emitInstr("call void @free(i8* %s)", c2)
+		return
+	}
+	if info.param || info.direct {
+		return
+	}
+	c := e.newReg()
+	e.emitInstr("%s = bitcast %s* %s to i8*", c, e.ir(info.typ), info.reg)
+	e.emitInstr("call void @free(i8* %s)", c)
+}
+
+func (e *emitter) emitIf(st *ifStmt) {
+	thenB, endB := e.newBlock(), e.newBlock()
+	var elseB string
+	if len(st.els) > 0 {
+		elseB = e.newBlock()
+	}
+	c, _ := e.compileExpr(st.cond)
+	if elseB != "" {
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", c, thenB, elseB)
+	} else {
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", c, thenB, endB)
+	}
+	saved := e.funcReturned
+	e.setBlock(thenB)
+	e.emitBlock(st.then)
+	thenRet := e.funcReturned || e.term
+	e.funcReturned = saved
+	if !thenRet {
+		e.emitInstr("br label %%%s", endB)
+	}
+	if elseB != "" {
+		e.setBlock(elseB)
+		e.emitBlock(st.els)
+		elseRet := e.funcReturned || e.term
 		e.funcReturned = saved
-		if !thenRet {
+		if !elseRet {
 			e.emitInstr("br label %%%s", endB)
 		}
-		if elseB != "" {
-			e.setBlock(elseB)
-			e.emitBlock(st.els)
-			elseRet := e.funcReturned
-			e.funcReturned = saved
-			if !elseRet {
-				e.emitInstr("br label %%%s", endB)
-			}
-		}
-		e.funcReturned = saved
-		e.setBlock(endB)
-	case *whileStmt:
-		condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
-		e.emitInstr("br label %%%s", condB)
-		e.setBlock(condB)
-		c := e.compileCond(st.cond)
-		e.emitInstr("br i1 %s, label %%%s, label %%%s", c, bodyB, endB)
-		saved := e.funcReturned
-		e.setBlock(bodyB)
-		e.emitBlock(st.body)
-		bodyRet := e.funcReturned
-		e.funcReturned = saved
-		if !bodyRet {
-			e.emitInstr("br label %%%s", condB)
-		}
-		e.funcReturned = saved
-		e.setBlock(endB)
 	}
+	e.funcReturned = saved
+	e.setBlock(endB)
 }
 
-func (e *emitter) emitPrintln(s *printlnStmt) {
+func (e *emitter) emitWhile(st *whileStmt) {
+	condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
+	e.emitInstr("br label %%%s", condB)
+	e.setBlock(condB)
+	c, _ := e.compileExpr(st.cond)
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", c, bodyB, endB)
+	saved := e.funcReturned
+	e.breaks = append(e.breaks, endB)
+	e.setBlock(bodyB)
+	e.emitBlock(st.body)
+	bodyRet := e.funcReturned || e.term
+	e.funcReturned = saved
+	e.breaks = e.breaks[:len(e.breaks)-1]
+	if !bodyRet {
+		e.emitInstr("br label %%%s", condB)
+	}
+	e.funcReturned = saved
+	e.setBlock(endB)
+}
+
+// emitFor 发射 C 风格 for：init; cond; step。
+func (e *emitter) emitFor(st *forStmt) {
+	if st.init != nil {
+		e.emitStmt(st.init)
+	}
+	condB, bodyB, stepB, endB := e.newBlock(), e.newBlock(), e.newBlock(), e.newBlock()
+	e.emitInstr("br label %%%s", condB)
+	e.setBlock(condB)
+	c, _ := e.compileExpr(st.cond)
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", c, bodyB, endB)
+	saved := e.funcReturned
+	e.breaks = append(e.breaks, endB)
+	e.setBlock(bodyB)
+	e.emitBlock(st.body)
+	bodyRet := e.funcReturned || e.term
+	e.funcReturned = saved
+	if !bodyRet {
+		e.emitInstr("br label %%%s", stepB)
+	}
+	e.setBlock(stepB)
+	if st.step != nil {
+		e.emitStmt(st.step)
+	}
+	if !e.funcReturned {
+		e.emitInstr("br label %%%s", condB)
+	}
+	e.funcReturned = saved
+	e.breaks = e.breaks[:len(e.breaks)-1]
+	e.setBlock(endB)
+}
+
+// emitForIn 发射迭代 for：for (T x : list) —— 与解释器一致，按滚动游标消费
+// （head 前进；循环结束后元素已消耗，size() 归零）。
+func (e *emitter) emitForIn(st *forInStmt) {
+	slot := e.newReg()
+	llt := e.ir(st.typ)
+	e.emitInstr("%s = alloca %s, align %d", slot, llt, e.alignOf(st.typ))
+	e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
+	lo := e.listObj(st.list)
+	condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
+	e.emitInstr("br label %%%s", condB)
+	e.setBlock(condB)
+	hf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, lo)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
+	h := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", h, hf)
+	t := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", t, tf)
+	c := e.newReg()
+	e.emitInstr("%s = icmp slt i32 %s, %s", c, h, t)
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", c, bodyB, endB)
+	saved := e.funcReturned
+	e.breaks = append(e.breaks, endB)
+	e.setBlock(bodyB)
+	h2 := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", h2, hf)
+	p := e.listBuf(lo)
+	h64 := e.toI64(h2)
+	ep := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", ep, p, h64)
+	ev := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", ev, ep)
+	e.emitInstr("store i32 %s, i32* %s", ev, slot)
+	nx := e.newReg()
+	e.emitInstr("%s = add i32 %s, 1", nx, h2)
+	e.emitInstr("store i32 %s, i32* %s", nx, hf)
+	e.emitBlock(st.body)
+	bodyRet := e.funcReturned || e.term
+	e.funcReturned = saved
+	if !bodyRet {
+		e.emitInstr("br label %%%s", condB)
+	}
+	e.funcReturned = saved
+	e.breaks = e.breaks[:len(e.breaks)-1]
+	e.setBlock(endB)
+}
+
+// emitPrint 发射 io.println / io.print（newline 决定是否换行）。
+func (e *emitter) emitPrint(args []*expr, newline bool) {
 	type av struct {
 		val string
-		typ byte // 'i' i32, 's' i8*, 'b' i1
+		typ string
 	}
-	var args []av
-	for _, a := range s.args {
-		v, t := e.compileExpr(a)
-		args = append(args, av{v, t})
-	}
-	// 按编译后实际类型生成格式串（字符串与布尔都是 %s）
-	fmts := make([]string, len(args))
-	for i, a := range args {
-		if a.typ == 's' || a.typ == 'b' {
-			fmts[i] = "%s"
-		} else {
-			fmts[i] = "%d"
-		}
-	}
-	fp := e.i8Ptr(e.strConst(strings.Join(fmts, " ") + "\n"))
-	// 参数指令（含 select/gep）全部生成完毕后，再取 call 的寄存器号（SSA 单调）
-	var lineArgs []string
+	vals := make([]av, 0, len(args))
+	fmts := make([]string, 0, len(args))
 	for _, a := range args {
-		switch a.typ {
-		case 's':
-			lineArgs = append(lineArgs, "i8* "+a.val)
-		case 'b':
-			// 布尔 → select "true"/"false" 字符串（先算 gep 再取号，保持 SSA 单调）
-			tp := e.i8Ptr(e.strs["true"])
-			fp2 := e.i8Ptr(e.strs["false"])
+		v, t := e.compileExpr(a)
+		vals = append(vals, av{v, t})
+		switch t {
+		case "int":
+			fmts = append(fmts, "%d")
+		case "float":
+			e.needFloatToStr = true
 			r := e.newReg()
-			e.emitInstr("%s = select i1 %s, i8* %s, i8* %s", r, a.val, tp, fp2)
-			lineArgs = append(lineArgs, "i8* "+r)
+			e.emitInstr("%s = call i8* @ql_float_to_str(double %s)", r, v)
+			vals[len(vals)-1].val = r
+			vals[len(vals)-1].typ = "String"
+			fmts = append(fmts, "%s")
+		case "bool":
+			tp := e.i8Ptr(e.strs["true"])
+			fp := e.i8Ptr(e.strs["false"])
+			r := e.newReg()
+			e.emitInstr("%s = select i1 %s, i8* %s, i8* %s", r, e.toI1(v), tp, fp)
+			vals[len(vals)-1].val = r
+			vals[len(vals)-1].typ = "String"
+			fmts = append(fmts, "%s")
 		default:
-			lineArgs = append(lineArgs, "i32 "+a.val)
+			fmts = append(fmts, "%s")
 		}
 	}
-	line := "  " + e.newReg() + " = call i32 (i8*, ...) @printf(i8* " + fp
-	for _, a := range lineArgs {
-		line += ", " + a
+	line := strings.Join(fmts, " ")
+	if newline {
+		line += "\n"
 	}
-	line += ")\n"
-	e.body.WriteString(line)
+	if len(args) == 0 {
+		if !newline {
+			return
+		}
+		line = "\n"
+	}
+	fp := e.i8Ptr(e.strConst(line))
+	var sb strings.Builder
+	sb.WriteString("  " + e.newReg() + " = call i32 (i8*, ...) @printf(i8* " + fp)
+	for _, a := range vals {
+		sb.WriteString(", " + e.ir(a.typ) + " " + a.val)
+	}
+	sb.WriteString(")\n")
+	e.body.WriteString(sb.String())
 }
 
-// compileCond 编译条件表达式为 i1 值。
-func (e *emitter) compileCond(x *expr) string {
-	switch x.kind {
-	case kBool:
-		if x.b {
-			return "true"
-		}
-		return "false"
-	case kCmp:
-		l, _ := e.compileExpr(x.l)
-		r, _ := e.compileExpr(x.r)
-		reg := e.newReg()
-		e.emitInstr("%s = icmp %s i32 %s, %s", reg, x.op, l, r)
-		return reg
-	case kAndOr:
-		if x.op == "!" {
-			r := e.compileCond(x.l)
-			reg := e.newReg()
-			e.emitInstr("%s = xor i1 %s, true", reg, r)
-			return reg
-		}
-		l := e.compileCond(x.l)
-		r := e.compileCond(x.r)
-		reg := e.newReg()
-		op := "and"
-		if x.op == "||" {
-			op = "or"
-		}
-		e.emitInstr("%s = %s i1 %s, %s", reg, op, l, r)
-		return reg
-	default:
-		v, _ := e.compileExpr(x)
-		reg := e.newReg()
-		e.emitInstr("%s = icmp ne i32 %s, 0", reg, v)
-		return reg
+// llvmFloat 把 float64 格式化为 LLVM 浮点字面量（必须含小数点/指数，
+// 否则 "2" 会被当成整数常量：fadd double 1.5, 2 非法）。
+func llvmFloat(f float64) string {
+	s := strconv.FormatFloat(f, 'g', -1, 64)
+	if !strings.ContainsAny(s, ".eEnN") {
+		s += ".0"
 	}
+	return s
 }
 
-// compileExpr 编译表达式，返回 (值引用, 类型 'i' i32 / 's' i8* / 'b' i1)。
-func (e *emitter) compileExpr(x *expr) (string, byte) {
+// toI1 把值转成 i1（bool 直接用；int 判零）。
+func (e *emitter) toI1(reg string) string {
+	if reg == "true" || reg == "false" {
+		return reg
+	}
+	return reg
+}
+
+// toI64 把 i32 寄存器扩展为 i64（字面量直接可用）。
+func (e *emitter) toI64(reg string) string {
+	if strings.HasPrefix(reg, "%") {
+		r := e.newReg()
+		e.emitInstr("%s = sext i32 %s to i64", r, reg)
+		return r
+	}
+	return reg
+}
+
+// ---------- 表达式 ----------
+
+// compileExpr 编译表达式，返回 (寄存器, 语言类型)。
+func (e *emitter) compileExpr(x *expr) (string, string) {
 	switch x.kind {
 	case kInt:
-		return fmt.Sprintf("%d", x.i), 'i'
+		return fmt.Sprintf("%d", int32(x.i)), "int"
+	case kFloat:
+		return llvmFloat(x.f), "float"
 	case kString:
-		return e.i8Ptr(x.sc), 's'
+		if x.sc.name == "" {
+			x.sc = e.strConst(x.s)
+		}
+		return e.i8Ptr(x.sc), "String"
 	case kBool:
 		if x.b {
-			return "true", 'b'
+			return "true", "bool"
 		}
-		return "false", 'b'
+		return "false", "bool"
 	case kIdent:
-		info, ok := e.vars[x.s]
-		if !ok {
-			return x.s, 'i' // 未声明变量：让生成的 IR 报错（llvm-as 校验会拦截）
-		}
-		if info.param || info.direct {
-			return info.reg, 'i' // 参数/SSA 直通变量：值寄存器直接使用
-		}
-		reg := e.newReg()
-		if info.isStr {
-			e.emitInstr("%s = load i8*, i8** %s", reg, info.reg)
-			return reg, 's'
-		}
-		e.emitInstr("%s = load i32, i32* %s", reg, info.reg)
-		return reg, 'i'
-	case kCmp, kAndOr:
-		c := e.compileCond(x)
-		return c, 'b'
+		return e.loadVar(x.s)
+	case kField:
+		return e.compileField(x)
+	case kCmp, kBin:
+		return e.compileBin(x)
+	case kAndOr:
+		return e.compileLogic(x)
 	case kMethod:
-		// taskm 全局：spawn() / block(t.pid()) / done / channel / send / recv
-		if x.method.name == "taskm" {
-			switch x.method.method {
-			case "block":
-				if len(x.method.args) > 0 && x.method.args[0].kind == kMethod && x.method.args[0].method.method == "pid" {
-					if ti, ok := e.vars[x.method.args[0].method.name]; ok && ti.isThread {
-						tl := e.newReg()
-						e.emitInstr("%s = load i8*, i8** %s", tl, ti.reg)
-						e.emitInstr("call void @ql_block(i8* %s)", tl)
-					}
-				}
-				return "0", 'i'
-			case "done":
-				if len(x.method.args) > 0 && x.method.args[0].kind == kMethod && x.method.args[0].method.method == "pid" {
-					if ti, ok := e.vars[x.method.args[0].method.name]; ok && ti.isThread {
-						tl := e.newReg()
-						e.emitInstr("%s = load i8*, i8** %s", tl, ti.reg)
-						rc := e.newReg()
-						e.emitInstr("%s = call i32 @ql_done(i8* %s)", rc, tl)
-						rb := e.newReg()
-						e.emitInstr("%s = icmp ne i32 %s, 0", rb, rc)
-						return rb, 'b' // done = 线程是否空闲（bool，同解释器语义）
-					}
-				}
-				return "0", 'i'
-			}
-			return "0", 'i'
+		return e.compileMethod(x)
+	case kStructLit:
+		return e.compileStructLit(x)
+	case kIndex:
+		return e.compileIndex(x)
+	case kCall:
+		return e.compileCall(x)
+	case kToString:
+		v, t := e.compileExpr(x.l)
+		switch t {
+		case "String":
+			return v, "String"
+		case "bool":
+			tp := e.i8Ptr(e.strs["true"])
+			fp := e.i8Ptr(e.strs["false"])
+			r := e.newReg()
+			e.emitInstr("%s = select i1 %s, i8* %s, i8* %s", r, v, tp, fp)
+			return r, "String"
+		case "float":
+			e.needFloatToStr = true
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_float_to_str(double %s)", r, v)
+			return r, "String"
+		default:
+			e.needIntToStr = true
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_int_to_str(i32 %s)", r, v)
+			return r, "String"
 		}
-		// struct 字段访问：p.a → gep+load（变量）或 extractvalue（参数）
-		if sr, ok := e.structVars[x.method.name]; ok {
-			fields := e.structs[e.structTypes[x.method.name]]
-			for i, fn := range fields {
-				if fn == x.method.method {
-					f := e.newReg()
-					e.emitInstr("%s = getelementptr inbounds { i32, i32 }, { i32, i32 }* %s, i32 0, i32 %d", f, sr, i)
-					v := e.newReg()
-					e.emitInstr("%s = load i32, i32* %s", v, f)
-					return v, 'i'
-				}
-			}
-		}
-		if si, ok := e.vars[x.method.name]; ok && si.isStruct && si.param {
-			if styp := e.structTypes[x.method.name]; styp != "" {
-				fields := e.structs[styp]
-				for i, fn := range fields {
-					if fn == x.method.method {
-						v := e.newReg()
-						e.emitInstr("%s = extractvalue { i32, i32 } %%%s, %d", v, si.reg, i)
-						return v, 'i'
-					}
-				}
-			}
-		}
-		// impl 方法调用：p.sum() → load struct + call @Point_sum
-		if sr, ok := e.structVars[x.method.name]; ok {
-			styp := e.structTypes[x.method.name]
-			if fname, ok := e.methods[styp+"_"+x.method.method]; ok {
-				fields := e.structs[styp]
-				typ := "{ "
-				for i := 0; i < len(fields); i++ {
-					if i > 0 {
-						typ += ", "
-					}
-					typ += "i32"
-				}
-				typ += " }"
-				sv := e.newReg()
-				e.emitInstr("%s = load %s, %s* %s", sv, typ, typ, sr)
-				args := make([]string, 0, len(x.method.args))
-				for _, a := range x.method.args {
-					av, _ := e.compileExpr(a)
-					args = append(args, av)
-				}
-				r := e.newReg()
-				e.body.WriteString(r)
-				e.body.WriteString(" = call i32 @" + fname + "(" + typ + " " + sv)
-				for _, a := range args {
-					e.body.WriteString(", i32 " + a)
-				}
-				e.body.WriteString(")\n")
-				return r, 'i'
-			}
-		}
-		// channel 变量方法：c.send(v) / c.recv()
-		if info, ok := e.vars[x.method.name]; ok {
-			cl := e.newReg()
-			e.emitInstr("%s = load i8*, i8** %s", cl, info.reg)
-			switch x.method.method {
-			case "send":
-				v, _ := e.compileExpr(x.method.args[0])
-				rc := e.newReg()
-				e.emitInstr("%s = call i32 @ql_send(i8* %s, i32 %s)", rc, cl, v)
-				return "0", 'i'
-			case "recv":
-				rc := e.newReg()
-				e.emitInstr("%s = call i32 @ql_recv(i8* %s)", rc, cl)
-				return rc, 'i'
-			}
-		}
-		// thread 变量方法：t.merge(fn[, arg]) / t.pid()
-		if info, ok := e.vars[x.method.name]; ok && info.isThread {
-			switch x.method.method {
-			case "merge":
-				fn := ""
-				argc := "0"
-				if len(x.method.args) > 0 && x.method.args[0].kind == kIdent {
-					fn = x.method.args[0].s
-				}
-				if len(x.method.args) > 1 {
-					argc = "1"
-				}
-				rn := e.registerRunner(fn, argc)
-				tl := e.newReg()
-				e.emitInstr("%s = load i8*, i8** %s", tl, info.reg)
-				av := "0"
-				if argc == "1" {
-					a, _ := e.compileExpr(x.method.args[1])
-					av = a
-				}
-				e.emitInstr("call void @ql_merge(i8* %s, i8* bitcast (i8* (i8*)* @%s to i8*), i32 %s)", tl, rn, av)
-				return "0", 'i'
-			case "pid":
-				tl := e.newReg()
-				e.emitInstr("%s = load i8*, i8** %s", tl, info.reg)
-				pid := e.newReg()
-				e.emitInstr("%s = ptrtoint i8* %s to i32", pid, tl)
-				return pid, 'i'
-			}
-			return "0", 'i'
-		}
+	case kList:
+		return e.compileListLit(x)
+	}
+	return "0", "int"
+}
 
-		// List 方法：size() / get(i)
-		info, ok := e.vars[x.method.name]
-		if !ok {
-			return "0", 'i'
-		}
-		switch x.method.method {
-		case "size":
-			lf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 1", lf, info.reg)
+// loadVar 读取变量（槽 → load；参数/直通 → 直接用）。
+func (e *emitter) loadVar(name string) (string, string) {
+	info, ok := e.vars[name]
+	if !ok {
+		return name, "int" // 未声明变量：让生成的 IR 报错（llvm-as 校验会拦截）
+	}
+	if info.param || info.direct {
+		return info.reg, info.typ
+	}
+	r := e.newReg()
+	llt := e.ir(info.typ)
+	e.emitInstr("%s = load %s, %s* %s", r, llt, llt, info.reg)
+	return r, info.typ
+}
+
+func (e *emitter) compileField(x *expr) (string, string) {
+	obj, otyp := e.compileExpr(x.field.recv)
+	fields := e.structs[otyp]
+	for i, f := range fields {
+		if f.name == x.field.name {
+			g := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(otyp), e.irElem(otyp), obj, i)
 			v := e.newReg()
-			e.emitInstr("%s = load i32, i32* %s", v, lf)
-			return v, 'i'
+			e.emitInstr("%s = load %s, %s* %s", v, e.ir(f.typ), e.ir(f.typ), g)
+			return v, f.typ
+		}
+	}
+	return "0", "int"
+}
+
+func (e *emitter) compileStructLit(x *expr) (string, string) {
+	typ := x.sl.typ
+	ptrTy := e.ir(typ)
+	obj := e.structAlloc(typ)
+	v := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %s", v, obj, ptrTy)
+	e.zeroStructFields(v, typ, 0)
+	fields := e.structs[typ]
+	for i, val := range x.sl.values {
+		if i >= len(fields) {
+			break
+		}
+		fv, ft := e.compileExpr(val)
+		fv = e.coerce(fv, ft, fields[i].typ)
+		g := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %s, %s %s, i32 0, i32 %d", g, e.irElem(typ), ptrTy, v, i)
+		e.emitInstr("store %s %s, %s* %s", e.ir(fields[i].typ), fv, e.ir(fields[i].typ), g)
+	}
+	return v, typ
+}
+
+func (e *emitter) compileIndex(x *expr) (string, string) {
+	lo := e.listObj(x.idx.name)
+	head, size := e.listHeadSize(lo)
+	i, it := e.compileExpr(x.idx.i)
+	i = e.coerce(i, it, "int")
+	e.emitBoundsCheck(i, size, x.line)
+	idx := e.newReg()
+	e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+	p := e.listBuf(lo)
+	i64 := e.toI64(idx)
+	g2 := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, p, i64)
+	v := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", v, g2)
+	return v, "int"
+}
+
+func (e *emitter) compileListLit(x *expr) (string, string) {
+	e.ensureList()
+	n := len(x.lst.items)
+	obj := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	lo := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
+	buf := e.newReg()
+	e.emitInstr("%s = call i8* @malloc(i64 %d)", buf, max(1, n)*4)
+	p := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to i32*", p, buf)
+	for i, it := range x.lst.items {
+		v, vt := e.compileExpr(it)
+		v = e.coerce(v, vt, "int")
+		g2 := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %d", g2, p, i)
+		e.emitInstr("store i32 %s, i32* %s", v, g2)
+	}
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, lo)
+	e.emitInstr("store i32* %s, i32** %s", p, bf)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
+	e.emitInstr("store i32 %d, i32* %s", n, tf)
+	return lo, "List<int>"
+}
+
+// compileCall 编译普通函数调用与内建（sum/clock）。
+func (e *emitter) compileCall(x *expr) (string, string) {
+	c := x.call
+	if c.name == "sum" && len(c.args) >= 3 && c.args[0].kind == kIdent {
+		return e.emitSum(c), "int"
+	}
+	if c.name == "clock" {
+		return e.emitClock(), "int"
+	}
+	ret := e.sigRet(c.name)
+	args := e.compileArgs(c)
+	if ret == "void" {
+		e.body.WriteString("  call void @" + c.name + "(" + strings.Join(args, ", ") + ")\n")
+		return "0", "void"
+	}
+	r := e.newReg()
+	e.body.WriteString(r + " = call " + e.ir(ret) + " @" + c.name + "(" + strings.Join(args, ", ") + ")\n")
+	return r, ret
+}
+
+// compileMethod 编译实例方法调用与内建方法。
+func (e *emitter) compileMethod(x *expr) (string, string) {
+	m := x.method
+	recv, rtyp := e.compileExpr(m.recv)
+	// List 内建方法
+	if rtyp == "List<int>" {
+		switch m.name {
+		case "size":
+			hf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, recv)
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, recv)
+			h := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", h, hf)
+			t := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t, tf)
+			r := e.newReg()
+			e.emitInstr("%s = sub i32 %s, %s", r, t, h)
+			return r, "int"
 		case "get":
-			pf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 0", pf, info.reg)
-			lp := e.newReg()
-			e.emitInstr("%s = load i32*, i32** %s", lp, pf)
-			i, _ := e.compileExpr(x.method.args[0])
-			i64i := e.toI64(i)
+			head, size := e.listHeadSize(recv)
+			i, it := e.compileExpr(m.args[0])
+			i = e.coerce(i, it, "int")
+			e.emitBoundsCheck(i, size, x.line)
+			idx := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+			p := e.listBuf(recv)
+			i64 := e.toI64(idx)
 			g2 := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, lp, i64i)
+			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, p, i64)
 			v := e.newReg()
 			e.emitInstr("%s = load i32, i32* %s", v, g2)
-			return v, 'i'
+			return v, "int"
 		case "append":
-			// l.append(v)：realloc 扩容 + 写入 + len++
-			pf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 0", pf, info.reg)
-			lp := e.newReg()
-			e.emitInstr("%s = load i32*, i32** %s", lp, pf)
-			lf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 1", lf, info.reg)
-			l1 := e.newReg()
-			e.emitInstr("%s = load i32, i32* %s", l1, lf)
-			// realloc(lp, max(len*2, 1)*4) —— 几何增长（amortized O(1)，避免 O(n²) 逐项拷贝）
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, recv)
+			t1 := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t1, tf)
+			// realloc(buf, max(tail*2,1)*4)
 			n1 := e.newReg()
-			e.emitInstr("%s = shl i32 %s, 1", n1, l1) // len*2
+			e.emitInstr("%s = shl i32 %s, 1", n1, t1)
 			n1b := e.newReg()
 			e.emitInstr("%s = icmp slt i32 %s, 1", n1b, n1)
 			n1c := e.newReg()
@@ -817,214 +1595,298 @@ func (e *emitter) compileExpr(x *expr) (string, byte) {
 			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
 			sz := e.newReg()
 			e.emitInstr("%s = mul i64 %s, 4", sz, n64)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, recv)
+			lp := e.newReg()
+			e.emitInstr("%s = load i32*, i32** %s", lp, bf)
 			bc := e.newReg()
 			e.emitInstr("%s = bitcast i32* %s to i8*", bc, lp)
 			rc := e.newReg()
 			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
 			np := e.newReg()
 			e.emitInstr("%s = bitcast i8* %s to i32*", np, rc)
-			e.emitInstr("store i32* %s, i32** %s", np, pf)
-			l1i := e.newReg()
-			e.emitInstr("%s = sext i32 %s to i64", l1i, l1)
+			e.emitInstr("store i32* %s, i32** %s", np, bf)
+			t1i := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
 			g2 := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, np, l1i)
-			v, _ := e.compileExpr(x.method.args[0])
+			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, np, t1i)
+			v, vt := e.compileExpr(m.args[0])
+			v = e.coerce(v, vt, "int")
 			e.emitInstr("store i32 %s, i32* %s", v, g2)
-			l2 := e.newReg()
-			e.emitInstr("%s = add i32 %s, 1", l2, l1)
-			e.emitInstr("store i32 %s, i32* %s", l2, lf)
-			return "0", 'i'
+			t2 := e.newReg()
+			e.emitInstr("%s = add i32 %s, 1", t2, t1)
+			e.emitInstr("store i32 %s, i32* %s", t2, tf)
+			return "0", "void"
 		}
-		return "0", 'i'
-	case kIndex:
-		// list[i]：取结构体 ptr 字段再下标（{i32*, i32}）
-		info, ok := e.vars[x.idx.name]
-		if !ok {
-			return "0", 'i'
+	}
+	// struct 实例方法：call @Type_method(recv, args...)
+	if m.sig != "" {
+		args := []string{e.ir(rtyp) + " " + recv}
+		sig := e.sigs[m.sig]
+		for i, a := range m.args {
+			v, vt := e.compileExpr(a)
+			want := vt
+			if sig != nil && i < len(sig.params) {
+				want = sig.params[i].typ
+			}
+			v = e.coerce(v, vt, want)
+			args = append(args, e.ir(want)+" "+v)
 		}
-		pf := e.newReg()
-		e.emitInstr("%s = getelementptr inbounds { i32*, i32 }, { i32*, i32 }* %s, i32 0, i32 0", pf, info.reg)
-		lp := e.newReg()
-		e.emitInstr("%s = load i32*, i32** %s", lp, pf)
-		i, _ := e.compileExpr(x.idx.i)
-		i64i := e.toI64(i)
-		g2 := e.newReg()
-		e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, lp, i64i)
-		v := e.newReg()
-		e.emitInstr("%s = load i32, i32* %s", v, g2)
-		return v, 'i'
-	case kCall:
-		// sum(g, begin, stop[, step])：内联展开为循环（clang -O3 自动闭式化线性生成器）
-		if x.call.name == "sum" && len(x.call.args) >= 3 && x.call.args[0].kind == kIdent {
-			return e.emitSum(x.call), 'i'
-		}
-		// clock()：gettimeofday 微秒（编译路径延迟测量）
-		if x.call.name == "clock" {
-			tv := e.newReg()
-			e.emitInstr("%s = alloca { i64, i64 }, align 8", tv)
-			rc := e.newReg()
-			e.emitInstr("%s = call i32 @gettimeofday({ i64, i64 }* %s, i8* null)", rc, tv)
-			secf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i64, i64 }, { i64, i64 }* %s, i32 0, i32 0", secf, tv)
-			secl := e.newReg()
-			e.emitInstr("%s = load i64, i64* %s", secl, secf)
-			usf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds { i64, i64 }, { i64, i64 }* %s, i32 0, i32 1", usf, tv)
-			usl := e.newReg()
-			e.emitInstr("%s = load i64, i64* %s", usl, usf)
-			us := e.newReg()
-			e.emitInstr("%s = mul i64 %s, 1000000", us, secl)
-			u2 := e.newReg()
-			e.emitInstr("%s = add i64 %s, %s", u2, us, usl)
-			v := e.newReg()
-			e.emitInstr("%s = trunc i64 %s to i32", v, u2)
-			return v, 'i'
-		}
-		// 函数调用：call i32 @name(i32 %a, ...)
-		argRegs := make([]string, 0, len(x.call.args))
-		for _, a := range x.call.args {
-			v, _ := e.compileExpr(a)
-			argRegs = append(argRegs, v)
+		ret := e.sigRet(m.sig)
+		if ret == "void" {
+			e.body.WriteString("  call void @" + m.sig + "(" + strings.Join(args, ", ") + ")\n")
+			return "0", "void"
 		}
 		r := e.newReg()
-		e.body.WriteString(r)
-		e.body.WriteString(" = call i32 @" + x.call.name)
-		if len(argRegs) > 0 {
-			e.body.WriteString("(i32 " + strings.Join(argRegs, ", i32 ") + ")\n")
-		} else {
-			e.body.WriteString("()\n")
-		}
-		return r, 'i' // 返回 %N（call 结果寄存器）
-	case kBin:
-		// String 拼接："a" + "b" → ql_strcat（运行时）
-		if x.op == "+" && (x.l.kind == kString || x.r.kind == kString || x.l.kind == kIdent && e.vars[x.l.s].isStr || x.r.kind == kIdent && e.vars[x.r.s].isStr) {
-			lv, lt := e.compileExpr(x.l)
-			rv, rt := e.compileExpr(x.r)
-			if lt == 's' && rt == 's' {
-				rc := e.newReg()
-				e.emitInstr("%s = call i8* @ql_strcat(i8* %s, i8* %s)", rc, lv, rv)
-				return rc, 's'
-			}
-		}
-		// 简单优化：递归常量折叠（1 + 2*3 → 7 编译期算掉，IR 更小编译更快）
-		if v, ok := constEval(x); ok {
-			return fmt.Sprintf("%d", int32(v)), 'i'
-		}
-		l, _ := e.compileExpr(x.l)
-		r, _ := e.compileExpr(x.r)
-		// try/catch：除零检查跳 catch
-		if (x.op == "/" || x.op == "%") && e.curTry != "" {
-			cz := e.newReg()
-			e.emitInstr("%s = icmp eq i32 %s, 0", cz, r)
-			okL := e.newBlock()
-			e.emitInstr("br i1 %s, label %%%s, label %%%s", cz, e.curTry, okL)
-			e.setBlock(okL)
-		}
-		op := map[string]string{"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem", "<<": "shl", ">>": "ashr"}[x.op]
-		reg := e.newReg()
-		e.emitInstr("%s = %s i32 %s, %s", reg, op, l, r)
-		return reg, 'i'
+		e.body.WriteString(r + " = call " + e.ir(ret) + " @" + m.sig + "(" + strings.Join(args, ", ") + ")\n")
+		return r, ret
 	}
-	return "0", 'i'
+	return "0", "int"
 }
 
-// ---------- AST ----------
-
-type exprKind int
-
-const (
-	kInt exprKind = iota
-	kString
-	kIdent
-	kBin
-	kBool
-	kCmp
-	kAndOr
-	kCall
-	kList
-	kIndex
-	kMethod
-	kStructLit
-)
-
-type expr struct {
-	kind   exprKind
-	i      int64
-	b      bool
-	s      string
-	op     string
-	l, r   *expr
-	call   *callExpr   // kCall
-	lst    *listLit    // kList
-	idx    *indexExpr  // kIndex
-	method *methodExpr // kMethod
-	sl     *structLit  // kStructLit
-	sc     strConst    // 预注册的字符串常量（kString）
+// emitClock 发射 clock()（gettimeofday 微秒）。
+func (e *emitter) emitClock() string {
+	tv := e.newReg()
+	e.emitInstr("%s = alloca { i64, i64 }, align 8", tv)
+	rc := e.newReg()
+	e.emitInstr("%s = call i32 @gettimeofday({ i64, i64 }* %s, i8* null)", rc, tv)
+	secf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds { i64, i64 }, { i64, i64 }* %s, i32 0, i32 0", secf, tv)
+	secl := e.newReg()
+	e.emitInstr("%s = load i64, i64* %s", secl, secf)
+	usf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds { i64, i64 }, { i64, i64 }* %s, i32 0, i32 1", usf, tv)
+	usl := e.newReg()
+	e.emitInstr("%s = load i64, i64* %s", usl, usf)
+	us := e.newReg()
+	e.emitInstr("%s = mul i64 %s, 1000000", us, secl)
+	u2 := e.newReg()
+	e.emitInstr("%s = add i64 %s, %s", u2, us, usl)
+	v := e.newReg()
+	e.emitInstr("%s = trunc i64 %s to i32", v, u2)
+	return v
 }
 
-type indexExpr struct {
-	name string
-	i    *expr
+// emitSum 把 sum(g, begin, stop[, step]) 内联展开为循环。
+func (e *emitter) emitSum(c *callExpr) string {
+	b, _ := e.compileExpr(c.args[1])
+	s, _ := e.compileExpr(c.args[2])
+	st := "1"
+	if len(c.args) == 4 {
+		st, _ = e.compileExpr(c.args[3])
+	}
+	gname := c.args[0].s
+	total := e.newReg()
+	e.emitInstr("%s = alloca i32, align 4", total)
+	e.emitInstr("store i32 0, i32* %s", total)
+	iv := e.newReg()
+	e.emitInstr("%s = alloca i32, align 4", iv)
+	e.emitInstr("store i32 %s, i32* %s", b, iv)
+	condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
+	e.emitInstr("br label %%%s", condB)
+	e.setBlock(condB)
+	li := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", li, iv)
+	c1 := e.newReg()
+	e.emitInstr("%s = icmp slt i32 %s, %s", c1, li, s)
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", c1, bodyB, endB)
+	e.setBlock(bodyB)
+	li2 := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", li2, iv)
+	gv := e.newReg()
+	e.emitInstr("%s = call i32 @%s(i32 %s)", gv, gname, li2)
+	tl := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", tl, total)
+	t2 := e.newReg()
+	e.emitInstr("%s = add i32 %s, %s", t2, tl, gv)
+	e.emitInstr("store i32 %s, i32* %s", t2, total)
+	li3 := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", li3, iv)
+	ni := e.newReg()
+	e.emitInstr("%s = add i32 %s, %s", ni, li3, st)
+	e.emitInstr("store i32 %s, i32* %s", ni, iv)
+	e.emitInstr("br label %%%s", condB)
+	e.setBlock(endB)
+	tf := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", tf, total)
+	return tf
 }
 
-type methodExpr struct {
-	name   string
-	method string
-	args   []*expr
+// compileBin 编译二元运算（算术/比较/逻辑/String 拼接/运算符重载）。
+func (e *emitter) compileBin(x *expr) (string, string) {
+	if x.op == "&&" || x.op == "||" {
+		return e.compileLogic(x)
+	}
+	if x.kind == kCmp {
+		return e.compileCmp(x)
+	}
+	lv, lt := e.compileExpr(x.l)
+	rv, rt := e.compileExpr(x.r)
+	if x.strcat {
+		rc := e.newReg()
+		e.emitInstr("%s = call i8* @ql_strcat(i8* %s, i8* %s)", rc, lv, rv)
+		return rc, "String"
+	}
+	// 运算符重载：struct 操作数 → 调用 __add__ 等方法
+	if sig, ok := e.sigs["__op__"+x.op+"|"+lt]; ok && lt == rt {
+		r := e.newReg()
+		e.body.WriteString(r + " = call " + e.ir(sig.ret) + " @" + sig.name + "(" + e.ir(lt) + " " + lv + ", " + e.ir(rt) + " " + rv + ")\n")
+		return r, sig.ret
+	}
+	if lt == "float" || rt == "float" {
+		lv = e.coerce(lv, lt, "float")
+		rv = e.coerce(rv, rt, "float")
+		if (x.op == "/" || x.op == "%") && x.op == "/" {
+			e.emitZeroCheckF(rv, "DivisionByZeroError: float division by zero", x.line)
+		}
+		op := map[string]string{"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}[x.op]
+		if op == "" {
+			return "0.0", "float" // float % 不可达（lowering 已拦截）
+		}
+		reg := e.newReg()
+		e.emitInstr("%s = %s double %s, %s", reg, op, lv, rv)
+		return reg, "float"
+	}
+	if v, ok := constEval(x); ok {
+		return fmt.Sprintf("%d", int32(v)), "int"
+	}
+	if x.op == "/" || x.op == "%" {
+		e.emitZeroCheckI(rv, x.op, x.line)
+	}
+	op := map[string]string{"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem", "<<": "shl", ">>": "ashr"}[x.op]
+	reg := e.newReg()
+	e.emitInstr("%s = %s i32 %s, %s", reg, op, lv, rv)
+	return reg, "int"
 }
 
-type structLit struct {
-	values []*expr
+// emitZeroCheckI 整数除零检查（try 内跳 catch，否则运行期错误）。
+func (e *emitter) emitZeroCheckI(rv, op string, line int) {
+	cz := e.newReg()
+	e.emitInstr("%s = icmp eq i32 %s, 0", cz, rv)
+	msg := "DivisionByZeroError: integer division by zero"
+	if op == "%" {
+		msg = "DivisionByZeroError: modulo by zero"
+	}
+	okB := e.newBlock()
+	var tgt string
+	if e.curTry != "" {
+		tgt = e.curTry
+	} else {
+		e.needPanic = true
+		tgt = e.newBlock()
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", cz, tgt, okB)
+		e.setBlock(tgt)
+		c := e.i8Ptr(e.strConst(msg))
+		e.emitInstr("call void @ql_panic(i8* %s, i32 %d)", c, line)
+		e.emitInstr("unreachable")
+		e.setBlock(okB)
+		return
+	}
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", cz, tgt, okB)
+	e.setBlock(okB)
 }
 
-type stmt interface{}
-
-type printlnStmt struct {
-	args []*expr
+func (e *emitter) emitZeroCheckF(rv string, msg string, line int) {
+	cz := e.newReg()
+	e.emitInstr("%s = fcmp oeq double %s, 0.0", cz, rv)
+	okB := e.newBlock()
+	var tgt string
+	if e.curTry != "" {
+		tgt = e.curTry
+	} else {
+		e.needPanic = true
+		tgt = e.newBlock()
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", cz, tgt, okB)
+		e.setBlock(tgt)
+		c := e.i8Ptr(e.strConst(msg))
+		e.emitInstr("call void @ql_panic(i8* %s, i32 %d)", c, line)
+		e.emitInstr("unreachable")
+		e.setBlock(okB)
+		return
+	}
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", cz, tgt, okB)
+	e.setBlock(okB)
 }
 
-type declStmt struct {
-	name string
-	typ  string
-	init *expr
+// compileLogic 短路求值 && / ||（解释器语义：右侧仅在必要时求值）。
+func (e *emitter) compileLogic(x *expr) (string, string) {
+	if x.op == "!" {
+		v, _ := e.compileExpr(x.l)
+		r := e.newReg()
+		e.emitInstr("%s = xor i1 %s, true", r, v)
+		return r, "bool"
+	}
+	tmp := e.newReg()
+	e.emitInstr("%s = alloca i1, align 1", tmp)
+	lv, _ := e.compileExpr(x.l)
+	lv = e.toI1(lv)
+	e.emitInstr("store i1 %s, i1* %s", lv, tmp)
+	rhsB := e.newBlock()
+	endB := e.newBlock()
+	if x.op == "&&" {
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", lv, rhsB, endB)
+	} else {
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", lv, endB, rhsB)
+	}
+	e.setBlock(rhsB)
+	rv, _ := e.compileExpr(x.r)
+	rv = e.toI1(rv)
+	e.emitInstr("store i1 %s, i1* %s", rv, tmp)
+	e.emitInstr("br label %%%s", endB)
+	e.setBlock(endB)
+	r := e.newReg()
+	e.emitInstr("%s = load i1, i1* %s", r, tmp)
+	return r, "bool"
 }
 
-type assignStmt struct {
-	name string
-	x    *expr
+// compileCmp 编译比较运算（int/float/bool/String/struct）。
+func (e *emitter) compileCmp(x *expr) (string, string) {
+	lv, lt := e.compileExpr(x.l)
+	rv, rt := e.compileExpr(x.r)
+	// struct：__eq__/__ne__ 方法或引用比较
+	if lt == rt && e.isStruct(lt) {
+		if sig, ok := e.sigs["__op__"+x.op+"|"+lt]; ok {
+			r := e.newReg()
+			e.body.WriteString(r + " = call " + e.ir(sig.ret) + " @" + sig.name + "(" + e.ir(lt) + " " + lv + ", " + e.ir(lt) + " " + rv + ")\n")
+			return r, sig.ret
+		}
+		c := e.newReg()
+		e.emitInstr("%s = icmp %s %s %s, %s", c, cmpOps[x.op], e.ir(lt), lv, rv)
+		return c, "bool"
+	}
+	if lt == "bool" && rt == "bool" {
+		r := e.newReg()
+		e.emitInstr("%s = icmp %s i1 %s, %s", r, cmpOps[x.op], lv, rv)
+		return r, "bool"
+	}
+	if lt == "String" && rt == "String" {
+		e.needStrCmp = true
+		c := e.newReg()
+		e.emitInstr("%s = call i32 @strcmp(i8* %s, i8* %s)", c, lv, rv)
+		r := e.newReg()
+		e.emitInstr("%s = icmp %s i32 %s, 0", r, cmpOps[x.op], c)
+		return r, "bool"
+	}
+	if lt == "float" || rt == "float" {
+		lv = e.coerce(lv, lt, "float")
+		rv = e.coerce(rv, rt, "float")
+		op := map[string]string{"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}[x.op]
+		r := e.newReg()
+		e.emitInstr("%s = fcmp %s double %s, %s", r, op, lv, rv)
+		return r, "bool"
+	}
+	op := map[string]string{"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}[x.op]
+	r := e.newReg()
+	e.emitInstr("%s = icmp %s i32 %s, %s", r, op, lv, rv)
+	return r, "bool"
 }
 
-type ifStmt struct {
-	cond *expr
-	then []stmt
-	els  []stmt
+func (e *emitter) isStruct(t string) bool {
+	_, ok := e.structs[t]
+	return ok
 }
 
-type whileStmt struct {
-	cond *expr
-	body []stmt
-}
-
-// ---------- 递归下降解析器 ----------
-
-type funcDef struct {
-	name      string
-	params    []string
-	ret       string
-	body      []stmt
-	selfTyp   string // impl 方法 receiver struct 名
-	selfParam string // receiver 参数名（self）
-}
-
-type structDef struct {
-	name   string
-	fields []string
-}
-
-type callExpr struct {
-	name string
-	args []*expr
-}
+var cmpOps = map[string]string{"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
 
 // ---------- 函数属性分析（LLVM norecurse/mustprogress 安全判定） ----------
 
@@ -1051,7 +1913,13 @@ func analyzeExpr(e *expr, m *fnMeta) {
 		for _, a := range e.method.args {
 			analyzeExpr(a, m)
 		}
+	case kToString:
+		m.impure = true // ql_int_to_str：malloc/snprintf 调用
+		analyzeExpr(e.l, m)
 	case kBin:
+		if e.strcat {
+			m.impure = true // ql_strcat 调用：有副作用，禁止 memory(none)
+		}
 		analyzeExpr(e.l, m)
 		analyzeExpr(e.r, m)
 	case kIndex:
@@ -1067,6 +1935,14 @@ func analyzeExpr(e *expr, m *fnMeta) {
 		for _, v := range e.sl.values {
 			analyzeExpr(v, m)
 		}
+	case kField:
+		analyzeExpr(e.field.recv, m)
+	case kAndOr:
+		analyzeExpr(e.l, m)
+		analyzeExpr(e.r, m)
+	case kCmp:
+		analyzeExpr(e.l, m)
+		analyzeExpr(e.r, m)
 	}
 }
 
@@ -1077,6 +1953,12 @@ func analyzeStmt(s stmt, m *fnMeta) {
 	case *assignStmt:
 		analyzeExpr(st.x, m)
 	case *printlnStmt:
+		m.impure = true // printf：IO 副作用，禁止 memory(none)
+		for _, a := range st.args {
+			analyzeExpr(a, m)
+		}
+	case *printStmt:
+		m.impure = true
 		for _, a := range st.args {
 			analyzeExpr(a, m)
 		}
@@ -1094,12 +1976,38 @@ func analyzeStmt(s stmt, m *fnMeta) {
 		for _, x := range st.body {
 			analyzeStmt(x, m)
 		}
+	case *forStmt:
+		m.hasLoop = true
+		if st.init != nil {
+			analyzeStmt(st.init, m)
+		}
+		analyzeExpr(st.cond, m)
+		if st.step != nil {
+			analyzeStmt(st.step, m)
+		}
+		for _, x := range st.body {
+			analyzeStmt(x, m)
+		}
+	case *forInStmt:
+		m.hasLoop = true
+		for _, x := range st.body {
+			analyzeStmt(x, m)
+		}
 	case *returnStmt:
 		analyzeExpr(st.x, m)
 	case *exprStmt:
 		analyzeExpr(st.x, m)
+	case *logStmt:
+		analyzeExpr(st.x, m)
+	case *deleteStmt:
+		m.impure = true // free
 	case *indexAssignStmt:
+		m.impure = true // 堆数组写入
 		analyzeExpr(st.idx, m)
+		analyzeExpr(st.x, m)
+	case *fieldAssignStmt:
+		m.impure = true
+		analyzeExpr(st.recv, m)
 		analyzeExpr(st.x, m)
 	case *tryStmt:
 		for _, x := range st.then {
@@ -1159,7 +2067,7 @@ func reachesSelf(name string, meta map[string]*fnMeta) bool {
 	return false
 }
 
-// fnAttrs 返回函数定义属性串（mustprogress/norecurse）。
+// fnAttrs 返回函数定义属性串（mustprogress/norecurse/memory(none)）。
 func fnAttrs(name string, meta map[string]*fnMeta) string {
 	m := meta[name]
 	if m == nil {
@@ -1179,612 +2087,33 @@ func fnAttrs(name string, meta map[string]*fnMeta) string {
 	return attrs
 }
 
-type returnStmt struct {
-	x *expr
-}
-
-type listLit struct {
-	items []*expr
-}
-
-type deleteStmt struct {
-	name string
-}
-
-type exprStmt struct {
-	x *expr
-}
-
-type indexAssignStmt struct {
-	name string
-	idx  *expr
-	x    *expr
-}
-
-type tryStmt struct {
-	then  []stmt
-	catch []stmt
-}
-
-type varInfoList struct {
-	reg    string
-	isList bool
-}
-
-type parser struct {
-	src     string
-	pos     int
-	funcs   []*funcDef
-	stmts   []stmt // main 的函数体
-	structs []structDef
-}
-
-func (p *parser) errf(format string, args ...interface{}) error {
-	return fmt.Errorf(format, args...)
-}
-
-func (p *parser) skipSpace() {
-	for p.pos < len(p.src) {
-		c := p.src[p.pos]
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
-			p.pos++
-			continue
-		}
-		if c == '/' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '/' {
-			for p.pos < len(p.src) && p.src[p.pos] != '\n' {
-				p.pos++
+// scanAssigned 收集语句中所有被赋值（assignStmt）的变量名 —— 决定哪些 decl 可 SSA 直通。
+func scanAssigned(stmts []stmt, out map[string]bool) {
+	for _, s := range stmts {
+		switch st := s.(type) {
+		case *assignStmt:
+			out[st.name] = true
+		case *ifStmt:
+			scanAssigned(st.then, out)
+			scanAssigned(st.els, out)
+		case *whileStmt:
+			scanAssigned(st.body, out)
+		case *forStmt:
+			if st.init != nil {
+				scanAssigned([]stmt{st.init}, out)
 			}
-			continue
-		}
-		return
-	}
-}
-
-func (p *parser) isIdentStart(c byte) bool {
-	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-}
-
-func (p *parser) isIdentPart(c byte) bool {
-	return p.isIdentStart(c) || (c >= '0' && c <= '9')
-}
-
-func (p *parser) lexIdent() string {
-	start := p.pos
-	for p.pos < len(p.src) && p.isIdentPart(p.src[p.pos]) {
-		p.pos++
-	}
-	return p.src[start:p.pos]
-}
-
-func (p *parser) expect(ch byte) error {
-	if p.pos >= len(p.src) || p.src[p.pos] != ch {
-		return p.errf("expected %q at pos %d", string(ch), p.pos)
-	}
-	p.pos++
-	return nil
-}
-
-func (p *parser) expectIdent() (string, error) {
-	if p.pos >= len(p.src) || !p.isIdentStart(p.src[p.pos]) {
-		return "", p.errf("expected identifier at pos %d", p.pos)
-	}
-	return p.lexIdent(), nil
-}
-
-func (p *parser) parseProgram() error {
-	p.skipSpace()
-	for p.pos < len(p.src) {
-		name, err := p.expectIdent()
-		if err != nil {
-			return err
-		}
-		if name == "type" {
-			// type struct { a int; b int; } Name;
-			p.skipSpace()
-			if _, err := p.expectIdent(); err != nil {
-				return err
-			} // struct
-			p.skipSpace()
-			if err := p.expect('{'); err != nil {
-				return err
+			if st.step != nil {
+				scanAssigned([]stmt{st.step}, out)
 			}
-			var fields []string
-			p.skipSpace()
-			for p.pos < len(p.src) && p.src[p.pos] != '}' {
-				fn, err := p.expectIdent()
-				if err != nil {
-					return err
-				}
-				fields = append(fields, fn)
-				p.skipSpace()
-				p.parseTypeName() // 字段类型（v1 忽略，按 i32）
-				p.skipSpace()
-				if err := p.expect(';'); err != nil {
-					return err
-				}
-				p.skipSpace()
-			}
-			p.pos++ // }
-			p.skipSpace()
-			sn, err := p.expectIdent()
-			if err != nil {
-				return err
-			}
-			p.skipSpace()
-			if err := p.expect(';'); err != nil {
-				return err
-			}
-			p.structs = append(p.structs, structDef{name: sn, fields: fields})
-			p.skipSpace()
-			continue
-		}
-		if name == "macro" {
-			// 宏声明跳过（v1：token 展开由解释器宏系统承担，编译器接受声明）
-			for depth := 0; p.pos < len(p.src); p.pos++ {
-				if p.src[p.pos] == '{' {
-					depth++
-				}
-				if p.src[p.pos] == '}' {
-					depth--
-					if depth == 0 && strings.Count(p.src[:p.pos], "{")%2 == 0 {
-						p.pos++
-						break
-					}
-				}
-			}
-			// 消费第二个块
-			for p.pos < len(p.src) && p.src[p.pos] != '{' {
-				p.pos++
-			}
-			if p.pos < len(p.src) {
-				for depth := 0; p.pos < len(p.src); p.pos++ {
-					if p.src[p.pos] == '{' {
-						depth++
-					}
-					if p.src[p.pos] == '}' {
-						depth--
-						if depth == 0 {
-							p.pos++
-							break
-						}
-					}
-				}
-			}
-			p.skipSpace()
-			continue
-		}
-		if name == "program" || name == "library" || name == "lib" {
-			// program main; 声明本文件为主程序（main 函数自动编译为 @main 入口）；
-			// library;/lib; 声明为库（编译产物供 import，不生成 main 入口——v1 接受声明）
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] != ';' {
-				if _, err := p.expectIdent(); err != nil {
-					return err
-				}
-			}
-			p.skipSpace()
-			if err := p.expect(';'); err != nil {
-				return err
-			}
-			p.skipSpace()
-			continue
-		}
-		if name == "impl" {
-			p.skipSpace()
-			styp, err := p.expectIdent()
-			if err != nil {
-				return err
-			}
-			p.skipSpace()
-			if err := p.expect('{'); err != nil {
-				return err
-			}
-			for p.pos < len(p.src) {
-				p.skipSpace()
-				if p.pos < len(p.src) && p.src[p.pos] == '}' {
-					break
-				}
-				if p.pos+2 < len(p.src) && p.src[p.pos:p.pos+2] == "fn" {
-					p.pos += 2
-					if err := p.parseImplMethod(styp); err != nil {
-						return err
-					}
-				} else {
-					p.pos++
-				}
-			}
-			p.pos++
-			p.skipSpace()
-			continue
-		}
-		if name != "fn" {
-			if name == "func" {
-				return p.errf("函数声明关键字是 fn：func main(...) 应写为 fn main(...)")
-			}
-			return p.errf("compiler v0.2 supports only fn/type/impl declarations, got %q", name)
-		}
-		if err := p.parseFunc(); err != nil {
-			return err
-		}
-		p.skipSpace()
-	}
-	return nil
-}
-
-// parseImplMethod：impl 的方法 fn name(self Type[, p1 T1]) ret { body }。
-func (p *parser) parseImplMethod(styp string) error {
-	p.skipSpace()
-	name, err := p.expectIdent()
-	if err != nil {
-		return err
-	}
-	p.skipSpace()
-	if err := p.expect('('); err != nil {
-		return err
-	}
-	p.skipSpace()
-	selfName, err := p.expectIdent()
-	if err != nil {
-		return err
-	}
-	p.skipSpace()
-	p.parseTypeName()
-	var params []string
-	p.skipSpace()
-	for p.pos < len(p.src) && p.src[p.pos] != ')' {
-		if p.src[p.pos] == ',' {
-			p.pos++
-		}
-		p.skipSpace()
-		pn, err := p.expectIdent()
-		if err != nil {
-			return err
-		}
-		params = append(params, pn)
-		p.skipSpace()
-		p.parseTypeName()
-		p.skipSpace()
-	}
-	p.pos++
-	p.skipSpace()
-	ret := ""
-	if p.pos < len(p.src) && p.src[p.pos] != '{' {
-		ret, _ = p.expectIdent()
-		p.skipSpace()
-	}
-	if err := p.expect('{'); err != nil {
-		return err
-	}
-	body, err := p.parseBlock()
-	if err != nil {
-		return err
-	}
-	p.funcs = append(p.funcs, &funcDef{name: styp + "_" + name, params: params, ret: ret, body: body, selfTyp: styp, selfParam: selfName})
-	return nil
-}
-
-// parseFunc 解析多函数声明：func name(p1 T1, ...) [ret] { body }。
-func (p *parser) parseFunc() error {
-	p.skipSpace()
-	name, err := p.expectIdent()
-	if err != nil {
-		return err
-	}
-	fd := &funcDef{name: name}
-	p.skipSpace()
-	// 泛型：fn<T,...>（v1 跳过类型参数，类型擦除按 int）
-	if p.pos < len(p.src) && p.src[p.pos] == '<' {
-		for p.pos < len(p.src) && p.src[p.pos] != '>' {
-			p.pos++
-		}
-		p.pos++
-		p.skipSpace()
-	}
-	if p.pos < len(p.src) && p.src[p.pos] == '(' {
-		p.pos++
-		for {
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ')' {
-				p.pos++
-				break
-			}
-			pn, err := p.expectIdent()
-			if err != nil {
-				return err
-			}
-			fd.params = append(fd.params, pn)
-			p.skipSpace()
-			// 参数类型（int/String/...，编译器 v0.2 只支持 int 语义）
-			if p.pos < len(p.src) && p.isIdentStart(p.src[p.pos]) {
-				p.lexIdent()
-			}
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ',' {
-				p.pos++
-				continue
-			}
+			scanAssigned(st.body, out)
+		case *forInStmt:
+			out[st.name] = true // 循环变量每次迭代被写入
+			scanAssigned(st.body, out)
+		case *tryStmt:
+			scanAssigned(st.then, out)
+			scanAssigned(st.catch, out)
 		}
 	}
-	p.skipSpace()
-	// 返回类型（'{' 前的标识符；main 无返回类型 = void）
-	if p.pos < len(p.src) && p.isIdentStart(p.src[p.pos]) {
-		fd.ret = p.lexIdent()
-		p.skipSpace()
-	}
-	if err := p.expect('{'); err != nil {
-		return err
-	}
-	stmts, err := p.parseBlock()
-	if err != nil {
-		return err
-	}
-	fd.body = stmts
-	p.funcs = append(p.funcs, fd)
-	if name == "main" {
-		p.stmts = stmts
-	}
-	return nil
-}
-
-// parseBlock 解析语句列表，直到 '}'（消费之）。
-func (p *parser) parseBlock() ([]stmt, error) {
-	var stmts []stmt
-	for {
-		p.skipSpace()
-		if p.pos >= len(p.src) {
-			return nil, p.errf("unterminated block")
-		}
-		if p.src[p.pos] == '}' {
-			p.pos++
-			return stmts, nil
-		}
-		stmtStart := p.pos
-		first, err := p.expectIdent()
-		if err != nil {
-			return nil, err
-		}
-		p.skipSpace()
-		switch first {
-		case "try":
-			p.skipSpace()
-			if err := p.expect('{'); err != nil {
-				return nil, err
-			}
-			then, err := p.parseBlock()
-			if err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			var catch []stmt
-			if p.pos+5 < len(p.src) && p.src[p.pos:p.pos+5] == "catch" {
-				p.pos += 5
-				p.skipSpace()
-				if p.pos < len(p.src) && p.src[p.pos] == '(' {
-					p.pos++
-					if _, err := p.expectIdent(); err != nil {
-						return nil, err
-					}
-					p.skipSpace()
-					if _, err := p.expectIdent(); err != nil {
-						return nil, err
-					}
-					p.skipSpace()
-					if err := p.expect(')'); err != nil {
-						return nil, err
-					}
-				}
-				p.skipSpace()
-				if err := p.expect('{'); err != nil {
-					return nil, err
-				}
-				catch, err = p.parseBlock()
-				if err != nil {
-					return nil, err
-				}
-			}
-			stmts = append(stmts, &tryStmt{then: then, catch: catch})
-		case "delete", "clear", "compact":
-			// delete/clear/compact variable; —— 编译路径 = free（空闲队列语义由解释器内存管理器承担）
-			p.skipSpace()
-			target, err := p.expectIdent()
-			if err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			if err := p.expect(';'); err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &deleteStmt{name: target})
-		case "return":
-			x, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			if err := p.expect(';'); err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &returnStmt{x: x})
-		case "io":
-			if err := p.expect('.'); err != nil {
-				return nil, err
-			}
-			m, err := p.expectIdent()
-			if err != nil {
-				return nil, err
-			}
-			if m != "println" && m != "print" {
-				return nil, p.errf("compiler v0.2 supports only io.println/io.print, got %q", m)
-			}
-			p.skipSpace()
-			if err := p.expect('('); err != nil {
-				return nil, err
-			}
-			var args []*expr
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] != ')' {
-				for {
-					a, err := p.parseExpr()
-					if err != nil {
-						return nil, err
-					}
-					args = append(args, a)
-					p.skipSpace()
-					if p.pos < len(p.src) && p.src[p.pos] == ',' {
-						p.pos++
-						p.skipSpace()
-						continue
-					}
-					break
-				}
-			}
-			if err := p.expect(')'); err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			if err := p.expect(';'); err != nil {
-				return nil, err
-			}
-			if m == "println" {
-				stmts = append(stmts, &printlnStmt{args: args})
-			}
-		case "if":
-			if err := p.expect('('); err != nil {
-				return nil, err
-			}
-			cond, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			if err := p.expect(')'); err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			if err := p.expect('{'); err != nil {
-				return nil, err
-			}
-			thenStmts, err := p.parseBlock()
-			if err != nil {
-				return nil, err
-			}
-			var els []stmt
-			p.skipSpace()
-			if p.pos+3 < len(p.src) && p.src[p.pos:p.pos+4] == "else" {
-				p.pos += 4
-				p.skipSpace()
-				if err := p.expect('{'); err != nil {
-					return nil, err
-				}
-				els, err = p.parseBlock()
-				if err != nil {
-					return nil, err
-				}
-			}
-			stmts = append(stmts, &ifStmt{cond: cond, then: thenStmts, els: els})
-		case "while":
-			if err := p.expect('('); err != nil {
-				return nil, err
-			}
-			cond, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			if err := p.expect(')'); err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			if err := p.expect('{'); err != nil {
-				return nil, err
-			}
-			body, err := p.parseBlock()
-			if err != nil {
-				return nil, err
-			}
-			stmts = append(stmts, &whileStmt{cond: cond, body: body})
-		default:
-			// 声明（name Type = expr;）或赋值（name = expr;）
-			if p.pos < len(p.src) && p.src[p.pos] == '=' {
-				p.pos++
-				p.skipSpace()
-				x, err := p.parseExpr()
-				if err != nil {
-					return nil, err
-				}
-				p.skipSpace()
-				if err := p.expect(';'); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &assignStmt{name: first, x: x})
-			} else if p.pos < len(p.src) && p.isIdentStart(p.src[p.pos]) {
-				typ := p.parseTypeName()
-				p.skipSpace()
-				if err := p.expect('='); err != nil {
-					return nil, p.errf("expected '=' in declaration of %q", first)
-				}
-				p.skipSpace()
-				init, err := p.parseExpr()
-				if err != nil {
-					return nil, err
-				}
-				p.skipSpace()
-				if err := p.expect(';'); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &declStmt{name: first, typ: typ, init: init})
-			} else {
-				// 表达式语句：expr;（如 l.size();）——回溯到语句起点完整解析
-				p.pos = stmtStart
-				x, err := p.parseExpr()
-				if err != nil {
-					return nil, err
-				}
-				p.skipSpace()
-				if p.pos < len(p.src) && p.src[p.pos] == '=' {
-					// l[i] = v 下标赋值
-					if xi := x; xi.kind == kIndex && xi.idx != nil {
-						p.pos++
-						p.skipSpace()
-						v, err := p.parseExpr()
-						if err != nil {
-							return nil, err
-						}
-						p.skipSpace()
-						if err := p.expect(';'); err != nil {
-							return nil, err
-						}
-						stmts = append(stmts, &indexAssignStmt{name: xi.idx.name, idx: xi.idx.i, x: v})
-						continue
-					}
-				}
-				if err := p.expect(';'); err != nil {
-					return nil, err
-				}
-				stmts = append(stmts, &exprStmt{x: x})
-			}
-		}
-	}
-}
-
-// registerRunner 注册 merge 的 runner（fn|argc），返回 runner 函数名。
-func (e *emitter) registerRunner(fn, argc string) string {
-	e.runners = append(e.runners, fn+"|"+argc)
-	return fmt.Sprintf("runner_%d", len(e.runners)-1)
-}
-
-// emitRunners 生成所有 runner 函数与 idle_runner。
-func emitRunners(runners []string) string {
-	var sb strings.Builder
-	sb.WriteString("define i8* @idle_runner(i8*) {\n  ret i8* null\n}\n")
-	for i, r := range runners {
-		parts := strings.Split(r, "|")
-		fn, argc := parts[0], parts[1]
-		if argc == "0" {
-			sb.WriteString(fmt.Sprintf("define i8* @runner_%d(i8*) {\n  call i32 @%s()\n  ret i8* null\n}\n", i, fn))
-		} else {
-			sb.WriteString(fmt.Sprintf("define i8* @runner_%d(i8* %%a) {\n  %%v = ptrtoint i8* %%a to i32\n  call i32 @%s(i32 %%v)\n  ret i8* null\n}\n", i, fn))
-		}
-	}
-	return sb.String()
 }
 
 // constEval 递归求值常量表达式（字面量算术折叠）。
@@ -1825,487 +2154,67 @@ func constEval(x *expr) (int64, bool) {
 	return 0, false
 }
 
-// scanAssigned 收集语句中所有被赋值（assignStmt）的变量名 —— 决定哪些 decl 可 SSA 直通。
-func scanAssigned(stmts []stmt, out map[string]bool) {
-	for _, s := range stmts {
-		switch st := s.(type) {
-		case *assignStmt:
-			out[st.name] = true
-		case *ifStmt:
-			scanAssigned(st.then, out)
-			scanAssigned(st.els, out)
-		case *whileStmt:
-			scanAssigned(st.body, out)
-		}
-	}
-}
+// ---------- 运行期助手（按需追加到模块尾部） ----------
 
-// parseTypeName 解析类型注解：int / String / List<int>（编译器支持的子集）。
-func (p *parser) parseTypeName() string {
-	t := p.lexIdent()
-	if t == "List" && p.pos < len(p.src) && p.src[p.pos] == '<' {
-		p.pos++
-		for p.pos < len(p.src) && p.src[p.pos] != '>' {
-			p.pos++
-		}
-		if p.pos < len(p.src) {
-			p.pos++
-		}
-		return "List<int>"
-	}
-	return t
+// intToStrHelper 是 int.toString() 的运行时助手：malloc(12) + snprintf("%d")；
+// 12 字节足够 int32 极值（-2147483648 + NUL）。
+const intToStrHelper = `@.ql.fmt.d = private unnamed_addr constant [3 x i8] c"%d\00", align 1
+define i8* @ql_int_to_str(i32 %v) {
+entry:
+  %b = call i8* @malloc(i64 12)
+  %f = getelementptr inbounds [3 x i8], [3 x i8]* @.ql.fmt.d, i64 0, i64 0
+  %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %b, i64 12, i8* %f, i32 %v)
+  ret i8* %b
 }
+`
 
-func (p *parser) peekChar() byte {
-	if p.pos < len(p.src) {
-		return p.src[p.pos]
-	}
-	return 0
+// floatToStrHelper 是 float.toString()/打印的运行时助手：与解释器
+// strconv.FormatFloat(v,'f',-1,64) 一致 —— 取最短可回读（round-trip）的定点小数。
+// 实现：%.0f..%.17f 逐个 snprintf，用 strtod 回读校验，取首个能精确还原的精度。
+const floatToStrHelper = `@.ql.fmt.f = private unnamed_addr constant [5 x i8] c"%.*f\00", align 1
+define i8* @ql_float_to_str(double %v) {
+entry:
+  %buf = call i8* @malloc(i64 40)
+  %fmt = getelementptr inbounds [5 x i8], [5 x i8]* @.ql.fmt.f, i64 0, i64 0
+  br label %loop
+loop:
+  %p = phi i32 [ 0, %entry ], [ %pn, %next ]
+  %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %buf, i64 40, i8* %fmt, i32 %p, double %v)
+  %back = call double @strtod(i8* %buf, i8** null)
+  %same = fcmp oeq double %back, %v
+  br i1 %same, label %done, label %next
+next:
+  %pn = add i32 %p, 1
+  %over = icmp sgt i32 %pn, 17
+  br i1 %over, label %done, label %loop
+done:
+  ret i8* %buf
 }
+`
 
-func (p *parser) parseExpr() (*expr, error) {
-	p.skipSpace()
-	return p.parseOr()
+// panicHelper 是运行期错误的打印与退出（与解释器 ReportError 的 "error: ..." 一致）。
+const panicHelper = `@.ql.panic.fmt = private unnamed_addr constant [22 x i8] c"error: %s at line %d\0A\00", align 1
+@.ql.panic.idx = private unnamed_addr constant [71 x i8] c"error: IndexOutOfBoundsError: index %d out of range [0,%d) at line %d\0A\00", align 1
+define void @ql_panic(i8* %msg, i32 %line) {
+entry:
+  %buf = alloca [512 x i8], align 16
+  %p = getelementptr inbounds [512 x i8], [512 x i8]* %buf, i64 0, i64 0
+  %fmt = getelementptr inbounds [22 x i8], [22 x i8]* @.ql.panic.fmt, i64 0, i64 0
+  %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %p, i64 512, i8* %fmt, i8* %msg, i32 %line)
+  %n64 = sext i32 %n to i64
+  %w = call i64 @write(i32 2, i8* %p, i64 %n64)
+  call void @exit(i32 1)
+  unreachable
 }
-
-func (p *parser) parseOr() (*expr, error) {
-	l, err := p.parseAnd()
-	if err != nil {
-		return nil, err
-	}
-	for {
-		p.skipSpace()
-		if p.pos+1 < len(p.src) && p.src[p.pos] == '|' && p.src[p.pos+1] == '|' {
-			p.pos += 2
-			r, err := p.parseAnd()
-			if err != nil {
-				return nil, err
-			}
-			l = &expr{kind: kAndOr, op: "||", l: l, r: r}
-			continue
-		}
-		return l, nil
-	}
+define void @ql_panic_index(i32 %idx, i32 %size, i32 %line) {
+entry:
+  %buf = alloca [512 x i8], align 16
+  %p = getelementptr inbounds [512 x i8], [512 x i8]* %buf, i64 0, i64 0
+  %fmt = getelementptr inbounds [71 x i8], [71 x i8]* @.ql.panic.idx, i64 0, i64 0
+  %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %p, i64 512, i8* %fmt, i32 %idx, i32 %size, i32 %line)
+  %n64 = sext i32 %n to i64
+  %w = call i64 @write(i32 2, i8* %p, i64 %n64)
+  call void @exit(i32 1)
+  unreachable
 }
-
-func (p *parser) parseAnd() (*expr, error) {
-	l, err := p.parseCmp()
-	if err != nil {
-		return nil, err
-	}
-	for {
-		p.skipSpace()
-		if p.pos+1 < len(p.src) && p.src[p.pos] == '&' && p.src[p.pos+1] == '&' {
-			p.pos += 2
-			r, err := p.parseCmp()
-			if err != nil {
-				return nil, err
-			}
-			l = &expr{kind: kAndOr, op: "&&", l: l, r: r}
-			continue
-		}
-		return l, nil
-	}
-}
-
-func (p *parser) parseCmp() (*expr, error) {
-	l, err := p.parseAdd()
-	if err != nil {
-		return nil, err
-	}
-	for {
-		p.skipSpace()
-		if p.pos >= len(p.src) {
-			return l, nil
-		}
-		op := ""
-		switch {
-		case p.src[p.pos] == '=' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-			op = "eq"
-		case p.src[p.pos] == '!' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-			op = "ne"
-		case p.src[p.pos] == '<' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-			op = "sle"
-		case p.src[p.pos] == '>' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '=':
-			op = "sge"
-		case p.src[p.pos] == '<':
-			op = "slt"
-		case p.src[p.pos] == '>':
-			op = "sgt"
-		}
-		if op == "" {
-			return l, nil
-		}
-		if op == "eq" || op == "ne" || op == "sle" || op == "sge" {
-			p.pos += 2
-		} else {
-			p.pos++
-		}
-		r, err := p.parseAdd()
-		if err != nil {
-			return nil, err
-		}
-		l = &expr{kind: kCmp, op: op, l: l, r: r}
-	}
-}
-
-func (p *parser) parseAdd() (*expr, error) {
-	l, err := p.parseMul()
-	if err != nil {
-		return nil, err
-	}
-	for {
-		p.skipSpace()
-		if p.pos >= len(p.src) || (p.src[p.pos] != '+' && p.src[p.pos] != '-') {
-			return l, nil
-		}
-		op := string(p.src[p.pos])
-		p.pos++
-		r, err := p.parseMul()
-		if err != nil {
-			return nil, err
-		}
-		l = &expr{kind: kBin, op: op, l: l, r: r}
-	}
-}
-
-func (p *parser) parseMul() (*expr, error) {
-	l, err := p.parsePrimary()
-	if err != nil {
-		return nil, err
-	}
-	for {
-		p.skipSpace()
-		// 位移 << >>
-		if p.pos+1 < len(p.src) && ((p.src[p.pos] == '<' && p.src[p.pos+1] == '<') || (p.src[p.pos] == '>' && p.src[p.pos+1] == '>')) {
-			op := string(p.src[p.pos]) + string(p.src[p.pos+1])
-			p.pos += 2
-			r, err := p.parsePrimary()
-			if err != nil {
-				return nil, err
-			}
-			l = &expr{kind: kBin, op: op, l: l, r: r}
-			continue
-		}
-		if p.pos >= len(p.src) || (p.src[p.pos] != '*' && p.src[p.pos] != '/' && p.src[p.pos] != '%') {
-			return l, nil
-		}
-		op := string(p.src[p.pos])
-		p.pos++
-		r, err := p.parsePrimary()
-		if err != nil {
-			return nil, err
-		}
-		l = &expr{kind: kBin, op: op, l: l, r: r}
-	}
-}
-
-func (p *parser) parsePrimary() (*expr, error) {
-	p.skipSpace()
-	if p.pos >= len(p.src) {
-		return nil, p.errf("unexpected end of expression")
-	}
-	c := p.src[p.pos]
-	switch {
-	case c >= '0' && c <= '9':
-		start := p.pos
-		for p.pos < len(p.src) && p.src[p.pos] >= '0' && p.src[p.pos] <= '9' {
-			p.pos++
-		}
-		var v int64
-		for _, d := range p.src[start:p.pos] {
-			v = v*10 + int64(d-'0')
-		}
-		return &expr{kind: kInt, i: v}, nil
-	case c == '"':
-		p.pos++
-		var sb strings.Builder
-		for {
-			if p.pos >= len(p.src) {
-				return nil, p.errf("unterminated string literal")
-			}
-			ch := p.src[p.pos]
-			if ch == '"' {
-				p.pos++
-				break
-			}
-			if ch == '\\' && p.pos+1 < len(p.src) {
-				n := p.src[p.pos+1]
-				switch n {
-				case 'n':
-					sb.WriteByte('\n')
-				case 't':
-					sb.WriteByte('\t')
-				case 'r':
-					sb.WriteByte('\r')
-				case '"':
-					sb.WriteByte('"')
-				case '\\':
-					sb.WriteByte('\\')
-				default:
-					sb.WriteByte(n)
-				}
-				p.pos += 2
-				continue
-			}
-			sb.WriteByte(ch)
-			p.pos++
-		}
-		return &expr{kind: kString, s: sb.String()}, nil
-	case p.isIdentStart(c):
-		name := p.lexIdent()
-		if name == "true" {
-			return &expr{kind: kBool, b: true}, nil
-		}
-		if name == "false" {
-			return &expr{kind: kBool, b: false}, nil
-		}
-		// 函数调用：name(args)
-		save := p.pos
-		p.skipSpace()
-		if p.pos < len(p.src) && p.src[p.pos] == '(' {
-			p.pos++
-			call := &callExpr{name: name}
-			for {
-				p.skipSpace()
-				if p.pos < len(p.src) && p.src[p.pos] == ')' {
-					p.pos++
-					break
-				}
-				a, err := p.parseExpr()
-				if err != nil {
-					return nil, err
-				}
-				call.args = append(call.args, a)
-				p.skipSpace()
-				if p.pos < len(p.src) && p.src[p.pos] == ',' {
-					p.pos++
-					continue
-				}
-			}
-			// 签名 f(args) @instance(...)：编译器后端暂未实现，给出明确诊断
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == '@' {
-				return nil, p.errf("signatures f(args) @instance(...) 暂仅解释器支持（编译器后端待实现）")
-			}
-			return &expr{kind: kCall, call: call}, nil
-		}
-		// 泛型调用类型参数：f<T>(args)（v1 跳过，然后作为函数调用处理）
-		if p.pos < len(p.src) && p.src[p.pos] == '<' {
-			for p.pos < len(p.src) && p.src[p.pos] != '>' {
-				p.pos++
-			}
-			p.pos++
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == '(' {
-				p.pos++
-				call := &callExpr{name: name}
-				for {
-					p.skipSpace()
-					if p.pos < len(p.src) && p.src[p.pos] == ')' {
-						p.pos++
-						break
-					}
-					a, err := p.parseExpr()
-					if err != nil {
-						return nil, err
-					}
-					call.args = append(call.args, a)
-					p.skipSpace()
-					if p.pos < len(p.src) && p.src[p.pos] == ',' {
-						p.pos++
-						continue
-					}
-				}
-				return &expr{kind: kCall, call: call}, nil
-			}
-		}
-		p.pos = save
-		// 下标访问：name[expr]
-		p.skipSpace()
-		if p.pos < len(p.src) && p.src[p.pos] == '[' {
-			p.pos++
-			ie, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			p.skipSpace()
-			if err := p.expect(']'); err != nil {
-				return nil, err
-			}
-			return &expr{kind: kIndex, idx: &indexExpr{name: name, i: ie}}, nil
-		}
-		// 方法调用：name.method(args)（如 l.size() / l.get(i)）
-		p.skipSpace()
-		if p.pos < len(p.src) && p.src[p.pos] == '.' {
-			p.pos++
-			m, err := p.expectIdent()
-			if err != nil {
-				return nil, err
-			}
-			me := &methodExpr{name: name, method: m}
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == '(' {
-				p.pos++
-				for {
-					p.skipSpace()
-					if p.pos < len(p.src) && p.src[p.pos] == ')' {
-						p.pos++
-						break
-					}
-					a, err := p.parseExpr()
-					if err != nil {
-						return nil, err
-					}
-					me.args = append(me.args, a)
-					p.skipSpace()
-					if p.pos < len(p.src) && p.src[p.pos] == ',' {
-						p.pos++
-						continue
-					}
-				}
-			}
-			return &expr{kind: kMethod, method: me}, nil
-		}
-		return &expr{kind: kIdent, s: name}, nil
-	case c == '.':
-		// 结构体字面量：.{v1, v2, ...}
-		p.pos++
-		if err := p.expect('{'); err != nil {
-			return nil, err
-		}
-		sl := &structLit{}
-		p.skipSpace()
-		for p.pos < len(p.src) && p.src[p.pos] != '}' {
-			v, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			sl.values = append(sl.values, v)
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ',' {
-				p.pos++
-				p.skipSpace()
-				continue
-			}
-		}
-		p.pos++ // }
-		return &expr{kind: kStructLit, sl: sl}, nil
-	case c == '-':
-		p.pos++
-		inner, err := p.parsePrimary()
-		if err != nil {
-			return nil, err
-		}
-		return &expr{kind: kBin, op: "-", l: &expr{kind: kInt}, r: inner}, nil
-	case c == '!':
-		p.pos++
-		inner, err := p.parsePrimary()
-		if err != nil {
-			return nil, err
-		}
-		return &expr{kind: kAndOr, op: "!", l: inner}, nil
-	case c == '(':
-		p.pos++
-		e, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		p.skipSpace()
-		if err := p.expect(')'); err != nil {
-			return nil, err
-		}
-		return e, nil
-	case c == '[':
-		p.pos++
-		lit := &listLit{}
-		for {
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ']' {
-				p.pos++
-				break
-			}
-			it, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			lit.items = append(lit.items, it)
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ',' {
-				p.pos++
-				continue
-			}
-		}
-		return &expr{kind: kList, lst: lit}, nil
-	case c == '[':
-		// 列表字面量 [a, b, c]
-		p.pos++
-		lit := &listLit{}
-		for {
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ']' {
-				p.pos++
-				break
-			}
-			it, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			lit.items = append(lit.items, it)
-			p.skipSpace()
-			if p.pos < len(p.src) && p.src[p.pos] == ',' {
-				p.pos++
-				continue
-			}
-		}
-		return &expr{kind: kList, lst: lit}, nil
-	}
-	return nil, p.errf("unexpected character %q in expression", string(c))
-}
-
-// emitSum 把 sum(g, begin, stop[, step]) 内联展开为循环：
-// total = 0; for (i = begin; i < stop; i += step) total += g(i);
-// 线性生成器由 clang -O3 自动闭式化（乘加 O(1)）。
-func (e *emitter) emitSum(c *callExpr) string {
-	b, _ := e.compileExpr(c.args[1])
-	s, _ := e.compileExpr(c.args[2])
-	st := "1"
-	if len(c.args) == 4 {
-		st, _ = e.compileExpr(c.args[3])
-	}
-	gname := c.args[0].s
-	total := e.newReg()
-	e.emitInstr("%s = alloca i32, align 4", total)
-	e.emitInstr("store i32 0, i32* %s", total)
-	iv := e.newReg()
-	e.emitInstr("%s = alloca i32, align 4", iv)
-	e.emitInstr("store i32 %s, i32* %s", b, iv)
-	condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
-	e.emitInstr("br label %%%s", condB)
-	e.setBlock(condB)
-	li := e.newReg()
-	e.emitInstr("%s = load i32, i32* %s", li, iv)
-	c1 := e.newReg()
-	e.emitInstr("%s = icmp slt i32 %s, %s", c1, li, s)
-	e.emitInstr("br i1 %s, label %%%s, label %%%s", c1, bodyB, endB)
-	e.setBlock(bodyB)
-	li2 := e.newReg()
-	e.emitInstr("%s = load i32, i32* %s", li2, iv)
-	gv := e.newReg()
-	e.emitInstr("%s = call i32 @%s(i32 %s)", gv, gname, li2)
-	tl := e.newReg()
-	e.emitInstr("%s = load i32, i32* %s", tl, total)
-	t2 := e.newReg()
-	e.emitInstr("%s = add i32 %s, %s", t2, tl, gv)
-	e.emitInstr("store i32 %s, i32* %s", t2, total)
-	li3 := e.newReg()
-	e.emitInstr("%s = load i32, i32* %s", li3, iv)
-	ni := e.newReg()
-	e.emitInstr("%s = add i32 %s, %s", ni, li3, st)
-	e.emitInstr("store i32 %s, i32* %s", ni, iv)
-	e.emitInstr("br label %%%s", condB)
-	e.setBlock(endB)
-	tf := e.newReg()
-	e.emitInstr("%s = load i32, i32* %s", tf, total)
-	return tf
-}
+`

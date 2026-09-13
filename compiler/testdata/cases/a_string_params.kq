@@ -1,0 +1,19 @@
+// S1：String 形参（含拼接、返回、递归）
+fn greet(String s) String {
+    return "hi " + s;
+}
+fn wrap(String s, String p) String {
+    return p + s + p;
+}
+fn reps(String s, int n) String {
+    if (n <= 0) { return ""; }
+    return s + reps(s, n - 1);
+}
+fn main(IOStream io) {
+    io.println(greet("bob"));
+    String x = "abcd";
+    io.println(greet(x));
+    io.println(wrap(x, "["));
+    io.println(greet(greet("z")));
+    io.println(reps("ab", 3));
+}
