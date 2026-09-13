@@ -433,6 +433,65 @@ func TestOverloads(t *testing.T) {
 	}
 }
 
+// 形参按引用传递：callee 写形参穿透到调用方；copyd 传时深拷贝；非左值实参是临时单元。
+func TestByRefParams(t *testing.T) {
+	src := "type struct { int v; } S;\n" +
+		"fn bump(int a) int { a = a + 1; return a; }\n" +
+		"fn rebind(S s) int { S o; o.v = 99; s = o; return s.v; }\n" +
+		"fn deep(copyd S s) int { s.v = 100; return s.v; }\n" +
+		"fn chain(int a) int { return bump(a); }\n" +
+		"fn main(IOStream io) {\n" +
+		"    int x = 5;\n" +
+		"    io.println(bump(x), x);\n" + // 6 6（写回）
+		"    chain(x);\n" +
+		"    io.println(x);\n" + // 7（引用链）
+		"    io.println(bump(x + 1), x);\n" + // 9 7（非左值不回写）
+		"    S s; s.v = 1;\n" +
+		"    io.println(rebind(s), s.v);\n" + // 99 99（形参重绑定写回）
+		"    S c; c.v = 7;\n" +
+		"    io.println(deep(c), c.v);\n" + // 100 7（copyd 深拷贝）
+		"}\n"
+	ir := transpile(t, src)
+	for _, want := range []string{"define i32 @bump(i32* noundef %p0)", "define i32 @rebind(%S** noundef %p0)", "call %S* @ql_copyd_struct_S"} {
+		if !strings.Contains(ir, want) {
+			t.Fatalf("by-ref IR missing %q:\n%s", want, ir)
+		}
+	}
+	if got := lliRun(t, withTestRuntime(ir)); got != "6 6\n7\n9 7\n99 99\n100 7\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// 签名 memorize（f(args) @mb()）：IR 必须包含初始化、查表、调用与写回（端到端由
+// testdata/cases_run/v_sign.kq 的 compare.sh 对比覆盖：需要 clang 链接 qthreads 运行时）。
+func TestMemoizeSignatureIR(t *testing.T) {
+	ir := transpile(t, "fn sq(int n) int { return n * n; }\n"+
+		"fn main(IOStream io) {\n"+
+		"    memorize mb = memorize::new();\n"+
+		"    io.println(sq(41) @mb());\n"+
+		"}\n")
+	for _, want := range []string{
+		"declare i8* @ql_memo_new()",
+		"call i8* @ql_memo_new()",
+		"declare i32 @ql_memo_get(i8*, i32, i32*, i32*)",
+		"call i32 @ql_memo_get(i8*",
+		"call void @ql_memo_put(i8*",
+		"call i32 @sq(i32*",
+		"phi i32",
+	} {
+		if !strings.Contains(ir, want) {
+			t.Fatalf("memory IR missing %q:\n%s", want, ir)
+		}
+	}
+	// 非 int 键 / 返回值：明确报错
+	if _, err := Transpile("fn f(String s) String { return s; }\nfn main(IOStream io) { memorize mb = memorize::new(); io.println(f(\"a\") @mb()); }\n", "test.qk"); err == nil {
+		t.Fatal("memorize with String keys must report unsupported")
+	}
+	if _, err := Transpile("fn main(IOStream io) { int x = 1; io.println(1 @x()); }\n", "test.qk"); err == nil {
+		t.Fatal("non-memorize sign instance must report unsupported")
+	}
+}
+
 // Phase D：library FFI（LLVM declare + C ABI 直调）与 taskm（qthreads 运行时）。
 // 这两类需要 clang 链接（-lm / qthreads.c），lli 单测只校验 IR 形状；
 // 端到端输出对齐由 compiler/testdata/compare.sh 覆盖（cases_run/e_ffi、f_taskm）。
@@ -515,8 +574,8 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 		"}\n")
 	for _, want := range []string{
 		"declare i32 @ql_spawn()",
-		"declare void @ql_merge(i32, i8*, i32)",
-		"define void @runner_0(i32 %a)",
+		"declare void @ql_merge(i32, i8*, i64, i64, i64, i64)",
+		"define void @runner_0(i64 %a0)",
 		"call void @ql_merge(i32",
 		"call void @ql_block(i32",
 		"call i32 @ql_send(i8*",

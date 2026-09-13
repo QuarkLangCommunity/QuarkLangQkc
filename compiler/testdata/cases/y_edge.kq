@@ -1,0 +1,39 @@
+// y_edge：边角语义（泛型函数作 sum 生成器、尾调用、List 字面量赋值/实参、函数重载）。
+fn<T> ident(T x) T { return x; }
+fn add(int a, int b) int { return a + b; }
+fn add(String a, String b) String { return a + "<" + b; }
+fn add(int a, int b, int c) int { return a + b + c; }
+fn tailSum(int n, int acc) int { if (n == 0) { return acc; } return tailSum(n - 1, acc + n); }
+fn<T> bump(T x) T { x = x; return x; }
+fn sumList(List<int> l) int { int t = 0; for (int x : l) { t = t + x; } return t; }
+type struct { int v; } V;
+impl { fn __add__(V self, V o) V { V z; z.v = self.v + o.v; o = z; return z; } } V;
+type struct<T> { T v; } Box;
+impl<T> { fn get(Box<T> self) T { return self.v; } } Box;
+
+fn main(IOStream io) {
+  io.println(sum(ident, 1, 5));        // 10（泛型生成器按 T=int 单态化）
+  io.println(sum(ident, 1, 6, 2));     // 9
+  io.println(tailSum(5, 0));           // 15（尾调用：实参是形参槽 → 地址稳定）
+  io.println(tailSum(1000, 0));        // 500500
+  List<int> l = [1, 2, 3];
+  l = [4, 5];                          // 列表字面量赋值
+  io.println(sumList(l));              // 9
+  io.println(sumList([6, 7]));         // 13（列表字面量作实参）
+  io.println(add(1, 2));               // 3
+  io.println(add("a", "b"));           // a<b
+  io.println(add(1, 2, 3));            // 6
+  io.println(add(add(1, 2), 4));       // 7
+  // 运算符重载的实参按值（解释器 BinOp 求值 → 非引用）：重绑定操作数不回写
+  V a; a.v = 1;
+  V b; b.v = 2;
+  V c = a + b;
+  io.println(c.v);                     // 3
+  io.println(b.v);                     // 2
+  // 泛型函数形参同样按引用（T 单态化为 int）
+  int n = 5;
+  io.println(bump(n));                 // 5
+  io.println(n);                       // 5
+  Box<int> bx; bx.v = 9;
+  io.println(bx.get());                // 9
+}

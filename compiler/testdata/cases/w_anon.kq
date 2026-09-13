@@ -1,0 +1,37 @@
+// w_anon：匿名 struct / 匿名 interface 类型标注（解释器 parser 合成实名类型 __anon_struct_N /
+// __anon_iface_N，编译器按合成名 lower，同一结构复用同一个合成名）。
+type struct { int v; } A;
+impl { fn tag(A self) String { return "A" + self.v.toString(); } } A;
+type struct { int u; } B;
+impl { fn tag(B self) String { return "B" + self.u.toString(); } } B;
+
+fn mk(int n) struct { int a; String s; } {
+  struct { int a; String s; } r = .{a: n, s: "x" + n.toString()};
+  return r;
+}
+fn take(struct { int a; String s; } p) String { return p.s + "/" + p.a.toString(); }
+fn pick(interface { fn tag(Self self) String; } x) String { return x.tag(); }
+type struct { int a; interface { fn tag(Self self) String; } it; } Holder;
+
+fn main(IOStream io) {
+  struct { int a; String s; } p;
+  p.a = 3;
+  p.s = "abc";
+  io.println(take(p));            // abc/3
+  io.println(take(mk(5)));        // x5/5
+  io.println(mk(7).a);            // 7
+  A a; a.v = 1;
+  B b; b.u = 2;
+  io.println(pick(a));            // A1
+  io.println(pick(b));            // B2
+  Holder h;
+  h.a = 7;
+  h.it = a;
+  io.println(h.it.tag());         // A1
+  io.println(h.a);                // 7
+  h.it = b;
+  io.println(h.it.tag());         // B2
+  // 结构相同的两处匿名 struct 标注是同一个合成类型（字段可互换赋值）
+  struct { int a; String s; } q = p;
+  io.println(take(q));            // abc/3
+}

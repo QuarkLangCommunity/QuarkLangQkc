@@ -33,30 +33,40 @@ testdata/compare.sh                 # 解释器 vs 编译器逐字节对比（�
 是回归语料，基准输出由解释器生成。
 
 - 入口：`fn main(IOStream io) { ... }`（必须，首个参数为 IOStream）；`import` 递归合并
+- **参数语义（正典）**：形参一律**按引用传递**（LLVM 层形参 = 值类型\*，callee 读写穿透调用方）；
+  左值实参用其自身存储、非左值实参是调用方临时单元；`copyd` 形参在入口深拷贝（标量/String 复制、
+  struct 递归复制、List<int> 复制缓冲区），callee 写入不回写；`self` 接收者按值绑定（解释器同）
 - 函数：任意标量/struct/接口返回与形参（int/bool/float/String/struct/接口）；调用/递归/尾调用
-- 变量与语句：int/bool/float/String/List<int>/struct/接口/thread/Channel；
+  （尾调用仅在实参地址稳定时发射，避免指针失效）
+- 变量与语句：int/bool/float/String/List<int>/struct/接口/thread/Channel/memorize；
   赋值、`l[i] = v`、struct 字段赋值、`if/else`、`while`、C 风格 `for`、迭代 `for (T x : l)`、
   `break`、`log`、`try/catch (void e)`、`return`、`delete l`、`io.println/io.print`
-- 表达式：int/float/bool/String 字面量、`+ - * / % << >>`、比较（int/float/String/bool）、
-  短路 `&& || !`、String 拼接、`int/float/bool.toString()`、`l.size()/get(i)/append(v)/l[i]`、
-  内置 `sum(...)` / `clock()`
+- 表达式：int/float/bool/String/List 字面量（任意表达式位置）、`+ - * / % << >>`、
+  比较（int/float/String/bool）、短路 `&& || !`、String 拼接、`int/float/bool.toString()`、
+  `l.size()/get(i)/append(v)/l[i]`（接收者可以是变量或 struct 字段）、内置 `sum(...)`/`clock()`
 - 对象模型：struct（引用语义，与解释器 *Struct 别名一致）、struct 字面量（命名+位置）、
   `impl` 实例/静态方法、`space`（`space::f`）、Operation 运算符重载（`__add__` 等）
-- 泛型：`fn<T>` 与 `type struct<T>` / `impl<T>` 按调用点单态化
-- 接口：结构化满足（由 internal/lang Typecheck 校验）+ vtable/thunk dynamic 分发
+- 泛型：`fn<T>` 与 `type struct<T>` / `impl<T>` 按调用点单态化；泛型函数可作 `sum` 生成器
+- 接口：结构化满足（由 internal/lang Typecheck 校验）+ vtable/thunk dynamic 分发；
+  **匿名 struct / 匿名 interface 类型标注**（parser 合成 `__anon_struct_N`/`__anon_iface_N`，
+  编译器按合成实名 lower）
+- 签名调用：`f(args) @mb()`（内置 **memorize**：按 int 实参列表记忆化，运行时
+  `ql_memo_new/get/put`；@ 处的显式 prefix 实参求值丢弃 —— 与解释器一致）
 - library FFI：LLVM `declare` + C ABI 直调，IR 里 `; qkc-link: -lm` 标记由 qkc 转成链接参数
-- taskm：`spawn/merge/block/done/channel` 对接 `qthreads.c` 运行时（pid = 小整数句柄）
+- taskm：`spawn/merge/block/done/channel` 对接 `qthreads.c` 运行时（pid = 小整数句柄）；
+  `merge`/`t.merge` 支持 0..4 个实参（int/bool/float/String/struct/List/pointer 等，经 4 个 i64 槽）
 
 ## 暂不支持（必须报明确错误，绝不静默错编）
 
 后端未 lower 的构造统一返回 `compiler: 暂未支持 …` 并带源码位置：
 
-- String/List 内建方法（`substring`/`size`/`split`/`trim`/`indexOf`/`List.toString()` 等，
-  仅 `int/float/bool.toString()` 已 lower）
-- `List<T>`（T ≠ int）变量/形参/返回、HashTable、指针/`new`/`copyd`、匿名 struct
-- `interface{}`（tAny）、签名调用 `f(...) @sign`、函数重载（同名函数）
-- `long`、library FFI 的 `pointer` 参数/返回、float 取模（解释器运行期报错）
-- 打印 struct/接口值（解释器字段序来自 Go map，本身不确定）
+- `List<T>`（T ≠ int）变量/形参/返回（如 `String.split` 需要 List<String>）、HashTable
+- `interface{}`（tAny）变量/形参/返回（装箱 + 运行期类型信息未 lower）
+- 用户自定义 Sign 实例（`f(args) @sign` 只 lower 内置 memorize）、`copyd` 接口形参/接口字段
+- 指针类型 `T&`/`pointer T`、`new T[n]`、`Copyd<T>` 类型标注（`copyd` **修饰**已支持）
+- 打印 struct/接口/memorize 值（解释器 struct 字段序来自 Go map，本身不确定）
+- `merge` 超过 4 个实参、`String.split`/`List<String>` 相关内建
+- library FFI 已支持 `long`/`pointer` 链接；float 取模在两条路径都以运行期错误结束（文案一致）
 - 含 `log` 的函数的返回值被表达式使用（解释器返回 nil，静态类型无法表达）
 - `merge` 的多参数/非 int 参数（qthreads 运行时只携带 1 个 int）、`thread.talk`
 

@@ -1,0 +1,46 @@
+// v_sign：签名调用 f(args) @sign(prefix)（正典 §6）——内置 memorize 记忆化。
+// 语义基准 = 解释器：首次调用执行被包装函数并记录结果，之后同键调用返回缓存值。
+// 说明：签名机制按值记录 in 列表（解释器 derefArgs），因此被包装函数的形参写入不回写调用方。
+fn square(int n) int {
+    return n * n;
+}
+
+fn add2(int a, int b) int {
+    return a + b;
+}
+
+fn mix(int a, String s, int b) int {
+    return a + s.size() + b;
+}
+
+fn boom(int n) int {
+    return n + 1;
+}
+
+fn main(IOStream io) {
+    memorize mb = memorize::new();
+    io.println(square(41) @mb());      // 1681
+    io.println(square(41) @mb());      // 1681（缓存）
+    io.println(square(42) @mb());      // 1764
+    io.println(square(41) @mb());      // 1681（缓存）
+    // @ 显式 prefix 实参：解释器求值后放进 prefix 记录（memorize 不使用）
+    int x = 7;
+    io.println(square(3) @mb(x));      // 9
+    io.println(square(3) @mb(x + 1));  // 9（同一键）
+    io.println(x);                     // 7
+    // 多个 int 实参：键 = 整个实参列表
+    memorize m2 = memorize::new();
+    io.println(add2(1, 2) @m2());      // 3
+    io.println(add2(1, 2) @m2());      // 3
+    io.println(add2(2, 1) @m2());      // 3（键不同 → 重新执行，结果相同）
+    // 独立实例互不共享缓存
+    io.println(add2(1, 2) @mb());      // 3（mb 未记录 add2 → 执行）
+    io.println(add2(1, 2) @m2());      // 3（m2 已记录）
+    // 表达式位置（算术/拼接）
+    io.println((square(5) @mb()) + (square(5) @mb()));  // 50
+    io.println("v=" + (square(6) @mb()).toString());    // v=36
+    // 被包装函数可以是重载/被其它函数调用
+    io.println(boom(1) @mb());         // 2
+    int q = square(9) @mb();
+    io.println(q);                     // 81
+}

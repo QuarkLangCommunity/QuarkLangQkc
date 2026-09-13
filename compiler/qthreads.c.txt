@@ -424,3 +424,48 @@ char* ql_list_int_str(const int* buf, int head, int tail) {
     r[o++] = ']'; r[o] = 0;
     return r;
 }
+
+/* ================= 签名 memorize 运行时（@mb() 记忆化） =================
+ * 键 = 实参列表（int 数组），值 = 被包装函数的 int 返回值；
+ * 语义与解释器 MemorizeBuffer 一致：命中直接返回，未命中执行并记录。 */
+typedef struct ql_memo_ent { int n; int* keys; int val; struct ql_memo_ent* next; } ql_memo_ent;
+typedef struct { ql_memo_ent** b; int cap; int len; } ql_memo;
+static unsigned ql_memo_hash(const int* keys, int n) {
+    unsigned h = 2166136261u; /* FNV-1a */
+    for (int i = 0; i < n; i++) { h ^= (unsigned)keys[i]; h *= 16777619u; }
+    return h;
+}
+void* ql_memo_new(void) {
+    ql_memo* m = (ql_memo*)calloc(1, sizeof(ql_memo));
+    m->cap = 64; m->len = 0;
+    m->b = (ql_memo_ent**)calloc((size_t)m->cap, sizeof(ql_memo_ent*));
+    return m;
+}
+static ql_memo_ent* ql_memo_find(ql_memo* m, const int* keys, int n) {
+    ql_memo_ent* e = m->b[ql_memo_hash(keys, n) % (unsigned)m->cap];
+    while (e) {
+        if (e->n == n) {
+            int i = 0;
+            while (i < n && e->keys[i] == keys[i]) i++;
+            if (i == n) return e;
+        }
+        e = e->next;
+    }
+    return 0;
+}
+int ql_memo_get(void* mp, int n, int* keys, int* found) {
+    ql_memo* m = (ql_memo*)mp;
+    ql_memo_ent* e = ql_memo_find(m, keys, n);
+    *found = e ? 1 : 0;
+    return e ? e->val : 0;
+}
+void ql_memo_put(void* mp, int n, int* keys, int val) {
+    ql_memo* m = (ql_memo*)mp;
+    if (ql_memo_find(m, keys, n)) return; /* 已有记录：保持首次结果（解释器 Put 覆盖，但同键同值） */
+    ql_memo_ent* e = (ql_memo_ent*)calloc(1, sizeof(ql_memo_ent));
+    e->n = n; e->val = val;
+    e->keys = (int*)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    for (int i = 0; i < n; i++) e->keys[i] = keys[i];
+    unsigned h = ql_memo_hash(keys, n) % (unsigned)m->cap;
+    e->next = m->b[h]; m->b[h] = e; m->len++;
+}

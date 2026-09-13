@@ -1,0 +1,79 @@
+// u_byref：形参按引用传递（含 int/float/bool/String 标量）+ copyd 传时拷贝。
+// 语义基准 = 解释器（compiler/testdata/cases 下与 .out 逐字节对比）。
+// 注：不用 List.toString()（需要 clang 链接 qthreads 运行时），改用 size()/下标。
+type struct { int v; } S;
+type struct { S inner; List<int> l; int tag; } Outer;
+type interface { fn touch(Self self, int a) int; } I;
+
+fn bumpInt(int a) int { a = a + 1; return a; }
+fn setBool(bool b) void { b = !b; }
+fn setFloat(float f) void { f = f + 0.5; }
+fn setStr(String s) void { s = s + "!"; }
+fn setStruct(S s) int { s.v = s.v + 1; return s.v; }
+fn rebindStruct(S s) int { S o; o.v = 99; s = o; return s.v; }
+fn setList(List<int> l) int { l = [7, 8, 9]; return l.size(); }
+fn appendList(List<int> l) int { l.append(9); return l.size(); }
+fn setElem(List<int> l) void { l[0] = 42; }
+fn chain(int a) void { bumpInt(a); }
+fn recur(int a, int n) int { if (n == 0) { return a; } a = a + 10; return recur(a, n - 1); }
+fn bumpCopy(copyd int a) int { a = a + 1; return a; }
+fn copyStruct(copyd S s) int { s.v = 100; return s.v; }
+fn copyOuter(copyd Outer o) int { o.inner.v = 55; o.l.append(3); o.tag = 7; return o.inner.v + o.l.size() + o.tag; }
+fn copyList(copyd List<int> l) int { l.append(4); l[0] = 77; return l.size(); }
+
+impl {
+    fn touch(S self, int a) int { a = 200; return a; }
+} S;
+impl {
+    fn bumpSelf(S self, int d) int { self.v = self.v + d; return self.v; }
+    fn rebindSelf(S self) int { S o; o.v = 77; self = o; return self.v; }
+} S;
+
+fn main(IOStream io) {
+    S s; s.v = 1;
+    S t; t.v = 1;
+    io.println(s.bumpSelf(5).toString() + " s.v=" + s.v.toString());   // 6 / s.v=6（字段写穿透）
+    io.println(t.rebindSelf().toString() + " t.v=" + t.v.toString());  // 77 / t.v=1（self 按值绑定）
+    int x = 5;
+    io.println(bumpInt(x).toString() + " x=" + x.toString());          // 6 / x=6
+    chain(x);                                                          // 引用链：x=7
+    io.println("x=" + x.toString());
+    io.println(recur(x, 3).toString() + " x=" + x.toString());          // 37 / x=37（递归改形参）
+    bool b = true; setBool(b); io.println(b.toString());                // false
+    float f = 1.5; setFloat(f); io.println(f.toString());               // 2
+    String str = "hi"; setStr(str); io.println(str);                    // hi!
+    S u; u.v = 10;
+    io.println(setStruct(u).toString() + " u.v=" + u.v.toString());     // 11 / u.v=11
+    io.println(rebindStruct(u).toString() + " u.v=" + u.v.toString());  // 99 / u.v=99（形参重绑定写回）
+    S w; w.v = 3; int r = bumpInt(w.v);                                 // 字段实参写回
+    io.println(r.toString() + " w.v=" + w.v.toString());                // 4 / w.v=4
+    int q = 1; int qr = bumpInt(q + 1);                                 // 非左值：不回写
+    io.println(qr.toString() + " q=" + q.toString());                   // 3 / q=1
+    List<int> l = [1, 2]; int n1 = appendList(l);
+    io.println(n1.toString() + " " + l.size().toString() + " " + l[2].toString());   // 3 3 9
+    List<int> l2 = [1, 2]; int n2 = setList(l2);
+    io.println(n2.toString() + " " + l2[0].toString() + " " + l2[2].toString());     // 3 7 9
+    List<int> l3 = [1, 2]; setElem(l3);
+    io.println(l3[0].toString() + " " + l3[1].toString());              // 42 2
+    List<int> l4 = [1, 2, 3]; int er = bumpInt(l4[1]);
+    io.println(er.toString() + " " + l4[0].toString() + " " + l4[1].toString()
+        + " " + l4[2].toString());                                      // 3 1 3 3
+    // copyd：传时拷贝，callee 内修改不影响调用方
+    io.println(bumpCopy(x).toString() + " x=" + x.toString());          // 38 / x=37
+    S c; c.v = 9;
+    io.println(copyStruct(c).toString() + " c.v=" + c.v.toString());    // 100 / c.v=9
+    Outer o; o.inner.v = 1; o.l = [1, 2]; o.tag = 3;
+    io.println(copyOuter(o).toString() + " " + o.inner.v.toString() + " "
+        + o.l.size().toString() + " " + o.l[0].toString() + " " + o.tag.toString()); // 65 1 2 1 3
+    List<int> cl = [1, 2];
+    io.println(copyList(cl).toString() + " " + cl.size().toString()
+        + " " + cl[0].toString());                                      // 3 2 1
+    // 方法实参按引用；接口方法同样
+    S m; m.v = 1; int ma = 7;
+    io.println(m.touch(ma).toString() + " ma=" + ma.toString());        // 200 / ma=200
+    I mi = m; int ia = 7;
+    io.println(mi.touch(ia).toString() + " ia=" + ia.toString());       // 200 / ia=200
+    io.println(tailSum(5, 0).toString());                               // 15（尾调用）
+}
+
+fn tailSum(int n, int acc) int { if (n == 0) { return acc; } return tailSum(n - 1, acc + n); }

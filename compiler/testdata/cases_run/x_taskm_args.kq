@@ -1,0 +1,29 @@
+type struct { int v; String s; } P;
+fn work(int n) int { return n; }
+fn add2(int a, int b) int { return a + b; }
+fn mix(int a, String s, float f, bool b) int {
+    int r = a;
+    if (b) { r = r + 1; }
+    return r + s.size() + f.toString().size();
+}
+fn touch(P p, int d) int { p.v = p.v + d; return p.v; }
+fn main(IOStream io) {
+    thread t = taskm.spawn();
+    t.merge(work, 1);
+    taskm.block(t.pid());
+    io.println(taskm.done(t.pid()));
+    thread t2 = taskm.spawn();
+    t2.merge(add2, 3, 4);
+    taskm.block(t2.pid());
+    io.println(taskm.done(t2.pid()));
+    thread t3 = taskm.spawn();
+    taskm.merge(t3.pid(), mix, 5, "abc", 1.5, true);
+    taskm.block(t3.pid());
+    io.println(taskm.done(t3.pid()));
+    P p; p.v = 10; p.s = "p";
+    thread t4 = taskm.spawn();
+    t4.merge(touch, p, 7);
+    taskm.block(t4.pid());
+    io.println(p.v);
+    io.println(taskm.done(t4.pid()));
+}

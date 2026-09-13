@@ -30,11 +30,14 @@
 //   - 顶层：library（FFI：LLVM declare + C ABI 直调 + ; qkc-link 链接标记）、
 //     taskm（spawn/merge/block/done/channel，对接 qthreads 运行时）
 //
+// 参数语义（正典）：形参一律按引用传递（LLVM 形参 = 值类型*），copyd 形参入口深拷贝；
+// 左值实参用自身存储、非左值实参是调用方临时单元；self 接收者按值绑定。
+//
 // 仍未 lower（一律返回带位置的明确错误，绝不静默错编）：
-// String/List 内建方法（substring/size/split/toString 等，除 int/float/bool.toString）、
-// 指针/new/HashTable、打印 struct/接口值、copyd、签名调用 @sign、匿名 struct、
-// interface{}（tAny）、long 与 FFI pointer、float 取模、含 log 函数的返回值被使用、
-// merge 多参数/非 int 参数。
+// 指针类型/new/Copyd<T> 类型标注、HashTable、interface{}（tAny）、
+// 非 memorize 的自定义 Sign 实例、copyd 接口形参/接口字段、List<T≠int>、
+// 打印 struct/接口值（解释器字段序不确定）、含 log 函数的返回值被使用、
+// merge 超过 4 个实参。
 package cgen
 
 import (
@@ -319,7 +322,7 @@ func (l *lowerer) collect() error {
 	}
 	for _, sd := range l.prog.Structs {
 		if sd.Name == "" {
-			return l.errf(sd.Pos, "暂未支持匿名 struct 类型（编译器后端未实现）")
+			continue // 无名字的顶层声明：解释器登记为不可引用的死类型，编译器直接忽略
 		}
 		l.structs[sd.Name] = sd
 	}
@@ -620,6 +623,8 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		return l.errf(pos, "暂未支持 %s 类型 %q（编译器暂未 lower）", what, t)
 	case "thread", "Task", "Channel", "channel":
 		return nil // taskm：thread = pid(i32)，Channel = i8* 句柄
+	case "memorize":
+		return nil // 内置 memorize 签名实例（i8* 句柄；@mb() 记忆化）
 	case "IOStream":
 		return l.errf(pos, "暂未支持 IOStream %s（编译器仅在 main 入口绑定 io）", what)
 	case "interface{}":
@@ -631,8 +636,9 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	if strings.HasPrefix(t, "HashTable") {
 		return l.errf(pos, "暂未支持 %s 类型 %q（HashTable 仅解释器可用）", what, t)
 	}
-	if strings.HasPrefix(t, "pointer ") || strings.HasSuffix(t, "&") || strings.Contains(t, "[Copyd]") || strings.HasSuffix(t, "[]") {
-		return l.errf(pos, "暂未支持指针/传时复制类型 %q（解释器可用）", t)
+	if strings.HasPrefix(t, "pointer ") || strings.HasSuffix(t, "&") ||
+		strings.Contains(t, "[Copyd]") || strings.HasPrefix(t, "Copyd<") || strings.HasSuffix(t, "[]") {
+		return l.errf(pos, "暂未支持指针/传时复制类型 %q（解释器可用；copyd 作为形参修饰已支持）", t)
 	}
 	return l.errf(pos, "未知类型 %q（%s 声明）", t, what)
 }
@@ -764,7 +770,13 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		if err := fc.declare(p.Name, pt, p.Pos); err != nil {
 			return nil, err
 		}
-		params = append(params, funcParam{name: p.Name, typ: pt})
+		cp := paramCopyd(p)
+		if cp {
+			if err := l.checkCopydType(pt, p.Pos, 0); err != nil {
+				return nil, err
+			}
+		}
+		params = append(params, funcParam{name: p.Name, typ: pt, copyd: cp})
 	}
 	body, err := fc.block(f.Body)
 	if err != nil {
@@ -778,6 +790,40 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		l.sigs[irName] = fd
 	}
 	return fd, nil
+}
+
+// paramCopyd 判断形参是否 copyd（两种正典写法：修饰 copyd、类型 Copyd<T>/T[Copyd]；
+// 与 internal/lang 的 Func.CopydFlags 同规则）。
+func paramCopyd(p lang.Param) bool {
+	return p.Decor == "copyd" || strings.Contains(p.Type, "Copyd")
+}
+
+// checkCopydType 校验 copyd 形参的类型可深拷贝（与解释器 copydCopy 语义一致）：
+// 标量/String/List<int> 可拷贝；struct 递归校验字段；接口字段/接口类型运行期类型未知，
+// 后端无法深拷贝 → 明确报错（绝不静默按浅拷贝错编）。
+func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
+	if depth > 16 {
+		return nil
+	}
+	if l.isIfaceType(t) {
+		return l.errf(pos, "暂未支持 copyd 接口形参 %s（运行期类型未知，无法深拷贝）", t)
+	}
+	sd, sub := l.structSubst(t)
+	if sd == nil {
+		return nil // 标量 / String / List<int> / 未知类型由 checkType 处理
+	}
+	for _, m := range sd.Members {
+		ft := substType(m.Type, sub)
+		if l.isIfaceType(ft) {
+			return l.errf(pos, "暂未支持 copyd struct %s 的接口字段 %s（运行期类型未知，无法深拷贝）", t, m.Name)
+		}
+		if nsd, _ := l.structSubst(ft); nsd != nil {
+			if err := l.checkCopydType(ft, pos, depth+1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // lowerMain lower 程序入口 fn main(IOStream io)。
@@ -1029,7 +1075,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		return nil, err
 	}
 	switch t {
-	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel":
+	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel", "memorize":
 		if st.Init == nil {
 			if err := fc.declare(st.Name, t, st.Pos); err != nil {
 				return nil, err
@@ -1184,12 +1230,12 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if t := fc.typeOf(tgt.Idx); t != "int" && t != "?" {
 			return nil, l.errf(exprPos(tgt.Idx, st.Pos), "暂未支持下标为 %s（需要 int）", t)
 		}
-		id, ok := tgt.X.(*lang.Ident)
-		if !ok {
-			return nil, l.errf(st.Pos, "暂未支持该下标赋值（编译器仅支持 <List 变量>[i] = v）")
-		}
 		if t := fc.typeOf(st.X); !fc.assignable(t, "int") {
 			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 赋值给 List<int> 元素", t)
+		}
+		recv, err := fc.expr(tgt.X)
+		if err != nil {
+			return nil, err
 		}
 		idx, err := fc.expr(tgt.Idx)
 		if err != nil {
@@ -1199,7 +1245,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &indexAssignStmt{name: id.Name, idx: idx, x: x}, nil
+		return &indexAssignStmt{recv: recv, idx: idx, x: x}, nil
 
 	case *lang.MemberExpr:
 		rt := fc.typeOf(tgt.X)
@@ -1267,18 +1313,18 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		if !ok {
 			return nil, l.errf(e.Pos, "暂未支持该下标访问（编译器仅支持 List<int>）")
 		}
-		id, ok := e.X.(*lang.Ident)
-		if !ok {
-			return nil, l.errf(e.Pos, "暂未支持该下标访问（编译器仅支持 <List 变量>[i]）")
-		}
 		if t := fc.typeOf(e.Idx); t != "int" && t != "?" {
 			return nil, l.errf(exprPos(e.Idx, e.Pos), "暂未支持下标为 %s（需要 int）", t)
+		}
+		recv, err := fc.expr(e.X)
+		if err != nil {
+			return nil, err
 		}
 		idx, err := fc.expr(e.Idx)
 		if err != nil {
 			return nil, err
 		}
-		return &expr{kind: kIndex, typ: elem, line: e.Pos.Line, idx: &indexExpr{name: id.Name, i: idx}}, nil
+		return &expr{kind: kIndex, typ: elem, line: e.Pos.Line, idx: &indexExpr{recv: recv, i: idx}}, nil
 
 	case *lang.StructLit:
 		return fc.structLit(e, fc.expectT)
@@ -1286,7 +1332,27 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 	case *lang.NewExpr:
 		return nil, l.errf(e.Pos, "暂未支持 new %s（堆分配仅解释器可用）", e.Typ)
 	case *lang.ListLit:
-		return nil, l.errf(exprPos(e, lang.Pos{Line: 1, Col: 1}), "暂未支持该处的列表字面量（编译器仅支持 List<int> 变量初始化的 [a, b, ...]）")
+		// 列表字面量：任意表达式位置（编译器只 lower List<int>；元素必须可赋给 int）
+		t := "List<int>"
+		if _, ok := listElem(fc.expectT); ok {
+			t = fc.expectT
+		}
+		if elem, ok := listElem(t); !ok || elem != "int" {
+			return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持列表字面量 %s（编译器只 lower List<int>；List<String> 等需要运行期元素类型）", t)
+		}
+		items := make([]*expr, 0, len(e.Items))
+		for _, it := range e.Items {
+			et := fc.typeOf(it)
+			if !fc.assignable(et, "int") {
+				return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持用 %s 元素初始化 List<int>", et)
+			}
+			x, err := fc.expr(it)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, x)
+		}
+		return &expr{kind: kList, typ: "List<int>", lst: &listLit{items: items}}, nil
 	case *lang.ScopeCall:
 		return fc.scopeCall(e)
 	case *lang.MemberExpr:
@@ -1308,7 +1374,13 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 				if err != nil {
 					return nil, err
 				}
-				return fc.methodCall(imi, lt, e.L, []lang.Expr{e.R}, e.Pos)
+				x, err := fc.methodCall(imi, lt, e.L, []lang.Expr{e.R}, e.Pos)
+				if err != nil {
+					return nil, err
+				}
+				// 运算符重载：解释器按值传入操作数（BinOp 求值 → 非引用），实参不写回
+				x.method.byVal = true
+				return x, nil
 			}
 		}
 	}
@@ -1511,7 +1583,12 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 				if err != nil {
 					return nil, err
 				}
-				return fc.methodCall(imi, t, e.X, nil, e.Pos)
+				x, err := fc.methodCall(imi, t, e.X, nil, e.Pos)
+				if err != nil {
+					return nil, err
+				}
+				x.method.byVal = true // 一元运算符重载：按值操作数
+				return x, nil
 			}
 		}
 		if !numLike(t) {
@@ -1553,7 +1630,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 func (fc *funcCtx) call(c *lang.CallExpr) (*expr, error) {
 	l := fc.l
 	if c.Sign != nil {
-		return nil, l.errf(c.Pos, "暂未支持签名调用 %s @%s()（解释器可用）", identifierName(c.Fn), c.Sign.Name)
+		return fc.signCall(c)
 	}
 	switch fn := c.Fn.(type) {
 	case *lang.Ident:
@@ -1564,6 +1641,64 @@ func (fc *funcCtx) call(c *lang.CallExpr) (*expr, error) {
 		return fc.scopeCallCall(c, fn)
 	}
 	return nil, l.errf(c.Pos, "暂未支持该调用形式（编译器仅支持 f(...)、obj.m(...) 与 T::m(...)）")
+}
+
+// signCall lower 签名调用 f(args) @sign(prefix)（正典 §6：sign.call(prefix) 收到
+// .{in: List(args), out: nil}，返回 rec.out）。编译器只 lower 内置 memorize 签名实例
+// （@mb() 记忆化：按实参列表缓存被包装函数的返回值）；其它 Sign 实例明确报错。
+func (fc *funcCtx) signCall(c *lang.CallExpr) (*expr, error) {
+	l := fc.l
+	id, ok := c.Fn.(*lang.Ident)
+	if !ok {
+		return nil, l.errf(c.Pos, "暂未支持该签名调用（编译器要求直接函数名 f(args) @sign(...)）")
+	}
+	st, ok := fc.lookup(c.Sign.Name)
+	if !ok {
+		return nil, l.errf(c.Pos, "未声明的签名实例 %q（@%s）", c.Sign.Name, c.Sign.Name)
+	}
+	if st != "memorize" {
+		return nil, l.errf(c.Pos, "暂未支持 %s 类型的签名实例 %q（编译器只 lower 内置 memorize）", st, c.Sign.Name)
+	}
+	irName, fd, err := fc.resolveFunc(id.Name, c.Args, id.Pos)
+	if err != nil {
+		return nil, err
+	}
+	if len(c.Args) != len(fd.Params) {
+		return nil, l.errf(id.Pos, "函数 %s 需要 %d 个参数，got %d", id.Name, len(fd.Params), len(c.Args))
+	}
+	if l.fnRet[irName] != "int" {
+		return nil, l.errf(id.Pos, "暂未支持 memorize 包装返回 %s 的函数 %s（运行时缓存只承载 int）", l.fnRet[irName], id.Name)
+	}
+	for _, p := range fd.Params {
+		if pt := strings.TrimSpace(p.Type); pt != "int" {
+			return nil, l.errf(p.Pos, "暂未支持 memorize 包装 %s 形参（运行时缓存键只承载 int）", pt)
+		}
+	}
+	// 被包装调用的实参：解释器 derefArgs 后按值记录 in 列表（非左值语义）
+	args := make([]*expr, 0, len(c.Args))
+	for _, a := range c.Args {
+		t := fc.typeOf(a)
+		if !fc.assignable(t, "int") {
+			return nil, l.errf(exprPos(a, id.Pos), "暂未支持 memorize 的 %s 实参（运行时缓存键只承载 int）", t)
+		}
+		x, err := fc.expr(a)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, x)
+	}
+	// @ 处的显式 prefix 参数：解释器求值后放进 prefix 记录（memorize 不使用）→ 求值丢弃副作用
+	skips := make([]*expr, 0, len(c.Sign.Args))
+	for _, a := range c.Sign.Args {
+		x, err := fc.expr(a)
+		if err != nil {
+			return nil, err
+		}
+		skips = append(skips, x)
+	}
+	return &expr{kind: kMemoCall, typ: "int", line: c.Pos.Line,
+		call: &callExpr{name: irName, args: args, byValArgs: true},
+		memo: &memoExpr{handle: &expr{kind: kIdent, typ: "memorize", s: c.Sign.Name}, skips: skips}}, nil
 }
 
 // callNamed lower 具名函数调用（含内建 sum/clock 与泛型实例化）。
@@ -1791,18 +1926,18 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			if len(c.Args) != 0 {
 				return nil, l.errf(me.Pos, "toString() 不接受参数")
 			}
-			id, ok := me.X.(*lang.Ident)
-			if !ok {
-				return nil, l.errf(me.Pos, "暂未支持该形式的方法调用（接收者必须是变量）")
+			recv, err := fc.expr(me.X)
+			if err != nil {
+				return nil, err
 			}
-			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "toString"}}, nil
+			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: recv, name: "toString"}}, nil
 		}
 	}
-	// List 内建方法
+	// List 内建方法（接收者可以是任意 List<int> 表达式：变量 / struct 字段等）
 	if elem, ok := listElem(rt); ok && elem == "int" {
-		id, ok := me.X.(*lang.Ident)
-		if !ok {
-			return nil, l.errf(me.Pos, "暂未支持该形式的方法调用（接收者必须是变量）")
+		rx, err := fc.expr(me.X)
+		if err != nil {
+			return nil, err
 		}
 		args := make([]*expr, 0, len(c.Args))
 		for _, a := range c.Args {
@@ -1817,7 +1952,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			if len(c.Args) != 0 {
 				return nil, l.errf(me.Pos, "List.size() 不接受参数")
 			}
-			return &expr{kind: kMethod, typ: "int", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "size"}}, nil
+			return &expr{kind: kMethod, typ: "int", method: &methodExpr{recv: rx, name: "size"}}, nil
 		case "get":
 			if len(c.Args) != 1 {
 				return nil, l.errf(me.Pos, "List.get(i) 需要 1 个参数")
@@ -1825,7 +1960,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
 				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List.get 的 %s 下标（需要 int）", t)
 			}
-			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "get", args: args}}, nil
+			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "get", args: args}}, nil
 		case "append":
 			if len(c.Args) != 1 {
 				return nil, l.errf(me.Pos, "List.append(v) 需要 1 个参数")
@@ -1833,17 +1968,17 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			if t := fc.typeOf(c.Args[0]); !fc.assignable(t, "int") {
 				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List<int>.append 的 %s 参数（需要 int）", t)
 			}
-			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "append", args: args}}, nil
+			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: rx, name: "append", args: args}}, nil
 		case "head", "tail", "next":
 			if len(c.Args) != 0 {
 				return nil, l.errf(me.Pos, "List.%s() 不接受参数", me.Name)
 			}
-			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: me.Name}}, nil
+			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: rx, name: me.Name}}, nil
 		case "reset":
 			if len(c.Args) != 0 {
 				return nil, l.errf(me.Pos, "List.reset() 不接受参数")
 			}
-			return &expr{kind: kMethod, typ: "List<int>", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "reset"}}, nil
+			return &expr{kind: kMethod, typ: "List<int>", method: &methodExpr{recv: rx, name: "reset"}}, nil
 		case "appendAll":
 			if len(c.Args) != 1 {
 				return nil, l.errf(me.Pos, "List.appendAll(l2) 需要 1 个参数")
@@ -1851,12 +1986,12 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			if t := fc.typeOf(c.Args[0]); t != "List<int>" && t != "?" {
 				return nil, l.errf(exprPos(c.Args[0], me.Pos), "List.appendAll 需要 List<int>，got %s", t)
 			}
-			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "appendAll", args: args}}, nil
+			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: rx, name: "appendAll", args: args}}, nil
 		case "__sort__":
 			if len(c.Args) != 0 {
 				return nil, l.errf(me.Pos, "List.__sort__() 不接受参数")
 			}
-			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "__sort__"}}, nil
+			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: rx, name: "__sort__"}}, nil
 		}
 		return nil, l.errf(me.Pos, "暂未支持 List 方法 %q（编译器支持 size/get/append/head/tail/next/reset/appendAll/toString/__sort__）", me.Name)
 	}
@@ -1958,6 +2093,13 @@ func (fc *funcCtx) methodCall(mi *methodInfo, recvTyp string, recv lang.Expr, ex
 // scopeCallCall lower T::m(...) / space::f(...) 调用形式。
 func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, error) {
 	l := fc.l
+	// 内置 memorize::new()：签名实例（@mb() 记忆化）
+	if sc.Scope == "memorize" {
+		if sc.Name != "new" || len(sc.Args) != 0 {
+			return nil, l.errf(sc.Pos, "暂未支持 memorize::%s（编译器只 lower memorize::new()）", sc.Name)
+		}
+		return &expr{kind: kCall, typ: "memorize", call: &callExpr{name: "ql_memo_new"}}, nil
+	}
 	mi, err := l.staticMethodFor(sc.Scope, sc.Name, sc.Args, fc, sc.Pos)
 	if err != nil {
 		return nil, err
