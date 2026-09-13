@@ -63,11 +63,14 @@ type FuncDecl struct {
 	Pos        Pos
 }
 
-// Param is a function parameter ("name Type").
+// Param is a function parameter ("<修饰> <类型> <名字>")。
+// Decor 是声明修饰（"" | "const" | "copyd"，与 DeclStmt.Decor 同一张表）：
+// copyd 形参在绑定时深拷贝（传时复制），const 形参不可在 callee 内赋值。
 type Param struct {
-	Name string
-	Type string
-	Pos  Pos
+	Name  string
+	Type  string
+	Decor string
+	Pos   Pos
 }
 
 // Member is a struct member declaration ("name Type;").

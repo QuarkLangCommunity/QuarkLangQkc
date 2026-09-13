@@ -46,6 +46,7 @@ const (
 	vLib
 	vFile
 	vPtr // FFI 原生指针值（不透明句柄；新增在末尾，保持既有枚举序号不变）
+	vRef // 实参引用单元（按引用传递；新增在末尾，保持既有枚举序号不变）
 )
 
 func FileV(f *FileValue) Value { return Value{tag: byte(vFile), ptr: unsafe.Pointer(f)} }
@@ -108,33 +109,141 @@ func CopydV(c *CopydValue) Value        { return Value{tag: byte(vCopyd), ptr: u
 func ChanV(c *Channel) Value            { return Value{tag: byte(vChan), ptr: unsafe.Pointer(c)} }
 func StructV(st *StructValue) Value     { return Value{tag: byte(vStruct), ptr: unsafe.Pointer(st)} }
 func LibraryV(o *libObj) Value          { return Value{tag: byte(vLib), ptr: unsafe.Pointer(o)} }
+func RefV(r *refValue) Value             { return Value{tag: byte(vRef), ptr: unsafe.Pointer(r)} }
+
+// ---- 引用值（按引用传参） ----
+
+// refKind 是引用单元的种类。
+type refKind uint8
+
+const (
+	refIdent  refKind = iota // scope 中的名字（变量/形参槽位）
+	refMember                // struct 字段（obj 是 struct 值，name 是字段名）
+	refIndex                 // List 元素（obj 是 List 值，key 是下标）
+)
+
+// refValue 是实参的引用单元：形参按引用绑定时，读/写直接穿透到调用方的左值单元。
+// 非左值实参不构造引用（按值传递，callee 侧视作临时单元）。
+type refValue struct {
+	kind refKind
+	sc   *scope // refIdent：名字所在作用域
+	name string // refIdent/refMember：名字
+	obj  Value  // refMember/refIndex：容器
+	key  Value  // refIndex：下标
+}
+
+// load 读引用单元当前值（不递归解引用链；链由 deref/store 处理）。
+func (r *refValue) load() Value {
+	switch r.kind {
+	case refIdent:
+		if r.sc == nil {
+			return NilV()
+		}
+		return r.sc.rawGet(r.name)
+	case refMember:
+		if r.obj.IsStruct() {
+			if v, ok := r.obj.Struct().Fields[r.name]; ok {
+				return v
+			}
+		}
+	case refIndex:
+		if r.obj.IsList() {
+			v, err := r.obj.List().Get(int(r.key.Int()))
+			if err == nil {
+				return v
+			}
+		}
+	}
+	return NilV()
+}
+
+// store 写引用单元（写穿引用链；返回 false = 目标不可写）。
+func (r *refValue) store(v Value) bool {
+	switch r.kind {
+	case refIdent:
+		if r.sc == nil {
+			return false
+		}
+		// 目标槽位本身还是引用（f→g 链）：继续写穿，不覆盖引用单元
+		if cur := r.sc.rawGet(r.name); cur.IsRef() && cur.Ref() != r {
+			return cur.Ref().store(v)
+		}
+		return r.sc.rawSet(r.name, v)
+	case refMember:
+		if r.obj.IsStruct() {
+			if _, ok := r.obj.Struct().Fields[r.name]; ok {
+				r.obj.Struct().Fields[r.name] = v
+				return true
+			}
+		}
+	case refIndex:
+		if r.obj.IsList() {
+			return r.obj.List().setIndex(int(r.key.Int()), v) == nil
+		}
+	}
+	return false
+}
+
+// deref 解引用引用链：引用值对语言层完全透明（所有读路径统一解引用）。
+// 引用链由调用实参构造（f(x) 内再 g(x) 直接复用同一引用单元，链长 ≤ 1）。
+func (v Value) deref() Value {
+	if v.tag != byte(vRef) {
+		return v
+	}
+	for n := 0; v.tag == byte(vRef); n++ {
+		if n > 1<<20 { // 环守卫（构造上不可达，防御兜底）
+			return NilV()
+		}
+		r := (*refValue)(v.ptr)
+		if r == nil {
+			return NilV()
+		}
+		v = r.load()
+	}
+	return v
+}
+
+// derefArgs 解引用实参列表（FFI/内建/线程边界只接受值）。
+func derefArgs(args []Value) []Value {
+	for i, a := range args {
+		if a.IsRef() {
+			args[i] = a.deref()
+		}
+	}
+	return args
+}
+
+// IsRef 是唯一能看到引用单元本身的判定（其余判定/取值对引用透明）。
+func (v Value) IsRef() bool    { return v.tag == byte(vRef) }
+func (v Value) Ref() *refValue { return (*refValue)(v.ptr) }
 
 // ---- 类型判定 ----
 
-func (v Value) IsNil() bool         { return v.tag == byte(vNil) }
-func (v Value) IsInt() bool         { return v.tag == byte(vInt) }
-func (v Value) IsFloat() bool       { return v.tag == byte(vFloat) }
-func (v Value) IsBool() bool        { return v.tag == byte(vBool) }
-func (v Value) IsStr() bool         { return v.tag == byte(vStr) }
-func (v Value) IsList() bool        { return v.tag == byte(vList) }
-func (v Value) IsTable() bool       { return v.tag == byte(vTable) }
-func (v Value) IsIO() bool          { return v.tag == byte(vIO) }
-func (v Value) IsIn() bool          { return v.tag == byte(vIn) }
-func (v Value) IsOut() bool         { return v.tag == byte(vOut) }
-func (v Value) IsMemorize() bool    { return v.tag == byte(vMemorize) }
-func (v Value) IsMemory() bool      { return v.tag == byte(vMemory) }
-func (v Value) IsTaskm() bool       { return v.tag == byte(vTaskm) }
-func (v Value) IsTask() bool        { return v.tag == byte(vTask) }
-func (v Value) IsThread() bool      { return v.tag == byte(vThread) }
-func (v Value) IsFunc() bool        { return v.tag == byte(vFunc) }
-func (v Value) IsCopyd() bool       { return v.tag == byte(vCopyd) }
-func (v Value) IsChan() bool        { return v.tag == byte(vChan) }
-func (v Value) IsStruct() bool      { return v.tag == byte(vStruct) }
-func (v Value) IsLib() bool         { return v.tag == byte(vLib) }
-func (v Value) IsFile() bool        { return v.tag == byte(vFile) }
-func (v Value) IsPtr() bool         { return v.tag == byte(vPtr) }
-func (v Value) Ptr() unsafe.Pointer { return v.ptr }
+func (v Value) IsNil() bool         { return v.deref().tag == byte(vNil) }
+func (v Value) IsInt() bool         { return v.deref().tag == byte(vInt) }
+func (v Value) IsFloat() bool       { return v.deref().tag == byte(vFloat) }
+func (v Value) IsBool() bool        { return v.deref().tag == byte(vBool) }
+func (v Value) IsStr() bool         { return v.deref().tag == byte(vStr) }
+func (v Value) IsList() bool        { return v.deref().tag == byte(vList) }
+func (v Value) IsTable() bool       { return v.deref().tag == byte(vTable) }
+func (v Value) IsIO() bool          { return v.deref().tag == byte(vIO) }
+func (v Value) IsIn() bool          { return v.deref().tag == byte(vIn) }
+func (v Value) IsOut() bool         { return v.deref().tag == byte(vOut) }
+func (v Value) IsMemorize() bool    { return v.deref().tag == byte(vMemorize) }
+func (v Value) IsMemory() bool      { return v.deref().tag == byte(vMemory) }
+func (v Value) IsTaskm() bool       { return v.deref().tag == byte(vTaskm) }
+func (v Value) IsTask() bool        { return v.deref().tag == byte(vTask) }
+func (v Value) IsThread() bool      { return v.deref().tag == byte(vThread) }
+func (v Value) IsFunc() bool        { return v.deref().tag == byte(vFunc) }
+func (v Value) IsCopyd() bool       { return v.deref().tag == byte(vCopyd) }
+func (v Value) IsChan() bool        { return v.deref().tag == byte(vChan) }
+func (v Value) IsStruct() bool      { return v.deref().tag == byte(vStruct) }
+func (v Value) IsLib() bool         { return v.deref().tag == byte(vLib) }
+func (v Value) IsFile() bool        { return v.deref().tag == byte(vFile) }
+func (v Value) IsPtr() bool         { return v.deref().tag == byte(vPtr) }
+func (v Value) Ptr() unsafe.Pointer { return v.deref().ptr }
 func (v Value) File() *FileValue {
+	v = v.deref()
 	ptr := (*FileValue)(v.ptr)
 	if ptr == nil {
 		return &FileValue{}
@@ -144,25 +253,25 @@ func (v Value) File() *FileValue {
 
 // ---- 取值（调用方保证类型匹配；不匹配返回零值/空，语义由测试兜底） ----
 
-func (v Value) Int() int64                { return v.i }
-func (v Value) Float() float64            { return math.Float64frombits(uint64(v.i)) }
-func (v Value) Bool() bool                { return v.i == 1 }
-func (v Value) Str() string               { return (*strRef)(v.ptr).s }
-func (v Value) List() *List               { return (*List)(v.ptr) }
-func (v Value) Table() *HashTable         { return (*HashTable)(v.ptr) }
-func (v Value) IO() *IOStream             { return (*IOStream)(v.ptr) }
-func (v Value) In() *InputStream          { return (*InputStream)(v.ptr) }
-func (v Value) Out() *OutputStream        { return (*OutputStream)(v.ptr) }
-func (v Value) Memorize() *MemorizeBuffer { return (*MemorizeBuffer)(v.ptr) }
-func (v Value) Memory() *Memory           { return (*Memory)(v.ptr) }
-func (v Value) Taskm() *TaskManager       { return (*TaskManager)(v.ptr) }
-func (v Value) Task() *Task               { return (*Task)(v.ptr) }
-func (v Value) Thread() *ThreadValue      { return (*ThreadValue)(v.ptr) }
-func (v Value) Func() *FuncValue          { return (*FuncValue)(v.ptr) }
-func (v Value) Copyd() *CopydValue        { return (*CopydValue)(v.ptr) }
-func (v Value) Chan() *Channel            { return (*Channel)(v.ptr) }
-func (v Value) Struct() *StructValue      { return (*StructValue)(v.ptr) }
-func (v Value) Lib() *libObj              { return (*libObj)(v.ptr) }
+func (v Value) Int() int64                { v = v.deref(); return v.i }
+func (v Value) Float() float64            { v = v.deref(); return math.Float64frombits(uint64(v.i)) }
+func (v Value) Bool() bool                { v = v.deref(); return v.i == 1 }
+func (v Value) Str() string               { v = v.deref(); return (*strRef)(v.ptr).s }
+func (v Value) List() *List               { v = v.deref(); return (*List)(v.ptr) }
+func (v Value) Table() *HashTable         { v = v.deref(); return (*HashTable)(v.ptr) }
+func (v Value) IO() *IOStream             { v = v.deref(); return (*IOStream)(v.ptr) }
+func (v Value) In() *InputStream          { v = v.deref(); return (*InputStream)(v.ptr) }
+func (v Value) Out() *OutputStream        { v = v.deref(); return (*OutputStream)(v.ptr) }
+func (v Value) Memorize() *MemorizeBuffer { v = v.deref(); return (*MemorizeBuffer)(v.ptr) }
+func (v Value) Memory() *Memory           { v = v.deref(); return (*Memory)(v.ptr) }
+func (v Value) Taskm() *TaskManager       { v = v.deref(); return (*TaskManager)(v.ptr) }
+func (v Value) Task() *Task               { v = v.deref(); return (*Task)(v.ptr) }
+func (v Value) Thread() *ThreadValue      { v = v.deref(); return (*ThreadValue)(v.ptr) }
+func (v Value) Func() *FuncValue          { v = v.deref(); return (*FuncValue)(v.ptr) }
+func (v Value) Copyd() *CopydValue        { v = v.deref(); return (*CopydValue)(v.ptr) }
+func (v Value) Chan() *Channel            { v = v.deref(); return (*Channel)(v.ptr) }
+func (v Value) Struct() *StructValue      { v = v.deref(); return (*StructValue)(v.ptr) }
+func (v Value) Lib() *libObj              { v = v.deref(); return (*libObj)(v.ptr) }
 
 // TypeName 返回值的运行时类型名。
 func (v Value) TypeName() string {
@@ -207,6 +316,8 @@ func (v Value) TypeName() string {
 		return v.Struct().SType
 	case vPtr:
 		return "pointer"
+	case vRef:
+		return v.deref().TypeName() // 引用透明（防御：读路径本应已解引用）
 	}
 	return "<unknown>"
 }
@@ -259,6 +370,8 @@ func (v Value) String() string {
 		return "<library " + v.Lib().name + ">"
 	case vPtr:
 		return "0x" + strconv.FormatUint(uint64(uintptr(v.ptr)), 16)
+	case vRef:
+		return v.deref().String() // 引用透明（防御：读路径本应已解引用）
 	}
 	return "<unknown>"
 }
@@ -495,14 +608,21 @@ func (f *Func) ParamNames() []string {
 }
 
 // CopydFlags 返回参数 Copyd 标志（惰性缓存，与 ParamNames 同一思路）。
+// 两种写法都认：类型标注 int[Copyd]/Copyd<T>，以及形参修饰 copyd（fn f(copyd int a)）。
 func (f *Func) CopydFlags() []bool {
 	if f.paramCopyd == nil {
 		f.paramCopyd = make([]bool, len(f.Params))
 		for i, p := range f.Params {
-			f.paramCopyd[i] = isCopydType(p.Type)
+			f.paramCopyd[i] = isCopydType(p.Type) || p.Decor == "copyd"
 		}
 	}
 	return f.paramCopyd
+}
+
+// paramWrapCopyd 返回第 i 个参数是否按「Copyd 类型」包装绑定（绑 Copyd 值，.ptr() 可取包装值）；
+// copyd 修饰形参绑定深拷贝后的裸值（标量可直接参与运算；.ptr() 不适用）。
+func (f *Func) paramWrapCopyd(i int) bool {
+	return i >= 0 && i < len(f.Params) && isCopydType(f.Params[i].Type)
 }
 
 // execCtx 是函数执行的内部上下文（v2：语言面不再有 FuncBuffer）。
@@ -705,12 +825,22 @@ func (c *Channel) String() string   { return "<Channel>" }
 
 // ---- deep copy (Copyd semantics; HashTable stores deep copies) ----
 
-func deepCopy(v Value) Value {
+// deepCopy 深拷贝 List/HashTable（HashTable.Put 的既有语义：存表值快照）；
+// struct 不在其中（保持既有行为，HashTable/内存语义不受影响）——Copyd 传参用 copyDeep。
+func deepCopy(v Value) Value { return copyDeep(v, false) }
+
+// copydCopy 是 Copyd 传参/绑定用的深拷贝：在 deepCopy 基础上连 struct 一起递归拷贝
+// （callee 修改 copyd 形参的字段不影响调用方）。
+func copydCopy(v Value) Value { return copyDeep(v, true) }
+
+// copyDeep 递归拷贝；deepStruct=true 时 struct 也复制（List/Table 元素同样递归）。
+func copyDeep(v Value, deepStruct bool) Value {
+	v = v.deref()
 	if v.IsList() {
 		t := v.List()
 		items := make([]Value, len(t.items))
 		for i, it := range t.items {
-			items[i] = deepCopy(it)
+			items[i] = copyDeep(it, deepStruct)
 		}
 		cp := &List{items: items, head: t.head, tail: t.tail}
 		return ListV(cp)
@@ -719,9 +849,17 @@ func deepCopy(v Value) Value {
 		t := v.Table()
 		h := NewHashTable()
 		for k, it := range t.m {
-			h.m[k] = deepCopy(it)
+			h.m[k] = copyDeep(it, deepStruct)
 		}
 		return TableV(h)
+	}
+	if deepStruct && v.IsStruct() {
+		sv := v.Struct()
+		cp := &StructValue{SType: sv.SType, Fields: make(map[string]Value, len(sv.Fields))}
+		for k, fv := range sv.Fields {
+			cp.Fields[k] = copyDeep(fv, true)
+		}
+		return StructV(cp)
 	}
 	return v
 }

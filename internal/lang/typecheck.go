@@ -956,7 +956,8 @@ func (c *checker) checkFunc(f *Func) error {
 		if err != nil {
 			return err
 		}
-		if err := sc.declare(p.Name, &cVar{typ: t, init: true}, p.Pos); err != nil {
+		// 形参修饰（与声明通式一致）：const = callee 内不可赋值；copyd 只影响绑定时复制（eval 侧）
+		if err := sc.declare(p.Name, &cVar{typ: t, init: true, isConst: p.Decor == "const"}, p.Pos); err != nil {
 			return err
 		}
 	}

@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 	"sync"
 )
 
@@ -21,6 +23,10 @@ func (e *ParseError) Error() string {
 type parser struct {
 	toks []Token
 	i    int
+
+	prog      *Program          // 当前程序（匿名 struct/interface 作类型标注时合成实名类型登记）
+	anonByKey map[string]string // 匿名类型结构键 → 合成实名（同一结构复用同一个名字）
+	anonSeq   int
 }
 
 // Parse builds the AST from tokens (spec §2).
@@ -235,6 +241,10 @@ func isWordToken(k TokenKind) bool {
 
 func (p *parser) parseProgram() (*Program, error) {
 	prog := &Program{}
+	p.prog = prog
+	if p.anonByKey == nil {
+		p.anonByKey = map[string]string{}
+	}
 	for !p.curIs(TEOF) {
 		switch p.cur().Kind {
 		case TFunc:
@@ -369,7 +379,7 @@ func (p *parser) parseProgram() (*Program, error) {
 								return nil, err
 							}
 							ret := "void"
-							if p.curIs(TIdent) || p.curIs(TInterface) {
+							if p.curIs(TIdent) || p.curIs(TInterface) || p.curIs(TStruct) {
 								ret, err = p.parseType()
 								if err != nil {
 									return nil, err
@@ -524,7 +534,7 @@ func (p *parser) parseFunc() (*FuncDecl, error) {
 	}
 	fn.Params = params
 	// 返回类型注解必填（新模型：函数必须声明返回类型；main 入口可省略，视为 void）
-	if p.curIs(TIdent) || p.curIs(TInterface) {
+	if p.curIs(TIdent) || p.curIs(TInterface) || p.curIs(TStruct) {
 		typ, err := p.parseType()
 		if err != nil {
 			return nil, err
@@ -548,11 +558,19 @@ func (p *parser) parseFunc() (*FuncDecl, error) {
 	return fn, nil
 }
 
-// parseParamList parses "(name Type, ...)".
+// parseParamList parses "(<修饰> <类型> <名字>, ...)"（形参与声明同一通式：
+// 修饰 const/copyd 写在类型前，如 fn f(copyd int a)）。
 func (p *parser) parseParamList() ([]Param, error) {
 	var params []Param
 	if !p.curIs(TRParen) {
 		for {
+			decor := ""
+			// 修饰消歧：cur 是 const/copyd 且下一个 token 是类型（TIdent/TInterface）时按修饰解析
+			if p.curIs(TIdent) && (p.cur().Text == "const" || p.cur().Text == "copyd") &&
+				(p.peekIs(TIdent) || p.peekIs(TInterface) || p.peekIs(TStruct)) {
+				decor = p.cur().Text
+				p.advance()
+			}
 			typ, err := p.parseType()
 			if err != nil {
 				return nil, err
@@ -562,9 +580,10 @@ func (p *parser) parseParamList() ([]Param, error) {
 				return nil, err
 			}
 			params = append(params, Param{
-				Name: ptok.Text,
-				Type: typ,
-				Pos:  Pos{Line: ptok.Line, Col: ptok.Col},
+				Name:  ptok.Text,
+				Type:  typ,
+				Decor: decor,
+				Pos:   Pos{Line: ptok.Line, Col: ptok.Col},
 			})
 			if p.curIs(TComma) {
 				p.advance()
@@ -609,6 +628,21 @@ func (p *parser) parseStruct() (*StructDecl, error) {
 	if err != nil {
 		return nil, err
 	}
+	sd, err := p.parseStructBody(kw)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.parseStructName(sd); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(TSemi, "';'"); err != nil {
+		return nil, err
+	}
+	return sd, nil
+}
+
+// parseStructBody 解析 struct[<T,...>] { 成员… }（不含名字与 ';'，实名/匿名共用一个解析体）。
+func (p *parser) parseStructBody(kw Token) (*StructDecl, error) {
 	sd := &StructDecl{Pos: Pos{Line: kw.Line, Col: kw.Col}}
 	// 可选泛型参数：struct<T, U> { ... }
 	if p.curIs(TLt) {
@@ -643,12 +677,6 @@ func (p *parser) parseStruct() (*StructDecl, error) {
 		})
 	}
 	p.advance() // '}'
-	if err := p.parseStructName(sd); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(TSemi, "';'"); err != nil {
-		return nil, err
-	}
 	return sd, nil
 }
 
@@ -683,7 +711,7 @@ func (p *parser) parseMethodSig() (MethodSig, error) {
 		return MethodSig{}, err
 	}
 	sig := MethodSig{Name: name.Text, Params: params, Dynamic: dyn, Pos: Pos{Line: kw.Line, Col: kw.Col}}
-	if p.curIs(TIdent) || p.curIs(TInterface) {
+	if p.curIs(TIdent) || p.curIs(TInterface) || p.curIs(TStruct) {
 		typ, err := p.parseType()
 		if err != nil {
 			return MethodSig{}, err
@@ -702,6 +730,21 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 	if err != nil {
 		return nil, err
 	}
+	id, err := p.parseInterfaceBody(kw)
+	if err != nil {
+		return nil, err
+	}
+	if p.curIs(TIdent) {
+		id.Name = p.advance().Text
+	}
+	if _, err := p.expect(TSemi, "';'"); err != nil {
+		return nil, err
+	}
+	return id, nil
+}
+
+// parseInterfaceBody 解析 interface[<T,...>] { 签名… }（不含名字与 ';'）。
+func (p *parser) parseInterfaceBody(kw Token) (*InterfaceDecl, error) {
 	id := &InterfaceDecl{Pos: Pos{Line: kw.Line, Col: kw.Col}}
 	if p.curIs(TLt) { // 泛型接口：interface<T, ...> { ... } Name;
 		tps, err := p.parseTypeParams()
@@ -743,13 +786,100 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 		id.Methods = append(id.Methods, sig)
 	}
 	p.advance() // '}'
-	if p.curIs(TIdent) {
-		id.Name = p.advance().Text
-	}
-	if _, err := p.expect(TSemi, "';'"); err != nil {
-		return nil, err
-	}
 	return id, nil
+}
+
+
+// parseAnonTypeName 解析匿名 struct { ... } / interface { ... } 类型标注：
+// 合成实名类型（__anon_struct_N / __anon_iface_N）登记进 Program（解释器/编译器按实名类型处理），
+// 返回该合成名。字段/方法集合等价的匿名类型复用同一个合成名。
+func (p *parser) parseAnonTypeName() (string, error) {
+	kw := p.advance() // struct | interface
+	if kw.Kind == TStruct {
+		sd, err := p.parseStructBody(kw)
+		if err != nil {
+			return "", err
+		}
+		if len(sd.TypeParams) > 0 {
+			return "", p.errf(kw, "匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）")
+		}
+		key := anonStructKey(sd)
+		if n, ok := p.anonByKey[key]; ok {
+			return n, nil
+		}
+		p.anonSeq++
+		name := fmt.Sprintf("__anon_struct_%d", p.anonSeq)
+		sd.Name = name
+		if p.prog != nil {
+			p.prog.Structs = append(p.prog.Structs, sd)
+		}
+		p.anonByKey[key] = name
+		return name, nil
+	}
+	id, err := p.parseInterfaceBody(kw)
+	if err != nil {
+		return "", err
+	}
+	if len(id.TypeParams) > 0 {
+		return "", p.errf(kw, "匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）")
+	}
+	if len(id.Methods) == 0 && len(id.Expands) == 0 {
+		return "interface{}", nil // 空接口 = void（既有语义不变）
+	}
+	key := anonIfaceKey(id)
+	if n, ok := p.anonByKey[key]; ok {
+		return n, nil
+	}
+	p.anonSeq++
+	name := fmt.Sprintf("__anon_iface_%d", p.anonSeq)
+	id.Name = name
+	if p.prog != nil {
+		p.prog.Interfaces = append(p.prog.Interfaces, id)
+	}
+	p.anonByKey[key] = name
+	return name, nil
+}
+
+// anonStructKey 匿名 struct 的结构键（字段顺序 + 名字 + 类型）。
+func anonStructKey(sd *StructDecl) string {
+	var sb strings.Builder
+	for _, m := range sd.Members {
+		sb.WriteString(m.Name)
+		sb.WriteByte(':')
+		sb.WriteString(m.Type)
+		sb.WriteByte(';')
+	}
+	return sb.String()
+}
+
+// anonIfaceKey 匿名 interface 的结构键（方法 + expand 组合；顺序无关）。
+func anonIfaceKey(id *InterfaceDecl) string {
+	parts := make([]string, 0, len(id.Methods))
+	for _, m := range id.Methods {
+		var sb strings.Builder
+		sb.WriteString(m.Name)
+		if m.Dynamic {
+			sb.WriteString("!dynamic")
+		}
+		sb.WriteByte('(')
+		for _, prm := range m.Params {
+			sb.WriteString(prm.Decor)
+			sb.WriteByte(' ')
+			sb.WriteString(prm.Type)
+			sb.WriteByte(',')
+		}
+		sb.WriteString(")->")
+		sb.WriteString(m.Ret)
+		parts = append(parts, sb.String())
+	}
+	sort.Strings(parts)
+	out := strings.Join(parts, "|")
+	if len(id.Expands) > 0 {
+		ex := append([]string(nil), id.Expands...)
+		sort.Strings(ex)
+		out += " expand:" + strings.Join(ex, ",")
+	}
+	return out
 }
 
 // parseImpl parses "impl [Iface] { funcs } Type;".
@@ -793,17 +923,39 @@ func (p *parser) parseImpl() (*ImplDecl, error) {
 	return im, nil
 }
 
-// parseType reads a type annotation: ident ( "<" ... ">" )* ( "[" ... "]" )?.
+// parseType reads a type annotation: 类型基名 ( "<" ... ">" )* ( "[" ... "]" )? ( "&" )?。
+// 类型基名可以是标识符、interface{}（空接口）、匿名 struct { ... } / interface { ... }
+// （匿名类型合成实名类型登记进 Program，等价结构复用同一个名字）。
 func (p *parser) parseType() (string, error) {
-	if p.curIs(TInterface) {
-		p.advance()
-		if _, err := p.expect(TLBrace, "'{'"); err != nil {
+	if p.curIs(TInterface) || p.curIs(TStruct) {
+		name, err := p.parseAnonTypeName()
+		if err != nil {
 			return "", err
 		}
-		if _, err := p.expect(TRBrace, "'}'"); err != nil {
-			return "", err
+		if name == "interface{}" {
+			return name, nil // 空接口 = void（无后缀可言）
 		}
-		return "interface{}", nil
+		if p.curIs(TLBracket) && !p.peekIs(TInt) && !p.peekIs(TMinus) {
+			p.advance()
+			if p.curIs(TRBracket) {
+				p.advance()
+				name += "[]"
+			} else {
+				inner, err := p.expectIdent("type suffix (e.g. Copyd)")
+				if err != nil {
+					return "", err
+				}
+				if _, err := p.expect(TRBracket, "']'"); err != nil {
+					return "", err
+				}
+				name += "[" + inner.Text + "]"
+			}
+		}
+		if p.curIs(TAmper) {
+			p.advance()
+			name += "&"
+		}
+		return name, nil
 	}
 	tok, err := p.expectIdent("type name")
 	if err != nil {
@@ -832,7 +984,7 @@ func (p *parser) parseType() (string, error) {
 	}
 	if name == "pointer" {
 		// pointer 修饰：pointer <type>（等价 T&）；裸 pointer = 不透明句柄（FFI void*，可空、可往返）
-		if !p.curIs(TIdent) && !p.curIs(TInterface) {
+		if !p.curIs(TIdent) && !p.curIs(TInterface) && !p.curIs(TStruct) {
 			return "pointer", nil
 		}
 		// 消歧：pointer p（p 后紧跟 , ) ; =）是「裸 pointer + 参数/变量名」，不是「pointer 指向 p」

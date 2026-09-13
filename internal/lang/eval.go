@@ -64,6 +64,49 @@ func (s *scope) paramIndex(name string) int {
 	return -1
 }
 
+// findScope 返回定义 name 的作用域（按引用传参时构造引用单元用；nil = 未声明）。
+func (s *scope) findScope(name string) *scope {
+	for sc := s; sc != nil; sc = sc.outer {
+		if sc.paramIndex(name) >= 0 {
+			return sc
+		}
+		if sc.vars != nil {
+			if _, ok := sc.vars[name]; ok {
+				return sc
+			}
+		}
+	}
+	return nil
+}
+
+// rawGet 读 name 的原始槽位值（不解引用；引用单元读写用）。
+func (s *scope) rawGet(name string) Value {
+	if i := s.paramIndex(name); i >= 0 {
+		return s.slots[i]
+	}
+	if s.vars != nil {
+		if v, ok := s.vars[name]; ok {
+			return v
+		}
+	}
+	return NilV()
+}
+
+// rawSet 写 name 的原始槽位（不穿透引用；返回 false = 该作用域没有此名字）。
+func (s *scope) rawSet(name string, v Value) bool {
+	if i := s.paramIndex(name); i >= 0 {
+		s.slots[i] = v
+		return true
+	}
+	if s.vars != nil {
+		if _, ok := s.vars[name]; ok {
+			s.vars[name] = v
+			return true
+		}
+	}
+	return false
+}
+
 func (s *scope) declare(name string, v Value, pos Pos) error {
 	// 参数槽位已存在（execute 绑定）→ 保留绑定值；若是局部变量重复声明（循环内每轮重新声明）
 	// → 更新槽位（否则旧值永久残留，如循环中 p int = html.indexOf(...) 拿到首轮旧下标）
@@ -86,18 +129,25 @@ func (s *scope) declare(name string, v Value, pos Pos) error {
 
 func (s *scope) set(name string, v Value, pos Pos) error {
 	for sc := s; sc != nil; sc = sc.outer {
-		if pn := sc.paramNames; len(pn) > 0 && pn[0] == name {
-			sc.slots[0] = v
-			return nil
-		}
+		// 引用传递：形参槽位是引用单元时写穿到调用方实参（按引用语义），不覆盖引用本身
 		if i := sc.paramIndex(name); i >= 0 {
+			if cur := sc.slots[i]; cur.IsRef() {
+				if cur.Ref().store(v) {
+					return nil
+				}
+			}
 			sc.slots[i] = v
 			return nil
 		}
 		if sc.vars == nil {
 			continue
 		}
-		if _, ok := sc.vars[name]; ok {
+		if cur, ok := sc.vars[name]; ok {
+			if cur.IsRef() {
+				if cur.Ref().store(v) {
+					return nil
+				}
+			}
 			sc.vars[name] = v
 			return nil
 		}
@@ -108,16 +158,16 @@ func (s *scope) set(name string, v Value, pos Pos) error {
 func (s *scope) get(name string, pos Pos) (Value, error) {
 	for sc := s; sc != nil; sc = sc.outer {
 		if pn := sc.paramNames; len(pn) > 0 && pn[0] == name {
-			return sc.slots[0], nil
+			return sc.slots[0].deref(), nil // 引用传递：读路径统一解引用
 		}
 		if i := sc.paramIndex(name); i >= 0 {
-			return sc.slots[i], nil
+			return sc.slots[i].deref(), nil
 		}
 		if sc.vars == nil {
 			continue
 		}
 		if v, ok := sc.vars[name]; ok {
-			return v, nil
+			return v.deref(), nil
 		}
 	}
 	return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: undeclared identifier %q", name), Pos: pos}
@@ -536,9 +586,18 @@ func (in *interp) execute(ctx *execCtx) error {
 	args := ctx.Args
 	if flags := fn.CopydFlags(); flags != nil {
 		for i, f := range flags {
-			if f {
-				args[i] = deepCopy(args[i])
+			if !f || i >= len(args) {
+				continue
 			}
+			v := args[i]
+			if v.IsRef() { // 直接构造 ctx 的调用方（taskm 线程等）：copyd 不引用
+				v = v.deref()
+				args[i] = v
+			}
+			if v.IsCopyd() { // callFunc 已包装并深拷贝
+				continue
+			}
+			args[i] = copydCopy(v)
 		}
 	}
 	sc.setParams(fn.ParamNames(), args)
@@ -1198,6 +1257,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		if err != nil {
 			return NilV(), err
 		}
+		argVals = derefArgs(argVals) // 签名机制按值记录 in 列表
 		fn := in.bestMatchV(in.allDefs(id.Name), argVals)
 		if fn == nil {
 			return NilV(), &RunError{Msg: overloadErr(in.allDefs(id.Name), id.Name, len(argVals)), Pos: id.Pos, Ctx: ctx}
@@ -1272,7 +1332,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		}
 	}
 	if b, ok := in.builtins[id.Name]; ok {
-		return b(argVals, id.Pos, ctx)
+		return b(derefArgs(argVals), id.Pos, ctx) // 内建只接受值
 	}
 	return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: undeclared function %q", id.Name), Pos: id.Pos, Ctx: ctx}
 }
@@ -1282,7 +1342,7 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	// 内置函数引用（如 sum 的生成器 rand）：仅当是伪函数（无 Body）时——用户同名方法不被劫持
 	if fn.Body == nil {
 		if b, ok := in.builtins[fn.Name]; ok {
-			return b(args, pos, nil)
+			return b(derefArgs(args), pos, nil) // 内建只接受值
 		}
 	}
 	if len(args) != len(fn.Params) {
@@ -1291,20 +1351,37 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	if parentDepth >= 8192 {
 		return NilV(), &RunError{Msg: "StackOverflowError: recursion depth exceeded 8192", Pos: pos}
 	}
-	// 传时复制（copyd）：
-	//   ① 形参标注 [Copyd] → 实参包装为 Copyd 值（深拷贝一次）
-	//   ② 实参本身是 copyd 声明的 Copyd 值、而形参未标注 → 解包并深拷贝（传时复制）
+	// 形参绑定（唯一正典）：
+	//   ① 普通形参 → 左值实参按引用绑定（引用值保留在槽位，读/写穿透到调用方）；
+	//      非左值实参是临时单元，callee 修改无副作用；
+	//   ② copyd 形参（类型 int[Copyd]/Copyd<T> 或修饰 copyd）→ 深拷贝后绑定，
+	//      不回写调用方：类型写法绑 Copyd 包装值（.ptr() 可取），修饰写法绑裸值；
+	//   ③ 实参本身是 copyd 声明的 Copyd 值、而形参不是 copyd → 解包并深拷贝（传时复制）。
 	flags := fn.CopydFlags()
 	for i := range args {
 		flagged := flags != nil && i < len(flags) && flags[i]
-		if args[i].IsCopyd() {
-			if !flagged {
-				args[i] = deepCopy(args[i].Copyd().V)
+		if args[i].IsCopyd() { // 引用透明：引用到 Copyd 值时按 Copyd 值处理
+			cv := args[i]
+			if cv.IsRef() {
+				cv = cv.deref()
+			}
+			if flagged {
+				args[i] = cv // 已是 Copyd 值：原样绑定（不再复制）
+			} else {
+				args[i] = deepCopy(cv.Copyd().V)
 			}
 			continue
 		}
 		if flagged {
-			args[i] = CopydV(&CopydValue{V: deepCopy(args[i])})
+			v := args[i]
+			if v.IsRef() {
+				v = v.deref() // copyd 形参不解引用/不引用：取实参当前值
+			}
+			if fn.paramWrapCopyd(i) {
+				args[i] = CopydV(&CopydValue{V: copydCopy(v)})
+			} else {
+				args[i] = copydCopy(v)
+			}
 		}
 	}
 	ctx := in.newCtx(fn, args, pos)
@@ -1319,10 +1396,12 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	return ctx.result, nil
 }
 
+// evalArgs 求值实参列表：左值实参（变量 / struct 字段 / List 下标）返回引用值，
+// 其余按值返回——形参一律按引用绑定（copyd 形参除外，见 callFunc）。
 func (in *interp) evalArgs(args []Expr, sc *scope, ctx *execCtx) ([]Value, error) {
 	vals := make([]Value, 0, len(args))
 	for _, a := range args {
-		v, err := in.evalExpr(a, sc, ctx)
+		v, err := in.evalArg(a, sc, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -1331,7 +1410,68 @@ func (in *interp) evalArgs(args []Expr, sc *scope, ctx *execCtx) ([]Value, error
 	return vals, nil
 }
 
+// evalArg 求值单个实参：能构成左值单元的返回引用值（写回调用方），否则按值。
+func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
+	switch x := a.(type) {
+	case *Ident:
+		// 已声明变量 → 引用单元（未声明的名字可能是函数引用，回退按值）
+		if owner := sc.findScope(x.Name); owner != nil {
+			return RefV(&refValue{kind: refIdent, sc: owner, name: x.Name}), nil
+		}
+	case *MemberExpr:
+		obj, err := in.evalExpr(x.X, sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		if obj.IsCopyd() {
+			obj = obj.Copyd().V // Copyd 透传（与 evalMember 一致）
+		}
+		if obj.IsStruct() {
+			if _, ok := obj.Struct().Fields[x.Name]; ok {
+				return RefV(&refValue{kind: refMember, obj: obj, name: x.Name}), nil
+			}
+		}
+		return evalMember(obj, x.Name, x.Pos, ctx)
+	case *IndexExpr:
+		obj, err := in.evalExpr(x.X, sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		idx, err := in.evalExpr(x.Idx, sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		if !obj.IsList() {
+			return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: indexing requires a List, got %s", obj.TypeName()), Pos: x.Pos, Ctx: ctx}
+		}
+		if !idx.IsInt() {
+			return NilV(), &RunError{Msg: "TypeError: index must be int", Pos: x.Pos, Ctx: ctx}
+		}
+		// 先按原语义取值（含越界检查），再构造元素引用
+		if _, gerr := obj.List().Get(int(idx.Int())); gerr != nil {
+			return NilV(), &RunError{Msg: gerr.Error(), Pos: x.Pos, Ctx: ctx}
+		}
+		return RefV(&refValue{kind: refIndex, obj: obj, key: idx}), nil
+	}
+	return in.evalExpr(a, sc, ctx)
+}
+
 func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx, pos Pos) (Value, error) {
+	// Copyd 透传（提前到类型分发之前，与 List/Table 判定互斥）
+	if obj.IsCopyd() {
+		if name == "ptr" {
+			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
+				return NilV(), err
+			}
+			return obj.Copyd().V, nil // .ptr() 取出 Copyd 包装的地址
+		}
+		return in.callMethod(obj.Copyd().V, name, args, ctx, pos)
+	}
+	// 非 struct 接收者（List/Table/String/IO/FFI/…）：内建方法只接受值，实参解引用。
+	// struct 接收者走用户 impl 方法：保留引用实参（形参按引用绑定）。
+	if !obj.IsStruct() {
+		args = derefArgs(args)
+	}
 	if obj.IsLib() {
 		return in.callLibMethod(obj.Lib(), name, args, pos, ctx)
 	}
@@ -1464,15 +1604,6 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			}
 			return IntV(int64(o.Size())), nil
 		}
-	} else if obj.IsCopyd() {
-		o := obj.Copyd()
-		if name == "ptr" {
-			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
-				return NilV(), err
-			}
-			return o.V, nil // .ptr() 取出 Copyd 包装的地址
-		}
-		return in.callMethod(o.V, name, args, ctx, pos) // Copyd 透传
 	} else if obj.IsTaskm() {
 		_ = obj.Taskm() // taskm 是全局单例；方法走 in
 		switch name {
@@ -2028,6 +2159,11 @@ func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, e
 	args, err := in.evalArgs(x.Args, sc, ctx)
 	if err != nil {
 		return NilV(), err
+	}
+	// 内建空间方法只接受值（引用实参解引用）；用户 space 静态方法保留引用传递。
+	switch x.Scope {
+	case "memorize", "HashTable", "List", "taskm", "IO", "file":
+		args = derefArgs(args)
 	}
 	switch x.Scope {
 	case "memorize":
