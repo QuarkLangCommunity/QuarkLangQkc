@@ -397,12 +397,13 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 		in.interfaces[i.Name] = &InterfaceDef{Name: i.Name, Methods: i.Methods, Expands: i.Expands}
 	}
 	for _, im := range prog.Impls {
+		// 同一类型允许多个 impl 块：方法聚合（xmind §类：impl<T> {...} name;）
 		key := implKeyOf(im.Type, im.Iface)
-		if _, dup := in.impls[key]; dup {
-			return nil, fmt.Errorf("CompileError: duplicate impl %s for %s", im.Iface, im.Type)
+		def, exists := in.impls[key]
+		if !exists {
+			def = &ImplDef{Type: im.Type, Iface: im.Iface, TypeParams: im.TypeParams, Methods: map[string]*Func{}, SelfMethods: map[string]*Func{}}
+			in.impls[key] = def
 		}
-		def := &ImplDef{Type: im.Type, Iface: im.Iface, TypeParams: im.TypeParams, Methods: map[string]*Func{}, SelfMethods: map[string]*Func{}}
-		in.impls[key] = def
 		for _, m := range im.Methods {
 			if len(m.Params) > 0 && m.Params[0].Name == "self" && m.Params[0].Type == "" {
 				m.Params[0].Type = im.Type
@@ -717,6 +718,38 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			}
 		}
 		return nil
+	case *ForCStmt:
+		// C 风格：for (<init>; <cond>; <step>) { ... }
+		inner := newScope(sc)
+		if s.Init != nil {
+			if err := in.execStmt(s.Init, inner, ctx); err != nil {
+				return err
+			}
+		}
+		for {
+			c, err := in.evalExpr(s.Cond, inner, ctx)
+			if err != nil {
+				return err
+			}
+			b, err := truthy(c)
+			if err != nil {
+				return err
+			}
+			if !b {
+				return nil
+			}
+			if err := in.execBlock(s.Body, inner, ctx); err != nil {
+				if errors.Is(err, errLoopBreak) {
+					return nil
+				}
+				return err
+			}
+			if s.Step != nil {
+				if err := in.execStmt(s.Step, inner, ctx); err != nil {
+					return err
+				}
+			}
+		}
 	case *DeclStmt:
 		var v Value = NilV()
 		if s.Init != nil {
@@ -727,6 +760,10 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			}
 		} else if def, ok := in.structs[baseTypeName(s.Type)]; ok {
 			v = StructV(in.zeroInstance(def))
+		}
+		// copyd 修饰：声明即为 Copyd 值（与类型标注 [Copyd] 一致：传时复制、.ptr() 取包装值）
+		if s.Decor == "copyd" && !v.IsCopyd() {
+			v = CopydV(&CopydValue{V: deepCopy(v)})
 		}
 		return sc.declare(s.Name, v, s.Pos)
 	case *AssignStmt:
@@ -909,7 +946,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 				return FloatV(-v.Float()), nil
 			}
 			if v.IsStruct() {
-				if fn := in.selfMethodOf(v.Struct().SType, "neg"); fn != nil {
+				if fn := in.selfMethodOf(v.Struct().SType, "__neg__"); fn != nil {
 					return in.callFunc(fn, []Value{v}, x.Pos, ctx.depth)
 				}
 			}
@@ -1254,11 +1291,20 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	if parentDepth >= 8192 {
 		return NilV(), &RunError{Msg: "StackOverflowError: recursion depth exceeded 8192", Pos: pos}
 	}
-	if flags := fn.CopydFlags(); flags != nil {
-		for i, f := range flags {
-			if f {
-				args[i] = CopydV(&CopydValue{V: deepCopy(args[i])})
+	// 传时复制（copyd）：
+	//   ① 形参标注 [Copyd] → 实参包装为 Copyd 值（深拷贝一次）
+	//   ② 实参本身是 copyd 声明的 Copyd 值、而形参未标注 → 解包并深拷贝（传时复制）
+	flags := fn.CopydFlags()
+	for i := range args {
+		flagged := flags != nil && i < len(flags) && flags[i]
+		if args[i].IsCopyd() {
+			if !flagged {
+				args[i] = deepCopy(args[i].Copyd().V)
 			}
+			continue
+		}
+		if flagged {
+			args[i] = CopydV(&CopydValue{V: deepCopy(args[i])})
 		}
 	}
 	ctx := in.newCtx(fn, args, pos)
@@ -1289,6 +1335,15 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 	if obj.IsLib() {
 		return in.callLibMethod(obj.Lib(), name, args, pos, ctx)
 	}
+	if obj.IsPtr() { // FFI 不透明句柄：仅支持 toString（十六进制）
+		if name == "toString" {
+			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
+				return NilV(), err
+			}
+			return StrV(obj.String()), nil
+		}
+		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: no method %q on pointer", name), Pos: pos, Ctx: ctx}
+	}
 	if obj.IsList() {
 		o := obj.List()
 		switch name {
@@ -1307,6 +1362,18 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			return IntV(int64(o.Size())), nil
+		case "get":
+			if err := wantArity(name, 1, len(args), pos, ctx); err != nil {
+				return NilV(), err
+			}
+			if !args[0].IsInt() {
+				return NilV(), &RunError{Msg: "TypeError: get(i) 需要 int 下标", Pos: pos, Ctx: ctx}
+			}
+			gv, gerr := o.Get(int(args[0].Int()))
+			if gerr != nil {
+				return NilV(), &RunError{Msg: gerr.Error(), Pos: pos, Ctx: ctx}
+			}
+			return gv, nil
 		case "next":
 			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
 				return NilV(), err

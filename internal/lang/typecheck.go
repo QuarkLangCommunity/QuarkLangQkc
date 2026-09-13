@@ -103,6 +103,9 @@ func (t *Type) String() string {
 		}
 		return t.FName
 	case tPtr:
+		if t.Elem == nil {
+			return "pointer"
+		}
 		return t.Elem.String() + "&"
 	case tCopyd:
 		return "Copyd<" + t.Elem.String() + ">"
@@ -137,7 +140,13 @@ func assignable(from, to *Type) bool {
 		if from.Kind == tNull {
 			return true
 		}
+		if to.Elem == nil { // 不透明句柄：只接受 pointer / null
+			return from.Kind == tPtr
+		}
 		if from.Kind == tPtr {
+			if from.Elem == nil {
+				return true
+			}
 			return assignable(from.Elem, to.Elem) || to.Elem.Kind == tAny || from.Elem.Kind == tAny
 		}
 		return assignable(from, to.Elem) || to.Elem.Kind == tAny
@@ -151,9 +160,10 @@ func assignable(from, to *Type) bool {
 		return true
 	}
 	// 具名接口：struct/接口 → 接口 宽松放行（严格实现性校验在 checkCallArgs 等有 c 上下文处）
+	// 接口→接口按**结构化**满足：from 的方法集覆盖 to 即可（不要求同名）
 	if to.Kind == tInterface {
 		if from.Kind == tInterface {
-			return from.FName == to.FName
+			return true
 		}
 		if from.Kind == tStruct {
 			return true
@@ -192,6 +202,9 @@ func assignable(from, to *Type) bool {
 		}
 		return true
 	case tPtr:
+		if from.Elem == nil || to.Elem == nil {
+			return from.Elem == nil && to.Elem == nil
+		}
 		return assignable(from.Elem, to.Elem)
 	case tCopyd:
 		return assignable(from.Elem, to.Elem)
@@ -288,6 +301,9 @@ func splitType(s string) (base, inner, suffix string) {
 	s = strings.TrimSpace(s)
 	if i := strings.LastIndex(s, "["); i >= 0 && strings.HasSuffix(s, "]") {
 		suffix = strings.TrimSpace(s[i+1 : len(s)-1])
+		if suffix == "" {
+			suffix = "[]" // int[] = Copyd<Array<int>>
+		}
 		s = s[:i]
 	}
 	if i := strings.Index(s, "<"); i >= 0 && strings.HasSuffix(s, ">") {
@@ -429,31 +445,39 @@ func overloadErrT(defs []*Func, name string, n int) string {
 	return fmt.Sprintf("CompileError: 未找到匹配重载 %q（参数类型不匹配）", name)
 }
 
-// opMethodFor 运算符 → Operation 协议方法名（dynamic 接口分发）。
+// opMethodFor 运算符 → Operation 协议方法名（xmind §接口：__add__ 等操作符方法；dynamic 接口分发）。
 func opMethodFor(op string) string {
 	switch op {
 	case "+":
-		return "add"
+		return "__add__"
 	case "-":
-		return "sub"
+		return "__sub__"
 	case "*":
-		return "mul"
+		return "__mul__"
 	case "/":
-		return "div"
+		return "__div__"
 	case "%":
-		return "mod"
+		return "__mod__"
 	case "==":
-		return "eq"
+		return "__eq__"
 	case "!=":
-		return "ne"
+		return "__ne__"
 	case "<":
-		return "lt"
+		return "__lt__"
 	case "<=":
-		return "le"
+		return "__le__"
 	case ">":
-		return "gt"
+		return "__gt__"
 	case ">=":
-		return "ge"
+		return "__ge__"
+	}
+	return ""
+}
+
+// opUnaryMethodFor 一元运算符 → 协议方法名。
+func opUnaryMethodFor(op string) string {
+	if op == "-" {
+		return "__neg__"
 	}
 	return ""
 }
@@ -467,18 +491,18 @@ func builtinOperationIfaces() map[string]*InterfaceDef {
 		return MethodSig{Name: n, Params: p, Ret: ret, Dynamic: true}
 	}
 	return map[string]*InterfaceDef{
-		"AddOperation": {Name: "AddOperation", Methods: []MethodSig{fn("add", self2, "Self")}},
-		"SubOperation": {Name: "SubOperation", Methods: []MethodSig{fn("sub", self2, "Self")}},
-		"MulOperation": {Name: "MulOperation", Methods: []MethodSig{fn("mul", self2, "Self")}},
-		"DivOperation": {Name: "DivOperation", Methods: []MethodSig{fn("div", self2, "Self")}},
-		"ModOperation": {Name: "ModOperation", Methods: []MethodSig{fn("mod", self2, "Self")}},
-		"NegOperation": {Name: "NegOperation", Methods: []MethodSig{fn("neg", self1, "Self")}},
-		"EqOperation":  {Name: "EqOperation", Methods: []MethodSig{fn("eq", self2, "bool")}},
-		"NeOperation":  {Name: "NeOperation", Methods: []MethodSig{fn("ne", self2, "bool")}},
-		"LtOperation":  {Name: "LtOperation", Methods: []MethodSig{fn("lt", self2, "bool")}},
-		"LeOperation":  {Name: "LeOperation", Methods: []MethodSig{fn("le", self2, "bool")}},
-		"GtOperation":  {Name: "GtOperation", Methods: []MethodSig{fn("gt", self2, "bool")}},
-		"GeOperation":  {Name: "GeOperation", Methods: []MethodSig{fn("ge", self2, "bool")}},
+		"AddOperation": {Name: "AddOperation", Methods: []MethodSig{fn("__add__", self2, "Self")}},
+		"SubOperation": {Name: "SubOperation", Methods: []MethodSig{fn("__sub__", self2, "Self")}},
+		"MulOperation": {Name: "MulOperation", Methods: []MethodSig{fn("__mul__", self2, "Self")}},
+		"DivOperation": {Name: "DivOperation", Methods: []MethodSig{fn("__div__", self2, "Self")}},
+		"ModOperation": {Name: "ModOperation", Methods: []MethodSig{fn("__mod__", self2, "Self")}},
+		"NegOperation": {Name: "NegOperation", Methods: []MethodSig{fn("__neg__", self1, "Self")}},
+		"EqOperation":  {Name: "EqOperation", Methods: []MethodSig{fn("__eq__", self2, "bool")}},
+		"NeOperation":  {Name: "NeOperation", Methods: []MethodSig{fn("__ne__", self2, "bool")}},
+		"LtOperation":  {Name: "LtOperation", Methods: []MethodSig{fn("__lt__", self2, "bool")}},
+		"LeOperation":  {Name: "LeOperation", Methods: []MethodSig{fn("__le__", self2, "bool")}},
+		"GtOperation":  {Name: "GtOperation", Methods: []MethodSig{fn("__gt__", self2, "bool")}},
+		"GeOperation":  {Name: "GeOperation", Methods: []MethodSig{fn("__ge__", self2, "bool")}},
 		"Operation":    {Name: "Operation", Expands: []string{"AddOperation", "SubOperation", "MulOperation", "DivOperation", "ModOperation", "NegOperation", "EqOperation", "NeOperation", "LtOperation", "LeOperation", "GtOperation", "GeOperation"}},
 		// ---- 事件接口族（组件协议：用户用类直接 impl；qksignal_emit 派发） ----
 		"ClegClickable":  {Name: "ClegClickable", Methods: []MethodSig{fn("onClicked", self, "void"), fn("onPressed", self, "void"), fn("onReleased", self, "void")}},
@@ -574,12 +598,13 @@ func Typecheck(prog *Program) error {
 				return &CheckError{Msg: fmt.Sprintf("CompileError: struct %s has no type parameters, but impl declares %d", im.Type, len(im.TypeParams)), Pos: im.Pos}
 			}
 		}
+		// 同一类型允许多个 impl 块：方法聚合（xmind §类：impl<T> {...} name;）；方法名重复仍报错
 		key := implKeyOf(im.Type, im.Iface)
-		if _, dup := c.impls[key]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate impl %s for %s", im.Iface, im.Type), Pos: im.Pos}
+		def, exists := c.impls[key]
+		if !exists {
+			def = &ImplDef{Type: im.Type, Iface: im.Iface, TypeParams: im.TypeParams, Methods: map[string]*Func{}, SelfMethods: map[string]*Func{}}
+			c.impls[key] = def
 		}
-		def := &ImplDef{Type: im.Type, Iface: im.Iface, TypeParams: im.TypeParams, Methods: map[string]*Func{}, SelfMethods: map[string]*Func{}}
-		c.impls[key] = def
 		for _, m := range im.Methods {
 			if len(m.Params) > 0 && m.Params[0].Name == "self" && m.Params[0].Type == "" {
 				m.Params[0].Type = im.Type
@@ -655,6 +680,7 @@ func Typecheck(prog *Program) error {
 		for _, tp := range im.TypeParams {
 			subst[tp] = tAnyV // 泛型方法体：参数按 interface{} 宽松检查
 		}
+		subst["Self"] = &Type{Kind: tStruct, FName: im.Type} // impl 内 Self = 该类型（与接口的 Self 一致）
 		prev := c.curSubst
 		c.curSubst = subst
 		for _, m := range im.Methods {
@@ -685,7 +711,12 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		return tAnyV, nil // any 与 void 都用空接口实现（xmind §接口）
 	}
 	if s == "Self" {
-		return &Type{Kind: tTypeVar, FName: "Self"}, nil // Self = 所指类型（xmind §接口）
+		if subst != nil {
+			if t, ok := subst["Self"]; ok {
+				return t, nil // impl 场景：Self = 该 impl 的类型
+			}
+		}
+		return &Type{Kind: tTypeVar, FName: "Self"}, nil // 接口场景：Self = 所指类型（xmind §接口）
 	}
 	if s == "" {
 		return nil, &CheckError{Msg: "CompileError: empty type annotation", Pos: pos}
@@ -697,6 +728,10 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 			return nil, err
 		}
 		return &Type{Kind: tPtr, Elem: e}, nil
+	}
+	// 裸 pointer：不透明句柄（FFI void*，可空、可往返）；Elem == nil 表示不透明
+	if s == "pointer" {
+		return &Type{Kind: tPtr}, nil
 	}
 	// pointer 修饰：pointer <T> 等价 T&（xmind/用户：指针修饰）
 	if strings.HasPrefix(s, "pointer ") {
@@ -768,7 +803,11 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 				return nil, err
 			}
 		}
-		return mkList(e), nil
+		lst := mkList(e)
+		if suffix == "Copyd" || suffix == "[]" {
+			return &Type{Kind: tCopyd, Elem: lst}, nil
+		}
+		return lst, nil
 	case "Copyd":
 		if inner == "" {
 			return &Type{Kind: tCopyd, Elem: tAnyV}, nil
@@ -791,7 +830,11 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		if err != nil {
 			return nil, err
 		}
-		return mkTable(kt, vt), nil
+		tbl := mkTable(kt, vt)
+		if suffix == "Copyd" || suffix == "[]" {
+			return &Type{Kind: tCopyd, Elem: tbl}, nil
+		}
+		return tbl, nil
 	}
 	// 泛型结构体实例：node / node<T> / node<T, U>
 	if def, ok := c.structs[base]; ok {
@@ -962,6 +1005,11 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if c.curRet != nil && !assignable(t, c.curRet) {
 				return c.errf(s.Pos, "TypeError: return type is %s, got %s", c.curRet, t)
 			}
+			if c.curRet != nil {
+				if err := c.checkIfaceStrict(t, c.curRet, s.Pos, "return"); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	case *BreakStmt:
@@ -1000,10 +1048,42 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		if err := inner.declare(s.Var, &cVar{typ: it.Elem, init: true}, s.Pos); err != nil {
 			return err
 		}
+		if s.Type != "" { // 迭代变量类型在前声明：for (<type> <name> : <list>)
+			dt, err := c.substType(s.Type, c.curSubst, s.Pos)
+			if err != nil {
+				return err
+			}
+			if !assignable(it.Elem, dt) {
+				return c.errf(s.Pos, "TypeError: for 迭代变量类型 %s 与元素类型 %s 不匹配", dt, it.Elem)
+			}
+			if err := c.checkIfaceStrict(it.Elem, dt, s.Pos, "for 迭代变量"); err != nil {
+				return err
+			}
+		}
 		c.loopDepth++
 		err2 := c.checkBlock(s.Body, inner)
 		c.loopDepth--
 		return err2
+	case *ForCStmt:
+		// C 风格：for (<init>; <cond>; <step>) { ... }
+		inner := newCScope(sc)
+		if s.Init != nil {
+			if err := c.checkStmt(s.Init, inner); err != nil {
+				return err
+			}
+		}
+		if err := c.requireBool(s.Cond, inner); err != nil {
+			return err
+		}
+		if s.Step != nil {
+			if err := c.checkStmt(s.Step, inner); err != nil {
+				return err
+			}
+		}
+		c.loopDepth++
+		err := c.checkBlock(s.Body, inner)
+		c.loopDepth--
+		return err
 	case *DeclStmt:
 		// 变量修饰：copyd = 传时复制（类型标注追加 [Copyd]）；const = 常量
 		typStr := s.Type
@@ -1043,6 +1123,9 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 					if err != nil {
 						return err
 					}
+					if err := c.checkIfaceStrict(fv, want, s.Pos, "struct literal "+s.Name+"."+f.Name); err != nil {
+						return err
+					}
 					if !assignable(fv, want) {
 						return c.errf(s.Pos, "TypeError: 字段 %q: cannot assign %s to %s", f.Name, fv, want)
 					}
@@ -1056,6 +1139,9 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				}
 				if !assignable(it, typ) {
 					return c.errf(s.Pos, "TypeError: cannot assign %s to %s", it, typ)
+				}
+				if err := c.checkIfaceStrict(it, typ, s.Pos, "decl "+s.Name); err != nil {
+					return err
 				}
 				v.init = true
 			}
@@ -1080,6 +1166,9 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if !assignable(t, v.typ) {
 				return c.errf(s.Pos, "TypeError: cannot assign %s to %s", t, v.typ)
 			}
+			if err := c.checkIfaceStrict(t, v.typ, s.Pos, "assign "+target.Name); err != nil {
+				return err
+			}
 			v.init = true
 			return nil
 		case *IndexExpr:
@@ -1099,12 +1188,18 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				if recvT.Elem != nil && !assignable(t, recvT.Elem) {
 					return c.errf(target.Pos, "TypeError: 值需要 %s，给了 %s", recvT.Elem, t)
 				}
+				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "table value"); err != nil {
+					return err
+				}
 			case tList:
 				if kidx.Kind != tInt {
 					return c.errf(target.Pos, "TypeError: 列表索引必须是 int")
 				}
 				if recvT.Elem != nil && !assignable(t, recvT.Elem) {
 					return c.errf(target.Pos, "TypeError: 值需要 %s，给了 %s", recvT.Elem, t)
+				}
+				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "list element"); err != nil {
+					return err
 				}
 			default:
 				return c.errf(target.Pos, "TypeError: 不支持对 %s 索引赋值", recvT)
@@ -1132,6 +1227,9 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			}
 			if !assignable(t, ft) {
 				return c.errf(s.Pos, "TypeError: cannot assign %s to %s.%s (%s)", t, objT.FName, target.Name, ft)
+			}
+			if err := c.checkIfaceStrict(t, ft, s.Pos, objT.FName+"."+target.Name); err != nil {
+				return err
 			}
 			return nil
 		}
@@ -1298,7 +1396,7 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 		case "-":
 			if t.Kind == tStruct {
 				for _, def := range c.implDefsFor(t.FName) {
-					if fn := def.SelfMethods["neg"]; fn != nil {
+					if fn := def.SelfMethods["__neg__"]; fn != nil {
 						return c.resolveType(fn.Ret, x.Pos)
 					}
 				}
@@ -1507,6 +1605,9 @@ func (c *checker) memberType(recv *Type, name string, pos Pos) (*Type, error) {
 			}
 		}
 	case tPtr:
+		if recv.Elem == nil { // 不透明句柄（FFI void*）：无成员
+			return nil, c.errf(pos, "TypeError: no member %q on pointer", name)
+		}
 		// 指针成员访问自动解引用
 		return c.memberType(recv.Elem, name, pos)
 	case tCopyd:
@@ -1702,6 +1803,14 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			return tIntV, nil
+		case "get":
+			if err := c.checkArity(name, 1, len(args), pos); err != nil {
+				return nil, err
+			}
+			if args[0].Kind != tInt {
+				return nil, c.errf(pos, "TypeError: get(i) 需要 int 下标，得到 %s", args[0])
+			}
+			return recv.Elem, nil
 		case "next":
 			if err := c.checkArity(name, 0, len(args), pos); err != nil {
 				return nil, err
@@ -1718,6 +1827,9 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			if !assignable(args[0], recv.Elem) {
 				return nil, c.errf(pos, "TypeError: append expects %s, got %s", recv.Elem, args[0])
+			}
+			if err := c.checkIfaceStrict(args[0], recv.Elem, pos, "append"); err != nil {
+				return nil, err
 			}
 			return tNilV, nil
 		case "appendAll":
@@ -1750,6 +1862,9 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			if !assignable(args[1], recv.Val) {
 				return nil, c.errf(pos, "TypeError: put value expects %s, got %s", recv.Val, args[1])
+			}
+			if err := c.checkIfaceStrict(args[1], recv.Val, pos, "put value"); err != nil {
+				return nil, err
 			}
 			return tNilV, nil
 		case "get":
@@ -2004,6 +2119,15 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			return nil, c.errf(pos, "TypeError: %s is a static method; call it via %s::%s(...)", name, recv.FName, name)
 		}
 	case tPtr:
+		if recv.Elem == nil { // 不透明句柄（FFI void*）：支持 toString（十六进制呈现），无其它方法
+			if name == "toString" {
+				if err := c.checkArity(name, 0, len(args), pos); err != nil {
+					return nil, err
+				}
+				return tStringV, nil
+			}
+			return nil, c.errf(pos, "TypeError: no method %q on pointer", name)
+		}
 		// 指针方法调用自动解引用
 		return c.methodType(recv.Elem, name, args, pos)
 	case tCopyd:
@@ -2303,9 +2427,13 @@ func (c *checker) checkCallArgs(fn *Func, args []Expr, sc *cScope, pos Pos) erro
 			return err
 		}
 		if pt.Kind == tInterface {
-			// 接口参数严格实现性校验：实参 struct 须实现接口全部方法（动态派发保障）
+			// 接口参数严格实现性校验：实参 struct/接口 须覆盖接口全部方法（动态派发保障）
 			if argTys[i].Kind == tStruct {
 				if err := c.checkImplements(argTys[i].FName, pt.FName); err != nil {
+					return c.errf(pos, "TypeError: argument %d of %s: %v", i+1, fn.Name, err)
+				}
+			} else if argTys[i].Kind == tInterface {
+				if err := c.checkIfaceCovers(argTys[i].FName, pt.FName); err != nil {
 					return c.errf(pos, "TypeError: argument %d of %s: %v", i+1, fn.Name, err)
 				}
 			} else if !assignable(argTys[i], pt) {
@@ -2315,6 +2443,112 @@ func (c *checker) checkCallArgs(fn *Func, args []Expr, sc *cScope, pos Pos) erro
 		}
 		if !assignable(argTys[i], pt) {
 			return c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, argTys[i], pt)
+		}
+		if err := c.checkIfaceStrict(argTys[i], pt, pos, fmt.Sprintf("argument %d of %s", i+1, fn.Name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ifaceMethodNames 收集接口（含 expand 递归）的方法名集合。
+func (c *checker) ifaceMethodNames(name string, seen map[string]bool) []string {
+	if seen[name] {
+		return nil
+	}
+	seen[name] = true
+	def, ok := c.interfaces[name]
+	if !ok {
+		return nil
+	}
+	names := []string{}
+	for _, sig := range def.Methods {
+		names = append(names, sig.Name)
+	}
+	for _, ex := range def.Expands {
+		names = append(names, c.ifaceMethodNames(ex, seen)...)
+	}
+	return names
+}
+
+// isSelfType 是否为 Self 占位（Self = 实现类型，xmind §接口）。
+func isSelfType(s string) bool { return strings.TrimSpace(s) == "Self" }
+
+// sigCompatible 判断 from 的方法签名是否满足 to：**按类型严格**（方法名同 + 参数个数 + 参数/返回类型一致）。
+// Self 是实现类型占位：Self ↔ Self 等价；Self ↔ 具体类型（对侧已绑定实现类型）也成立。
+func sigCompatible(fromSig, toSig MethodSig) bool {
+	if len(fromSig.Params) != len(toSig.Params) {
+		return false
+	}
+	retA, retB := strings.TrimSpace(fromSig.Ret), strings.TrimSpace(toSig.Ret)
+	if retA != retB && !isSelfType(retA) && !isSelfType(retB) {
+		return false
+	}
+	for i := range toSig.Params {
+		a := strings.TrimSpace(fromSig.Params[i].Type)
+		b := strings.TrimSpace(toSig.Params[i].Type)
+		if a == b || isSelfType(a) || isSelfType(b) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// methodSigOf 在接口（含 expand 展开）中查找方法签名；ok=false 表示该接口没有此方法。
+func (c *checker) methodSigOf(iface, name string) (MethodSig, bool) {
+	def, ok := c.interfaces[iface]
+	if !ok {
+		return MethodSig{}, false
+	}
+	for _, sig := range def.Methods {
+		if sig.Name == name {
+			return sig, true
+		}
+	}
+	for _, ex := range def.Expands {
+		if s, ok := c.methodSigOf(ex, name); ok {
+			return s, true
+		}
+	}
+	return MethodSig{}, false
+}
+
+// checkIfaceCovers 校验 fromIface 是否满足 toIface：**按类型严格**的结构化满足
+// （方法集覆盖 + 签名一致；不比较接口名）。
+func (c *checker) checkIfaceCovers(fromIface, toIface string) error {
+	if fromIface == toIface {
+		return nil
+	}
+	for _, n := range c.ifaceMethodNames(toIface, map[string]bool{}) {
+		fsig, ok := c.methodSigOf(fromIface, n)
+		if !ok {
+			return fmt.Errorf("接口 %s 缺少 %s 的方法 %q", fromIface, toIface, n)
+		}
+		tsig, _ := c.methodSigOf(toIface, n)
+		if !sigCompatible(fsig, tsig) {
+			return fmt.Errorf("接口 %s 的方法 %q 与 %s 的签名不兼容（按类型严格）", fromIface, n, toIface)
+		}
+	}
+	return nil
+}
+
+// checkIfaceStrict 接口的**实现严格**校验（接口名不参与判断）：
+//
+//	struct → 接口：该类型须实现接口要求的全部方法（多 impl 聚合）；
+//	接口 → 接口：来源接口的方法集须覆盖目标接口，且签名一致。
+func (c *checker) checkIfaceStrict(from, to *Type, pos Pos, what string) error {
+	if from == nil || to == nil || to.Kind != tInterface {
+		return nil
+	}
+	switch from.Kind {
+	case tInterface:
+		if err := c.checkIfaceCovers(from.FName, to.FName); err != nil {
+			return c.errf(pos, "TypeError: %s: %v", what, err)
+		}
+	case tStruct:
+		if err := c.checkImplements(from.FName, to.FName); err != nil {
+			return c.errf(pos, "TypeError: %s: %v", what, err)
 		}
 	}
 	return nil

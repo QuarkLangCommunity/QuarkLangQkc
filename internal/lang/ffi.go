@@ -81,17 +81,32 @@ func ffiCall(fn unsafe.Pointer, paramTypes []int, nums []float64, ptrs []unsafe.
 	return retI, retF, unsafe.Pointer(retPSlot[0]), nil
 }
 
-// dlopenLib 加载系统库（跨系统库名解析：原名 → libX.so.6/.so/.dylib/.dll）。
+// dlopenLib 加载系统库（跨系统库名解析：原名/本地 → libX.so.N/.so/.dylib/.dll，含大小写变体）。
 func dlopenLib(name string) (*libHandle, error) {
-	cands := []string{name}
-	// 项目本地（产物树/assets）："./libX.so" / "./X.so" 优先于系统路径
-	cands = append(cands, "./"+name, "./lib"+name+".so")
-	if !strings.ContainsAny(name, "/.") && !strings.HasPrefix(name, "lib") &&
+	cands := []string{name, "./" + name}
+	if !strings.ContainsAny(name, "/.") &&
 		!strings.HasSuffix(name, ".dll") && !strings.HasSuffix(name, ".dylib") {
-		// 裸短名：按平台补位尝试
-		cands = append(cands,
-			"lib"+name+".so.6", "lib"+name+".so", "lib"+name+".dylib", name+".dll",
-			"lib"+name+".so.1", "lib"+name+".so.0")
+		// 裸短名：按平台补位尝试；大小写变体（如 gl → libGL.so.1）
+		variants := []string{name}
+		if up := strings.ToUpper(name[:1]) + name[1:]; up != name {
+			variants = append(variants, up)
+		}
+		if all := strings.ToUpper(name); all != name {
+			variants = append(variants, all)
+		}
+		for _, v := range variants {
+			bases := []string{"lib" + v}
+			if strings.HasPrefix(v, "lib") {
+				bases = append(bases, v) // 已带 lib 前缀：也直接试 name.so.N（如 libc → libc.so.6）
+			}
+			for _, bn := range bases {
+				cands = append(cands, "./"+bn+".so") // 项目本地（产物树/assets）优先
+				for _, ver := range []string{"", ".0", ".1", ".2", ".3", ".4", ".5", ".6"} {
+					cands = append(cands, bn+".so"+ver)
+				}
+				cands = append(cands, bn+".dylib", bn+".dll")
+			}
+		}
 	}
 	var lastErr string
 	for _, c := range cands {

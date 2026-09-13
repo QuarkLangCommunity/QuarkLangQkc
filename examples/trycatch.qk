@@ -1,7 +1,7 @@
-fn main(io IOStream) {
+fn main(IOStream io) {
     try {
-        a int = 10 / 0;
-    } catch (e void) {
+        int a = 10 / 0;
+    } catch (void e) {
         io.println("caught");
     }
 }

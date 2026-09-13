@@ -25,7 +25,7 @@ func ExportLibrary(prog *Program, outPath string) error {
 		body := extractBody(prog.Src, fn)
 		params := make([]string, 0, len(fn.Params))
 		for _, p := range fn.Params {
-			params = append(params, p.Name+" "+p.Type)
+			params = append(params, p.Type+" "+p.Name) // 正典：类型在前
 		}
 		var sb strings.Builder
 		sb.WriteString("fn ")

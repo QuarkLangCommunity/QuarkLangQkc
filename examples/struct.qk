@@ -1,6 +1,6 @@
-type struct { a int; b int; } Point;
-impl Point { fn sum(self Point) int { return self.a + self.b; } }
-fn main(io IOStream) {
-    p Point = .{3, 5};
+type struct { int a; int b; } Point;
+impl { fn sum(Point self) int { return self.a + self.b; } } Point;
+fn main(IOStream io) {
+    Point p = .{a: 3, b: 5};
     io.println(p.sum());
 }

@@ -7,10 +7,10 @@ import (
 
 // sum 数学优化：闭式结果必须与语言 int=32 位语义一致（wrap），双路径同值
 func TestSumClosedFormWrap(t *testing.T) {
-	out, err := runSrc(t, `fn ident(n int) int {
+	out, err := runSrc(t, `fn ident(int n) int {
     return n * 3 + 1;
 }
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(sum(ident, 0, 100000000));
 }`)
 	if err != nil {

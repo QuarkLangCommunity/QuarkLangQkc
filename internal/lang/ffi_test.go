@@ -8,15 +8,15 @@ import (
 // FFI：library 绑定系统库（libm/libc 真是符），跨平台 libffi 调用
 func TestLibraryFFI(t *testing.T) {
 	out, err := runSrc(t, `library m {
-    fn sqrt(x double) double;
-    fn pow(x double, y double) double;
+    fn sqrt(double x) double;
+    fn pow(double x, double y) double;
 }
 library c {
-    fn strlen(s String) long;
+    fn strlen(String s) long;
     fn rand() int;
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(m.sqrt(16.0));
     io.println(m.pow(2.0, 10.0));
     io.println(c.strlen("abcdef"));

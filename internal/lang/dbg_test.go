@@ -6,7 +6,7 @@ import (
 )
 
 func TestDbgRunQkexec(t *testing.T) {
-	prog, err := Compile(`fn main(io IOStream) { code int = qkexec("echo hi"); }`)
+	prog, err := Compile(`fn main(IOStream io) { int code = qkexec("echo hi"); }`)
 	if err != nil {
 		t.Fatal("compile:", err)
 	}

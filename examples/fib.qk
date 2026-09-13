@@ -1,9 +1,9 @@
-fn fib(n int) int {
+fn fib(int n) int {
     if (n < 2) {
         return n;
     }
     return fib(n - 1) + fib(n - 2);
 }
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(fib(30));
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 )
 
@@ -249,11 +248,17 @@ func (p *parser) parseProgram() (*Program, error) {
 			if err != nil {
 				return nil, err
 			}
+			if sd.Name != "" {
+				return nil, p.errf(p.cur(), "实名结构体必须写 type：type struct { ... } %s;", sd.Name)
+			}
 			prog.Structs = append(prog.Structs, sd)
 		case TInterface:
 			id, err := p.parseInterface()
 			if err != nil {
 				return nil, err
+			}
+			if id.Name != "" {
+				return nil, p.errf(p.cur(), "实名接口必须写 type：type interface { ... } %s;", id.Name)
 			}
 			prog.Interfaces = append(prog.Interfaces, id)
 		case TImpl:
@@ -298,7 +303,7 @@ func (p *parser) parseProgram() (*Program, error) {
 					}
 					continue
 				case "space":
-					// xmind：space {...} (name) 自我实现空间（匿名实现）
+					// space { ... } name;  自我实现空间（xmind 写作 space {...} (name);，(name) 表示名字槽位）
 					p.advance()
 					if _, err := p.expect(TLBrace, "'{'"); err != nil {
 						return nil, err
@@ -315,25 +320,14 @@ func (p *parser) parseProgram() (*Program, error) {
 						im.Methods = append(im.Methods, m)
 					}
 					p.advance() // '}'
-					if _, err := p.expect(TLParen, "'('"); err != nil {
-						return nil, err
-					}
-					tt, err := p.parseType()
+					name, err := p.expectIdent("space name")
 					if err != nil {
-						return nil, err
-					}
-					if _, err := p.expect(TRParen, "')'"); err != nil {
 						return nil, err
 					}
 					if _, err := p.expect(TSemi, "';'"); err != nil {
 						return nil, err
 					}
-					im.Type = tt
-					if i := strings.IndexByte(im.Type, '<'); i >= 0 {
-						inner := im.Type[i+1 : len(im.Type)-1]
-						im.Type = im.Type[:i] // 取基名
-						im.TypeParams = splitTopCommas(inner)
-					}
+					im.Type = name.Text
 					prog.Impls = append(prog.Impls, im)
 					continue
 				case "library":
@@ -439,26 +433,45 @@ func (p *parser) parseProgram() (*Program, error) {
 					prog.Imports = append(prog.Imports, path)
 					continue
 				case "pub":
-					// 预制宏：pub 前缀，公开下一个顶层符号
+					// 预制宏：pub 前缀，公开下一个顶层符号（fn / type struct / type interface）
 					p.advance()
-					if p.cur().Kind != TFunc && p.cur().Kind != TStruct {
-						return nil, p.errf(p.cur(), "pub 只能前缀于 func/struct")
-					}
-					if p.cur().Kind == TFunc {
-						fn, err := p.parseFunc()
-						if err != nil {
-							return nil, err
+					if p.curIs(TIdent) && p.cur().Text == "type" {
+						p.advance()
+						switch p.cur().Kind {
+						case TStruct:
+							sd, err := p.parseStruct()
+							if err != nil {
+								return nil, err
+							}
+							if sd.Name == "" {
+								return nil, p.errf(p.cur(), "pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;")
+							}
+							prog.Pub = append(prog.Pub, sd.Name)
+							prog.Structs = append(prog.Structs, sd)
+						case TInterface:
+							id, err := p.parseInterface()
+							if err != nil {
+								return nil, err
+							}
+							if id.Name == "" {
+								return nil, p.errf(p.cur(), "pub 的匿名接口没有名字可导出：pub type interface { ... } Name;")
+							}
+							prog.Pub = append(prog.Pub, id.Name)
+							prog.Interfaces = append(prog.Interfaces, id)
+						default:
+							return nil, p.errf(p.cur(), "pub type 只支持 struct / interface")
 						}
-						prog.Pub = append(prog.Pub, fn.Name)
-						prog.Funcs = append(prog.Funcs, fn)
-					} else {
-						sd, err := p.parseStruct()
-						if err != nil {
-							return nil, err
-						}
-						prog.Pub = append(prog.Pub, sd.Name)
-						prog.Structs = append(prog.Structs, sd)
+						continue
 					}
+					if p.cur().Kind != TFunc {
+						return nil, p.errf(p.cur(), "pub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）")
+					}
+					fn, err := p.parseFunc()
+					if err != nil {
+						return nil, err
+					}
+					prog.Pub = append(prog.Pub, fn.Name)
+					prog.Funcs = append(prog.Funcs, fn)
 					continue
 				}
 			}
@@ -540,17 +553,13 @@ func (p *parser) parseParamList() ([]Param, error) {
 	var params []Param
 	if !p.curIs(TRParen) {
 		for {
-			ptok, err := p.expectIdent("parameter name")
+			typ, err := p.parseType()
 			if err != nil {
 				return nil, err
 			}
-			typ := ""
-			if !p.curIs(TComma) && !p.curIs(TRParen) {
-				t, err := p.parseType()
-				if err != nil {
-					return nil, err
-				}
-				typ = t
+			ptok, err := p.expectIdent("parameter name")
+			if err != nil {
+				return nil, err
 			}
 			params = append(params, Param{
 				Name: ptok.Text,
@@ -616,11 +625,11 @@ func (p *parser) parseStruct() (*StructDecl, error) {
 		if p.curIs(TEOF) {
 			return nil, p.errf(p.cur(), "unterminated struct body (missing '}')")
 		}
-		name, err := p.expectIdent("member name")
+		typ, err := p.parseType()
 		if err != nil {
 			return nil, err
 		}
-		typ, err := p.parseType()
+		name, err := p.expectIdent("member name")
 		if err != nil {
 			return nil, err
 		}
@@ -643,19 +652,9 @@ func (p *parser) parseStruct() (*StructDecl, error) {
 	return sd, nil
 }
 
-// parseStructName 取结构体名字：xmind 用 } (name); 括号形式，兼容 } name; 旧形式。
+// parseStructName 取结构体名字：} Name;（匿名结构体则无名）。
 func (p *parser) parseStructName(sd *StructDecl) error {
-	if p.curIs(TLParen) {
-		p.advance()
-		n, err := p.expectIdent("struct name")
-		if err != nil {
-			return err
-		}
-		if _, err := p.expect(TRParen, "')'"); err != nil {
-			return err
-		}
-		sd.Name = n.Text
-	} else if p.curIs(TIdent) {
+	if p.curIs(TIdent) {
 		sd.Name = p.advance().Text
 	}
 	return nil
@@ -703,10 +702,17 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 	if err != nil {
 		return nil, err
 	}
+	id := &InterfaceDecl{Pos: Pos{Line: kw.Line, Col: kw.Col}}
+	if p.curIs(TLt) { // 泛型接口：interface<T, ...> { ... } Name;
+		tps, err := p.parseTypeParams()
+		if err != nil {
+			return nil, err
+		}
+		id.TypeParams = tps
+	}
 	if _, err := p.expect(TLBrace, "'{"); err != nil {
 		return nil, err
 	}
-	id := &InterfaceDecl{Pos: Pos{Line: kw.Line, Col: kw.Col}}
 	for !p.curIs(TRBrace) {
 		if p.curIs(TEOF) {
 			return nil, p.errf(p.cur(), "unterminated interface body (missing '}')")
@@ -737,36 +743,8 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 		id.Methods = append(id.Methods, sig)
 	}
 	p.advance() // '}'
-	if p.curIs(TLParen) {
-		// xmind：type interface {...} (name);
-		p.advance()
-		n, err := p.expectIdent("interface name")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(TRParen, "')'"); err != nil {
-			return nil, err
-		}
-		id.Name = n.Text
-	} else if p.curIs(TIdent) {
+	if p.curIs(TIdent) {
 		id.Name = p.advance().Text
-		// 泛型接口参数：Sign<P> —— 平衡跳过
-		if p.curIs(TLt) {
-			p.advance()
-			depth := 1
-			for depth > 0 {
-				if p.curIs(TEOF) {
-					return nil, p.errf(p.cur(), "unterminated interface type parameters")
-				}
-				if p.curIs(TLt) {
-					depth++
-				}
-				if p.curIs(TGt) {
-					depth--
-				}
-				p.advance()
-			}
-		}
 	}
 	if _, err := p.expect(TSemi, "';'"); err != nil {
 		return nil, err
@@ -789,13 +767,6 @@ func (p *parser) parseImpl() (*ImplDecl, error) {
 		}
 		im.TypeParams = params
 	}
-	if p.curIs(TIdent) {
-		// 编译器风格：impl <Type> [<Iface>] { ... }（Type 在块前，可选接口）
-		im.Type = p.advance().Text
-		if p.curIs(TIdent) {
-			im.Iface = p.advance().Text
-		}
-	}
 	if _, err := p.expect(TLBrace, "'{"); err != nil {
 		return nil, err
 	}
@@ -810,12 +781,14 @@ func (p *parser) parseImpl() (*ImplDecl, error) {
 		im.Methods = append(im.Methods, fn)
 	}
 	p.advance() // '}'
-	// 兼容旧语法 impl { ... } Type;（Type 在块后）；分号可选（新语法直接换行）
-	if p.curIs(TIdent) {
-		im.Type = p.advance().Text
+	// impl<T, ...> { ... } Name;  名字必须在块后（xmind §类）
+	name, err := p.expectIdent("impl type name")
+	if err != nil {
+		return nil, err
 	}
-	if p.curIs(TSemi) {
-		p.advance()
+	im.Type = name.Text
+	if _, err := p.expect(TSemi, "';'"); err != nil {
+		return nil, err
 	}
 	return im, nil
 }
@@ -858,7 +831,15 @@ func (p *parser) parseType() (string, error) {
 		return name, nil
 	}
 	if name == "pointer" {
-		// pointer 修饰：pointer <type>（等价 T&，指向堆上数据）
+		// pointer 修饰：pointer <type>（等价 T&）；裸 pointer = 不透明句柄（FFI void*，可空、可往返）
+		if !p.curIs(TIdent) && !p.curIs(TInterface) {
+			return "pointer", nil
+		}
+		// 消歧：pointer p（p 后紧跟 , ) ; =）是「裸 pointer + 参数/变量名」，不是「pointer 指向 p」
+		switch p.peek().Kind {
+		case TComma, TRParen, TSemi, TAssign:
+			return "pointer", nil
+		}
 		rest, err := p.parseType()
 		if err != nil {
 			return "", err
@@ -968,11 +949,11 @@ func (p *parser) parseStmt() (Stmt, error) {
 		if _, err := p.expect(TLParen, "'('"); err != nil {
 			return nil, err
 		}
-		cv, err := p.expectIdent("catch variable")
+		ct, err := p.parseType()
 		if err != nil {
 			return nil, err
 		}
-		ct, err := p.parseType()
+		cv, err := p.expectIdent("catch variable")
 		if err != nil {
 			return nil, err
 		}
@@ -1066,14 +1047,41 @@ func (p *parser) parseStmt() (Stmt, error) {
 		if _, err := p.expect(TLParen, "'('"); err != nil {
 			return nil, err
 		}
-		v, err := p.expectIdent("loop variable")
+		// 迭代形式：for (<type> <name> : <expr>) { ... }
+		save := p.i
+		typ, terr := p.parseType()
+		if terr == nil && p.curIs(TIdent) {
+			v := p.advance()
+			if p.curIs(TColon) {
+				p.advance()
+				iter, err := p.parseExpr()
+				if err != nil {
+					return nil, err
+				}
+				if _, err := p.expect(TRParen, "')'"); err != nil {
+					return nil, err
+				}
+				body, err := p.parseBlock()
+				if err != nil {
+					return nil, err
+				}
+				return &ForStmt{Var: v.Text, Type: typ, Iter: iter, Body: body, Pos: Pos{Line: kw.Line, Col: kw.Col}}, nil
+			}
+		}
+		p.i = save
+		// C 风格：for (<init>; <cond>; <step>) { ... }
+		init, err := p.parseForInit()
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(TColon, "':'"); err != nil {
+		cond, err := p.parseExpr()
+		if err != nil {
 			return nil, err
 		}
-		iter, err := p.parseExpr()
+		if _, err := p.expect(TSemi, "';'"); err != nil {
+			return nil, err
+		}
+		step, err := p.parseForStep()
 		if err != nil {
 			return nil, err
 		}
@@ -1084,60 +1092,13 @@ func (p *parser) parseStmt() (Stmt, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ForStmt{Var: v.Text, Iter: iter, Body: body, Pos: Pos{Line: kw.Line, Col: kw.Col}}, nil
+		return &ForCStmt{Init: init, Cond: cond, Step: step, Body: body, Pos: Pos{Line: kw.Line, Col: kw.Col}}, nil
 	}
-	// 变量修饰：const / copyd 前缀，类型在前（<decor> <type> <name>，xmind §变量）
-	if p.curIs(TIdent) && (p.cur().Text == "const" || p.cur().Text == "copyd") {
-		decor := p.advance().Text
-		typ, err := p.parseType()
-		if err != nil {
-			return nil, err
-		}
-		name, err := p.expectIdent("variable name")
-		if err != nil {
-			return nil, err
-		}
-		st := &DeclStmt{Name: name.Text, Type: typ, Decor: decor, Pos: Pos{Line: name.Line, Col: name.Col}}
-		if p.curIs(TAssign) {
-			p.advance()
-			init, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			st.Init = init
-		}
-		if _, err := p.expect(TSemi, "';'"); err != nil {
-			return nil, err
-		}
+	// 变量声明：<修饰> <类型> <名字> [= 初值];（xmind §变量：类型在前，唯一形态）
+	if st, ok, err := p.tryParseDecl(); err != nil {
+		return nil, err
+	} else if ok {
 		return st, nil
-	}
-	// type-first declaration（xmind §变量：<type> <name>）：内建类型名开头
-	if p.curIs(TIdent) && isBuiltinTypeName(p.cur().Text) {
-		typ, err := p.parseType()
-		if err != nil {
-			return nil, err
-		}
-		name, err := p.expectIdent("variable name")
-		if err != nil {
-			return nil, err
-		}
-		st := &DeclStmt{Name: name.Text, Type: typ, Pos: Pos{Line: name.Line, Col: name.Col}}
-		if p.curIs(TAssign) {
-			p.advance()
-			init, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			st.Init = init
-		}
-		if _, err := p.expect(TSemi, "';'"); err != nil {
-			return nil, err
-		}
-		return st, nil
-	}
-	// name-first declaration: Ident followed by a type (Ident or 'interface')
-	if p.curIs(TIdent) && (p.peek().Kind == TIdent || p.peek().Kind == TInterface) {
-		return p.parseDecl()
 	}
 	x, err := p.parseExpr()
 	if err != nil {
@@ -1161,28 +1122,87 @@ func (p *parser) parseStmt() (Stmt, error) {
 }
 
 // parseDecl parses "name Type [= init];".
-func (p *parser) parseDecl() (Stmt, error) {
-	name, err := p.expectIdent("variable name")
-	if err != nil {
-		return nil, err
+// tryParseDecl 解析「<修饰> <类型> <名字> [= 初值];」；不是声明则回退（ok=false），由调用方按表达式解析。
+func (p *parser) tryParseDecl() (Stmt, bool, error) {
+	save := p.i
+	decor := ""
+	if p.curIs(TIdent) && (p.cur().Text == "const" || p.cur().Text == "copyd") {
+		decor = p.cur().Text
+		p.advance()
 	}
 	typ, err := p.parseType()
 	if err != nil {
-		return nil, err
+		p.i = save
+		return nil, false, nil
 	}
-	st := &DeclStmt{Name: name.Text, Type: typ, Pos: Pos{Line: name.Line, Col: name.Col}}
+	if !p.curIs(TIdent) {
+		p.i = save
+		return nil, false, nil
+	}
+	name := p.advance()
+	st := &DeclStmt{Name: name.Text, Type: typ, Decor: decor, Pos: Pos{Line: name.Line, Col: name.Col}}
 	if p.curIs(TAssign) {
 		p.advance()
 		init, err := p.parseExpr()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		st.Init = init
+	}
+	if !p.curIs(TSemi) {
+		p.i = save
+		return nil, false, nil
+	}
+	p.advance()
+	return st, true, nil
+}
+
+// parseForInit 解析 C 风格 for 的初始化：<类型> <名字> [= 初值]; 或赋值/表达式 + ';'。
+func (p *parser) parseForInit() (Stmt, error) {
+	if st, ok, err := p.tryParseDecl(); err != nil {
+		return nil, err
+	} else if ok {
+		return st, nil
+	}
+	x, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	var st Stmt
+	if p.curIs(TAssign) {
+		eq := p.advance()
+		v, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		st = &AssignStmt{Target: x, X: v, Pos: Pos{Line: eq.Line, Col: eq.Col}}
+	} else {
+		st = &ExprStmt{X: x}
 	}
 	if _, err := p.expect(TSemi, "';'"); err != nil {
 		return nil, err
 	}
 	return st, nil
+}
+
+// parseForStep 解析 C 风格 for 的步进（可为空）。
+func (p *parser) parseForStep() (Stmt, error) {
+	if p.curIs(TRParen) {
+		return nil, nil
+	}
+	x, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if p.curIs(TAssign) {
+		eq := p.advance()
+		v, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		return &AssignStmt{Target: x, X: v, Pos: Pos{Line: eq.Line, Col: eq.Col}}, nil
+	}
+	return &ExprStmt{X: x}, nil
 }
 
 // ---- expressions ----

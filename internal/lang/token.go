@@ -67,11 +67,12 @@ const (
 
 var tokenNames = [...]string{
 	"end of file", "identifier", "int literal", "float literal", "string literal",
-	"'fn'", "'struct'", "'impl'", "'interface'", "'out'", "'return'", "'if'", "'else'",
-	"'while'", "'for'", "'in'", "'true'", "'false'",
+	"'fn'", "'struct'", "'impl'", "'interface'",
+	"'return'", "'if'", "'else'",
+	"'while'", "'for'", "'true'", "'false'",
 	"'('", "')'", "'{'", "'}'", "'['", "']'", "';'", "','", "'.'", "':'", "'::'", "'@'",
 	"'='", "'+'", "'-'", "'*'", "'/'", "'%'", "'!'", "'=='", "'!='", "'<'", "'<='", "'>'", "'>='", "'&&'", "'||'",
-	"'log'", "'&'", "'<<'", "'>>'", "'null'", "'try'", "'catch'", "'#'", "'macro'",
+	"'<<'", "'>>'", "'log'", "'&'", "'null'", "'try'", "'catch'", "'#'", "'macro'",
 }
 
 func (k TokenKind) String() string {

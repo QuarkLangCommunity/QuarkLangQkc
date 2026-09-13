@@ -1,82 +1,82 @@
-# QuarkLang 语法清单（当前实现逐条核对）
+# QuarkLang 语法清单（与实现同步维护 · 正典语法）
 
-> 编号供逐项检查：M=宏，K=语句，E=表达式，S=结构/泛型/接口，O=对象模型，T=类型，P=编译工具
+> **唯一正典形态：类型在前。** 旧「名字在前」写法已删除，不保留兼容。
+> 本文件随实现同步更新；变更需求 → 先改本文件与实现。
+> 编号供逐项核对：M=宏，K=语句，E=表达式，S=结构/泛型/接口，O=对象模型，T=类型，P=编译工具。
 
-## M 宏
-| 编号 | 语法 | 说明/已验证例 |
-|---|---|---|
-| M1 | `#macro name (a, b, ...) { ... }` | 参数列表分隔符 `()` `[]` `{}` 皆可，参数个数不限（逗号分隔，按名替换） |
-| M2 | `name(1,2)` / `name[1,2]` / `name{1,2}` | 调用分隔符与定义无关，可混用；实参个数必须等于形参个数 |
-| M3 | 参数按名替换 | 主体中同名标识符替换为实参 token 序列 |
-| M4 | `#return <expr>` | **宏返回**：展开结果 = `#return` 后的 token（**参数替换 + 后续指令如 #insert/#execute 继续处理**），立即终止整个宏展开（`#when` 分支内同样生效） |
-| M5 | `#when (run) { ... }` / `#when (compile) { ... }` | 态选择：解释器 → run 分支；qkc 编译 → compile 分支（**run 分支编译期丢弃 = 设计**） |
-| M6 | `#error("msg")` | 选中分支内出现即报预处理错误 |
-| M7 | `#insert(#ast(参数))` `#insert(#ast(...))` `#execute(名字)` | 直插参数 token / 按序直插全部参数（逗号连接，转发用）/ 直插标识符 token（拼接名字）；`#ast` 仅作 `#insert` 的包装参数 |
+## K 声明（类型在前）
 
-## K 语句
 | 编号 | 语法 | 说明 |
 |---|---|---|
-| K1 | `fn name(p int, q float) int { ... }` | 函数；返回 void 用 `void`；参数名在前类型在后 |
-| K2 | `x int = 1;` `x int;` | 变量声明（类型在名字后）；`l List<int> = [1,2];` |
-| K3 | `x = 2;` `p.x = 3;` `l[i] = 1;` | 赋值；成员/下标赋值 |
-| K4 | `if/else` `while` `for (x in List)` | for 只支持 List 迭代 |
-| K5 | `try { } catch (e) { }` | 异常捕获（catch 变量装错误信息） |
-| K6 | `return e;` `log e;` `delete x;` | log 记录并结束函数；delete 释放块 |
-| K7 | `program main;` / `program library;` | 程序声明；library 不可运行 |
-| K8 | `pub fn ...` `pub struct ...` `import "util";` | 库导出/导入 |
-| K9 | main 参数 | 1-3 个：`(io IOStream)` `+env HashTable<String,String>` `+args List<String>` |
-| K10 | **无** break/continue | for/while 无提前退出语句（当前实现无此关键字） |
+| K1 | `<修饰> <类型> <名字>;` | 声明；修饰见 K2 |
+| K2 | `const int N = 3;` `copyd List<int> l = [1,2];` | 修饰：`const`（常量）、`copyd`（传时复制）；修饰在**最前** |
+| K3 | `int x = 1;` `Point p;` `List<int> l = [1,2];` | 初始化可省略（零值） |
+| K4 | `x = 2;` `p.x = 3;` `l[i] = 1;` | 赋值（变量/成员/下标） |
+| K5 | `if (cond) { } else if (cond) { } else { }` | 条件必须是 bool |
+| K6 | `while (cond) { }` | |
+| K7 | `for (int i = 0; i < n; i = i + 1) { }` | C 风格 for（初始化是类型在前声明） |
+| K8 | `for (int x : l) { }` | 迭代 for（循环变量必须带类型） |
+| K9 | `break;` | 跳出 while/for |
+| K10 | `try { } catch (void e) { }` | catch 变量类型在前（`void` = 自由类型） |
+| K11 | `return e;` `log e;` `delete x;` | return 返回并结束；log 记录并结束；delete 回收 |
+| K12 | `program main;` `program library;` `import "path";` `pub fn ...` | 预制宏；library 不可运行 |
 
-## E 表达式
+## S 函数 / 结构体 / 接口 / 实现 / 空间
+
 | 编号 | 语法 | 说明 |
 |---|---|---|
-| E1 | `123` `-7` | int；**32 位补码 wrap**（与编译路径一致） |
-| E2 | `1.5` `"str"` `true/false` `null` | float/String/bool/null 字面量 |
-| E3 | `[1, 2, 3]` | List 字面量 |
-| E4 | `.{a: 1, b: 2}` | 匿名结构字面量（字段名可为关键字 `in`/`out`） |
-| E5 | `new int[10]` | 堆分配（block 管理）；`l pointer List<int> = new int[10];` |
-| E6 | `l[i]` `*l` `l.size()` | 下标；List 取头；List 方法 size/head/tail/next/reset/append/appendAll/toString/__sort__ |
-| E6b | `s.size()` 等 **String 内置文本方法** | size/contains/startsWith/endsWith/indexOf(-1=无)/substring(start,end?)/split(sep)→List<String>/trim/trimLeft/trimRight/toLower/toUpper/replace(old,new)/charAt(i)/toInt/toFloat；越界报 StringIndexOutOfBoundsError |
-| E7 | `+ - * / %` `<< >>` `== != < <= > >=` `&& || !` | 算术/位移/比较/逻辑；`+` 支持 String 拼接 |
-| E8 | `f(x)` `obj.m(x)` `Type::new()` `p.x` | 调用/方法/静态/成员读取 |
-| E9 | `expensive(41) @mb();` | **签名调用**：`@` 后缀任意 Sign 实例（mb 是 memorize 实例） |
-
-## S 结构/泛型/接口
-| 编号 | 语法 | 说明 |
-|---|---|---|
-| S1 | `struct { x int; y int; } Point;` | 结构类型；字段 名字在前类型在后 |
-| S2 | `struct<T> { val T; next node<T>&; } node;` | 泛型结构；`&` 指针字段；实例化 `node<int>` |
-| S3 | `impl { fn translate(self, ...) void {...} fn new() Point {...} } Point;` | 非泛型 impl（同名结构，静态 new + 实例方法 self） |
-| S4 | `impl<T> { fn set(self, v T) void {...} fn new() node<T> {...} } node;` | 泛型 impl |
-| S5 | `Point::new()` `node::new()` | 静态方法调用（`::` 用于类静态；实例成员用 `.`） |
-| S6 | `interface { fn call(prefix void, rec void) void; } Sign;` | 接口声明 |
-| S7 | `impl Bad Sign { ... }` | 接口实现（impl 结构 接口）；缺方法 → `missing method` 编译错 |
-| S8 | `self.x` | 实例方法内改自身字段 |
-
-## O 对象模型
-| 编号 | 语法 | 说明 |
-|---|---|---|
-| O1 | `taskm.spawn()` → thread 实例 | 全局实例 `taskm`（**点调用**；`::` 报 unknown scope） |
-| O2 | `t.pid()` `t.merge(fn, args...)` `t.talk(channel)` | thread 方法 |
-| O3 | `taskm.block(t.pid())` `taskm.done(t.pid())` → bool | 阻塞/查询空闲 |
-| O4 | `taskm.channel(n?)` → channel；`c.send(v)` `c.recv()` | 通道 |
-| O5 | `GlobalMemory.clear()` `.compact()` `.setBlock(n)` | 全局内存实例（点调用；**`::` 不适配**）；`memory` 为同义名 |
-| O6 | `mb memorize = memorize::new();` | memorize 是内置 Sign 类——缓存机制**类内部**；`@mb()` 只是注册 |
+| S1 | `fn name(int a, String b) bool { ... }` | 函数；**参数类型在前**；返回类型必填（main 可省略＝void） |
+| S2 | `fn<T, U> name(T v) T { ... }` | 泛型函数；调用自动推断：`name(5)` |
+| S3 | `type struct { int x; int y; } Point;` | 实名结构体（必须写 `type`）；字段类型在前 |
+| S4 | `struct { int x; };` | 匿名结构体类型 |
+| S5 | `type struct<T> { T v; } Box;` | 泛型结构体；`impl<T>` 必须引入同样参数 |
+| S6 | `type interface { fn sum(Self self) int; expand interface Other; } Iface;` | 接口；`Self` = 自身类型；`expand interface` 组合接口 |
+| S7 | `interface { };` | 匿名接口（空接口＝`void`） |
+| S8 | `impl { fn new(int x) Point { ... } fn sum(Point self) int { ... } } Point;` | 实现：**唯一形态**（名字在块后）；静态方法无 self，实例方法首参 `self` |
+| S9 | `impl<T> { ... } Box;` | 泛型实现 |
+| S10 | `space { fn max(int a, int b) int { ... } } math;` | 空间（自我实现）：无括号；**内外调用一律写 `math::max(1, 2)`**（空间内互调同样要带空间名） |
+| S11 | `Point::new(3, 4)` `p.sum()` | 静态调用 `::`；实例方法 `.` |
+| S12 | `Point p = .{x: 1, y: 2};` | 结构体字面量 |
+| S13 | `fn __add__(Point self, Point other) Point { ... }` | 运算符方法名：`__add__ __sub__ __mul__ __div__ __mod__ __neg__ __eq__ __ne__ __lt__ __le__ __gt__ __ge__`（`a + b` 自动分发） |
+| S14 | 接口**结构化满足**：类型方法齐全即满足接口，`impl` 上不再写接口名 | 赋值/传参处检查 |
 
 ## T 类型
+
 | 编号 | 类型 | 说明 |
 |---|---|---|
-| T1 | `int` `long` `char` `float` `bool` `String` | 标量（`long`/`char` 语义同 int，均 32 位） |
-| T2 | `List<T>` `HashTable<K,V>` | 容器（HashTable 键按 String 显示散列，值深拷贝） |
-| T3 | `T&` 指针 | `next node<T>&`；`null` 可赋指针 |
-| T4 | `Copyd<T>`；`int[Copyd]`/`int[]` | Copyd 语义（深拷贝传参）；`int[]` ≈ Copyd<数组> |
-| T5 | `pointer T` | `l pointer List<int> = new int[10];` |
-| T6 | `void` `IOStream` `InputStream` `OutputStream` `thread` `memorize` | 内建 |
-| T7 | `program library;`/`pub` | 库级 |
+| T1 | `int`（32 位 wrap） `long` `char` `float` `bool` `String` | 标量 |
+| T2 | `List<T>` `HashTable<K,V>` | 容器 |
+| T3 | `T&` / `pointer T` | 可空引用，零值 `null` |
+| T4 | `Copyd<T>` / `int[Copyd]` / `int[]` | 传时复制语义 |
+| T5 | `void` `interface{}` `IOStream` `thread` `memorize` `memory` | 内建 |
 
-## P 编译工具
+## E 表达式
+
+| 编号 | 语法 | 说明 |
+|---|---|---|
+| E1 | `123` `-7` `1.5` `"str"` `true` `.{x: 1}` | 字面量；`\``...\``` 原始字符串（Go 语义，不转义） |
+| E2 | `f(x)` `obj.m(x)` `T::m(x)` `space::f(x)` `p.x` `l[i]` `*l` | 调用/成员/下标/取头 |
+| E3 | `+ - * / %` `<< >>` `== != < <= > >=` `&& || !` | 运算符；`+` 支持 String 拼接 |
+| E4 | `s.size() contains startsWith endsWith indexOf substring split trim toLower toUpper replace charAt toInt toFloat` | String 内建方法（rune 语义；`indexOf` 返回字节下标，-1=无） |
+| E5 | `l.size()` `l.head()` `l.tail()` `l.get(i)` `l.next()` `l.reset()` `l.append(v)` `l.appendAll(l2)` `l.toString()` `l.__sort__()` `l[i]` `*l` | List（滚动双游标；`get(i)` 与 `l[i]` 同义；取头也可用 `*l`） |
+| E6 | `h.put(k, v)` `h.get(k)` `h.contains(k)` `h.keys()` `h.remove(k)` `h.size()` | HashTable（缺键 `get` 返回 nil） |
+| E7 | `f(args) @mb()` | 签名调用（Sign 实例） |
+
+## M 宏与预处理
+
+| 编号 | 语法 | 说明 |
+|---|---|---|
+| M1 | `#macro name (a, b) { 主体 }` | 命名参数宏；`()`/`[]`/`{}` 分隔符可互换；单趟展开，不递归 |
+| M2 | `#when (run) { ... }` / `#when (compile) { ... }` | 态选择（解释器走 run） |
+| M3 | `#error("msg")` `#return <expr>` `#insert(...)` `#execute(名字)` | 预处理命令 |
+| M4 | `#` 开头的自定义命令 | 见内部宏表 |
+| M5 | `library name { fn sym(int a, String b) int; }` | FFI 库绑定（参数同函数，类型在前）；方法名即符号名 |
+
+## P 工具链
+
 | 编号 | 行为 |
 |---|---|
-| P1 | `qkc file.qk` 输出 LLVM IR；`qkc -run file.qk` 编译并执行 |
-| P2 | 默认 `-O3 -flto=thin`；`QUARK_CFLAGS` 可覆盖 |
-| P3 | 缓存：`<tmp>/quarklang-cache`，键=源码+引擎版本+运行时指纹；`QUARK_CACHE` 可改目录 |
+| P1 | `quark file.qk` 解释执行（`qkd` 断点调试） |
+| P2 | `qkc file.qk` 输出 LLVM IR；`qkc -run file.qk` 编译执行（原生路径为正典） |
+| P3 | `qkm init/build/debug/install/update` 工程与依赖管理 |
+| P4 | 两条路径**语法与语义一致**（同一份源码到处可用） |

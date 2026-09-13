@@ -12,7 +12,7 @@ func TestMacroInsertDirectives(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(pair(20, 22));
 }`)
 	if err != nil {
@@ -25,7 +25,7 @@ fn main(io IOStream) {
 
 // #insert(#ast(...)) 按声明顺序直插全部参数（转发用法）
 func TestMacroInsertAll(t *testing.T) {
-	out, err := runSrc(t, `fn add2(a int, b int) int {
+	out, err := runSrc(t, `fn add2(int a, int b) int {
     return a + b;
 }
 #macro calladd (a, b) {
@@ -34,7 +34,7 @@ func TestMacroInsertAll(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(calladd(20, 22));
 }`)
 	if err != nil {
@@ -56,7 +56,7 @@ func TestMacroExecuteSplice(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(callit());
 }`)
 	if err != nil {

@@ -22,7 +22,7 @@ func runSrc(t *testing.T, src string, args ...string) (string, error) {
 // ============ v2 核心语义 ============
 
 func TestHello(t *testing.T) {
-	out, err := runSrc(t, `fn main(io IOStream) {
+	out, err := runSrc(t, `fn main(IOStream io) {
     io.println("Hello World!");
 }`)
 	if err != nil {
@@ -36,12 +36,12 @@ func TestHello(t *testing.T) {
 // 函数必须带返回类型；return 返回真实值并结束
 func TestReturnValue(t *testing.T) {
 	out, err := runSrc(t, `
-fn sq(n int) int {
+fn sq(int n) int {
     return n * n;
 }
 
-fn main(io IOStream) {
-    x int = sq(7);
+fn main(IOStream io) {
+    int x = sq(7);
     io.println(x);
 }`)
 	if err != nil {
@@ -60,8 +60,8 @@ fn f() int {
     return 999;
 }
 
-fn main(io IOStream) {
-    x int = f();
+fn main(IOStream io) {
+    int x = f();
     io.println(x);
 }`)
 	if err != nil {
@@ -75,11 +75,11 @@ fn main(io IOStream) {
 // try/catch（名字 + 类型）
 func TestTryCatch(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
+fn main(IOStream io) {
     try {
-        y int = 1 / 0;
+        int y = 1 / 0;
         io.println(y);
-    } catch (e void) {
+    } catch (void e) {
         io.println("caught: " + e);
     }
     io.println("after");
@@ -95,7 +95,7 @@ fn main(io IOStream) {
 // .{...} 匿名结构体字面量（字段名可为关键字 in/out）
 func TestStructLiteral(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(.{in: 1, out: 2}.out);
     io.println(.{in: 1, out: 2}.in);
 }`)
@@ -110,11 +110,11 @@ fn main(io IOStream) {
 // 滚动 List：* 取开头、next 滚动、for 语法糖、耗尽、reset
 func TestRollingList(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
-    l List<int> = [10, 20, 30];
+fn main(IOStream io) {
+    List<int> l = [10, 20, 30];
     io.println(*l);
     io.println(l.next());
-    for (x : l) {
+    for (int x : l) {
         io.println(x);
     }
     io.println(l.head() == l.tail());
@@ -131,8 +131,8 @@ fn main(io IOStream) {
 
 func TestListExhausted(t *testing.T) {
 	_, err := runSrc(t, `
-fn main(io IOStream) {
-    l List<int> = [1];
+fn main(IOStream io) {
+    List<int> l = [1];
     l.next();
     l.next();
 }`)
@@ -145,15 +145,15 @@ fn main(io IOStream) {
 
 func TestMemorizeSignature(t *testing.T) {
 	out, err := runSrc(t, `
-fn expensive(n int) int {
+fn expensive(int n) int {
     return n * n;
 }
 
-fn main(io IOStream) {
-    mb memorize = memorize::new();
-    x int = expensive(41) @mb();
+fn main(IOStream io) {
+    memorize mb = memorize::new();
+    int x = expensive(41) @mb();
     io.println(x);
-    y int = expensive(41) @mb();
+    int y = expensive(41) @mb();
     io.println(y);
 }`)
 	if err != nil {
@@ -168,15 +168,15 @@ fn main(io IOStream) {
 
 func TestTaskmThreads(t *testing.T) {
 	out, err := runSrc(t, `
-fn add(a int, b int) int {
+fn add(int a, int b) int {
     return a + b;
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     thread t = taskm.spawn();
     io.println(t.pid() > 0);
     t.merge(add, 3, 4);
-    ch Channel = taskm.channel();
+    Channel ch = taskm.channel();
     t.talk(ch);
     io.println("ok");
 }`)
@@ -193,29 +193,29 @@ fn main(io IOStream) {
 
 func TestStructAndMethods(t *testing.T) {
 	out, err := runSrc(t, `
-struct {
-    x int;
-    y int;
+type struct {
+    int x;
+    int y;
 } Point;
 
 impl {
-    fn translate(self, dx int, dy int) void {
+    fn translate(Point self, int dx, int dy) void {
         self.x = self.x + dx;
         self.y = self.y + dy;
     }
-    fn sum(self) int {
+    fn sum(Point self) int {
         return self.x + self.y;
     }
     fn new() Point {
-        p Point;
+        Point p;
         p.x = 3;
         p.y = 4;
         return p;
     }
 } Point;
 
-fn main(io IOStream) {
-    p Point = Point::new();
+fn main(IOStream io) {
+    Point p = Point::new();
     p.translate(1, 1);
     io.println(p.x);
     io.println(p.y);
@@ -231,27 +231,30 @@ fn main(io IOStream) {
 
 func TestImplConformanceError(t *testing.T) {
 	src := `
-interface {
-    fn call(prefix void, rec void) void;
+type interface {
+    fn call(void prefix, void rec) void;
 } Sign;
 
-struct {
-    x int;
+type struct {
+    int x;
 } Bad;
 
-impl Bad Sign {
+impl {
     fn new() Bad {
-        b Bad;
+        Bad b;
         return b;
     }
+} Bad;
+
+fn need(Sign s) void {
 }
 
-fn main(io IOStream) {
-    b Bad = Bad::new();
-    io.println(b.x);
+fn main(IOStream io) {
+    Bad b = Bad::new();
+    need(b);
 }`
 	_, err := runSrc(t, src)
-	if err == nil || !strings.Contains(err.Error(), "missing method") {
+	if err == nil || !strings.Contains(err.Error(), "未实现接口方法") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -260,25 +263,25 @@ fn main(io IOStream) {
 
 func TestGenericNode(t *testing.T) {
 	out, err := runSrc(t, `
-struct<T> {
-    val T;
-    next node<T>&;
+type struct<T> {
+    T val;
+    node<T>& next;
 } node;
 
 impl<T> {
-    fn set(self, v T) void {
+    fn set(node<T> self, T v) void {
         self.val = v;
     }
     fn new() node<T> {
-        n node<T>;
+        node<T> n;
         return n;
     }
 } node;
 
-fn main(io IOStream) {
-    a node<int> = node::new();
+fn main(IOStream io) {
+    node<int> a = node::new();
     a.set(42);
-    b node<int> = node::new();
+    node<int> b = node::new();
     b.set(7);
     a.next = b;
     io.println(a.next.val);
@@ -295,20 +298,20 @@ fn main(io IOStream) {
 
 func TestNullPointerDeref(t *testing.T) {
 	_, err := runSrc(t, `
-struct<T> {
-    val T;
-    next node<T>&;
+type struct<T> {
+    T val;
+    node<T>& next;
 } node;
 
 impl<T> {
     fn new() node<T> {
-        n node<T>;
+        node<T> n;
         return n;
     }
 } node;
 
-fn main(io IOStream) {
-    a node<int> = node::new();
+fn main(IOStream io) {
+    node<int> a = node::new();
     a.next = null;
     io.println(a.next.val);
 }`)
@@ -319,14 +322,14 @@ fn main(io IOStream) {
 
 func TestCopydPtr(t *testing.T) {
 	out, err := runSrc(t, `
-fn f(io IOStream, a int[Copyd]) void {
+fn f(IOStream io, int[Copyd] a) void {
     a.append(99);
-    b List<int> = a.ptr();
+    List<int> b = a.ptr();
     io.println(b.size());
 }
 
-fn main(io IOStream) {
-    l List<int> = [1, 2];
+fn main(IOStream io) {
+    List<int> l = [1, 2];
     f(io, l);
     io.println(l.size());
 }`)
@@ -342,16 +345,16 @@ fn main(io IOStream) {
 
 func TestMemoryCompactReclaims(t *testing.T) {
 	src := `
-fn worker(ch Channel) void {
+fn worker(Channel ch) void {
     ch.send(1);
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     thread t = taskm.spawn();
-    ch Channel = taskm.channel();
+    Channel ch = taskm.channel();
     t.talk(ch);
     t.merge(worker, ch);
-    x void = ch.recv();
+    void x = ch.recv();
     GlobalMemory.compact();
 }`
 	prog, err := Compile(src)
@@ -377,43 +380,43 @@ func TestTypeCheckErrors(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"badarith", `fn main(io IOStream) {
+		{"badarith", `fn main(IOStream io) {
     io.println("s" - 1);
 }`, "arithmetic requires numbers"},
-		{"star_nonlist", `fn main(io IOStream) {
-    n int = 5;
+		{"star_nonlist", `fn main(IOStream io) {
+    int n = 5;
     io.println(*n);
 }`, "requires a List"},
-		{"cond_not_bool", `fn main(io IOStream) {
+		{"cond_not_bool", `fn main(IOStream io) {
     if (1) {
         io.println("x");
     }
 }`, "condition must be bool"},
-		{"arg_count", `fn f(a int) int {
+		{"arg_count", `fn f(int a) int {
     return a;
 }
-fn main(io IOStream) {
+fn main(IOStream io) {
     f(1, 2, 3);
 }`, "expects 1 args"},
-		{"arg_type", `fn f(s String) String {
+		{"arg_type", `fn f(String s) String {
     return s;
 }
-fn main(io IOStream) {
+fn main(IOStream io) {
     f(42);
 }`, "cannot assign int to String"},
-		{"undeclared", `fn main(io IOStream) {
+		{"undeclared", `fn main(IOStream io) {
     x = 5;
 }`, "undeclared"},
-		{"duplicate", `fn main(io IOStream) {
-    l List<int> = [1];
-    l List<int> = [2];
+		{"duplicate", `fn main(IOStream io) {
+    List<int> l = [1];
+    List<int> l = [2];
 }`, "duplicate declaration"},
-		{"use_before_init", `fn main(io IOStream) {
-    l List<int>;
+		{"use_before_init", `fn main(IOStream io) {
+    List<int> l;
     io.println(l.size());
 }`, "used before initialization"},
-		{"unknown_member", `fn main(io IOStream) {
-    n int = 5;
+		{"unknown_member", `fn main(IOStream io) {
+    int n = 5;
     n.append(1);
 }`, "no method"},
 		{"missing_ret", `fn f() {
@@ -431,7 +434,7 @@ fn main(io IOStream) {
 
 func TestArithmeticEdges(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(7 % 3);
     io.println(-7 % 3);
     io.println(-5 + 3);
@@ -446,7 +449,7 @@ fn main(io IOStream) {
 }
 
 func TestDivByZero(t *testing.T) {
-	_, err := runSrc(t, `fn main(io IOStream) {
+	_, err := runSrc(t, `fn main(IOStream io) {
     io.println(1 / 0);
 }`)
 	if err == nil || !strings.Contains(err.Error(), "DivisionByZeroError") {
@@ -456,7 +459,7 @@ func TestDivByZero(t *testing.T) {
 
 func TestStringConcat(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println("a" + "b" + 3);
     io.println(1 + 2 + "x");
 }`)
@@ -470,7 +473,7 @@ fn main(io IOStream) {
 
 func TestBoolOps(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(true && false);
     io.println(true || false);
     io.println(!true);
@@ -485,8 +488,8 @@ fn main(io IOStream) {
 
 func TestHashTableOps(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
-    h HashTable<String, int> = HashTable::new();
+fn main(IOStream io) {
+    HashTable<String, int> h = HashTable::new();
     h.put("a", 10);
     h.put("b", 20);
     io.println(h.get("a"));
@@ -505,7 +508,7 @@ fn main(io IOStream) {
 
 func TestInt32Wrap(t *testing.T) {
 	out, err := runSrc(t, `
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(2147483647 + 1);
 }`)
 	if err != nil {
@@ -519,7 +522,7 @@ fn main(io IOStream) {
 func TestIORedirect(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/out.txt"
-	src := fmt.Sprintf(`fn main(io IOStream) {
+	src := fmt.Sprintf(`fn main(IOStream io) {
     io.setOut(FileOutputStream("%s"));
     io.println("redirected");
 }`, path)
@@ -550,7 +553,7 @@ func TestMacroNamedParams(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     emit(io.println("hello from macro"));
 }`)
 	if err != nil {
@@ -570,7 +573,7 @@ func TestMacroWhenCompileDropped(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     only(io.println("run-line"));
 }`)
 	if err != nil {
@@ -589,7 +592,7 @@ func TestMacroErrorDirective(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     bad(io.println("x"));
 }`)
 	if err == nil || !strings.Contains(err.Error(), "cannot do this at run time") {
@@ -598,7 +601,7 @@ fn main(io IOStream) {
 }
 
 func TestProgramLibraryNotRunnable(t *testing.T) {
-	_, err := runSrc(t, `fn main(io IOStream) {
+	_, err := runSrc(t, `fn main(IOStream io) {
     io.println("never");
 }
 
@@ -610,7 +613,7 @@ program library;`)
 
 // program main; 正常运行
 func TestProgramMain(t *testing.T) {
-	out, err := runSrc(t, `fn main(io IOStream) {
+	out, err := runSrc(t, `fn main(IOStream io) {
     io.println("ok");
 }
 
@@ -628,12 +631,12 @@ func TestPubAndImportParse(t *testing.T) {
 	prog, err := Compile(`import "util";
 program library;
 
-pub fn add(a int, b int) int {
+pub fn add(int a, int b) int {
     return a + b;
 }
 
-pub struct {
-    x int;
+pub type struct {
+    int x;
 } Box;
 `)
 	if err != nil {
@@ -658,7 +661,7 @@ func TestMacroDelimitersAndArity(t *testing.T) {
     }
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(add(10, 32));
     io.println(add{1, 2});
 }`)
@@ -672,7 +675,7 @@ fn main(io IOStream) {
     #return a
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     two(1);
 }`)
 	if err == nil || !strings.Contains(err.Error(), "需要 2 个参数") {
@@ -681,8 +684,8 @@ fn main(io IOStream) {
 }
 
 func TestDeleteReclaimsBlock(t *testing.T) {
-	prog, err := Compile(`fn main(io IOStream) {
-    l List<int> = [1, 2, 3];
+	prog, err := Compile(`fn main(IOStream io) {
+    List<int> l = [1, 2, 3];
     io.println(l.size());
     delete l;
     GlobalMemory.compact();
@@ -702,8 +705,8 @@ func TestDeleteReclaimsBlock(t *testing.T) {
 
 // pointer 修饰 + new <type>[size]（堆上申请，失败 badAlloc）
 func TestPointerAndNew(t *testing.T) {
-	out, err := runSrc(t, `fn main(io IOStream) {
-    l pointer List<int> = new int[10];
+	out, err := runSrc(t, `fn main(IOStream io) {
+    pointer List<int> l = new int[10];
     io.println("ok");
     delete l;
 }`)
@@ -717,10 +720,10 @@ func TestPointerAndNew(t *testing.T) {
 
 // new 非法大小 → badAlloc
 func TestNewBadAlloc(t *testing.T) {
-	_, err := runSrc(t, `fn main(io IOStream) {
+	_, err := runSrc(t, `fn main(IOStream io) {
     try {
-        bad pointer List<int> = new int[-1];
-    } catch (e void) {
+        pointer List<int> bad = new int[-1];
+    } catch (void e) {
         io.println("badalloc");
     }
 }`)
@@ -732,7 +735,7 @@ func TestNewBadAlloc(t *testing.T) {
 // program 声明位置：前后均可（用户确认：program main; 在前/后无关系）
 func TestProgramPlacementAnywhere(t *testing.T) {
 	out, err := runSrc(t, `program main;
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println("front-ok");
 }`)
 	if err != nil {
@@ -741,7 +744,7 @@ fn main(io IOStream) {
 	if out != "front-ok\n" {
 		t.Fatalf("got %q", out)
 	}
-	out, err = runSrc(t, `fn main(io IOStream) {
+	out, err = runSrc(t, `fn main(IOStream io) {
     io.println("back-ok");
 }
 program main;`)
@@ -755,15 +758,15 @@ program main;`)
 
 // String 文本处理内置方法集
 func TestStringMethods(t *testing.T) {
-	out, err := runSrc(t, `fn main(io IOStream) {
-    s String = "  Hello, QuarkLang World  ";
+	out, err := runSrc(t, `fn main(IOStream io) {
+    String s = "  Hello, QuarkLang World  ";
     io.println(s.trim().size());
     io.println(s.trim().toLower());
     io.println(s.trim().startsWith("Hello"));
     io.println(s.trim().endsWith("World"));
     io.println(s.trim().indexOf("Quark"));
     io.println(s.trim().substring(7, 14));
-    parts List<String> = "a,b,c".split(",");
+    List<String> parts = "a,b,c".split(",");
     io.println(parts.size());
     io.println("hello".replace("l", "L"));
     io.println("42".toInt());
@@ -782,7 +785,7 @@ func TestStringMethods(t *testing.T) {
 
 // String 越界访问报错
 func TestStringBoundsError(t *testing.T) {
-	_, err := runSrc(t, `fn main(io IOStream) {
+	_, err := runSrc(t, `fn main(IOStream io) {
     io.println("abc".charAt(5));
 }`)
 	if err == nil || !strings.Contains(err.Error(), "StringIndexOutOfBoundsError") {
@@ -792,11 +795,11 @@ func TestStringBoundsError(t *testing.T) {
 
 // 循环内变量重复声明必须更新槽位（曾致 indexOf 旧值残留→substring 越界）
 func TestLoopRedeclareUpdatesSlot(t *testing.T) {
-	out, err := runSrc(t, `fn main(io IOStream) {
-    html String = "AAA/xxxxB/yyyyyC/zzzzzz";
-    i int = 0;
+	out, err := runSrc(t, `fn main(IOStream io) {
+    String html = "AAA/xxxxB/yyyyyC/zzzzzz";
+    int i = 0;
     while (i < 3) {
-        p int = html.indexOf("/");
+        int p = html.indexOf("/");
         io.println(p);
         html = html.substring(p + 1);
         i = i + 1;

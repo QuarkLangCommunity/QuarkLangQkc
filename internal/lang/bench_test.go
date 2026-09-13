@@ -11,9 +11,9 @@ import (
 // ============ 性能基准（高计算场景） ============
 
 // 算术密集循环：1e6 次循环
-const loopSrc = `fn main(io IOStream) {
-    n int = 0;
-    i int = 0;
+const loopSrc = `fn main(IOStream io) {
+    int n = 0;
+    int i = 0;
     while (i < 1000000) {
         n = n + i * 2 - 1;
         i = i + 1;
@@ -23,26 +23,26 @@ const loopSrc = `fn main(io IOStream) {
 `
 
 // 递归计算：fib(24)
-const fibSrc = `fn fib(n int) int {
+const fibSrc = `fn fib(int n) int {
     if (n < 2) {
         return n;
     }
     return fib(n - 1) + fib(n - 2);
 }
 
-fn main(io IOStream) {
+fn main(IOStream io) {
     io.println(fib(24));
 }
 `
 
 // 密集函数调用 + List 操作
-const callSrc = `fn sq(n int) int {
+const callSrc = `fn sq(int n) int {
     return n * n;
 }
 
-fn main(io IOStream) {
-    total int = 0;
-    i int = 0;
+fn main(IOStream io) {
+    int total = 0;
+    int i = 0;
     while (i < 100000) {
         total = total + sq(i);
         i = i + 1;
@@ -160,32 +160,32 @@ func BenchmarkGoSliceChurnGC(b *testing.B) {
 // String 文本处理基准（1M 次）
 func BenchmarkStringProcessing1M(b *testing.B) {
 	srcs := []string{
-		`fn main(io IOStream) {
-    s String = "  Hello, QuarkLang World  ";
-    i int = 0;
-    t int = 0;
+		`fn main(IOStream io) {
+    String s = "  Hello, QuarkLang World  ";
+    int i = 0;
+    int t = 0;
     while (i < 1000000) {
         t = t + s.trim().size();
         i = i + 1;
     }
     io.println(t);
 }`,
-		`fn main(io IOStream) {
-    s String = "abcdefghijklmnopqrstuvwxyz0123456789";
-    i int = 0;
-    t int = 0;
+		`fn main(IOStream io) {
+    String s = "abcdefghijklmnopqrstuvwxyz0123456789";
+    int i = 0;
+    int t = 0;
     while (i < 1000000) {
         t = t + s.substring(4, 20).size();
         i = i + 1;
     }
     io.println(t);
 }`,
-		`fn main(io IOStream) {
-    s String = "a,b,c,d,e,f,g,h,i,j";
-    i int = 0;
-    t int = 0;
+		`fn main(IOStream io) {
+    String s = "a,b,c,d,e,f,g,h,i,j";
+    int i = 0;
+    int t = 0;
     while (i < 300000) {
-        parts List<String> = s.split(",");
+        List<String> parts = s.split(",");
         t = t + parts.size();
         i = i + 1;
     }

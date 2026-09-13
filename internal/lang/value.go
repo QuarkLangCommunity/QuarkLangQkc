@@ -45,6 +45,7 @@ const (
 	vStruct
 	vLib
 	vFile
+	vPtr // FFI 原生指针值（不透明句柄；新增在末尾，保持既有枚举序号不变）
 )
 
 func FileV(f *FileValue) Value { return Value{tag: byte(vFile), ptr: unsafe.Pointer(f)} }
@@ -80,6 +81,18 @@ func StrV(str string) Value {
 }
 func NilV() Value { return Value{} }
 
+// ---- FFI 原生指针值（不透明句柄：可空、可往返 FFI，不做指针算术） ----
+
+// PtrV 包装来自 FFI 的裸指针（void* 句柄）。指针由系统库分配/返回，
+// 不归 Go 堆管，直接存 ptr 字段（GC 只扫描 Go 堆指针，非 Go 堆地址自动忽略）。
+// nil 归一化为 null（NilV）：空指针的语言表示就是 null。
+func PtrV(p unsafe.Pointer) Value {
+	if p == nil {
+		return NilV()
+	}
+	return Value{tag: byte(vPtr), ptr: p}
+}
+
 func ListV(l *List) Value               { return Value{tag: byte(vList), ptr: unsafe.Pointer(l)} }
 func TableV(h *HashTable) Value         { return Value{tag: byte(vTable), ptr: unsafe.Pointer(h)} }
 func IOV(s *IOStream) Value             { return Value{tag: byte(vIO), ptr: unsafe.Pointer(s)} }
@@ -98,27 +111,29 @@ func LibraryV(o *libObj) Value          { return Value{tag: byte(vLib), ptr: uns
 
 // ---- 类型判定 ----
 
-func (v Value) IsNil() bool      { return v.tag == byte(vNil) }
-func (v Value) IsInt() bool      { return v.tag == byte(vInt) }
-func (v Value) IsFloat() bool    { return v.tag == byte(vFloat) }
-func (v Value) IsBool() bool     { return v.tag == byte(vBool) }
-func (v Value) IsStr() bool      { return v.tag == byte(vStr) }
-func (v Value) IsList() bool     { return v.tag == byte(vList) }
-func (v Value) IsTable() bool    { return v.tag == byte(vTable) }
-func (v Value) IsIO() bool       { return v.tag == byte(vIO) }
-func (v Value) IsIn() bool       { return v.tag == byte(vIn) }
-func (v Value) IsOut() bool      { return v.tag == byte(vOut) }
-func (v Value) IsMemorize() bool { return v.tag == byte(vMemorize) }
-func (v Value) IsMemory() bool   { return v.tag == byte(vMemory) }
-func (v Value) IsTaskm() bool    { return v.tag == byte(vTaskm) }
-func (v Value) IsTask() bool     { return v.tag == byte(vTask) }
-func (v Value) IsThread() bool   { return v.tag == byte(vThread) }
-func (v Value) IsFunc() bool     { return v.tag == byte(vFunc) }
-func (v Value) IsCopyd() bool    { return v.tag == byte(vCopyd) }
-func (v Value) IsChan() bool     { return v.tag == byte(vChan) }
-func (v Value) IsStruct() bool   { return v.tag == byte(vStruct) }
-func (v Value) IsLib() bool      { return v.tag == byte(vLib) }
-func (v Value) IsFile() bool     { return v.tag == byte(vFile) }
+func (v Value) IsNil() bool         { return v.tag == byte(vNil) }
+func (v Value) IsInt() bool         { return v.tag == byte(vInt) }
+func (v Value) IsFloat() bool       { return v.tag == byte(vFloat) }
+func (v Value) IsBool() bool        { return v.tag == byte(vBool) }
+func (v Value) IsStr() bool         { return v.tag == byte(vStr) }
+func (v Value) IsList() bool        { return v.tag == byte(vList) }
+func (v Value) IsTable() bool       { return v.tag == byte(vTable) }
+func (v Value) IsIO() bool          { return v.tag == byte(vIO) }
+func (v Value) IsIn() bool          { return v.tag == byte(vIn) }
+func (v Value) IsOut() bool         { return v.tag == byte(vOut) }
+func (v Value) IsMemorize() bool    { return v.tag == byte(vMemorize) }
+func (v Value) IsMemory() bool      { return v.tag == byte(vMemory) }
+func (v Value) IsTaskm() bool       { return v.tag == byte(vTaskm) }
+func (v Value) IsTask() bool        { return v.tag == byte(vTask) }
+func (v Value) IsThread() bool      { return v.tag == byte(vThread) }
+func (v Value) IsFunc() bool        { return v.tag == byte(vFunc) }
+func (v Value) IsCopyd() bool       { return v.tag == byte(vCopyd) }
+func (v Value) IsChan() bool        { return v.tag == byte(vChan) }
+func (v Value) IsStruct() bool      { return v.tag == byte(vStruct) }
+func (v Value) IsLib() bool         { return v.tag == byte(vLib) }
+func (v Value) IsFile() bool        { return v.tag == byte(vFile) }
+func (v Value) IsPtr() bool         { return v.tag == byte(vPtr) }
+func (v Value) Ptr() unsafe.Pointer { return v.ptr }
 func (v Value) File() *FileValue {
 	ptr := (*FileValue)(v.ptr)
 	if ptr == nil {
@@ -190,6 +205,8 @@ func (v Value) TypeName() string {
 		return "Channel"
 	case vStruct:
 		return v.Struct().SType
+	case vPtr:
+		return "pointer"
 	}
 	return "<unknown>"
 }
@@ -240,6 +257,8 @@ func (v Value) String() string {
 		return v.Struct().String()
 	case vLib:
 		return "<library " + v.Lib().name + ">"
+	case vPtr:
+		return "0x" + strconv.FormatUint(uint64(uintptr(v.ptr)), 16)
 	}
 	return "<unknown>"
 }

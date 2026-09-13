@@ -1,14 +1,14 @@
-fn work(n int) int {
-    s int = 0;
-    i int = 0;
+fn work(int n) int {
+    int s = 0;
+    int i = 0;
     while (i < 100000) {
         s = s + i;
         i = i + 1;
     }
     return s + n;
 }
-fn main(io IOStream) {
-    t thread = taskm.spawn();
+fn main(IOStream io) {
+    thread t = taskm.spawn();
     t.merge(work, 1);
     taskm.block(t.pid());
     io.println(taskm.done(t.pid()));

@@ -39,8 +39,23 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 			return NilV(), &RunError{Msg: fmt.Sprintf("LibraryError: %s 参数不足", name), Pos: pos, Ctx: ctx}
 		}
 		a := args[i]
+		if p.Type == "pointer" { // 不透明句柄：接受指针值或 null（void*），可往返
+			if a.IsNil() {
+				types = append(types, ffiPtr)
+				nums = append(nums, 0)
+				ptrs = append(ptrs, nil)
+				continue
+			}
+			if !a.IsPtr() {
+				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: %s 参数 %s 需要 pointer 或 null", name, p.Name), Pos: pos, Ctx: ctx}
+			}
+			types = append(types, ffiPtr)
+			nums = append(nums, 0)
+			ptrs = append(ptrs, a.Ptr())
+			continue
+		}
 		switch ffiTypeOf(p.Type) {
-		case ffiInt, ffiBool:
+		case ffiInt, ffiBool, ffiLong:
 			if !a.IsInt() && !a.IsBool() {
 				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: %s 参数 %s 需要 int/bool", name, p.Name), Pos: pos, Ctx: ctx}
 			}
@@ -53,7 +68,11 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 			} else {
 				nums = append(nums, float64(a.Int()))
 			}
-			types = append(types, ffiInt)
+			pt := ffiTypeOf(p.Type)
+			if pt == ffiBool {
+				pt = ffiInt
+			}
+			types = append(types, pt)
 			ptrs = append(ptrs, nil)
 		case ffiF32, ffiF64:
 			if !a.IsFloat() && !a.IsInt() {
@@ -110,13 +129,15 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 		return BoolV(ri != 0), nil
 	case "f32", "float", "double":
 		return FloatV(rf), nil
+	case "pointer":
+		return PtrV(rp), nil // 不透明句柄：返回原生指针值（nil → null）
 	case "String":
 		if rp == nil {
 			return NilV(), nil
 		}
 		return StrV(C.GoString((*C.char)(rp))), nil
 	default:
-		// v1：其它指针返回以十六进制字符串呈现（无原生指针值）
+		// 其它指针返回仍以十六进制字符串呈现（声明为 pointer 才得到原生指针值）
 		if rp == nil {
 			return NilV(), nil
 		}

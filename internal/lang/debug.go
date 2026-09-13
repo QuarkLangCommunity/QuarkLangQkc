@@ -57,6 +57,8 @@ func stPos(st Stmt) Pos {
 		return posOfExpr(t.Cond)
 	case *ForStmt:
 		return posOfExpr(t.Iter)
+	case *ForCStmt:
+		return t.Pos
 	case *BreakStmt:
 		return t.Pos
 	case *DeleteStmt:

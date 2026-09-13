@@ -96,10 +96,11 @@ type MethodSig struct {
 
 // InterfaceDecl is an interface declaration.
 type InterfaceDecl struct {
-	Name    string
-	Methods []MethodSig
-	Expands []string // expand interface 组合接口（xmind §接口）
-	Pos     Pos
+	Name       string
+	TypeParams []string // 泛型接口：interface<T, ...> { ... } Name;
+	Methods    []MethodSig
+	Expands    []string // expand interface 组合接口（xmind §接口）
+	Pos        Pos
 }
 
 // ImplDecl is an impl declaration: "impl<T> [Iface] { funcs } Type;".
@@ -166,7 +167,17 @@ type WhileStmt struct {
 }
 type ForStmt struct {
 	Var  string
+	Type string // 迭代变量类型（类型在前）：for (<type> <name> : <expr>)
 	Iter Expr
+	Body *Block
+	Pos  Pos
+}
+
+// ForCStmt is a C-style for: for (<init>; <cond>; <step>) { ... }
+type ForCStmt struct {
+	Init Stmt // 声明（类型在前）或赋值/表达式
+	Cond Expr
+	Step Stmt // 赋值/表达式，可为 nil
 	Body *Block
 	Pos  Pos
 }
@@ -191,6 +202,7 @@ func (*ReturnStmt) isStmt() {}
 func (*IfStmt) isStmt()     {}
 func (*WhileStmt) isStmt()  {}
 func (*ForStmt) isStmt()    {}
+func (*ForCStmt) isStmt()   {}
 func (*DeclStmt) isStmt()   {}
 func (*AssignStmt) isStmt() {}
 
