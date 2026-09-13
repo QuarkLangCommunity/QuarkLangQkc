@@ -1,0 +1,19 @@
+// S1：函数重载（按参数个数+类型解析，含 int→float 隐式转换优先级）
+fn add(int a, int b) int { return a + b; }
+fn add(String a, String b) String { return a + "<" + b; }
+fn add(float a, float b) float { return a + b; }
+fn pick(int a) String { return "int"; }
+fn pick(String s) String { return "str"; }
+fn pick(float f) String { return "float"; }
+fn zero() int { return 0; }
+fn zero(String s) int { return 1; }
+fn main(IOStream io) {
+    io.println(add(1, 2));
+    io.println(add("a", "b"));
+    io.println(add(1.5, 2.5));
+    io.println(pick(1), pick("x"), pick(2.5));
+    io.println(add(1, 2.5));
+    io.println(pick(3));
+    io.println(zero(), zero("s"));
+    io.println(add(1, 2).toString() + "!");
+}

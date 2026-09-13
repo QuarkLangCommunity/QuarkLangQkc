@@ -1,0 +1,12 @@
+// FFI 链接名映射：libc → -lc（默认已链接），m → -lm
+library libc {
+    fn abs(int v) int;
+}
+library m {
+    fn sqrt(float x) float;
+}
+fn main(IOStream io) {
+    io.println(libc.abs(0 - 7));
+    io.println(m.sqrt(16.0));
+    io.println(m.sqrt(2.0).toString());
+}

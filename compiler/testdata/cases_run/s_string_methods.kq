@@ -1,0 +1,22 @@
+// E4：String 内建方法（rune 语义：size/charAt/substring；字节语义：contains/indexOf…）
+fn main(IOStream io) {
+    String s = "Hello, World";
+    io.println(s.size());
+    io.println(s.contains("World"), s.contains("xyz"));
+    io.println(s.startsWith("Hello"), s.endsWith("World"));
+    io.println(s.indexOf("World"), s.indexOf("zzz"));
+    io.println(s.substring(0, 5), s.substring(7));
+    io.println("  pad  ".trim() + "|");
+    io.println("  pad  ".trimLeft() + "|");
+    io.println("  pad  ".trimRight() + "|");
+    io.println(s.toLower());
+    io.println(s.toUpper());
+    io.println(s.replace("l", "L"));
+    io.println(s.charAt(1), s.charAt(0));
+    io.println("123".toInt() + 1);
+    io.println("2.5".toFloat() + 0.5);
+    io.println("héllo wörld".toUpper());
+    io.println("héllo".size(), "héllo".charAt(1), "héllo".substring(1, 3));
+    io.println("a-b-c".replace("-", "+"));
+    io.println(" 42 ".toInt(), "\t7\n".toInt());
+}

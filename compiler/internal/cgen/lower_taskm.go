@@ -34,9 +34,9 @@ func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) 
 	if _, isGen := l.generics[id.Name]; isGen {
 		return nil, l.errf(id.Pos, "暂未支持 merge 泛型函数 %s（解释器可用）", id.Name)
 	}
-	fn, ok := l.fns[id.Name]
-	if !ok {
-		return nil, l.errf(id.Pos, "未知函数 %q（编译器只支持同一程序内定义的函数）", id.Name)
+	fn, irName, err := l.resolveRunnerTarget(id.Name, len(extra), id.Pos)
+	if err != nil {
+		return nil, err
 	}
 	if len(fn.Params) != len(extra) {
 		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", id.Name, len(fn.Params), len(extra))
@@ -47,10 +47,10 @@ func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) 
 	if len(fn.Params) == 1 && fn.Params[0].Type != "int" {
 		return nil, l.errf(fn.Params[0].Pos, "暂未支持 merge 的 %s 参数（运行时线程只携带 int）", fn.Params[0].Type)
 	}
-	if _, isNil := l.nilFns[id.Name]; isNil {
+	if _, isNil := l.nilFns[irName]; isNil {
 		return nil, l.errf(id.Pos, "暂未支持 merge 含 log 的函数 %s（返回值可能为 nil）", id.Name)
 	}
-	r := l.addRunner(id.Name, len(fn.Params) == 1)
+	r := l.addRunner(irName, len(fn.Params) == 1)
 	return &expr{kind: kRunner, typ: "runner", s: r}, nil
 }
 
@@ -157,9 +157,19 @@ func (fc *funcCtx) threadCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr)
 		}
 		return fc.mergeCall(me, recv, c.Args[0], c.Args[1:])
 	case "talk":
-		return nil, l.errf(me.Pos, "暂未支持 thread.talk（解释器可用）")
+		// 解释器语义：校验参数是 channel，然后什么都不做
+		if len(c.Args) != 1 {
+			return nil, l.errf(me.Pos, "t.talk(c) 需要 1 个参数")
+		}
+		if t := fc.typeOf(c.Args[0]); t != "Channel" && t != "channel" && t != "?" {
+			return nil, l.errf(exprPos(c.Args[0], me.Pos), "thread.talk 需要 channel 类实例，got %s", t)
+		}
+		if _, err := fc.expr(c.Args[0]); err != nil {
+			return nil, err
+		}
+		return &expr{kind: kInt, typ: "void"}, nil
 	}
-	return nil, l.errf(me.Pos, "暂未支持 thread 方法 %q（编译器支持 merge/pid）", me.Name)
+	return nil, l.errf(me.Pos, "暂未支持 thread 方法 %q（编译器支持 merge/pid/talk）", me.Name)
 }
 
 // mergeCall 构造 ql_merge(pid, runner, arg)。

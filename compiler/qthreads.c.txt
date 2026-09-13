@@ -8,7 +8,7 @@
 #include <process.h>
 #include <windows.h>
 typedef struct { int cap, head, tail, cnt; int* buf; SRWLOCK mu; CONDITION_VARIABLE cv; } ql_channel;
-typedef struct { void (*fn)(int); int arg; volatile int done; SRWLOCK mu; } ql_task;
+typedef struct { void (*fn)(long long, long long, long long, long long); long long args[4]; volatile int done; SRWLOCK mu; } ql_task;
 ql_channel* ql_channel_new(int cap) {
     ql_channel* c = calloc(1, sizeof(ql_channel));
     if (cap <= 0) cap = 1024;
@@ -40,11 +40,12 @@ int ql_spawn(void) {
     t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
-static unsigned __stdcall runner_w(void* p) { ql_task* t = p; t->fn(t->arg); AcquireSRWLockExclusive(&t->mu); t->done = 1; ReleaseSRWLockExclusive(&t->mu); return 0; }
-void ql_merge(int id, void* fn, int arg) {
+static unsigned __stdcall runner_w(void* p) { ql_task* t = p; t->fn(t->args[0], t->args[1], t->args[2], t->args[3]); AcquireSRWLockExclusive(&t->mu); t->done = 1; ReleaseSRWLockExclusive(&t->mu); return 0; }
+void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3) {
     if (id <= 0 || id >= QMAXTASK) return;
     ql_task* t = qtasks[id]; if (!t) return;
-    t->fn = fn; t->arg = arg; t->done = 0; _beginthreadex(0, 0, runner_w, t, 0, 0);
+    t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3; t->done = 0;
+    _beginthreadex(0, 0, runner_w, t, 0, 0);
 }
 void ql_block(int id) { if (id <= 0 || id >= QMAXTASK) return; ql_task* t = qtasks[id]; if (!t) return; while (1) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); if (d) break; } }
 int ql_done(int id) { if (id <= 0 || id >= QMAXTASK) return 1; ql_task* t = qtasks[id]; if (!t) return 1; AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); return d; }
@@ -59,7 +60,7 @@ typedef struct { int cap, head, tail, cnt; int* buf; pthread_mutex_t mu; pthread
 /* ---- 线程池（固定 8 工作线程 + 任务队列，amortized 无线程创建开销） ---- */
 #define QPOOL_N 8
 #define QCAP 65536
-typedef struct { void (*fn)(int); int arg; volatile int done; } ql_task;   /* done 原子化：免每任务 mutex */
+typedef struct { void (*fn)(long long, long long, long long, long long); long long args[4]; volatile int done; } ql_task;   /* done 原子化：免每任务 mutex */
 /* 无锁 MPSC 环形队列：单调计数器 head/tail（原子），快路径零锁；
    工人有限自旋后锁+条件睡眠，生产者入队后仅在有睡者时 signal——消除了 8 核互斥乒乓与逐任务 futex 唤醒 */
 #define QMASK (QCAP - 1)
@@ -114,7 +115,7 @@ static ql_task* qpop(void) {
 static void* qworker(void* p) {
     for (;;) {
         ql_task* t = qpop();
-        t->fn(t->arg);
+        t->fn(t->args[0], t->args[1], t->args[2], t->args[3]);
         __atomic_store_n(&t->done, 1, __ATOMIC_RELEASE);
     }
     return 0;
@@ -157,11 +158,11 @@ int ql_spawn(void) {
     t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
-void ql_merge(int id, void* fn, int arg) {
+void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3) {
     if (id <= 0 || id >= QMAXTASK) return;
     ql_task* t = qtasks[id]; if (!t) return;
     qpool_ensure();
-    t->fn = fn; t->arg = arg; t->done = 0;
+    t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3; t->done = 0;
     qpush(t);
 }
 void ql_block(int id) {
@@ -183,3 +184,243 @@ char* ql_strcat(const char* a, const char* b) {
     return r;
 }
 #endif
+
+/* ================= String 内建方法（与解释器 internal/lang/eval.go 同语义） =================
+ * rune（UTF-8）语义：size/charAt/substring 按 rune；contains/startsWith/endsWith/indexOf
+ * 按字节（Go strings 包同语义）。越界/解析失败 → 与解释器同文案的运行期错误并退出 1。 */
+static void ql_err_at(const char* msg, int line) {
+    fprintf(stderr, "error: %s at line %d\n", msg, line);
+    fflush(stderr);
+    exit(1);
+}
+static int ql_u8seq(unsigned char c) {
+    if (c < 0x80) return 1;
+    if ((c & 0xE0) == 0xC0) return 2;
+    if ((c & 0xF0) == 0xE0) return 3;
+    if ((c & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+int ql_str_size(const char* s) {
+    int n = 0;
+    for (const unsigned char* p = (const unsigned char*)s; *p; ) { p += ql_u8seq(*p); n++; }
+    return n;
+}
+/* ql_u8_off：第 i 个 rune 的字节偏移（i == rune 数 → strlen；i 超出 → -1） */
+static int ql_u8_off(const char* s, int i) {
+    int b = 0;
+    for (int k = 0; k < i; k++) {
+        if (!s[b]) return -1;
+        b += ql_u8seq((unsigned char)s[b]);
+    }
+    return b;
+}
+int ql_str_contains(const char* s, const char* sub) { return strstr(s, sub) != 0; }
+int ql_str_startswith(const char* s, const char* p) { size_t lp = strlen(p); return strncmp(s, p, lp) == 0; }
+int ql_str_endswith(const char* s, const char* p) {
+    size_t ls = strlen(s), lp = strlen(p);
+    return lp <= ls && memcmp(s + ls - lp, p, lp) == 0;
+}
+int ql_str_indexof(const char* s, const char* sub) {
+    const char* p = strstr(s, sub);
+    return p ? (int)(p - s) : -1;
+}
+char* ql_str_sub(const char* s, int start, int end, int line) {
+    int n = ql_str_size(s);
+    if (start < 0 || end < start || end > n) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]", start, end, n);
+        ql_err_at(msg, line);
+    }
+    int b0 = ql_u8_off(s, start), b1 = ql_u8_off(s, end);
+    int len = b1 - b0;
+    char* r = malloc(len + 1);
+    memcpy(r, s + b0, len); r[len] = 0;
+    return r;
+}
+char* ql_str_charat(const char* s, int i, int line) {
+    int n = ql_str_size(s);
+    int b = ql_u8_off(s, i);
+    if (i < 0 || b < 0 || s[b] == 0) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)", i, n);
+        ql_err_at(msg, line);
+    }
+    int sz = ql_u8seq((unsigned char)s[b]);
+    char* r = malloc(sz + 1);
+    memcpy(r, s + b, sz); r[sz] = 0;
+    return r;
+}
+/* Go unicode.IsSpace 的空白集合（含 Zs 类与 U+0085） */
+static int ql_space_at(const char* s, int* sz) {
+    unsigned char c = (unsigned char)s[0];
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r') { *sz = 1; return 1; }
+    if (c == 0xC2 && (unsigned char)s[1] == 0x85) { *sz = 2; return 1; } /* U+0085 */
+    if (c == 0xC2 && (unsigned char)s[1] == 0xA0) { *sz = 2; return 1; } /* U+00A0 */
+    if (c == 0xE1 && (unsigned char)s[1] == 0x9A && (unsigned char)s[2] == 0x80) { *sz = 3; return 1; } /* U+1680 */
+    if (c == 0xE2 && (unsigned char)s[1] == 0x80) {
+        unsigned char d = (unsigned char)s[2];
+        if (d >= 0x80 && d <= 0x8A) { *sz = 3; return 1; } /* U+2000..U+200A */
+        if (d == 0xA8 || d == 0xA9) { *sz = 3; return 1; } /* U+2028/2029 */
+        if (d == 0xAF) { *sz = 3; return 1; }              /* U+202F */
+    }
+    if (c == 0xE2 && (unsigned char)s[1] == 0x81 && (unsigned char)s[2] == 0x9F) { *sz = 3; return 1; } /* U+205F */
+    if (c == 0xE3 && (unsigned char)s[1] == 0x80 && (unsigned char)s[2] == 0x80) { *sz = 3; return 1; } /* U+3000 */
+    return 0;
+}
+char* ql_str_trim(const char* s, int mode) { /* 0=both 1=left 2=right */
+    int len = (int)strlen(s);
+    int b = 0, e = len;
+    if (mode != 2) {
+        while (b < e) { int sz = 0; if (!ql_space_at(s + b, &sz) || b + sz > e) break; b += sz; }
+    }
+    if (mode != 1) {
+        while (e > b) {
+            int k = e - 1;
+            while (k > b && ((unsigned char)s[k] & 0xC0) == 0x80) k--;
+            int sz = 0;
+            if (!ql_space_at(s + k, &sz)) break;
+            e = k;
+        }
+    }
+    int n = e - b;
+    char* r = malloc(n + 1);
+    memcpy(r, s + b, n); r[n] = 0;
+    return r;
+}
+/* ASCII + Latin-1 + 希腊/西里尔基本区的大小写映射（其他脚本保持原样） */
+static int ql_lower_rune(int cp) {
+    if (cp >= 'A' && cp <= 'Z') return cp + 32;
+    if (cp >= 0xC0 && cp <= 0xDE && cp != 0xD7) return cp + 32;
+    if (cp >= 0x391 && cp <= 0x3A9) return cp + 32;
+    if (cp >= 0x410 && cp <= 0x42F) return cp + 32;
+    if (cp >= 0x400 && cp <= 0x40F) return cp + 80;
+    return cp;
+}
+static int ql_upper_rune(int cp) {
+    if (cp >= 'a' && cp <= 'z') return cp - 32;
+    if (cp >= 0xE0 && cp <= 0xFE && cp != 0xF7) return cp - 32;
+    if (cp >= 0x3B1 && cp <= 0x3C9) return cp - 32;
+    if (cp >= 0x430 && cp <= 0x44F) return cp - 32;
+    if (cp >= 0x450 && cp <= 0x45F) return cp - 80;
+    return cp;
+}
+static int ql_u8dec(const char* s, int* cp) {
+    unsigned char c = (unsigned char)s[0];
+    if (c < 0x80) { *cp = c; return 1; }
+    if ((c & 0xE0) == 0xC0) { *cp = ((c & 0x1F) << 6) | ((unsigned char)s[1] & 0x3F); return 2; }
+    if ((c & 0xF0) == 0xE0) { *cp = ((c & 0x0F) << 12) | (((unsigned char)s[1] & 0x3F) << 6) | ((unsigned char)s[2] & 0x3F); return 3; }
+    if ((c & 0xF8) == 0xF0) { *cp = ((c & 0x07) << 18) | (((unsigned char)s[1] & 0x3F) << 12) | (((unsigned char)s[2] & 0x3F) << 6) | ((unsigned char)s[3] & 0x3F); return 4; }
+    *cp = c; return 1;
+}
+static int ql_u8enc(int cp, char* out) {
+    if (cp < 0x80) { out[0] = (char)cp; return 1; }
+    if (cp < 0x800) { out[0] = (char)(0xC0 | (cp >> 6)); out[1] = (char)(0x80 | (cp & 0x3F)); return 2; }
+    if (cp < 0x10000) { out[0] = (char)(0xE0 | (cp >> 12)); out[1] = (char)(0x80 | ((cp >> 6) & 0x3F)); out[2] = (char)(0x80 | (cp & 0x3F)); return 3; }
+    out[0] = (char)(0xF0 | (cp >> 18)); out[1] = (char)(0x80 | ((cp >> 12) & 0x3F)); out[2] = (char)(0x80 | ((cp >> 6) & 0x3F)); out[3] = (char)(0x80 | (cp & 0x3F)); return 4;
+}
+static char* ql_str_mapcase(const char* s, int upper) {
+    size_t l = strlen(s);
+    char* r = malloc(l * 4 + 4);
+    size_t o = 0;
+    for (size_t i = 0; i < l; ) {
+        int cp = 0, sz = ql_u8dec(s + i, &cp);
+        cp = upper ? ql_upper_rune(cp) : ql_lower_rune(cp);
+        char tmp[4];
+        int n = ql_u8enc(cp, tmp);
+        memcpy(r + o, tmp, n); o += n; i += sz;
+    }
+    r[o] = 0;
+    return r;
+}
+char* ql_str_lower(const char* s) { return ql_str_mapcase(s, 0); }
+char* ql_str_upper(const char* s) { return ql_str_mapcase(s, 1); }
+char* ql_str_replace(const char* s, const char* old, const char* nw) {
+    size_t lo = strlen(old), ln = strlen(nw);
+    if (lo == 0) {
+        size_t l = strlen(s), o = 0;
+        char* r = malloc((l + 1) * (ln + 4) + 1);
+        for (size_t i = 0; i < l; ) {
+            memcpy(r + o, nw, ln); o += ln;
+            int sz = ql_u8seq((unsigned char)s[i]);
+            memcpy(r + o, s + i, sz); o += sz; i += sz;
+        }
+        memcpy(r + o, nw, ln); o += ln;
+        r[o] = 0;
+        return r;
+    }
+    size_t l = strlen(s), cap = l + 1, o = 0;
+    char* r = malloc(cap);
+    const char* p = s;
+    for (;;) {
+        const char* hit = strstr(p, old);
+        size_t seg = hit ? (size_t)(hit - p) : strlen(p);
+        if (o + seg + ln + 1 > cap) { cap = (o + seg + ln + 1) * 2; r = realloc(r, cap); }
+        memcpy(r + o, p, seg); o += seg;
+        if (!hit) break;
+        memcpy(r + o, nw, ln); o += ln;
+        p = hit + lo;
+    }
+    r[o] = 0;
+    return r;
+}
+static void ql_parse_err(const char* s, const char* what, int line) {
+    char msg[192];
+    snprintf(msg, sizeof msg, "ParseError: \"%s\" 不是合法%s", s, what);
+    ql_err_at(msg, line);
+}
+int ql_str_toint(const char* s, int line) {
+    const char* p = s;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\v' || *p == '\f' || *p == '\r') p++;
+    const char* q = p + strlen(p);
+    while (q > p && (q[-1] == ' ' || q[-1] == '\t' || q[-1] == '\n' || q[-1] == '\v' || q[-1] == '\f' || q[-1] == '\r')) q--;
+    char buf[64];
+    size_t n = (size_t)(q - p);
+    if (n == 0 || n >= sizeof buf) ql_parse_err(s, "整数", line);
+    memcpy(buf, p, n); buf[n] = 0;
+    char* end = 0;
+    long v = strtol(buf, &end, 10);
+    if (end == buf || *end != 0 || v < -2147483648L || v > 2147483647L) ql_parse_err(s, "整数", line);
+    return (int)v;
+}
+double ql_str_tofloat(const char* s, int line) {
+    const char* p = s;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\v' || *p == '\f' || *p == '\r') p++;
+    const char* q = p + strlen(p);
+    while (q > p && (q[-1] == ' ' || q[-1] == '\t' || q[-1] == '\n' || q[-1] == '\v' || q[-1] == '\f' || q[-1] == '\r')) q--;
+    char buf[128];
+    size_t n = (size_t)(q - p);
+    if (n == 0 || n >= sizeof buf) ql_parse_err(s, "浮点数", line);
+    memcpy(buf, p, n); buf[n] = 0;
+    char* end = 0;
+    double v = strtod(buf, &end);
+    if (end == buf || *end != 0) ql_parse_err(s, "浮点数", line);
+    return v;
+}
+
+/* ================= List 内建方法辅助（int 元素；与解释器 value.go 同语义） ================= */
+static int ql_cmp_int(const void* a, const void* b) {
+    int x = *(const int*)a, y = *(const int*)b;
+    return x < y ? -1 : (x > y ? 1 : 0);
+}
+void ql_list_int_sort(int* buf, int head, int tail) {
+    if (tail - head > 1) qsort(buf + head, tail - head, sizeof(int), ql_cmp_int);
+}
+/* List.toString()：[e0, e1, ...]（只含可见区间 head..tail） */
+char* ql_list_int_str(const int* buf, int head, int tail) {
+    size_t cap = 16, o = 0;
+    char* r = malloc(cap);
+    r[o++] = '[';
+    for (int i = head; i < tail; i++) {
+        char nb[16];
+        int n = snprintf(nb, sizeof nb, "%d", buf[i]);
+        if (i > head) {
+            if (o + 2 > cap) { cap *= 2; r = realloc(r, cap); }
+            r[o++] = ','; r[o++] = ' ';
+        }
+        if (o + (size_t)n + 2 > cap) { cap = (o + n + 2) * 2; r = realloc(r, cap); }
+        memcpy(r + o, nb, n); o += (size_t)n;
+    }
+    if (o + 2 > cap) { cap += 2; r = realloc(r, cap); }
+    r[o++] = ']'; r[o] = 0;
+    return r;
+}

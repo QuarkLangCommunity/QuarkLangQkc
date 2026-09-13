@@ -47,7 +47,7 @@ func cacheDir() string {
 
 // engineVersion 编译器/运行时代次：任何 cgen/宏展开行为变化都必须递增，
 // 避免 IR/二进制缓存返回旧引擎产物（本次踩坑：宏展开模式与 done-bool 修复被缓存吞掉）。
-const engineVersion = "7"
+const engineVersion = "8"
 
 // engineFingerprint 缓存键前缀：引擎代次 + 线程运行时指纹（运行时任何改动自动失效）。
 func engineFingerprint() string {
@@ -55,16 +55,83 @@ func engineFingerprint() string {
 	return engineVersion + "-" + hex.EncodeToString(h[:8])
 }
 
-// linkFlags 提取 IR 里的链接标记（"; qkc-link: -lm"），供 clang 追加外部库。
-func linkFlags(ir string) []string {
-	var out []string
+// linkLib 是一个 library 的链接候选（按优先级，每组是一串 clang 参数）。
+type linkLib struct {
+	name   string
+	groups [][]string
+}
+
+// parseLinkLibs 解析 IR 里的链接标记：
+//
+//	; qkc-link: <库名> => <候选参数> => <候选参数>
+//
+// 兼容旧格式（"; qkc-link: -lm"）。
+func parseLinkLibs(ir string) []linkLib {
+	var out []linkLib
 	for _, line := range strings.Split(ir, "\n") {
 		if !strings.HasPrefix(line, "; qkc-link:") {
 			continue
 		}
-		out = append(out, strings.Fields(strings.TrimPrefix(line, "; qkc-link:"))...)
+		rest := strings.TrimSpace(strings.TrimPrefix(line, "; qkc-link:"))
+		if rest == "" {
+			continue
+		}
+		parts := strings.Split(rest, "=>")
+		if len(parts) == 1 {
+			out = append(out, linkLib{name: rest, groups: [][]string{strings.Fields(rest)}})
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		var groups [][]string
+		for _, g := range parts[1:] {
+			if f := strings.Fields(strings.TrimSpace(g)); len(f) > 0 {
+				groups = append(groups, f)
+			}
+		}
+		if len(groups) == 0 {
+			continue
+		}
+		out = append(out, linkLib{name: name, groups: groups})
 	}
 	return out
+}
+
+// linkCombos 展开候选组合（每个库取一组，上限 8 组避免组合爆炸）。
+func linkCombos(libs []linkLib) [][]string {
+	combos := [][]string{{}}
+	for _, l := range libs {
+		var next [][]string
+		for _, c := range combos {
+			for _, g := range l.groups {
+				nc := append(append([]string{}, c...), g...)
+				next = append(next, nc)
+				if len(next) >= 8 {
+					break
+				}
+			}
+			if len(next) >= 8 {
+				break
+			}
+		}
+		combos = next
+	}
+	return combos
+}
+
+// linkDiag 生成链接失败的明确诊断（库名 + 尝试过的链接参数）。
+func linkDiag(libs []linkLib) string {
+	if len(libs) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, l := range libs {
+		var gs []string
+		for _, g := range l.groups {
+			gs = append(gs, strings.Join(g, " "))
+		}
+		parts = append(parts, fmt.Sprintf("%s（尝试过：%s）", l.name, strings.Join(gs, " / ")))
+	}
+	return "library FFI 链接失败：" + strings.Join(parts, "；")
 }
 
 func srcHash(path string) (string, error) {
@@ -161,13 +228,9 @@ func main() {
 		os.Exit(1)
 	}
 	tmp.Close()
-	clangArgs := []string{tmp.Name(), runtimeSrc(), "-o", binPath, "-Wno-override-module"}
-	// POSIX 载体：线程运行时需 -pthread（Windows 分支用 CreateThread 版运行时不加）
-	if runtime.GOOS != "windows" {
-		clangArgs = append(clangArgs, "-pthread")
-	}
-	// library FFI：IR 里的 "; qkc-link: -lm" 标记 → 追加链接参数
-	clangArgs = append(clangArgs, linkFlags(ir)...)
+	// library FFI：IR 里的 "; qkc-link: <库名> => <候选参数>" 标记 → 逐组尝试链接参数
+	libs := parseLinkLibs(ir)
+	combos := linkCombos(libs)
 	// LTO 降级：默认含 -flto=thin 失败则去掉重试（仅当用户未显式指定 QUARK_CFLAGS）
 	attempts := [][]string{strings.Fields(cflags)}
 	if os.Getenv("QUARK_CFLAGS") == "" {
@@ -176,21 +239,30 @@ func main() {
 	var lastOut string
 	ok := false
 	for _, cf := range attempts {
-		args := []string{tmp.Name(), runtimeSrc(), "-o", binPath, "-Wno-override-module"}
-		if runtime.GOOS != "windows" {
-			args = append(args, "-pthread")
+		for _, lf := range combos {
+			args := []string{tmp.Name(), runtimeSrc(), "-o", binPath, "-Wno-override-module"}
+			// POSIX 载体：线程运行时需 -pthread（Windows 分支用 CreateThread 版运行时不加）
+			if runtime.GOOS != "windows" {
+				args = append(args, "-pthread")
+			}
+			args = append(args, lf...)
+			args = append(args, cf...)
+			cmd := exec.Command("clang", args...)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				ok = true
+				break
+			} else {
+				lastOut = string(out)
+			}
 		}
-		args = append(args, linkFlags(ir)...)
-		args = append(args, cf...)
-		cmd := exec.Command("clang", args...)
-		if out, err := cmd.CombinedOutput(); err == nil {
-			ok = true
+		if ok {
 			break
-		} else {
-			lastOut = string(out)
 		}
 	}
 	if !ok {
+		if diag := linkDiag(libs); diag != "" {
+			fmt.Fprintln(os.Stderr, "error:", diag)
+		}
 		fmt.Fprintln(os.Stderr, "clang:", lastOut)
 		os.Exit(1)
 	}

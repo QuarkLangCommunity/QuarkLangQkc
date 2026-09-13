@@ -130,6 +130,68 @@ func exprPos(x lang.Expr, fallback lang.Pos) lang.Pos {
 
 // ---------- 声明表 ----------
 
+// fnItem 是待 lower 的普通函数（声明 + IR 名）。
+type fnItem struct {
+	decl *lang.FuncDecl
+	ir   string
+}
+
+// retOf 返回声明的返回类型（缺省 void）。
+func retOf(f *lang.FuncDecl) string {
+	if f.Ret == "" {
+		return "void"
+	}
+	return f.Ret
+}
+
+// mangleOverload 生成重载的 IR 名：add$int$String（参数类型按 LLVM 安全名拼接）。
+func mangleOverload(name string, params []lang.Param) string {
+	if len(params) == 0 {
+		return name + "$void"
+	}
+	parts := make([]string, 0, len(params))
+	for _, p := range params {
+		parts = append(parts, tyName(strings.TrimSpace(p.Type)))
+	}
+	return name + "$" + strings.Join(parts, "$")
+}
+
+// kindOf 把语言类型粗分到「类型种类」，用于重载打分
+// （与 internal/lang bestMatchT 的 Kind 比较同粒度：struct 之间、接口之间同 kind）。
+func (l *lowerer) kindOf(t string) string {
+	switch t {
+	case "int", "long":
+		return "int"
+	case "float":
+		return "float"
+	case "bool":
+		return "bool"
+	case "String":
+		return "string"
+	case "void":
+		return "void"
+	case "null":
+		return "null"
+	case "pointer":
+		return "ptr"
+	case "?":
+		return "?"
+	}
+	if strings.HasPrefix(t, "List<") {
+		return "list"
+	}
+	if strings.HasPrefix(t, "HashTable<") {
+		return "table"
+	}
+	if l.isStructType(t) {
+		return "struct"
+	}
+	if l.isIfaceType(t) {
+		return "interface"
+	}
+	return "?"
+}
+
 // methodInfo 是 impl/space 里的一个方法。
 type methodInfo struct {
 	fn      *lang.FuncDecl
@@ -148,9 +210,12 @@ type lowerer struct {
 	mainLines int      // 主文件行数（import 合并前的 src 行数）
 	imported  bool
 
-	fns      map[string]*lang.FuncDecl // 非泛型、非 main 的普通函数
+	fns      map[string]*lang.FuncDecl // 非泛型、非 main 的普通函数（唯一名字）
 	fnOrder  []string
-	fnRet    map[string]string // lang 函数名 → 返回类型
+	fnRet    map[string]string         // IR 函数名 → 返回类型
+	ovl      map[string][]*lang.FuncDecl // 重载函数：lang 名 → 候选声明
+	fnIR     map[*lang.FuncDecl]string   // 声明 → IR 名（重载按参数类型修饰）
+	fnList   []fnItem                    // 待 lower 的普通函数（声明 + IR 名）
 	generics map[string]*lang.FuncDecl
 	structs  map[string]*lang.StructDecl // 具名 struct（含泛型模板）
 	ifaces   map[string]*lang.InterfaceDecl
@@ -185,6 +250,8 @@ func lowerProgram(prog *lang.Program, file, src string) (*lowered, error) {
 		imported:  len(prog.Imports) > 0,
 		fns:       map[string]*lang.FuncDecl{},
 		fnRet:     map[string]string{},
+		ovl:       map[string][]*lang.FuncDecl{},
+		fnIR:      map[*lang.FuncDecl]string{},
 		generics:  map[string]*lang.FuncDecl{},
 		structs:   map[string]*lang.StructDecl{},
 		ifaces:    map[string]*lang.InterfaceDecl{},
@@ -270,18 +337,19 @@ func (l *lowerer) collect() error {
 		l.libs[ld.Name] = ld
 	}
 
-	// 函数名收集（重载/重名 → 编译器无法区分，明确报错）
-	seen := map[string]lang.Pos{}
+	// 函数名收集：唯一名字直接用原名；重载按「参数类型」名字修饰
+	// （add$int$int / add$String$String），调用点按 bestMatch 语义解析。
+	groups := map[string][]*lang.FuncDecl{}
+	var order []string
 	var mainFn *lang.FuncDecl
 	for _, f := range l.prog.Funcs {
 		if f.Name == "sum" || f.Name == "clock" {
 			return l.errf(f.Pos, "暂未支持重定义内置函数 %q（编译器将 %s 视为内建）", f.Name, f.Name)
 		}
-		if p, dup := seen[f.Name]; dup {
-			return l.errf(f.Pos, "暂未支持函数重载 %q（首次定义于 %d:%d，编译器后端未实现）", f.Name, p.Line, p.Col)
-		}
-		seen[f.Name] = f.Pos
 		if len(f.TypeParams) > 0 {
+			if _, dup := l.generics[f.Name]; dup {
+				return l.errf(f.Pos, "暂未支持泛型函数重载 %q（编译器要求泛型函数名唯一）", f.Name)
+			}
 			l.generics[f.Name] = f
 			continue
 		}
@@ -289,21 +357,44 @@ func (l *lowerer) collect() error {
 			mainFn = f
 			continue
 		}
-		ret := f.Ret
-		if ret == "" {
-			ret = "void"
+		if _, seen := groups[f.Name]; !seen {
+			order = append(order, f.Name)
 		}
-		l.fns[f.Name] = f
-		l.fnRet[f.Name] = ret
-		l.fnOrder = append(l.fnOrder, f.Name)
+		groups[f.Name] = append(groups[f.Name], f)
+	}
+	for _, name := range order {
+		defs := groups[name]
+		if _, isGen := l.generics[name]; isGen {
+			return l.errf(defs[0].Pos, "暂未支持泛型函数与普通函数同名 %q（编译器要求二选一）", name)
+		}
+		if len(defs) == 1 {
+			f := defs[0]
+			l.fns[name] = f
+			l.fnIR[f] = name
+			l.fnRet[name] = retOf(f)
+			l.fnList = append(l.fnList, fnItem{decl: f, ir: name})
+			continue
+		}
+		sigs := map[string]bool{}
+		for _, f := range defs {
+			ir := mangleOverload(name, f.Params)
+			if sigs[ir] {
+				return l.errf(f.Pos, "重复的函数定义 %s（参数类型签名相同）", ir)
+			}
+			sigs[ir] = true
+			l.ovl[name] = append(l.ovl[name], f)
+			l.fnIR[f] = ir
+			l.fnRet[ir] = retOf(f)
+			l.fnList = append(l.fnList, fnItem{decl: f, ir: ir})
+		}
 	}
 	if mainFn == nil {
 		return l.errAt("未找到 main 函数（正典入口：fn main(IOStream io) { ... }）")
 	}
 
 	// 先 lower 普通函数（签名/语句/表达式的支持性检查都在这里完成）
-	for _, name := range l.fnOrder {
-		fd, err := l.lowerFunc(l.fns[name], name, "", "", nil)
+	for _, item := range l.fnList {
+		fd, err := l.lowerFunc(item.decl, item.ir, "", "", nil)
 		if err != nil {
 			return err
 		}
@@ -521,7 +612,11 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		return nil // 接口类型：vtable 分发（Phase C）
 	}
 	switch t {
-	case "long", "char":
+	case "long":
+		return nil // FFI 64 位通道（i64）；语言层变量/形参/返回均可用
+	case "pointer":
+		return nil // FFI 不透明句柄（i8*，可空）
+	case "char":
 		return l.errf(pos, "暂未支持 %s 类型 %q（编译器暂未 lower）", what, t)
 	case "thread", "Task", "Channel", "channel":
 		return nil // taskm：thread = pid(i32)，Channel = i8* 句柄
@@ -545,7 +640,7 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 // retOK 判断返回类型是否可 lower。
 func (l *lowerer) retOK(t string) bool {
 	switch t {
-	case "int", "bool", "float", "String", "void":
+	case "int", "bool", "float", "String", "long", "pointer", "void":
 		return true
 	}
 	return l.isStructType(t) || l.isIfaceType(t)
@@ -934,7 +1029,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		return nil, err
 	}
 	switch t {
-	case "int", "bool", "float", "String", "thread", "Channel", "channel":
+	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel":
 		if st.Init == nil {
 			if err := fc.declare(st.Name, t, st.Pos); err != nil {
 				return nil, err
@@ -1043,7 +1138,7 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 			return nil, err
 		}
 		switch t := fc.typeOf(a); t {
-		case "int", "String", "bool", "float", "?":
+		case "int", "String", "bool", "float", "long", "pointer", "null", "?":
 		default:
 			return nil, fc.l.errf(exprPos(a, call.Pos), "暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String）", t)
 		}
@@ -1145,7 +1240,7 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 	case *lang.BoolLit:
 		return &expr{kind: kBool, typ: "bool", b: e.V}, nil
 	case *lang.NullLit:
-		return nil, l.errf(e.Pos, "暂未支持 null（编译器暂只支持标量/struct/List<int>）")
+		return &expr{kind: kNull, typ: "null"}, nil
 
 	case *lang.Ident:
 		t, ok := fc.lookup(e.Name)
@@ -1252,8 +1347,15 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.line = pos.Line
 		return x, nil
 	case "%":
+		// float 取模：解释器在运行期报 TypeError（编译路径在运行期同样报错，见 cgen 的 float % 分支）
 		if lt == "float" || rt == "float" {
-			return nil, l.errf(pos, "暂未支持 float 取模（解释器在运行期报 TypeError: '%%' requires int operands）")
+			x, err := fc.binary(e, e.Op)
+			if err != nil {
+				return nil, err
+			}
+			x.typ = "float"
+			x.line = pos.Line
+			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
 			return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）", lt, rt, e.Op)
@@ -1287,6 +1389,19 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if lt == "String" && rt == "String" {
+			x, err := fc.binary(e, e.Op)
+			if err != nil {
+				return nil, err
+			}
+			x.kind = kCmp
+			x.typ = "bool"
+			return x, nil
+		}
+		// 指针 / null：引用比较（解释器 Value 语义：同一指针相等；null 即零值）
+		if isPtrType(lt) || isPtrType(rt) {
+			if e.Op != "==" && e.Op != "!=" {
+				return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）", lt, rt, e.Op)
+			}
 			x, err := fc.binary(e, e.Op)
 			if err != nil {
 				return nil, err
@@ -1421,6 +1536,13 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 		}
 		return &expr{kind: kAndOr, op: "!", typ: "bool", l: inner}, nil
 	case "*":
+		if elem, ok := listElem(t); ok && elem == "int" {
+			recv, err := fc.expr(e.X)
+			if err != nil {
+				return nil, err
+			}
+			return &expr{kind: kMethod, typ: "int", line: e.Pos.Line, method: &methodExpr{recv: recv, name: "peek"}}, nil
+		}
 		return nil, l.errf(e.Pos, "暂未支持解引用 *（指针仅解释器可用）")
 	}
 	return nil, l.errf(e.Pos, "暂未支持一元运算符 %q", e.Op)
@@ -1459,21 +1581,118 @@ func (fc *funcCtx) callNamed(name string, pos lang.Pos, c *lang.CallExpr) (*expr
 	if _, isGeneric := l.generics[name]; isGeneric {
 		return fc.callGeneric(name, c, pos)
 	}
-	fd, ok := l.fns[name]
-	if !ok {
-		return nil, l.errf(pos, "未知函数 %q（编译器只支持同一程序内定义的函数）", name)
+	irName, fd, err := fc.resolveFunc(name, c.Args, pos)
+	if err != nil {
+		return nil, err
 	}
 	if len(c.Args) != len(fd.Params) {
 		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", name, len(fd.Params), len(c.Args))
 	}
-	if l.nilFns[name] && fc.discarded != c {
+	if l.nilFns[irName] && fc.discarded != c {
 		return nil, l.errf(pos, "暂未支持在表达式中使用含 log 的函数 %s 的返回值（解释器返回 nil）", name)
 	}
 	args, err := fc.callArgs(c, fd.Params)
 	if err != nil {
 		return nil, err
 	}
-	return &expr{kind: kCall, typ: l.fnRet[name], line: pos.Line, call: &callExpr{name: name, args: args}}, nil
+	return &expr{kind: kCall, typ: l.fnRet[irName], line: pos.Line, call: &callExpr{name: irName, args: args}}, nil
+}
+
+// resolveGenerator 解析 sum 的生成器（重载中取唯一的 int(int) 候选）。
+func (l *lowerer) resolveGenerator(name string, pos lang.Pos) (*lang.FuncDecl, string, error) {
+	if cands, ok := l.ovl[name]; ok {
+		var hit *lang.FuncDecl
+		for _, f := range cands {
+			if len(f.Params) == 1 && f.Params[0].Type == "int" && retOf(f) == "int" {
+				if hit != nil {
+					return nil, "", l.errf(pos, "sum 生成器 %q 有多个 int(%s) 重载，无法确定", name, name)
+				}
+				hit = f
+			}
+		}
+		if hit == nil {
+			return nil, "", l.errf(pos, "sum 生成器 %q 没有 int(%s) 重载", name, name)
+		}
+		return hit, l.fnIR[hit], nil
+	}
+	gfn, ok := l.fns[name]
+	if !ok {
+		return nil, "", l.errf(pos, "未知生成器函数 %q（编译器只支持同一程序内定义且无泛型的函数）", name)
+	}
+	return gfn, name, nil
+}
+
+// resolveRunnerTarget 解析 merge 的目标函数（重载中取参数个数匹配的唯一候选）。
+func (l *lowerer) resolveRunnerTarget(name string, nargs int, pos lang.Pos) (*lang.FuncDecl, string, error) {
+	cands, ok := l.ovl[name]
+	if !ok {
+		fn, ok := l.fns[name]
+		if !ok {
+			return nil, "", l.errf(pos, "未知函数 %q（编译器只支持同一程序内定义的函数）", name)
+		}
+		return fn, name, nil
+	}
+	var hit *lang.FuncDecl
+	for _, f := range cands {
+		if len(f.Params) == nargs {
+			if hit != nil {
+				return nil, "", l.errf(pos, "merge 目标 %q 有多个同参数个数的重载，无法确定", name)
+			}
+			hit = f
+		}
+	}
+	if hit == nil {
+		return nil, "", l.errf(pos, "merge 目标 %q 没有 %d 个参数的重载", name, nargs)
+	}
+	return hit, l.fnIR[hit], nil
+}
+
+// resolveFunc 解析函数调用（含重载）：返回 IR 名与选中的声明。
+// 打分与 internal/lang bestMatchT 一致：同 kind +10 / 可赋值 +5 / 未知 +1，
+// 参数个数必须相同，分数最高者胜（并列取先声明者）。
+func (fc *funcCtx) resolveFunc(name string, args []lang.Expr, pos lang.Pos) (string, *lang.FuncDecl, error) {
+	l := fc.l
+	cands, isOvl := l.ovl[name]
+	if !isOvl {
+		fd, ok := l.fns[name]
+		if !ok {
+			return "", nil, l.errf(pos, "未知函数 %q（编译器只支持同一程序内定义的函数）", name)
+		}
+		return name, fd, nil
+	}
+	var best *lang.FuncDecl
+	bestScore := -1
+	for _, fn := range cands {
+		if len(fn.Params) != len(args) {
+			continue
+		}
+		score := 0
+		ok := true
+		for i, p := range fn.Params {
+			pt := strings.TrimSpace(p.Type)
+			at := fc.typeOf(args[i])
+			switch {
+			case l.kindOf(at) == l.kindOf(pt):
+				score += 10
+			case fc.assignable(at, pt):
+				score += 5
+			case at == "?" || pt == "?":
+				score += 1
+			default:
+				ok = false
+			}
+			if !ok {
+				break
+			}
+		}
+		if ok && score > bestScore {
+			best, bestScore = fn, score
+		}
+	}
+	if best == nil {
+		return "", nil, l.errf(pos, "未找到匹配重载 %q（参数个数/类型不匹配）", name)
+	}
+	return l.fnIR[best], best, nil
 }
 
 // callArgs lower 实参列表并做可赋值性检查（int → float 允许）。
@@ -1507,17 +1726,38 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 	if !ok {
 		return nil, l.errf(exprPos(c.Args[0], pos), "暂未支持该 sum 生成器（编译器要求生成器是具名函数）")
 	}
-	if _, isGen := l.generics[gid.Name]; isGen {
-		return nil, l.errf(gid.Pos, "暂未支持泛型实例化 %s（解释器可用）", gid.Name)
+	if gfn, isGen := l.generics[gid.Name]; isGen {
+		// 泛型生成器：sum 要求 int(int)，按 T=int 单态化
+		if len(gfn.TypeParams) != 1 || len(gfn.Params) != 1 ||
+			strings.TrimSpace(gfn.Params[0].Type) != gfn.TypeParams[0] ||
+			strings.TrimSpace(gfn.Ret) != gfn.TypeParams[0] {
+			return nil, l.errf(gid.Pos, "暂未支持该泛型生成器 %s（编译器要求 fn<T> %s(T) T）", gid.Name, gid.Name)
+		}
+		irName, err := l.instantiateFunc(gid.Name, gfn, map[string]string{gfn.TypeParams[0]: "int"})
+		if err != nil {
+			return nil, err
+		}
+		args := []*expr{{kind: kIdent, typ: "function", s: irName}}
+		for _, a := range c.Args[1:] {
+			if t := fc.typeOf(a); t != "int" && t != "?" {
+				return nil, l.errf(exprPos(a, pos), "暂未支持 sum 的 %s 参数（需要 int）", t)
+			}
+			x, err := fc.expr(a)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, x)
+		}
+		return &expr{kind: kCall, typ: "int", call: &callExpr{name: "sum", args: args}}, nil
 	}
-	gfn, ok := l.fns[gid.Name]
-	if !ok {
-		return nil, l.errf(gid.Pos, "未知生成器函数 %q（编译器只支持同一程序内定义且无泛型的函数）", gid.Name)
+	gfn, gIR, err := l.resolveGenerator(gid.Name, gid.Pos)
+	if err != nil {
+		return nil, err
 	}
-	if len(gfn.Params) != 1 || gfn.Params[0].Type != "int" || l.fnRet[gid.Name] != "int" {
+	if len(gfn.Params) != 1 || gfn.Params[0].Type != "int" || l.fnRet[gIR] != "int" {
 		return nil, l.errf(gid.Pos, "暂未支持生成器 %q（编译器要求 int %s(int)）", gid.Name, gid.Name)
 	}
-	args := []*expr{{kind: kIdent, typ: "function", s: gid.Name}}
+	args := []*expr{{kind: kIdent, typ: "function", s: gIR}}
 	for _, a := range c.Args[1:] {
 		if t := fc.typeOf(a); t != "int" && t != "?" {
 			return nil, l.errf(exprPos(a, pos), "暂未支持 sum 的 %s 参数（需要 int）", t)
@@ -1548,7 +1788,14 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			}
 			return &expr{kind: kToString, typ: "String", l: recv}, nil
 		case "List<int>":
-			return nil, l.errf(me.Pos, "暂未支持 List.toString()（后端未 lower 列表转字符串，解释器可用）")
+			if len(c.Args) != 0 {
+				return nil, l.errf(me.Pos, "toString() 不接受参数")
+			}
+			id, ok := me.X.(*lang.Ident)
+			if !ok {
+				return nil, l.errf(me.Pos, "暂未支持该形式的方法调用（接收者必须是变量）")
+			}
+			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "toString"}}, nil
 		}
 	}
 	// List 内建方法
@@ -1587,10 +1834,37 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List<int>.append 的 %s 参数（需要 int）", t)
 			}
 			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "append", args: args}}, nil
-		case "head", "tail", "next", "reset", "appendAll", "__sort__":
-			return nil, l.errf(me.Pos, "暂未支持 List.%s()（编译器后端未 lower，解释器可用）", me.Name)
+		case "head", "tail", "next":
+			if len(c.Args) != 0 {
+				return nil, l.errf(me.Pos, "List.%s() 不接受参数", me.Name)
+			}
+			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: me.Name}}, nil
+		case "reset":
+			if len(c.Args) != 0 {
+				return nil, l.errf(me.Pos, "List.reset() 不接受参数")
+			}
+			return &expr{kind: kMethod, typ: "List<int>", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "reset"}}, nil
+		case "appendAll":
+			if len(c.Args) != 1 {
+				return nil, l.errf(me.Pos, "List.appendAll(l2) 需要 1 个参数")
+			}
+			if t := fc.typeOf(c.Args[0]); t != "List<int>" && t != "?" {
+				return nil, l.errf(exprPos(c.Args[0], me.Pos), "List.appendAll 需要 List<int>，got %s", t)
+			}
+			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "appendAll", args: args}}, nil
+		case "__sort__":
+			if len(c.Args) != 0 {
+				return nil, l.errf(me.Pos, "List.__sort__() 不接受参数")
+			}
+			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: &expr{kind: kIdent, typ: rt, s: id.Name}, name: "__sort__"}}, nil
 		}
-		return nil, l.errf(me.Pos, "暂未支持 List 方法 %q（编译器支持 size()/get(i)/append(v)）", me.Name)
+		return nil, l.errf(me.Pos, "暂未支持 List 方法 %q（编译器支持 size/get/append/head/tail/next/reset/appendAll/toString/__sort__）", me.Name)
+	}
+	// String 内建方法（rune/字节语义与解释器一致，运行时在 qthreads.c）
+	if rt == "String" {
+		if x, handled, err := fc.strCall(c, me); handled || err != nil {
+			return x, err
+		}
 	}
 	// taskm 全局 / thread 变量 / Channel 变量
 	if id, ok := me.X.(*lang.Ident); ok {
@@ -1814,6 +2088,102 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 	return &expr{kind: kStructLit, typ: typ, sl: &structLit{typ: typ, values: values}}, nil
 }
 
+// strCall lower String 内建方法（SYNTAX.md E4）。未 lower 的返回 handled=false。
+func (fc *funcCtx) strCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, bool, error) {
+	l := fc.l
+	recv := func() lang.Expr { return me.X }
+	// 参数 lower 辅助
+	strArg := func(i int) (*expr, error) {
+		a := c.Args[i]
+		if t := fc.typeOf(a); t != "String" {
+			return nil, l.errf(exprPos(a, me.Pos), "%s 需要 String 参数，got %s", me.Name, t)
+		}
+		return fc.expr(a)
+	}
+	intArg := func(i int) (*expr, error) {
+		a := c.Args[i]
+		if t := fc.typeOf(a); t != "int" && t != "?" {
+			return nil, l.errf(exprPos(a, me.Pos), "%s 需要 int 参数，got %s", me.Name, t)
+		}
+		return fc.expr(a)
+	}
+	line := &expr{kind: kInt, typ: "int", i: int64(me.Pos.Line)}
+	call := func(name, typ string, args ...*expr) (*expr, bool, error) {
+		rx, err := fc.expr(recv())
+		if err != nil {
+			return nil, true, err
+		}
+		return &expr{kind: kCall, typ: typ, line: me.Pos.Line,
+			call: &callExpr{name: name, args: append([]*expr{rx}, args...)}}, true, nil
+	}
+	switch me.Name {
+	case "size":
+		return call("ql_str_size", "int")
+	case "contains", "startsWith", "endsWith":
+		a, err := strArg(0)
+		if err != nil {
+			return nil, true, err
+		}
+		name := map[string]string{"contains": "ql_str_contains", "startsWith": "ql_str_startswith", "endsWith": "ql_str_endswith"}[me.Name]
+		return call(name, "bool", a)
+	case "indexOf":
+		a, err := strArg(0)
+		if err != nil {
+			return nil, true, err
+		}
+		return call("ql_str_indexof", "int", a)
+	case "substring":
+		start, err := intArg(0)
+		if err != nil {
+			return nil, true, err
+		}
+		if len(c.Args) == 2 {
+			end, err := intArg(1)
+			if err != nil {
+				return nil, true, err
+			}
+			return call("ql_str_sub", "String", start, end, line)
+		}
+		// 单参数：end = rune 数（解释器语义），先取 size
+		rx, err := fc.expr(recv())
+		if err != nil {
+			return nil, true, err
+		}
+		sz := &expr{kind: kCall, typ: "int", call: &callExpr{name: "ql_str_size", args: []*expr{rx}}}
+		return call("ql_str_sub", "String", start, sz, line)
+	case "trim", "trimLeft", "trimRight":
+		mode := map[string]int64{"trim": 0, "trimLeft": 1, "trimRight": 2}[me.Name]
+		return call("ql_str_trim", "String", &expr{kind: kInt, typ: "int", i: mode})
+	case "toLower":
+		return call("ql_str_lower", "String")
+	case "toUpper":
+		return call("ql_str_upper", "String")
+	case "replace":
+		a, err := strArg(0)
+		if err != nil {
+			return nil, true, err
+		}
+		b, err := strArg(1)
+		if err != nil {
+			return nil, true, err
+		}
+		return call("ql_str_replace", "String", a, b)
+	case "charAt":
+		i, err := intArg(0)
+		if err != nil {
+			return nil, true, err
+		}
+		return call("ql_str_charat", "String", i, line)
+	case "toInt":
+		return call("ql_str_toint", "int", line)
+	case "toFloat":
+		return call("ql_str_tofloat", "float", line)
+	case "split":
+		return nil, true, l.errf(me.Pos, "暂未支持 String.split()（返回 List<String>，编译器需要 List<T> 泛型容器）")
+	}
+	return nil, false, nil
+}
+
 // ---------- 方法表查询 ----------
 
 // hasMethod 判断类型（基类型）是否声明了该方法名。
@@ -1911,6 +2281,20 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	if from == "int" && to == "float" {
 		return true
 	}
+	if from == "int" && to == "long" {
+		return true
+	}
+	if from == "null" && (to == "pointer" || to == "String" || fc.l.isIfaceType(to)) {
+		return true
+	}
+	if from == "pointer" && to == "pointer" {
+		return true
+	}
+	// long → int：解释器 int 变量保留 64 位（只有算术/比较才按 32 位截断），
+	// 编译器不静默截断，要求显式改用 long 变量。
+	if from == "long" && to == "int" {
+		return false
+	}
 	// 接口：具体 struct / 接口 → 接口（结构化满足由 typecheck 在赋值/传参处校验）
 	if fc.l.isIfaceType(to) && (fc.l.isStructType(from) || fc.l.isIfaceType(from)) {
 		return true
@@ -1919,7 +2303,10 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	return false
 }
 
-func numLike(t string) bool { return t == "int" || t == "float" || t == "?" }
+func numLike(t string) bool { return t == "int" || t == "float" || t == "long" || t == "?" }
+
+// isPtrType 判断是否是 FFI 不透明指针 / null（i8* 引用比较）。
+func isPtrType(t string) bool { return t == "pointer" || t == "null" }
 
 // numResult 返回数值运算结果类型（有 float 则 float）。
 func numResult(a, b string) string {
@@ -1929,6 +2316,7 @@ func numResult(a, b string) string {
 	if a == "?" || b == "?" {
 		return "?"
 	}
+	// long 参与算术：解释器 wrapI32（32 位环绕），结果按 int 处理
 	return "int"
 }
 
@@ -2017,6 +2405,11 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 		return "?"
 	case *lang.UnOp:
 		switch e.Op {
+		case "*":
+			if elem, ok := listElem(fc.typeOf(e.X)); ok {
+				return elem
+			}
+			return "?"
 		case "-":
 			t := fc.typeOf(e.X)
 			if l.isStructType(t) {
@@ -2067,10 +2460,28 @@ func (fc *funcCtx) callType(e *lang.CallExpr) string {
 		}
 		if elem, ok := listElem(rt); ok && elem == "int" {
 			switch me.Name {
-			case "size", "get":
+			case "size", "get", "head", "tail", "next":
 				return "int"
-			case "append":
+			case "append", "appendAll", "__sort__":
 				return "void"
+			case "reset":
+				return rt
+			case "toString":
+				return "String"
+			}
+		}
+		if rt == "String" {
+			switch me.Name {
+			case "size", "indexOf", "toInt":
+				return "int"
+			case "contains", "startsWith", "endsWith":
+				return "bool"
+			case "substring", "trim", "trimLeft", "trimRight", "toLower", "toUpper", "replace", "charAt":
+				return "String"
+			case "toFloat":
+				return "float"
+			case "split":
+				return "List<String>"
 			}
 		}
 		if id, ok := me.X.(*lang.Ident); ok {
@@ -2148,6 +2559,13 @@ func (fc *funcCtx) callType(e *lang.CallExpr) string {
 		}
 		return ret
 	}
+	if _, isOvl := l.ovl[id.Name]; isOvl {
+		_, fd, err := fc.resolveFunc(id.Name, e.Args, e.Pos)
+		if err != nil {
+			return "?"
+		}
+		return retOf(fd)
+	}
 	if ret, ok := l.fnRet[id.Name]; ok {
 		return ret
 	}
@@ -2210,10 +2628,10 @@ func (l *lowerer) ffiLangType(t string, pos lang.Pos) (string, error) {
 		return "String", nil
 	}
 	if strings.TrimSpace(t) == "pointer" {
-		return "", l.errf(pos, "暂未支持 library FFI 的 pointer 参数/返回（不透明句柄仅解释器可用）")
+		return "pointer", nil // 不透明句柄（void*）：i8*，可空、可往返
 	}
 	if t == "long" {
-		return "", l.errf(pos, "暂未支持 library FFI 的 long 参数/返回（解释器为 64 位，编译器未 lower）")
+		return "long", nil // 64 位整数通道（i64）
 	}
 	return "", l.errf(pos, "暂未支持 library FFI 的类型 %q", t)
 }
@@ -2235,12 +2653,14 @@ func (l *lowerer) libRetType(libName, method string) string {
 		switch t {
 		case "cbool":
 			return "bool"
-		case "f32":
-			return "float"
-		case "double":
+		case "f32", "double":
 			return "float"
 		case "void":
 			return "void"
+		case "long":
+			return "long"
+		case "pointer":
+			return "pointer"
 		}
 		return t
 	}
@@ -2304,6 +2724,10 @@ func (fc *funcCtx) libCall(c *lang.CallExpr, me *lang.MemberExpr, libName string
 		vis = "float"
 	case "double":
 		vis = "float"
+	case "long":
+		vis = "long"
+	case "pointer":
+		vis = "pointer"
 	}
 	if vis == "void" {
 		return &expr{kind: kCall, typ: "void", call: &callExpr{name: fn.Name, args: args}}, nil
@@ -2314,7 +2738,7 @@ func (fc *funcCtx) libCall(c *lang.CallExpr, me *lang.MemberExpr, libName string
 // ffiArgOK 判断 FFI 形参类型是否可 lower。
 func (fc *funcCtx) ffiArgOK(t string) bool {
 	switch t {
-	case "int", "cbool", "f32", "double", "String":
+	case "int", "cbool", "f32", "double", "long", "pointer", "String":
 		return true
 	}
 	return false
@@ -2327,13 +2751,18 @@ func (fc *funcCtx) ffiAssignable(from, to string) bool {
 	}
 	switch to {
 	case "int":
+		// long → int 形参：位置参数按 C int 传递（libffi 亦按 32 位截断）
 		return from == "int" || from == "long"
+	case "long":
+		return from == "int" || from == "long"
+	case "pointer":
+		return from == "pointer" || from == "null" || from == "?"
 	case "cbool":
 		return from == "bool" || from == "int"
 	case "f32", "double":
 		return from == "int" || from == "float" || from == "double" || from == "f32"
 	case "String":
-		return from == "String"
+		return from == "String" || from == "null"
 	}
 	return false
 }

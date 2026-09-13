@@ -1,0 +1,20 @@
+// E5：List 内建方法（滚动双游标；get(i) 与 l[i] 同义；*l 取头不消费）
+fn main(IOStream io) {
+    List<int> l = [3, 1, 2];
+    l.__sort__();
+    io.println(l.toString());
+    io.println(l.size(), l.head(), l.tail());
+    io.println(l.next(), l.head());
+    l.reset();
+    io.println(l.head(), l.next(), l.size());
+    List<int> m = [9, 8];
+    List<int> k = [1];
+    k.appendAll(m);
+    io.println(k.toString(), m.size());
+    List<int> e = [];
+    io.println(e.toString(), e.size());
+    io.println(*l);
+    io.println(l.get(0), l[1]);
+    l[1] = 42;
+    io.println(l.toString());
+}

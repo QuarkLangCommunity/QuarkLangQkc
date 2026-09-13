@@ -1,0 +1,25 @@
+// FFI long（i64）与 pointer（i8* 不透明句柄）：malloc/memset/free 往返 + strlen 计长
+library libc {
+    fn malloc(long n) pointer;
+    fn free(pointer p) void;
+    fn memset(pointer p, int c, long n) pointer;
+    fn strlen(String s) long;
+}
+fn main(IOStream io) {
+    pointer p = libc.malloc(16);
+    pointer q = libc.memset(p, 65, 4);
+    long n = libc.strlen("hello");
+    io.println(n);
+    io.println(p == q);
+    io.println(p != null);
+    io.println(q != null);
+    pointer z;
+    io.println(z == null, z != null);
+    long m = libc.strlen("hello world");
+    io.println(m);
+    pointer big = libc.malloc(m);
+    io.println(big != null);
+    libc.free(p);
+    libc.free(big);
+    io.println("done");
+}

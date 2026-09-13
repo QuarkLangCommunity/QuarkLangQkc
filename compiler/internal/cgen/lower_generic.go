@@ -67,7 +67,7 @@ func (fc *funcCtx) callGeneric(name string, c *lang.CallExpr, pos lang.Pos) (*ex
 	}
 	params := make([]lang.Param, len(fn.Params))
 	for i, p := range fn.Params {
-		params[i] = lang.Param{Name: p.Name, Type: substType(p.Type, sub), Pos: p.Pos}
+		params[i] = lang.Param{Name: p.Name, Type: substType(p.Type, sub), Decor: p.Decor, Pos: p.Pos}
 	}
 	args, err := fc.callArgs(c, params)
 	if err != nil {

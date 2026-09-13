@@ -352,6 +352,87 @@ func TestPhaseCGenerics(t *testing.T) {
 	}
 }
 
+// String / List 内建方法：语义运行时在 qthreads.c（UTF-8 感知），lli 无法解析，
+// 这里校验 IR 里确实调用了对应助手；端到端字节对齐由 compare.sh 的
+// cases_run/s_string_methods.kq、t_list_methods.kq 覆盖。
+func TestBuiltinMethodsIR(t *testing.T) {
+	str := transpile(t, "fn main(IOStream io) {\n"+
+		"    String s = \"abc\";\n"+
+		"    io.println(s.size(), s.contains(\"b\"), s.startsWith(\"a\"), s.endsWith(\"c\"));\n"+
+		"    io.println(s.indexOf(\"c\"), s.substring(1), s.substring(0, 2));\n"+
+		"    io.println(s.trim(), s.trimLeft(), s.trimRight(), s.toLower(), s.toUpper());\n"+
+		"    io.println(s.replace(\"a\", \"z\"), s.charAt(0), \"12\".toInt(), \"1.5\".toFloat());\n"+
+		"}\n")
+	for _, want := range []string{
+		"call i32 @ql_str_size(", "call i32 @ql_str_contains(", "call i32 @ql_str_startswith(",
+		"call i32 @ql_str_endswith(", "call i32 @ql_str_indexof(", "call i8* @ql_str_sub(",
+		"call i8* @ql_str_trim(", "call i8* @ql_str_lower(", "call i8* @ql_str_upper(",
+		"call i8* @ql_str_replace(", "call i8* @ql_str_charat(", "call i32 @ql_str_toint(",
+		"call double @ql_str_tofloat(",
+	} {
+		if !strings.Contains(str, want) {
+			t.Fatalf("String method IR missing %q:\n%s", want, str)
+		}
+	}
+	lst := transpile(t, "fn main(IOStream io) {\n"+
+		"    List<int> l = [3, 1, 2];\n"+
+		"    l.__sort__();\n"+
+		"    io.println(l.toString(), l.head(), l.tail(), l.next());\n"+
+		"    l.reset();\n"+
+		"    List<int> m = [9];\n"+
+		"    l.appendAll(m);\n"+
+		"    io.println(*l, l.size());\n"+
+		"}\n")
+	for _, want := range []string{
+		"call void @ql_list_int_sort(", "call i8* @ql_list_int_str(",
+		"@realloc(", "ListExhaustedError",
+	} {
+		if !strings.Contains(lst, want) {
+			t.Fatalf("List method IR missing %q:\n%s", want, lst)
+		}
+	}
+	// split 需要 List<String>：明确报错
+	if _, err := Transpile("fn main(IOStream io) { String s = \"a,b\"; io.println(s.split(\",\")); }\n", "test.qk"); err == nil {
+		t.Fatal("String.split must report unsupported (List<String>)")
+	}
+}
+
+// 函数重载：按参数个数+类型解析（bestMatch 语义：同 kind +10 / 可赋值 +5）。
+func TestOverloads(t *testing.T) {
+	src := "fn add(int a, int b) int { return a + b; }\n" +
+		"fn add(String a, String b) String { return a + \"<\" + b; }\n" +
+		"fn add(float a, float b) float { return a + b; }\n" +
+		"fn pick(int a) String { return \"int\"; }\n" +
+		"fn pick(String s) String { return \"str\"; }\n" +
+		"fn pick(float f) String { return \"float\"; }\n" +
+		"fn zero() int { return 0; }\n" +
+		"fn zero(String s) int { return 1; }\n" +
+		"fn main(IOStream io) {\n" +
+		"    io.println(add(1, 2));\n" +
+		"    io.println(add(\"a\", \"b\"));\n" +
+		"    io.println(add(1.5, 2.5));\n" +
+		"    io.println(pick(1), pick(\"x\"), pick(2.5));\n" +
+		"    io.println(add(1, 2.5));\n" +
+		"    io.println(zero(), zero(\"s\"));\n" +
+		"    io.println(add(1, 2).toString() + \"!\");\n" +
+		"}\n"
+	ir := transpile(t, src)
+	for _, want := range []string{"@add$int$int", "@add$String$String", "@add$float$float", "@pick$int", "@zero$void"} {
+		if !strings.Contains(ir, want) {
+			t.Fatalf("overload IR missing %q:\n%s", want, ir)
+		}
+	}
+	got := lliRun(t, withTestRuntime(ir))
+	want := "3\na<b\n4\nint str float\n3.5\n0 1\n3!\n"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	// 没有匹配重载 → 明确报错
+	if _, err := Transpile("fn f(int a) int { return a; }\nfn main(IOStream io) { io.println(f(\"s\")); }\n", "test.qk"); err == nil {
+		t.Fatal("mismatched overload call must fail")
+	}
+}
+
 // Phase D：library FFI（LLVM declare + C ABI 直调）与 taskm（qthreads 运行时）。
 // 这两类需要 clang 链接（-lm / qthreads.c），lli 单测只校验 IR 形状；
 // 端到端输出对齐由 compiler/testdata/compare.sh 覆盖（cases_run/e_ffi、f_taskm）。
@@ -366,10 +447,60 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 		"declare float @sqrtf(float)",
 		"call double @sqrt(",
 		"fpext float",
-		"; qkc-link: -lm",
+		"; qkc-link: m => -lm",
 	} {
 		if !strings.Contains(ffi, want) {
 			t.Fatalf("FFI IR missing %q:\n%s", want, ffi)
+		}
+	}
+	// 链接名映射：libc 默认已链接（-lc），m → -lm；IR 里以「库名 => 候选参数」标记
+	links := transpile(t, "library libc {\n"+
+		"    fn abs(int v) int;\n"+
+		"}\n"+
+		"library m {\n"+
+		"    fn sqrt(float x) float;\n"+
+		"}\n"+
+		"fn main(IOStream io) { io.println(libc.abs(0 - 7), m.sqrt(16.0)); }\n")
+	for _, want := range []string{
+		"; qkc-link: libc => -lc",
+		"; qkc-link: m => -lm",
+		"declare i32 @abs(i32)",
+		"declare double @sqrt(double)",
+	} {
+		if !strings.Contains(links, want) {
+			t.Fatalf("link mapping IR missing %q:\n%s", want, links)
+		}
+	}
+	if strings.Contains(links, "-llibc") {
+		t.Fatalf("libc 不应映射为 -llibc:\n%s", links)
+	}
+	// long（i64）与 pointer（i8* 不透明句柄，可空、可往返）
+	lp := transpile(t, "library libc {\n"+
+		"    fn malloc(long n) pointer;\n"+
+		"    fn free(pointer p) void;\n"+
+		"    fn memset(pointer p, int c, long n) pointer;\n"+
+		"    fn strlen(String s) long;\n"+
+		"}\n"+
+		"fn main(IOStream io) {\n"+
+		"    pointer p = libc.malloc(16);\n"+
+		"    pointer q = libc.memset(p, 65, 4);\n"+
+		"    long n = libc.strlen(\"hello\");\n"+
+		"    pointer z;\n"+
+		"    io.println(n, p == q, p != null, z == null);\n"+
+		"    libc.free(p);\n"+
+		"}\n")
+	for _, want := range []string{
+		"declare i8* @malloc(i64)",
+		"declare i64 @strlen(i8*)",
+		"declare i8* @memset(i8*, i32, i64)",
+		"call i8* @malloc(i64",
+		"call i64 @strlen(",
+		"icmp eq i8*",
+		"sext i32", // int → long（malloc 实参）
+		"%lld",     // long 打印
+	} {
+		if !strings.Contains(lp, want) {
+			t.Fatalf("long/pointer IR missing %q:\n%s", want, lp)
 		}
 	}
 	taskm := transpile(t, "fn work(int n) int { return n; }\n"+
@@ -413,34 +544,13 @@ func TestUnsupportedConstructs(t *testing.T) {
 			want: "暂未支持在 catch 体内使用",
 		},
 		{
-			name: "函数重载",
-			src: "fn add(int a, int b) int { return a + b; }\n" +
-				"fn add(String a, String b) String { return a + b; }\n" +
-				"fn main(IOStream io) { io.println(add(1, 2)); }\n",
-			want: "暂未支持函数重载",
-		},
-		{
 			name: "IOStream 形参（仅 main 入口绑定）",
 			src: "fn f(int n, IOStream io) void { io.println(n); }\n" +
 				"fn main(IOStream io) { f(1, io); }\n",
 			want: "暂未支持 IOStream",
 		},
-		{
-			name: "String 内建方法未 lower（substring 等）",
-			src: "fn main(IOStream io) {\n" +
-				"    String s = \"abc\";\n" +
-				"    io.println(s.substring(0, 1));\n" +
-				"}\n",
-			want: "暂未支持对 String 调用方法 substring",
-		},
-		{
-			name: "List.toString 未 lower",
-			src: "fn main(IOStream io) {\n" +
-				"    List<int> l = [1, 2];\n" +
-				"    io.println(l.toString());\n" +
-				"}\n",
-			want: "暂未支持 List.toString()",
-		},
+		// String 内建方法已 lower（见 testdata/cases_run/s_string_methods.kq 的解析器/编译器对比）
+		// List.toString 已 lower（见 testdata/cases_run/t_list_methods.kq）
 		{
 			name: "非标量返回类型",
 			src: "fn f(int n) List<String> {\n" +
@@ -466,11 +576,7 @@ func TestUnsupportedConstructs(t *testing.T) {
 				"fn main(IOStream io) { P p; io.println(p); }\n",
 			want: "暂未支持打印",
 		},
-		{
-			name: "float 取模",
-			src:  "fn main(IOStream io) { float a = 5.0; float b = 2.0; io.println(a % b); }\n",
-			want: "暂未支持 float 取模",
-		},
+		// float 取模已 lower
 		{
 			name: "含 log 的函数返回值被使用",
 			src: "fn f(int n) int { log n; return n; }\n" +

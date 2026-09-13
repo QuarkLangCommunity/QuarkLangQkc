@@ -65,6 +65,7 @@ const (
 	kField
 	kToString
 	kRunner // taskm.merge 的 runner 函数引用（i8* 函数指针）
+	kNull   // null 字面量（指针零值）
 )
 
 // expr 是 cgen IR 表达式。typ 由 lowering 填入语言类型（"?" = 未判定）。
@@ -346,6 +347,7 @@ type emitter struct {
 	vtables        []*vtableDef
 	needIntToStr   bool
 	needFloatToStr bool
+	needPtrToStr   bool
 	needStrCmp     bool
 	needPanic      bool
 }
@@ -388,6 +390,29 @@ func newEmitter(lp *lowered) *emitter {
 	e.sigs["ql_merge"] = &funcSig{name: "ql_merge", params: []funcParam{{typ: "int"}, {typ: "runner"}, {typ: "int"}}, ret: "void"}
 	e.sigs["ql_send"] = &funcSig{name: "ql_send", params: []funcParam{{typ: "Channel"}, {typ: "int"}}, ret: "int"}
 	e.sigs["ql_recv"] = &funcSig{name: "ql_recv", params: []funcParam{{typ: "Channel"}}, ret: "int"}
+	// String 内建方法
+	str := func(name, ret string, params ...string) {
+		ps := make([]funcParam, 0, len(params))
+		for _, p := range params {
+			ps = append(ps, funcParam{typ: p})
+		}
+		e.sigs[name] = &funcSig{name: name, params: ps, ret: ret}
+	}
+	str("ql_str_size", "int", "String")
+	str("ql_str_contains", "cbool", "String", "String")
+	str("ql_str_startswith", "cbool", "String", "String")
+	str("ql_str_endswith", "cbool", "String", "String")
+	str("ql_str_indexof", "int", "String", "String")
+	str("ql_str_sub", "String", "String", "int", "int", "int")
+	str("ql_str_charat", "String", "String", "int", "int")
+	str("ql_str_trim", "String", "String", "int")
+	str("ql_str_lower", "String", "String")
+	str("ql_str_upper", "String", "String")
+	str("ql_str_replace", "String", "String", "String", "String")
+	str("ql_str_toint", "int", "String", "int")
+	str("ql_str_tofloat", "double", "String", "int")
+	str("ql_list_int_sort", "void", "intptr", "int", "int")
+	str("ql_list_int_str", "String", "intptr", "int", "int")
 	return e
 }
 
@@ -398,16 +423,33 @@ var builtinDecls = map[string]bool{
 	"strtod": true, "write": true, "exit": true,
 }
 
-// linkerFlag 把 library 名映射为链接参数（裸名 → -lX；路径/带点 → 原样）。
-func linkerFlag(lib string) string {
-	if strings.ContainsAny(lib, "/.") {
-		return lib
+// linkCandidates 把 library 名映射为**候选链接参数组**（按优先级）。
+// qkc 逐组尝试，全部失败时给出「库名 + 尝试过的参数」诊断（不透传 clang 原文了事）。
+func linkCandidates(lib string) []string {
+	name := strings.TrimSpace(lib)
+	// 路径 / 带扩展名：按文件链接
+	if strings.ContainsAny(name, "/.") {
+		return []string{name}
 	}
-	switch lib {
-	case "c", "m", "dl", "pthread", "rt", "stdc++":
-		return "-l" + lib
+	base := strings.TrimPrefix(name, "lib")
+	switch strings.ToLower(base) {
+	case "c":
+		// libc 默认已链接；显式 -lc 无害（且 libc.so 一定存在）
+		return []string{"-lc"}
+	case "m":
+		return []string{"-lm"}
+	case "dl", "rt", "pthread", "stdc++", "gcc_s", "z", "curl", "sqlite3", "png", "jpeg":
+		return []string{"-l" + base}
+	case "gl":
+		// 解释器会试 libGL.so.1 / libgl.so.1；链接侧同样给大小写与 soname 兜底
+		return []string{"-lGL", "-l:libGL.so.1", "-lgl"}
+	case "vulkan":
+		return []string{"-lvulkan", "-l:libvulkan.so.1"}
+	case "clegrt":
+		// 项目本地运行时优先（产物树/assets），再退回系统路径
+		return []string{"-L. -l" + base, "-l" + base}
 	}
-	return "-l" + lib
+	return []string{"-l" + base, "-L. -l" + base}
 }
 
 // ensureIface 发射接口值类型：{ i8* data, i8** vt }。
@@ -568,7 +610,7 @@ func (e *emitter) ir(t string) string {
 		return "i32"
 	case "long":
 		return "i64"
-	case "pointer":
+	case "pointer", "null":
 		return "i8*"
 	case "thread":
 		return "i32"
@@ -576,6 +618,8 @@ func (e *emitter) ir(t string) string {
 		return "i8*"
 	case "runner":
 		return "i8*"
+	case "intptr":
+		return "i32*"
 	}
 	if t == "List<int>" || t == "List<String>" || t == "List<float>" || t == "List<bool>" {
 		e.ensureList()
@@ -595,7 +639,8 @@ func (e *emitter) alignOf(t string) int {
 		return 1
 	case "thread":
 		return 4
-	case "float", "String", "List<int>", "List<String>", "List<float>", "List<bool>":
+	case "float", "double", "long", "pointer", "null", "String",
+		"List<int>", "List<String>", "List<float>", "List<bool>":
 		return 8
 	}
 	if e.ifaces[t] {
@@ -619,7 +664,7 @@ func (e *emitter) emptyString() string {
 // zeroOf 返回语言类型的零值（按 LLVM 类型）。
 func (e *emitter) zeroOf(t string) string {
 	switch t {
-	case "int", "thread":
+	case "int", "thread", "long":
 		return "0"
 	case "bool":
 		return "false"
@@ -631,7 +676,7 @@ func (e *emitter) zeroOf(t string) string {
 	if e.ifaces[t] {
 		return "zeroinitializer"
 	}
-	return "null" // List / struct：引用零值 = null
+	return "null" // List / struct / pointer：引用零值 = null
 }
 
 // zeroStructFields 把刚分配（calloc 清零）的 struct 的引用型字段初始化为零值对象：
@@ -682,7 +727,24 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i32 @ql_done(i32)\n")
 	e.decls.WriteString("declare i8* @ql_channel_new(i32)\n")
 	e.decls.WriteString("declare i32 @ql_send(i8*, i32)\n")
-	e.decls.WriteString("declare i32 @ql_recv(i8*)\n\n")
+	e.decls.WriteString("declare i32 @ql_recv(i8*)\n")
+	// String 内建方法运行时（qthreads.c：UTF-8 感知，与解释器同语义）
+	e.decls.WriteString("declare i32 @ql_str_size(i8*)\n")
+	e.decls.WriteString("declare i32 @ql_str_contains(i8*, i8*)\n")
+	e.decls.WriteString("declare i32 @ql_str_startswith(i8*, i8*)\n")
+	e.decls.WriteString("declare i32 @ql_str_endswith(i8*, i8*)\n")
+	e.decls.WriteString("declare i32 @ql_str_indexof(i8*, i8*)\n")
+	e.decls.WriteString("declare i8* @ql_str_sub(i8*, i32, i32, i32)\n")
+	e.decls.WriteString("declare i8* @ql_str_charat(i8*, i32, i32)\n")
+	e.decls.WriteString("declare i8* @ql_str_trim(i8*, i32)\n")
+	e.decls.WriteString("declare i8* @ql_str_lower(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_str_upper(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_str_replace(i8*, i8*, i8*)\n")
+	e.decls.WriteString("declare i32 @ql_str_toint(i8*, i32)\n")
+	e.decls.WriteString("declare double @ql_str_tofloat(i8*, i32)\n")
+	// List 内建方法运行时（int 元素；可见区间 head..tail）
+	e.decls.WriteString("declare void @ql_list_int_sort(i32*, i32, i32)\n")
+	e.decls.WriteString("declare i8* @ql_list_int_str(i32*, i32, i32)\n\n")
 
 	// library FFI：外部符号声明 + 链接库标记（main.go 解析 ; qkc-link:）
 	seenExt := map[string]bool{}
@@ -707,7 +769,12 @@ func (e *emitter) emitProgram(lp *lowered) string {
 			continue
 		}
 		libs[ed.lib] = true
-		link.WriteString("; qkc-link: " + linkerFlag(ed.lib) + "\n")
+		// 格式：; qkc-link: <库名> => <候选参数> => <候选参数>
+		link.WriteString("; qkc-link: " + ed.lib)
+		for _, cand := range linkCandidates(ed.lib) {
+			link.WriteString(" => " + cand)
+		}
+		link.WriteString("\n")
 	}
 
 	e.vars = map[string]varSlot{}
@@ -759,6 +826,9 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	}
 	if e.needFloatToStr {
 		helpers += floatToStrHelper
+	}
+	if e.needPtrToStr {
+		helpers += ptrToStrHelper
 	}
 	if e.needPanic {
 		helpers += panicHelper
@@ -1093,6 +1163,16 @@ func (e *emitter) coerce(reg, from, to string) string {
 		return r
 	case from == "cbool" && to == "int":
 		return reg
+	case from == "long" && to == "int":
+		r := e.newReg()
+		e.emitInstr("%s = trunc i64 %s to i32", r, reg)
+		return r
+	case from == "int" && to == "long":
+		r := e.newReg()
+		e.emitInstr("%s = sext i32 %s to i64", r, reg)
+		return r
+	case from == "null" && (to == "pointer" || to == "String" || to == "runner"):
+		return reg
 	}
 	return reg
 }
@@ -1101,7 +1181,7 @@ func (e *emitter) coerce(reg, from, to string) string {
 
 func (e *emitter) emitDecl(st *declStmt) {
 	switch st.typ {
-	case "int", "bool", "float", "String":
+	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel":
 		// SSA 直通：单赋值标量直接用寄存器（免 alloca/load/store）
 		if !e.assigned[st.name] && st.init != nil && !e.funcReturned {
 			v, vt := e.compileExpr(st.init)
@@ -1526,6 +1606,15 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 		switch t {
 		case "int":
 			fmts = append(fmts, "%d")
+		case "long":
+			fmts = append(fmts, "%lld")
+		case "pointer", "null":
+			e.needPtrToStr = true
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_ptr_to_str(i8* %s)", r, v)
+			vals[len(vals)-1].val = r
+			vals[len(vals)-1].typ = "String"
+			fmts = append(fmts, "%s")
 		case "float":
 			e.needFloatToStr = true
 			r := e.newReg()
@@ -1633,6 +1722,8 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		r := e.newReg()
 		e.emitInstr("%s = bitcast void (i32)* @%s to i8*", r, x.s)
 		return r, "runner"
+	case kNull:
+		return "null", "null"
 	case kBool:
 		if x.b {
 			return "true", "bool"
@@ -1805,6 +1896,8 @@ func (e *emitter) compileCall(x *expr) (string, string) {
 		return d, "float"
 	case "double":
 		return r, "float" // FFI double → 语言 float
+	case "long", "pointer":
+		return r, ret // FFI long → i64；pointer → i8* 不透明句柄
 	}
 	return r, ret
 }
@@ -1845,6 +1938,148 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			v := e.newReg()
 			e.emitInstr("%s = load i32, i32* %s", v, g2)
 			return v, "int"
+		case "head":
+			hf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, recv)
+			h := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", h, hf)
+			return h, "int"
+		case "tail":
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, recv)
+			t := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t, tf)
+			return t, "int"
+		case "next", "peek":
+			hf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, recv)
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, recv)
+			h := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", h, hf)
+			t := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t, tf)
+			empty := e.newReg()
+			e.emitInstr("%s = icmp eq i32 %s, %s", empty, h, t)
+			okB := e.newBlock()
+			badB := e.newBlock()
+			e.emitInstr("br i1 %s, label %%%s, label %%%s", empty, badB, okB)
+			e.setBlock(badB)
+			msg := "ListExhaustedError: list is exhausted (head()==tail()); next() stops and errors"
+			if m.name == "peek" {
+				msg = "ListExhaustedError: list is exhausted (head()==tail()); '*' stops and errors"
+			}
+			if e.curTry != "" {
+				e.emitInstr("br label %%%s", e.curTry)
+				e.emitInstr("unreachable")
+			} else {
+				e.needPanic = true
+				c := e.i8Ptr(e.strConst(msg))
+				e.emitInstr("call void @ql_panic(i8* %s, i32 %d)", c, x.line)
+				e.emitInstr("unreachable")
+			}
+			e.setBlock(okB)
+			p := e.listBuf(recv)
+			h64 := e.toI64(h)
+			ep := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", ep, p, h64)
+			v := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", v, ep)
+			if m.name == "next" {
+				nx := e.newReg()
+				e.emitInstr("%s = add i32 %s, 1", nx, h)
+				e.emitInstr("store i32 %s, i32* %s", nx, hf)
+			}
+			return v, "int"
+		case "reset":
+			hf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, recv)
+			e.emitInstr("store i32 0, i32* %s", hf)
+			return recv, "List<int>"
+		case "appendAll":
+			other, _ := e.compileExpr(m.args[0])
+			head, size := e.listHeadSize(other)
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, recv)
+			idx := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", idx, head, size)
+			selfBuf := e.listBuf(recv)
+			otherBuf := e.listBuf(other)
+			condB := e.newBlock()
+			bodyB := e.newBlock()
+			endB := e.newBlock()
+			iv := e.newReg()
+			e.emitInstr("%s = alloca i32, align 4", iv)
+			e.emitInstr("store i32 %s, i32* %s", head, iv)
+			e.emitInstr("br label %%%s", condB)
+			e.setBlock(condB)
+			li := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", li, iv)
+			cnd := e.newReg()
+			e.emitInstr("%s = icmp slt i32 %s, %s", cnd, li, idx)
+			e.emitInstr("br i1 %s, label %%%s, label %%%s", cnd, bodyB, endB)
+			e.setBlock(bodyB)
+			li2 := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", li2, iv)
+			li64 := e.toI64(li2)
+			sp := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", sp, otherBuf, li64)
+			val := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", val, sp)
+			// 追加到 self 尾部（realloc 扩容，同 append）
+			t1 := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t1, tf)
+			n1 := e.newReg()
+			e.emitInstr("%s = shl i32 %s, 1", n1, t1)
+			n1b := e.newReg()
+			e.emitInstr("%s = icmp slt i32 %s, 1", n1b, n1)
+			n1c := e.newReg()
+			e.emitInstr("%s = select i1 %s, i32 1, i32 %s", n1c, n1b, n1)
+			n64 := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
+			sz := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 4", sz, n64)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, recv)
+			cur := e.newReg()
+			e.emitInstr("%s = load i32*, i32** %s", cur, bf)
+			bc := e.newReg()
+			e.emitInstr("%s = bitcast i32* %s to i8*", bc, cur)
+			rc := e.newReg()
+			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			np := e.newReg()
+			e.emitInstr("%s = bitcast i8* %s to i32*", np, rc)
+			e.emitInstr("store i32* %s, i32** %s", np, bf)
+			t1i := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
+			dp := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", dp, np, t1i)
+			e.emitInstr("store i32 %s, i32* %s", val, dp)
+			t2 := e.newReg()
+			e.emitInstr("%s = add i32 %s, 1", t2, t1)
+			e.emitInstr("store i32 %s, i32* %s", t2, tf)
+			ni := e.newReg()
+			e.emitInstr("%s = add i32 %s, 1", ni, li2)
+			e.emitInstr("store i32 %s, i32* %s", ni, iv)
+			e.emitInstr("br label %%%s", condB)
+			e.setBlock(endB)
+			_ = selfBuf
+			return "0", "void"
+		case "toString":
+			p := e.listBuf(recv)
+			head, size := e.listHeadSize(recv)
+			tail := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_list_int_str(i32* %s, i32 %s, i32 %s)", r, p, head, tail)
+			return r, "String"
+		case "__sort__":
+			p := e.listBuf(recv)
+			head, size := e.listHeadSize(recv)
+			tail := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+			e.emitInstr("call void @ql_list_int_sort(i32* %s, i32 %s, i32 %s)", p, head, tail)
+			return "0", "void"
 		case "append":
 			tf := e.newReg()
 			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, recv)
@@ -2167,13 +2402,15 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 	if lt == "float" || rt == "float" {
 		lv = e.coerce(lv, lt, "float")
 		rv = e.coerce(rv, rt, "float")
-		if (x.op == "/" || x.op == "%") && x.op == "/" {
+		if x.op == "/" {
 			e.emitZeroCheckF(rv, "DivisionByZeroError: float division by zero", x.line)
 		}
-		op := map[string]string{"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}[x.op]
-		if op == "" {
-			return "0.0", "float" // float % 不可达（lowering 已拦截）
+		if x.op == "%" {
+			// 解释器语义：float 取模在运行期报 TypeError
+			e.emitAbortF("TypeError: '%' requires int operands", x.line)
+			return "0.0", "float" // 之后的死代码
 		}
+		op := map[string]string{"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}[x.op]
 		reg := e.newReg()
 		e.emitInstr("%s = %s double %s, %s", reg, op, lv, rv)
 		return reg, "float"
@@ -2181,6 +2418,9 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 	if v, ok := constEval(x); ok {
 		return fmt.Sprintf("%d", int32(v)), "int"
 	}
+	// long 参与算术：解释器按 32 位截断（wrapI32），这里同样先截断
+	lv = e.coerce(lv, lt, "int")
+	rv = e.coerce(rv, rt, "int")
 	if x.op == "/" || x.op == "%" {
 		e.emitZeroCheckI(rv, x.op, x.line)
 	}
@@ -2214,6 +2454,27 @@ func (e *emitter) emitZeroCheckI(rv, op string, line int) {
 		return
 	}
 	e.emitInstr("br i1 %s, label %%%s, label %%%s", cz, tgt, okB)
+	e.setBlock(okB)
+}
+
+// emitAbortF 发射「一定失败」的浮点运算路径（解释器在此报运行期错误）：
+// try 内跳 catch，否则打印同文案错误并退出。
+func (e *emitter) emitAbortF(msg string, line int) {
+	okB := e.newBlock()
+	tgt := e.curTry
+	if tgt == "" {
+		e.needPanic = true
+		tgt = e.newBlock()
+		e.emitInstr("br label %%%s", tgt)
+		e.setBlock(tgt)
+		c := e.i8Ptr(e.strConst(msg))
+		e.emitInstr("call void @ql_panic(i8* %s, i32 %d)", c, line)
+		e.emitInstr("unreachable")
+		e.setBlock(okB)
+		return
+	}
+	e.emitInstr("br label %%%s", tgt)
+	e.emitInstr("unreachable")
 	e.setBlock(okB)
 }
 
@@ -2290,6 +2551,19 @@ func (e *emitter) compileCmp(x *expr) (string, string) {
 		e.emitInstr("%s = icmp %s i1 %s, %s", r, cmpOps[x.op], lv, rv)
 		return r, "bool"
 	}
+	// 指针 / null：引用比较（解释器 Value 语义：同一指针相等）
+	if isPtrLike(lt) || isPtrLike(rt) {
+		op := cmpOps[x.op]
+		if x.op != "==" && x.op != "!=" {
+			op = "eq" // 指针不支持顺序比较（typecheck 已拦截）
+		}
+		r := e.newReg()
+		e.emitInstr("%s = icmp %s i8* %s, %s", r, op, lv, rv)
+		return r, "bool"
+	}
+	// long 参与比较：解释器按 32 位截断比较
+	lv = e.coerce(lv, lt, "int")
+	rv = e.coerce(rv, rt, "int")
 	if lt == "String" && rt == "String" {
 		e.needStrCmp = true
 		c := e.newReg()
@@ -2316,6 +2590,9 @@ func (e *emitter) isStruct(t string) bool {
 	_, ok := e.structs[t]
 	return ok
 }
+
+// isPtrLike 判断是否是 FFI 不透明指针 / null（i8* 引用比较）。
+func isPtrLike(t string) bool { return t == "pointer" || t == "null" }
 
 var cmpOps = map[string]string{"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
 
@@ -2621,6 +2898,26 @@ next:
   br i1 %over, label %done, label %loop
 done:
   ret i8* %buf
+}
+`
+
+// ptrToStrHelper 是 pointer 打印助手：null → "nil"，否则 "0x%llx"
+// （与解释器 Value.String() 的 0x+十六进制 呈现一致）。
+const ptrToStrHelper = `@.ql.nil = private unnamed_addr constant [4 x i8] c"nil\00", align 1
+@.ql.fmt.p = private unnamed_addr constant [7 x i8] c"0x%llx\00", align 1
+define i8* @ql_ptr_to_str(i8* %p) {
+entry:
+  %isnull = icmp eq i8* %p, null
+  br i1 %isnull, label %nil, label %hex
+nil:
+  %np = getelementptr inbounds [4 x i8], [4 x i8]* @.ql.nil, i64 0, i64 0
+  ret i8* %np
+hex:
+  %b = call i8* @malloc(i64 20)
+  %f = getelementptr inbounds [7 x i8], [7 x i8]* @.ql.fmt.p, i64 0, i64 0
+  %v = ptrtoint i8* %p to i64
+  %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %b, i64 20, i8* %f, i64 %v)
+  ret i8* %b
 }
 `
 
