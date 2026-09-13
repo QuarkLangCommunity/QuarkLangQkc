@@ -469,3 +469,77 @@ void ql_memo_put(void* mp, int n, int* keys, int val) {
     unsigned h = ql_memo_hash(keys, n) % (unsigned)m->cap;
     e->next = m->b[h]; m->b[h] = e; m->len++;
 }
+
+/* ================= interface{}（tAny）运行期：RTTI 描述符分派 =================
+ * 描述符布局必须与 IR 的 %RT = type { i8* (i8*)*, i8*, i32 } 一致：
+ *   { char* (*str)(void*); const char* name; int kind; }
+ * kind: 0=int 1=float 2=bool 3=String 4=List<int> 5=struct 6=null */
+typedef struct ql_rt { char* (*str)(void*); const char* name; int kind; } ql_rt;
+char* ql_int_to_str(int v);      /* qkc 生成的 IR 助手（复用同一格式化） */
+char* ql_float_to_str(double v);
+char* ql_long_to_str(long long v) {
+    char* b = (char*)malloc(24);
+    snprintf(b, 24, "%lld", v);
+    return b;
+}
+char* ql_any_str_int(void* d) { return ql_int_to_str(*(int*)d); }
+char* ql_any_str_float(void* d) { return ql_float_to_str(*(double*)d); }
+char* ql_any_str_bool(void* d) { return (char*)(*(int*)d ? "true" : "false"); }
+char* ql_any_str_string(void* d) { return *(char**)d; }
+char* ql_any_str_list(void* d);
+char* ql_any_str(void* d, void* rt) {
+    ql_rt* r = (ql_rt*)rt;
+    if (!r || r->kind == 6 || !d) return (char*)"nil";
+    return r->str(d);
+}
+static void ql_any_bad(ql_rt* r, const char* want) {
+    fprintf(stderr, "error: TypeError: cannot use interface{} value of type %s as %s\n",
+            r ? r->name : "nil", want);
+    exit(1);
+}
+int ql_any_int(void* d, void* rt) {
+    ql_rt* r = (ql_rt*)rt;
+    if (!r || r->kind != 0) ql_any_bad(r, "int");
+    return *(int*)d;
+}
+double ql_any_float(void* d, void* rt) {
+    ql_rt* r = (ql_rt*)rt;
+    if (!r || r->kind != 1) ql_any_bad(r, "float");
+    return *(double*)d;
+}
+int ql_any_bool(void* d, void* rt) {
+    ql_rt* r = (ql_rt*)rt;
+    if (!r || r->kind != 2) ql_any_bad(r, "bool");
+    return *(int*)d;
+}
+char* ql_any_string(void* d, void* rt) {
+    ql_rt* r = (ql_rt*)rt;
+    if (!r || r->kind != 3) ql_any_bad(r, "String");
+    return *(char**)d;
+}
+/* 相等语义与解释器 equalValues 对齐：int/float 跨类型数值比较；bool/String 按值；
+ * List/struct 按引用（指针身份）；nil == nil。 */
+int ql_any_eq(void* d1, void* rt1, void* d2, void* rt2) {
+    ql_rt* a = (ql_rt*)rt1;
+    ql_rt* b = (ql_rt*)rt2;
+    int k1 = a ? a->kind : 6, k2 = b ? b->kind : 6;
+    if (k1 == 6 || k2 == 6) return k1 == k2;
+    if ((k1 == 0 || k1 == 1) && (k2 == 0 || k2 == 1)) {
+        double x = (k1 == 0) ? (double)*(int*)d1 : *(double*)d1;
+        double y = (k2 == 0) ? (double)*(int*)d2 : *(double*)d2;
+        return x == y;
+    }
+    if (k1 != k2) return 0;
+    switch (k1) {
+    case 2: return (*(int*)d1 != 0) == (*(int*)d2 != 0);
+    case 3: return strcmp(*(char**)d1, *(char**)d2) == 0;
+    case 4: case 5: return d1 == d2;
+    }
+    return 0;
+}
+char* ql_any_str_list(void* d) {
+    struct ql_list_s { int* buf; int head; int tail; };
+    struct ql_list_s* l = (struct ql_list_s*)d;
+    return ql_list_int_str(l->buf, l->head, l->tail);
+}
+

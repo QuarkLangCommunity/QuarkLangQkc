@@ -33,10 +33,13 @@
 // 参数语义（正典）：形参一律按引用传递（LLVM 形参 = 值类型*），copyd 形参入口深拷贝；
 // 左值实参用自身存储、非左值实参是调用方临时单元；self 接收者按值绑定。
 //
+// interface{}（tAny）：装箱任意标量/String/List<int>/struct + 运行期类型描述符（RTTI），
+// println 按 kind 分派、==/!= 走 ql_any_eq、拆箱到标量/String 运行期校验 kind。
+//
 // 仍未 lower（一律返回带位置的明确错误，绝不静默错编）：
-// 指针类型/new/Copyd<T> 类型标注、HashTable、interface{}（tAny）、
-// 非 memorize 的自定义 Sign 实例、copyd 接口形参/接口字段、List<T≠int>、
-// 打印 struct/接口值（解释器字段序不确定）、含 log 函数的返回值被使用、
+// 指针类型/new/Copyd<T> 类型标注、HashTable、非 memorize 的自定义 Sign 实例、
+// copyd 接口形参/接口字段、List<T≠int>、interface{} 拆箱到 struct/List、
+// 打印多字段 struct（解释器字段序来自 Go map，不确定）、含 log 函数的返回值被使用、
 // merge 超过 4 个实参。
 package cgen
 
@@ -453,21 +456,38 @@ func (l *lowerer) registerImpl(im *lang.ImplDecl) error {
 			_ = i
 			mi.subst[tp] = tp
 		}
-		if len(m.Params) > 0 && (isSelfParam(m.Params[0]) || m.Params[0].Type == typ) {
+		if len(m.Params) > 0 && isRecvParam(typ, &m.Params[0]) {
 			mi.isSelf = true
 			mi.selfTyp = typ
-			if isSelfParam(m.Params[0]) {
-				mi.selfTyp = typ
-			}
 		}
 		l.methods[typ][m.Name] = mi
 	}
 	return nil
 }
 
-// isSelfParam 判断参数是否是 self 接收者（类型为 Self 或参数名 self）。
-func isSelfParam(p lang.Param) bool {
-	return strings.TrimSpace(p.Type) == "Self" || (p.Name == "self" && p.Type != "int" && p.Type != "float" && p.Type != "bool" && p.Type != "String")
+// isRecvParam 判定方法/接口方法的首参是否为**接收者**：按类型（Self 或该 impl/接口
+// 类型基名），与形参名无关；首参无类型标注时按接收者处理并补全类型。
+// 规则与 internal/lang 的 isRecvParam 完全一致（解释器为语义基准）。
+func isRecvParam(recvType string, p *lang.Param) bool {
+	if p == nil {
+		return false
+	}
+	t := strings.TrimSpace(p.Type)
+	if t == "" {
+		p.Type = recvType
+		return true
+	}
+	return t == "Self" || recvBaseName(t) == recvBaseName(recvType)
+}
+
+// recvBaseName 取类型基名：去掉尾部 & 与泛型实参（node<T>& → node）。
+func recvBaseName(t string) string {
+	t = strings.TrimSpace(t)
+	t = strings.TrimSuffix(t, "&")
+	if i := strings.IndexByte(t, '<'); i >= 0 {
+		t = t[:i]
+	}
+	return strings.TrimSpace(t)
 }
 
 // ---------- 类型工具 ----------
@@ -590,11 +610,17 @@ func (l *lowerer) isStructType(t string) bool {
 	return ok
 }
 
-// isIfaceType 判断类型是否是接口。
+// isIfaceType 判断类型是否是接口（含空接口 interface{}）。
 func (l *lowerer) isIfaceType(t string) bool {
+	if isAnyT(t) {
+		return true
+	}
 	_, ok := l.ifaces[t]
 	return ok
 }
+
+// isAnyT 判断是否是空接口 interface{}（装箱 + RTTI 路径）。
+func isAnyT(t string) bool { return strings.TrimSpace(t) == "interface{}" }
 
 // checkType 校验类型可用性（不可 lower 的类型给出明确诊断）。
 func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
@@ -628,7 +654,7 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	case "IOStream":
 		return l.errf(pos, "暂未支持 IOStream %s（编译器仅在 main 入口绑定 io）", what)
 	case "interface{}":
-		return l.errf(pos, "暂未支持 interface{} 类型 %s（dynamic 分发仅解释器可用）", what)
+		return nil // 装箱任意值 + 运行期类型描述符（RTTI）；打印/相等/标量拆箱已 lower
 	}
 	if strings.HasPrefix(t, "List") {
 		return l.errf(pos, "暂未支持 %s 类型 %q（编译器仅支持 List<int>）", what, t)
@@ -646,7 +672,7 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 // retOK 判断返回类型是否可 lower。
 func (l *lowerer) retOK(t string) bool {
 	switch t {
-	case "int", "bool", "float", "String", "long", "pointer", "void":
+	case "int", "bool", "float", "String", "long", "pointer", "void", "interface{}":
 		return true
 	}
 	return l.isStructType(t) || l.isIfaceType(t)
@@ -1184,9 +1210,9 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 			return nil, err
 		}
 		switch t := fc.typeOf(a); t {
-		case "int", "String", "bool", "float", "long", "pointer", "null", "?":
+		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}":
 		default:
-			return nil, fc.l.errf(exprPos(a, call.Pos), "暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String）", t)
+			return nil, fc.l.errf(exprPos(a, call.Pos), "暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String/interface{}）", t)
 		}
 		args = append(args, x)
 	}
@@ -1450,6 +1476,32 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.typ = "int"
 		return x, nil
 	case "==", "!=", "<", "<=", ">", ">=":
+		// interface{}（tAny）相等：任一侧是 any 就按 any 比较（运行期按 RTTI 分派；
+		// 与解释器 equalValues 一致：int/float 跨类型数值比较、String 按内容、struct/List 按引用）
+		if isAnyT(lt) || isAnyT(rt) {
+			if e.Op != "==" && e.Op != "!=" {
+				return nil, l.errf(pos, "暂未支持对 interface{} 使用 %q（只支持 == / !=）", e.Op)
+			}
+			x, err := fc.expr(e.L)
+			if err != nil {
+				return nil, err
+			}
+			y, err := fc.expr(e.R)
+			if err != nil {
+				return nil, err
+			}
+			if !isAnyT(lt) {
+				if x, err = fc.boxTo(x, "interface{}", exprPos(e.L, pos)); err != nil {
+					return nil, err
+				}
+			}
+			if !isAnyT(rt) {
+				if y, err = fc.boxTo(y, "interface{}", exprPos(e.R, pos)); err != nil {
+					return nil, err
+				}
+			}
+			return &expr{kind: kCmp, op: e.Op, typ: "bool", l: x, r: y, line: pos.Line}, nil
+		}
 		if l.isStructType(lt) && lt == rt {
 			// __eq__ 等已在上方重载分支处理；其余情况 = 引用比较（解释器 Value 语义）
 			x, err := fc.binary(e, e.Op)
@@ -2425,6 +2477,17 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	}
 	if from == "int" && to == "long" {
 		return true
+	}
+	// interface{}（tAny）：任意值可装箱；拆箱只支持标量/String（运行期按 kind 校验）
+	if to == "interface{}" {
+		return from != "void"
+	}
+	if from == "interface{}" {
+		switch to {
+		case "int", "float", "bool", "String", "interface{}":
+			return true
+		}
+		return false
 	}
 	if from == "null" && (to == "pointer" || to == "String" || fc.l.isIfaceType(to)) {
 		return true

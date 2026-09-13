@@ -44,11 +44,11 @@ func (l *lowerer) ifaceMethodList(name string) []ifaceM {
 		}
 		for _, m := range id.Methods {
 			var params []string
-			for i, p := range m.Params {
-				if i == 0 && (strings.TrimSpace(p.Type) == "Self" || p.Name == "self" || p.Name == "Self") {
-					continue // self 接收者
+			for i := range m.Params {
+				if i == 0 && isRecvParam(n, &m.Params[0]) {
+					continue // 接收者：按类型判定（Self / 接口类型基名），与形参名无关
 				}
-				params = append(params, p.Type)
+				params = append(params, m.Params[i].Type)
 			}
 			out = append(out, ifaceM{name: m.Name, idx: len(out), params: params, ret: m.Ret})
 		}
@@ -106,9 +106,26 @@ func (l *lowerer) vtableFor(typ, iface string, fc *funcCtx, pos lang.Pos) (*vtab
 	return v, nil
 }
 
-// boxTo 把具体 struct 值装箱成接口值（want 是接口类型时）。
+// boxTo 把具体值装箱成接口值：
+//   - want == interface{}（tAny）→ 装箱任意可 lower 值（标量/String 堆单元 + RTTI 描述符）；
+//   - want 是具名接口 → vtable 方案（需要 struct 实现）。
 func (fc *funcCtx) boxTo(e *expr, want string, pos lang.Pos) (*expr, error) {
-	if e == nil || !fc.l.isIfaceType(want) || e.typ == want {
+	if e == nil || e.typ == want {
+		return e, nil
+	}
+	if isAnyT(want) {
+		switch e.typ {
+		case "int", "float", "bool", "String", "interface{}", "null":
+		default:
+			if !fc.l.isStructType(e.typ) && !fc.l.isListTypeE(e.typ) {
+				return nil, fc.l.errf(pos, "暂未支持把 %s 值装箱成 interface{}（编译器支持 int/float/bool/String/List<int>/struct）", e.typ)
+			}
+		}
+		e.anyBox = e.typ
+		e.typ = want
+		return e, nil
+	}
+	if !fc.l.isIfaceType(want) {
 		return e, nil
 	}
 	if !fc.l.isStructType(e.typ) {

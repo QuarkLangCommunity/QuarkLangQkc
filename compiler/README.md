@@ -49,7 +49,13 @@ testdata/compare.sh                 # 解释器 vs 编译器逐字节对比（�
 - 泛型：`fn<T>` 与 `type struct<T>` / `impl<T>` 按调用点单态化；泛型函数可作 `sum` 生成器
 - 接口：结构化满足（由 internal/lang Typecheck 校验）+ vtable/thunk dynamic 分发；
   **匿名 struct / 匿名 interface 类型标注**（parser 合成 `__anon_struct_N`/`__anon_iface_N`，
-  编译器按合成实名 lower）
+  编译器按合成实名 lower）；**接收者识别按类型**（首参类型 `Self` 或基名等于 impl/接口类型，
+  与形参名无关；`fn sum(P me)` / `fn sum2(Self other)` 都是实例方法）
+- `interface{}`（tAny）：装箱任意标量/String/List<int>/struct + 运行期类型描述符
+  （`%RT = { str, name, kind }`，`@rt$<T>` 常量；标量装箱为堆单元、List/struct 用对象指针）；
+  `io.println` 按 kind 分派打印（struct 按声明字段序，nil → `nil`），`==`/`!=` 走
+  `ql_any_eq`（int/float 跨类型数值、String 按内容、List/struct 按引用、nil==nil），
+  拆箱到 int/float/bool/String 运行期校验 kind
 - 签名调用：`f(args) @mb()`（内置 **memorize**：按 int 实参列表记忆化，运行时
   `ql_memo_new/get/put`；@ 处的显式 prefix 实参求值丢弃 —— 与解释器一致）
 - library FFI：LLVM `declare` + C ABI 直调，IR 里 `; qkc-link: -lm` 标记由 qkc 转成链接参数
@@ -61,7 +67,9 @@ testdata/compare.sh                 # 解释器 vs 编译器逐字节对比（�
 后端未 lower 的构造统一返回 `compiler: 暂未支持 …` 并带源码位置：
 
 - `List<T>`（T ≠ int）变量/形参/返回（如 `String.split` 需要 List<String>）、HashTable
-- `interface{}`（tAny）变量/形参/返回（装箱 + 运行期类型信息未 lower）
+- `interface{}` 拆箱到 struct/List、装箱 `pointer`/`long`、`interface{}` 作 merge/FFI 实参
+- 打印 `interface{}` 里的多字段 struct：解释器字段序来自 Go map（**本身不确定**），
+  编译器按声明顺序输出 —— 单字段源码上一致，多字段无法逐字节对齐
 - 用户自定义 Sign 实例（`f(args) @sign` 只 lower 内置 memorize）、`copyd` 接口形参/接口字段
 - 指针类型 `T&`/`pointer T`、`new T[n]`、`Copyd<T>` 类型标注（`copyd` **修饰**已支持）
 - 打印 struct/接口/memorize 值（解释器 struct 字段序来自 Go map，本身不确定）

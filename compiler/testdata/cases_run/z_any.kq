@@ -1,0 +1,70 @@
+// z_any：interface{}（tAny）——装箱任意值 + 运行期类型信息（RTTI 描述符）
+// 打印/相等/拆箱都按运行期 kind 分派；语义基准 = 解释器（compare.sh 逐字节对比）。
+// any_probe：interface{}（tAny）装箱 + RTTI 打印/相等/拆箱
+type struct { int v; String s; } P;
+type struct { int v; } P1;  // 打印用（单字段：解释器字段序确定）
+type struct { interface{} cell; int tag; } Box2;
+fn id(interface{} x) interface{} { return x; }
+fn setAny(interface{} x) void { x = "changed"; }
+fn main(IOStream io) {
+  interface{} a = 7;
+  io.println(a);
+  a = "str";
+  io.println(a);
+  a = 1.5;
+  io.println(a);
+  a = true;
+  io.println(a);
+  List<int> l = [1,2];
+  a = l;
+  io.println(a);
+  P p; p.v = 3; p.s = "z";
+  a = p;
+  P1 p1; p1.v = 3;
+  a = p1;
+  io.println(a);
+  // 相等：int/float 跨类型、String 内容、struct 引用、nil
+  interface{} x = 1;
+  interface{} y = 1.0;
+  io.println(x == y);
+  interface{} s1 = "ab";
+  interface{} s2 = "ab";
+  io.println(s1 == s2);
+  interface{} s3 = "cd";
+  io.println(s1 == s3);
+  interface{} p2 = p1;
+  io.println(a == p2);
+  P q; q.v = 3; q.s = "z";
+  interface{} q2 = q;
+  io.println(a == q2);
+  // 参数/返回
+  interface{} c = id(9);
+  io.println(c);
+  io.println(c == 9);
+  c = id("s2");
+  io.println(c);
+  // 拆箱
+  interface{} n1 = 42;
+  int n = n1;
+  io.println(n);
+  interface{} f1 = 2.5;
+  float ff = f1;
+  io.println(ff);
+  interface{} b1 = false;
+  bool bb = b1;
+  io.println(bb);
+  interface{} st = "hello";
+  String ss = st;
+  io.println(ss);
+  // struct 内嵌 interface{} 字段
+  Box2 bx; bx.cell = 5; bx.tag = 8;
+  io.println(bx.cell);
+  io.println(bx.tag);
+  io.println(bx.cell == 5);
+  // 形参按引用（interface{} 是两字值）
+  interface{} m = 1;
+  setAny(m);
+  io.println(m);
+  interface{} nn = 0;
+  io.println(nn);
+}

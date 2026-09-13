@@ -492,6 +492,42 @@ func TestMemoizeSignatureIR(t *testing.T) {
 	}
 }
 
+// interface{}（tAny）：装箱 + RTTI 描述符 + 打印/相等/拆箱 IR 形状；拆箱到 struct/List 明确报错。
+func TestAnyInterfaceIR(t *testing.T) {
+	ir := transpile(t, "fn main(IOStream io) {\n"+
+		"    interface{} a = 7;\n"+
+		"    a = \"s\";\n"+
+		"    io.println(a);\n"+
+		"    io.println(a == 7);\n"+
+		"    int n = a;\n"+
+		"    io.println(n);\n"+
+		"}\n")
+	for _, want := range []string{
+		"%RT = type { i8* (i8*)*, i8*, i32 }",
+		"@rt$int = private constant %RT",
+		"@rt$String = private constant %RT",
+		"declare i8* @ql_any_str(i8*, i8**)",
+		"call i8* @ql_any_str(i8*",
+		"call i32 @ql_any_eq(",
+		"call i32 @ql_any_int(",
+	} {
+		if !strings.Contains(ir, want) {
+			t.Fatalf("interface{} IR missing %q:\n%s", want, ir)
+		}
+	}
+	for _, src := range []string{
+		"type struct { int v; } P;\nfn main(IOStream io) { interface{} a = 1; P p = a; io.println(p.v); }\n",
+		"fn main(IOStream io) { interface{} a = 1; List<int> l = a; io.println(l.size()); }\n",
+	} {
+		if _, err := Transpile(src, "test.qk"); err == nil {
+			t.Fatalf("unboxing interface{} to struct/List must report unsupported: %s", src)
+		}
+	}
+	if _, err := Transpile("fn main(IOStream io) { pointer p; interface{} a = p; io.println(1); }\n", "test.qk"); err == nil {
+		t.Fatal("boxing pointer into interface{} must report unsupported")
+	}
+}
+
 // Phase D：library FFI（LLVM declare + C ABI 直调）与 taskm（qthreads 运行时）。
 // 这两类需要 clang 链接（-lm / qthreads.c），lli 单测只校验 IR 形状；
 // 端到端输出对齐由 compiler/testdata/compare.sh 覆盖（cases_run/e_ffi、f_taskm）。

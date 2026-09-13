@@ -1,0 +1,33 @@
+// recv_by_type：接收者识别**按类型**（首参类型 == Self，或基名等于 impl/接口类型，
+// 忽略 <...> 与 & 后缀），与形参名无关；首参无类型标注时按接收者补全
+// （当前 parser 不接受完全无类型形参，故该分支只在类型标注缺省化路径上生效）。
+// 语义基准 = 解释器（/tmp/quark 与 /tmp/qkc -run 逐字节一致）。
+type struct { int a; int b; } P;
+impl {
+    fn new(int a, int b) P { P p; p.a = a; p.b = b; return p; }   // 静态方法（首参不是接收者）
+    fn sum(P me) int { return me.a + me.b; }                      // 实例：类型是 impl 类型，名字不叫 self
+    fn sum2(Self other) int { return other.a * other.b; }         // 实例：Self
+    fn twice(int self) int { return self * 2; }                   // 静态：名字叫 self 但类型不是 P
+} P;
+type interface { fn sum(Self s) int; } C;                         // 接口接收者写 Self、名字任意
+
+type struct<T> { T v; } Box;
+impl<T> {
+    fn get(Box<T> b) T { return b.v; }                            // 实例：泛型基名 Box<T> → Box
+    fn set(Box<T> me, T d) T { me.v = d; return me.v; }           // 实例：名字任意 + 形参按引用
+} Box;
+
+fn main(IOStream io) {
+    P p = P::new(3, 4);
+    io.println(p.sum());     // 7
+    io.println(p.sum2());    // 12
+    C c = p;
+    io.println(c.sum());     // 7（接口 vtable 分发到同一实例方法）
+    io.println(P::twice(21)); // 42（静态：名字 self 不构成接收者）
+    Box<int> b; b.v = 9;
+    io.println(b.get());     // 9
+    int d = 5;
+    io.println(b.set(d));    // 5（形参按引用：d 仍是 5）
+    io.println(b.v);         // 5
+    io.println(d);           // 5
+}

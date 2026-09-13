@@ -94,6 +94,7 @@ type expr struct {
 	line   int      // 运行期错误定位（除零等）
 
 	ifaceBox string // 非空：把具体 struct 值装箱成接口值（值为 vtable 符号）
+	anyBox   string // 非空：把该具体类型的值装箱成 interface{}（RTTI 描述符按类型发射）
 }
 
 type indexExpr struct {
@@ -382,13 +383,17 @@ type emitter struct {
 
 	emitted        map[string]bool
 	deepCopied     map[string]bool // 已发射的深拷贝助手（按需）
+	rtti           map[string]bool // 已发射的 interface{} 类型描述符（按需）
+	rttiFns        map[string]bool // 已发射的 struct 打印助手（按需）
 	hasList        bool
 	hasEmpty       bool
 	hasIface       bool
+	hasRT          bool
 	ifaces         map[string]bool
 	vtables        []*vtableDef
 	needIntToStr   bool
 	needFloatToStr bool
+	needLLongToStr bool
 	needPtrToStr   bool
 	needStrCmp     bool
 	needPanic      bool
@@ -402,6 +407,7 @@ func newEmitter(lp *lowered) *emitter {
 		sigs:       map[string]*funcSig{},
 		strs:       map[string]strConst{},
 		deepCopied: map[string]bool{},
+		rtti:       map[string]bool{},
 	}
 	for _, sd := range lp.structs {
 		fs := make([]structField, 0, len(sd.fields))
@@ -418,7 +424,7 @@ func newEmitter(lp *lowered) *emitter {
 		// 用户函数：形参一律按引用传递（语言语义），LLVM 层形参类型 = 值类型*
 		e.sigs[fd.name] = &funcSig{name: fd.name, params: fd.params, ret: fd.ret, byRef: true}
 	}
-	e.ifaces = map[string]bool{}
+	e.ifaces = map[string]bool{"interface{}": true} // tAny：%Iface 值 + RTTI 描述符
 	for _, n := range lp.ifaces {
 		e.ifaces[n] = true
 	}
@@ -792,6 +798,19 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_str_replace(i8*, i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @ql_str_toint(i8*, i32)\n")
 	e.decls.WriteString("declare double @ql_str_tofloat(i8*, i32)\n")
+	// interface{}（tAny）运行期：RTTI 描述符分派 / 装箱值拆箱与相等
+	e.decls.WriteString("declare i8* @ql_any_str(i8*, i8**)\n")
+	e.decls.WriteString("declare i32 @ql_any_eq(i8*, i8**, i8*, i8**)\n")
+	e.decls.WriteString("declare i32 @ql_any_int(i8*, i8**)\n")
+	e.decls.WriteString("declare double @ql_any_float(i8*, i8**)\n")
+	e.decls.WriteString("declare i32 @ql_any_bool(i8*, i8**)\n")
+	e.decls.WriteString("declare i8* @ql_any_string(i8*, i8**)\n")
+	e.decls.WriteString("declare i8* @ql_any_str_int(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_str_float(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_str_bool(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_str_string(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_str_list(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_long_to_str(i64)\n")
 	// 签名 memorize 运行时（@mb() 记忆化：int 键 → int 值）
 	e.decls.WriteString("declare i8* @ql_memo_new()\n")
 	e.decls.WriteString("declare i32 @ql_memo_get(i8*, i32, i32*, i32*)\n")
@@ -1488,6 +1507,38 @@ func (e *emitter) coerce(reg, from, to string) string {
 	if from == to || to == "" || to == "?" {
 		return reg
 	}
+	// interface{} → 具体标量/String：运行期按 RTTI kind 校验后拆箱（不匹配则明确运行期错误）
+	if from == "interface{}" {
+		e.ensureIface()
+		d := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 0", d, reg)
+		rt := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 1", rt, reg)
+		to2 := to
+		if to2 == "double" {
+			to2 = "float"
+		}
+		switch to2 {
+		case "int":
+			r := e.newReg()
+			e.emitInstr("%s = call i32 @ql_any_int(i8* %s, i8** %s)", r, d, rt)
+			return r
+		case "float":
+			r := e.newReg()
+			e.emitInstr("%s = call double @ql_any_float(i8* %s, i8** %s)", r, d, rt)
+			return r
+		case "bool":
+			r := e.newReg()
+			e.emitInstr("%s = call i32 @ql_any_bool(i8* %s, i8** %s)", r, d, rt)
+			b := e.newReg()
+			e.emitInstr("%s = icmp ne i32 %s, 0", b, r)
+			return b
+		case "String":
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_any_string(i8* %s, i8** %s)", r, d, rt)
+			return r
+		}
+	}
 	switch {
 	case from == "int" && (to == "float" || to == "double"):
 		r := e.newReg()
@@ -1974,6 +2025,17 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 			vals[len(vals)-1].val = r
 			vals[len(vals)-1].typ = "String"
 			fmts = append(fmts, "%s")
+		case "interface{}":
+			// 运行期按 RTTI kind 分派到具体类型的字符串化（null → "nil"）
+			d := e.newReg()
+			e.emitInstr("%s = extractvalue %%Iface %s, 0", d, v)
+			rt := e.newReg()
+			e.emitInstr("%s = extractvalue %%Iface %s, 1", rt, v)
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_any_str(i8* %s, i8** %s)", r, d, rt)
+			vals[len(vals)-1].val = r
+			vals[len(vals)-1].typ = "String"
+			fmts = append(fmts, "%s")
 		case "float":
 			e.needFloatToStr = true
 			r := e.newReg()
@@ -2050,7 +2112,274 @@ func (e *emitter) compileExpr(x *expr) (string, string) {
 		v = e.boxIface(v, t, x.ifaceBox)
 		t = x.typ
 	}
+	if x.anyBox != "" && t != x.typ {
+		v = e.boxAny(v, t)
+		t = x.typ
+	}
 	return v, t
+}
+
+// ---------- interface{}（tAny）：装箱 + 运行期类型描述符（RTTI） ----------
+//
+// 值表示沿用 %Iface { i8* data, i8** rt }：rt 指向类型描述符
+//
+//	%RT = type { i8* (i8*)* str, i8* name, i32 kind }   kind: 0=int 1=float 2=bool
+//	                                                           3=String 4=List<int> 5=struct 6=null
+//
+// data 约定：标量/String 指向调用期分配的堆单元（按值语义，装箱即快照）；List/struct 直接是
+// 对象指针（引用语义，与解释器 *List/*Struct 一致）；null 为零值。
+// 打印/相等/拆箱都由运行期按 kind 分派（qthreads.c 的 ql_any_*；struct 的 str 由编译器生成）。
+
+// anyKindOf 返回类型的 RTTI kind。
+func anyKindOf(t string) int {
+	switch t {
+	case "int", "thread", "cbool":
+		return 0
+	case "float", "double", "f32":
+		return 1
+	case "bool":
+		return 2
+	case "String":
+		return 3
+	case "interface{}", "null", "void":
+		return 6
+	}
+	if isListType(t) {
+		return 4
+	}
+	return 5 // struct
+}
+
+// ensureRT 发射类型描述符的 LLVM 结构定义。
+func (e *emitter) ensureRT() {
+	if e.hasRT {
+		return
+	}
+	e.hasRT = true
+	e.types.WriteString("%RT = type { i8* (i8*)*, i8*, i32 }\n")
+}
+
+// rttiSym 返回（按需发射）类型描述符符号。
+func (e *emitter) rttiSym(typ string) string {
+	sym := "@rt$" + tyName(typ)
+	if e.rtti[sym] {
+		return sym
+	}
+	e.rtti[sym] = true
+	e.ensureRT()
+	kind := anyKindOf(typ)
+	strFn := ""
+	switch kind {
+	case 0:
+		e.needIntToStr = true // 复用同一 int→String 格式化
+		strFn = "@ql_any_str_int"
+	case 1:
+		e.needFloatToStr = true // 复用同一 float→String 格式化
+		strFn = "@ql_any_str_float"
+	case 2:
+		strFn = "@ql_any_str_bool"
+	case 3:
+		strFn = "@ql_any_str_string"
+	case 4:
+		e.ensureList()
+		strFn = "@ql_any_str_list"
+	default:
+		strFn = "@" + e.emitStructAnyStr(typ)
+	}
+	nameC := e.strConst(typ)
+	fmt.Fprintf(&e.globals, "%s = private constant %%RT { i8* (i8*)* %s, i8* getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0), i32 %d }\n",
+		sym, strFn, nameC.size, nameC.size, nameC.name, kind)
+	return sym
+}
+
+// boxAny 把具体值装箱成 interface{} 值。
+func (e *emitter) boxAny(v, from string) string {
+	e.ensureIface()
+	sym := e.rttiSym(from)
+	var data string
+	switch from {
+	case "int", "thread", "cbool":
+		p := e.newReg()
+		e.emitInstr("%s = call i8* @malloc(i64 4)", p)
+		cp := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to i32*", cp, p)
+		e.emitInstr("store i32 %s, i32* %s", v, cp)
+		data = p
+	case "bool":
+		p := e.newReg()
+		e.emitInstr("%s = call i8* @malloc(i64 4)", p)
+		cp := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to i32*", cp, p)
+		z := e.newReg()
+		e.emitInstr("%s = zext i1 %s to i32", z, v)
+		e.emitInstr("store i32 %s, i32* %s", z, cp)
+		data = p
+	case "float", "double":
+		p := e.newReg()
+		e.emitInstr("%s = call i8* @malloc(i64 8)", p)
+		cp := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to double*", cp, p)
+		e.emitInstr("store double %s, double* %s", v, cp)
+		data = p
+	case "String":
+		p := e.newReg()
+		e.emitInstr("%s = call i8* @malloc(i64 8)", p)
+		cp := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to i8**", cp, p)
+		e.emitInstr("store i8* %s, i8** %s", v, cp)
+		data = p
+	case "null":
+		data = "null"
+	default:
+		// struct / List<int>：值本身就是对象指针（引用语义）
+		data = e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8*", data, e.ir(from), v)
+	}
+	i0 := e.newReg()
+	e.emitInstr("%s = insertvalue %%Iface undef, i8* %s, 0", i0, data)
+	rts := e.newReg()
+	e.emitInstr("%s = bitcast %%RT* %s to i8**", rts, sym)
+	i1 := e.newReg()
+	e.emitInstr("%s = insertvalue %%Iface %s, i8** %s, 1", i1, i0, rts)
+	return i1
+}
+
+// emitStructAnyStr 生成 struct 的 interface{} 打印函数（解释器 StructValue.String 格式：
+// <T {字段=值, ...}>，字段按声明顺序）。
+func (e *emitter) emitStructAnyStr(typ string) string {
+	sym := "ql_any_str_struct_" + tyName(typ)
+	if e.rttiFns == nil {
+		e.rttiFns = map[string]bool{}
+	}
+	if e.rttiFns[sym] {
+		return sym
+	}
+	e.rttiFns[sym] = true
+	e.ensureStruct(typ)
+	savedBody, savedVars := e.body, e.vars
+	savedTerm, savedRet, savedCur := e.term, e.funcReturned, e.cur
+	e.body = strings.Builder{}
+	e.vars = map[string]varSlot{}
+	e.blockCount = 0
+	e.term = false
+	e.funcReturned = false
+	e.body.WriteString("entry:\n")
+	p := e.newReg()
+	e.emitInstr("%s = bitcast i8* %%d to %s", p, e.ir(typ))
+	acc := e.i8Ptr(e.strConst("<" + typ + " {"))
+	for i, f := range e.structs[typ] {
+		if i > 0 {
+			acc = e.strcat2(acc, e.i8Ptr(e.strConst(", ")))
+		}
+		acc = e.strcat2(acc, e.i8Ptr(e.strConst(f.name+"=")))
+		g := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(typ), e.irElem(typ), p, i)
+		fv := e.newReg()
+		e.emitInstr("%s = load %s, %s* %s", fv, e.ir(f.typ), e.ir(f.typ), g)
+		acc = e.strcat2(acc, e.anyValueStr(fv, f.typ))
+	}
+	acc = e.strcat2(acc, e.i8Ptr(e.strConst("}>")))
+	e.emitInstr("ret i8* %s", acc)
+	body := e.body.String()
+	e.body, e.vars = savedBody, savedVars
+	e.term, e.funcReturned, e.cur = savedTerm, savedRet, savedCur
+	e.helpers.WriteString("define i8* @" + sym + "(i8* %d) {\n" + body + "}\n")
+	return sym
+}
+
+// anyValueStr 取任意字段值的字符串形式（struct 打印用；与解释器 Value.String 对齐）。
+func (e *emitter) anyValueStr(v, typ string) string {
+	switch {
+	case typ == "int" || typ == "thread" || typ == "cbool":
+		e.needIntToStr = true
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @ql_int_to_str(i32 %s)", r, v)
+		return r
+	case typ == "long":
+		e.needLLongToStr = true
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @ql_long_to_str(i64 %s)", r, v)
+		return r
+	case typ == "float" || typ == "double" || typ == "f32":
+		e.needFloatToStr = true
+		fv := e.coerce(v, typ, "float")
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @ql_float_to_str(double %s)", r, fv)
+		return r
+	case typ == "bool":
+		r := e.newReg()
+		e.emitInstr("%s = select i1 %s, i8* %s, i8* %s", r, e.toI1(v), e.i8Ptr(e.strConst("true")), e.i8Ptr(e.strConst("false")))
+		return r
+	case typ == "String":
+		return v
+	case typ == "pointer":
+		e.needPtrToStr = true
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @ql_ptr_to_str(i8* %s)", r, v)
+		return r
+	case typ == "interface{}":
+		d := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 0", d, v)
+		rt := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 1", rt, v)
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @ql_any_str(i8* %s, i8** %s)", r, d, rt)
+		return r
+	case e.isStruct(typ):
+		nn := e.newReg()
+		e.emitInstr("%s = icmp ne %s %s, null", nn, e.ir(typ), v)
+		okB, nilB, endB := e.newBlock(), e.newBlock(), e.newBlock()
+		slot := e.newReg()
+		e.emitInstr("%s = alloca i8*, align 8", slot)
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", nn, okB, nilB)
+		e.setBlock(okB)
+		fn := e.emitStructAnyStr(typ)
+		c := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8*", c, e.ir(typ), v)
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @%s(i8* %s)", r, fn, c)
+		e.emitInstr("store i8* %s, i8** %s", r, slot)
+		e.emitInstr("br label %%%s", endB)
+		e.setBlock(nilB)
+		e.emitInstr("store i8* %s, i8** %s", e.i8Ptr(e.strConst("nil")), slot)
+		e.emitInstr("br label %%%s", endB)
+		e.setBlock(endB)
+		out := e.newReg()
+		e.emitInstr("%s = load i8*, i8** %s", out, slot)
+		return out
+	case isListType(typ):
+		e.ensureList()
+		nn := e.newReg()
+		e.emitInstr("%s = icmp ne %%List* %s, null", nn, v)
+		okB, nilB, endB := e.newBlock(), e.newBlock(), e.newBlock()
+		slot := e.newReg()
+		e.emitInstr("%s = alloca i8*, align 8", slot)
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", nn, okB, nilB)
+		e.setBlock(okB)
+		head, size := e.listHeadSize(v)
+		tail := e.newReg()
+		e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+		p := e.listBuf(v)
+		r := e.newReg()
+		e.emitInstr("%s = call i8* @ql_list_int_str(i32* %s, i32 %s, i32 %s)", r, p, head, tail)
+		e.emitInstr("store i8* %s, i8** %s", r, slot)
+		e.emitInstr("br label %%%s", endB)
+		e.setBlock(nilB)
+		e.emitInstr("store i8* %s, i8** %s", e.i8Ptr(e.strConst("nil")), slot)
+		e.emitInstr("br label %%%s", endB)
+		e.setBlock(endB)
+		out := e.newReg()
+		e.emitInstr("%s = load i8*, i8** %s", out, slot)
+		return out
+	}
+	return e.i8Ptr(e.strConst("nil"))
+}
+
+// strcat2 拼接两个 String 寄存器（ql_strcat）。
+func (e *emitter) strcat2(a, b string) string {
+	r := e.newReg()
+	e.emitInstr("%s = call i8* @ql_strcat(i8* %s, i8* %s)", r, a, b)
+	return r
 }
 
 // boxIface 把具体 struct 指针装箱为接口值 { data, vtable }。
@@ -3026,6 +3355,35 @@ func (e *emitter) compileLogic(x *expr) (string, string) {
 func (e *emitter) compileCmp(x *expr) (string, string) {
 	lv, lt := e.compileExpr(x.l)
 	rv, rt := e.compileExpr(x.r)
+	// interface{} 相等：运行期按 RTTI 比较（数值跨 int/float、String 按内容、struct/List 按引用）
+	if lt == "interface{}" || rt == "interface{}" {
+		if lt != "interface{}" {
+			lv = e.boxAny(lv, lt)
+			lt = "interface{}"
+		}
+		if rt != "interface{}" {
+			rv = e.boxAny(rv, rt)
+			rt = "interface{}"
+		}
+		e.ensureIface()
+		ld := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 0", ld, lv)
+		lrt := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 1", lrt, lv)
+		rd := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 0", rd, rv)
+		rrt := e.newReg()
+		e.emitInstr("%s = extractvalue %%Iface %s, 1", rrt, rv)
+		cv := e.newReg()
+		e.emitInstr("%s = call i32 @ql_any_eq(i8* %s, i8** %s, i8* %s, i8** %s)", cv, ld, lrt, rd, rrt)
+		r := e.newReg()
+		op := "ne"
+		if x.op == "!=" {
+			op = "eq"
+		}
+		e.emitInstr("%s = icmp %s i32 %s, 0", r, op, cv)
+		return r, "bool"
+	}
 	// struct：__eq__/__ne__ 方法或引用比较
 	if lt == rt && e.isStruct(lt) {
 		if sig, ok := e.sigs["__op__"+x.op+"|"+lt]; ok {
@@ -3100,6 +3458,9 @@ type fnMeta struct {
 func analyzeExpr(e *expr, m *fnMeta) {
 	if e == nil {
 		return
+	}
+	if e.anyBox != "" {
+		m.impure = true // 装箱调用 malloc（标量堆单元），不是纯函数
 	}
 	switch e.kind {
 	case kMerge:
