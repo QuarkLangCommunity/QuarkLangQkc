@@ -606,11 +606,12 @@ func Typecheck(prog *Program) error {
 			c.impls[key] = def
 		}
 		for _, m := range im.Methods {
-			if len(m.Params) > 0 && m.Params[0].Name == "self" && m.Params[0].Type == "" {
-				m.Params[0].Type = im.Type
+			recv := false
+			if len(m.Params) > 0 {
+				recv = isRecvParam(im.Type, &m.Params[0]) // 按类型判定接收者（与形参名无关）
 			}
 			fn := &Func{Name: m.Name, TypeParams: m.TypeParams, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
-			if len(m.Params) > 0 && m.Params[0].Name == "self" {
+			if recv {
 				if _, dup := def.SelfMethods[fn.Name]; dup {
 					return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate method %q on %s", fn.Name, im.Type), Pos: m.Pos}
 				}
@@ -1657,8 +1658,8 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		for _, sig := range methods {
 			if sig.Name == name {
 				want := len(sig.Params)
-				if want > 0 && sig.Params[0].Name == "self" {
-					want--
+				if want > 0 && strings.TrimSpace(sig.Params[0].Type) == "Self" {
+					want-- // 接口签名的接收者按**类型**识别（Self），与形参名无关
 				}
 				if len(args) != want {
 					return nil, c.errf(pos, "TypeError: %s.%s 需要 %d 个参数，给了 %d", recv.FName, name, want, len(args))
@@ -2470,6 +2471,30 @@ func (c *checker) ifaceMethodNames(name string, seen map[string]bool) []string {
 		names = append(names, c.ifaceMethodNames(ex, seen)...)
 	}
 	return names
+}
+
+// isRecvParam 判定 impl 方法的首参是否为**接收者**：按类型（Self 或该 impl 的类型），
+// 与形参名无关；首参无类型标注时按接收者处理并补全为该 impl 类型。
+func isRecvParam(implType string, p *Param) bool {
+	if p == nil {
+		return false
+	}
+	t := strings.TrimSpace(p.Type)
+	if t == "" {
+		p.Type = implType
+		return true
+	}
+	return t == "Self" || recvBaseName(t) == recvBaseName(implType)
+}
+
+// recvBaseName 取类型基名：去掉尾部 & 与泛型实参（node<T>& → node）。
+func recvBaseName(t string) string {
+	t = strings.TrimSpace(t)
+	t = strings.TrimSuffix(t, "&")
+	if i := strings.IndexByte(t, '<'); i >= 0 {
+		t = t[:i]
+	}
+	return strings.TrimSpace(t)
 }
 
 // isSelfType 是否为 Self 占位（Self = 实现类型，xmind §接口）。

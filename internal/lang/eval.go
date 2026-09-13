@@ -455,11 +455,12 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 			in.impls[key] = def
 		}
 		for _, m := range im.Methods {
-			if len(m.Params) > 0 && m.Params[0].Name == "self" && m.Params[0].Type == "" {
-				m.Params[0].Type = im.Type
+			recv := false
+			if len(m.Params) > 0 {
+				recv = isRecvParam(im.Type, &m.Params[0]) // 按类型判定接收者（与形参名无关）
 			}
 			fn := &Func{Name: m.Name, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
-			if len(m.Params) > 0 && m.Params[0].Name == "self" {
+			if recv {
 				if _, dup := def.SelfMethods[fn.Name]; dup {
 					return nil, fmt.Errorf("CompileError: duplicate method %q on %s", fn.Name, im.Type)
 				}

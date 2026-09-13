@@ -109,7 +109,7 @@ func CopydV(c *CopydValue) Value        { return Value{tag: byte(vCopyd), ptr: u
 func ChanV(c *Channel) Value            { return Value{tag: byte(vChan), ptr: unsafe.Pointer(c)} }
 func StructV(st *StructValue) Value     { return Value{tag: byte(vStruct), ptr: unsafe.Pointer(st)} }
 func LibraryV(o *libObj) Value          { return Value{tag: byte(vLib), ptr: unsafe.Pointer(o)} }
-func RefV(r *refValue) Value             { return Value{tag: byte(vRef), ptr: unsafe.Pointer(r)} }
+func RefV(r *refValue) Value            { return Value{tag: byte(vRef), ptr: unsafe.Pointer(r)} }
 
 // ---- 引用值（按引用传参） ----
 

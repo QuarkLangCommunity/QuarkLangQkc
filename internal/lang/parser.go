@@ -789,7 +789,6 @@ func (p *parser) parseInterfaceBody(kw Token) (*InterfaceDecl, error) {
 	return id, nil
 }
 
-
 // parseAnonTypeName 解析匿名 struct { ... } / interface { ... } 类型标注：
 // 合成实名类型（__anon_struct_N / __anon_iface_N）登记进 Program（解释器/编译器按实名类型处理），
 // 返回该合成名。字段/方法集合等价的匿名类型复用同一个合成名。
