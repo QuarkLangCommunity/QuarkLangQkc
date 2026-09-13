@@ -55,6 +55,18 @@ func engineFingerprint() string {
 	return engineVersion + "-" + hex.EncodeToString(h[:8])
 }
 
+// linkFlags 提取 IR 里的链接标记（"; qkc-link: -lm"），供 clang 追加外部库。
+func linkFlags(ir string) []string {
+	var out []string
+	for _, line := range strings.Split(ir, "\n") {
+		if !strings.HasPrefix(line, "; qkc-link:") {
+			continue
+		}
+		out = append(out, strings.Fields(strings.TrimPrefix(line, "; qkc-link:"))...)
+	}
+	return out
+}
+
 func srcHash(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -154,6 +166,8 @@ func main() {
 	if runtime.GOOS != "windows" {
 		clangArgs = append(clangArgs, "-pthread")
 	}
+	// library FFI：IR 里的 "; qkc-link: -lm" 标记 → 追加链接参数
+	clangArgs = append(clangArgs, linkFlags(ir)...)
 	// LTO 降级：默认含 -flto=thin 失败则去掉重试（仅当用户未显式指定 QUARK_CFLAGS）
 	attempts := [][]string{strings.Fields(cflags)}
 	if os.Getenv("QUARK_CFLAGS") == "" {
@@ -166,6 +180,7 @@ func main() {
 		if runtime.GOOS != "windows" {
 			args = append(args, "-pthread")
 		}
+		args = append(args, linkFlags(ir)...)
 		args = append(args, cf...)
 		cmd := exec.Command("clang", args...)
 		if out, err := cmd.CombinedOutput(); err == nil {

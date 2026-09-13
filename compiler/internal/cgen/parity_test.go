@@ -9,11 +9,24 @@ import (
 )
 
 // parityCases 返回 compiler/testdata/cases/*.kq（测试工作目录是 internal/cgen）。
+// 这些用例只用 libc + 模块内 ql_strcat，可用 lli 直接执行。
 func parityCases(t *testing.T) []string {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join("..", "..", "testdata", "cases", "*.kq"))
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no parity cases found: %v", err)
+	}
+	return files
+}
+
+// parityRunCases 返回 compiler/testdata/cases_run/*.kq：需要 clang 链接（library FFI
+// 要 -lm/-lc，taskm 要 qthreads 运行时），因此只做 IR 语法校验；端到端由
+// compiler/testdata/compare.sh（qkc -run）与解释器逐字节对比。
+func parityRunCases(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join("..", "..", "testdata", "cases_run", "*.kq"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no run parity cases found: %v", err)
 	}
 	return files
 }
@@ -24,7 +37,8 @@ func TestParityCaseIRSyntax(t *testing.T) {
 	if err != nil {
 		t.Skip("llvm-as not available")
 	}
-	for _, f := range parityCases(t) {
+	all := append(parityCases(t), parityRunCases(t)...)
+	for _, f := range all {
 		t.Run(filepath.Base(f), func(t *testing.T) {
 			src, err := os.ReadFile(f)
 			if err != nil {

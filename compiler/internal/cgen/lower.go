@@ -12,8 +12,29 @@
 //     字段/元素修改对所有别名可见（q = p; q.a = 1 也会改到 p.a）。
 //   - int → float 是唯一隐式转换（与 typecheck.assignable 一致）。
 //
-// 支持的子集见文件末尾 supportedSummary；未 lower 的构造一律返回带源码位置的
-// 明确错误（编译器绝不静默错编）。
+// 已 lower 的构造（阶段 A/B/C）：
+//
+//   - 语句：声明（int/bool/float/String/List<int>/struct/接口）、赋值（变量/List 下标/
+//     struct 字段）、if/else、while、for（C 风格 + 迭代 for-in）、break、try/catch(void)、
+//     return、log、delete List、io.println/io.print、表达式语句
+//
+//   - 表达式：int/float/bool/String 字面量、算术/比较/短路逻辑、String 拼接、
+//     int/float/bool.toString()、函数调用/递归、List size/get/append/[i]、
+//     struct 字面量（命名+位置）、字段读写、实例方法/静态方法、space 调用、
+//     Operation 运算符重载（__add__ 等）、泛型函数/泛型 struct/泛型 impl 单态化、
+//     接口装箱与 vtable dynamic 分发、内置 sum/clock
+//
+//   - 顶层：fn、main(IOStream io)、import（lang.CompileWithImports 递归合并）、
+//     type struct、impl、space
+//
+//   - 顶层：library（FFI：LLVM declare + C ABI 直调 + ; qkc-link 链接标记）、
+//     taskm（spawn/merge/block/done/channel，对接 qthreads 运行时）
+//
+// 仍未 lower（一律返回带位置的明确错误，绝不静默错编）：
+// String/List 内建方法（substring/size/split/toString 等，除 int/float/bool.toString）、
+// 指针/new/HashTable、打印 struct/接口值、copyd、签名调用 @sign、匿名 struct、
+// interface{}（tAny）、long 与 FFI pointer、float 取模、含 log 函数的返回值被使用、
+// merge 多参数/非 int 参数。
 package cgen
 
 import (
@@ -137,12 +158,17 @@ type lowerer struct {
 	methods  map[string]map[string]*methodInfo // 类型/space 名 → 方法名 → 信息
 	spaces   map[string]bool                   // space 名（impl.Type 无对应 struct）
 
-	tys      []structDef   // 需要发射的 struct 类型（含泛型实例）
-	tyEmit   map[string]bool
-	insts    map[string]string // 泛型实例 → 已实例化标记
-	sigs     map[string]*funcDef
-	nilFns   map[string]bool // 含 log 的函数（返回值可能为 nil，仅解释器可用）
-	lowering map[string]bool // 正在 lower 的函数（防递归实例化死循环）
+	tys       []structDef // 需要发射的 struct 类型（含泛型实例）
+	tyEmit    map[string]bool
+	insts     map[string]string // 泛型实例 → 已实例化标记
+	instMi    map[string]*methodInfo
+	ifaceTbl  map[string][]ifaceM
+	vtables   map[string]*vtableDef
+	extSeen   map[string]bool
+	runnerIdx map[string]string
+	sigs      map[string]*funcDef
+	nilFns    map[string]bool // 含 log 的函数（返回值可能为 nil，仅解释器可用）
+	lowering  map[string]bool // 正在 lower 的函数（防递归实例化死循环）
 
 	out *lowered
 }
@@ -167,6 +193,11 @@ func lowerProgram(prog *lang.Program, file, src string) (*lowered, error) {
 		spaces:    map[string]bool{},
 		tyEmit:    map[string]bool{},
 		insts:     map[string]string{},
+		instMi:    map[string]*methodInfo{},
+		ifaceTbl:  map[string][]ifaceM{},
+		vtables:   map[string]*vtableDef{},
+		extSeen:   map[string]bool{},
+		runnerIdx: map[string]string{},
 		sigs:      map[string]*funcDef{},
 		nilFns:    map[string]bool{},
 		lowering:  map[string]bool{},
@@ -179,6 +210,14 @@ func lowerProgram(prog *lang.Program, file, src string) (*lowered, error) {
 		return nil, err
 	}
 	l.out.structs = l.tys
+	for sym, v := range l.vtables {
+		_ = sym
+		l.out.vtables = append(l.out.vtables, v)
+	}
+	l.out.sortVTables()
+	for name := range l.ifaces {
+		l.out.ifaces = append(l.out.ifaces, name)
+	}
 	return l.out, nil
 }
 
@@ -432,6 +471,12 @@ func (l *lowerer) ensureStructTy(t string) {
 		def.fields = append(def.fields, m.Name)
 		def.fieldTypes = append(def.fieldTypes, substType(m.Type, sub))
 	}
+	// 依赖先发射：LLVM 命名类型必须先定义后使用
+	for _, ft := range def.fieldTypes {
+		if l.isStructType(ft) {
+			l.ensureStructTy(ft)
+		}
+	}
 	l.tys = append(l.tys, def)
 }
 
@@ -473,13 +518,13 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		return nil
 	}
 	if l.isIfaceType(t) {
-		return l.errf(pos, "暂未支持接口类型 %s %q（dynamic 分发仅解释器可用）", what, t)
+		return nil // 接口类型：vtable 分发（Phase C）
 	}
 	switch t {
 	case "long", "char":
 		return l.errf(pos, "暂未支持 %s 类型 %q（编译器暂未 lower）", what, t)
 	case "thread", "Task", "Channel", "channel":
-		return l.errf(pos, "暂未支持 taskm 线程/通道类型 %q（解释器可用）", t)
+		return nil // taskm：thread = pid(i32)，Channel = i8* 句柄
 	case "IOStream":
 		return l.errf(pos, "暂未支持 IOStream %s（编译器仅在 main 入口绑定 io）", what)
 	case "interface{}":
@@ -503,7 +548,7 @@ func (l *lowerer) retOK(t string) bool {
 	case "int", "bool", "float", "String", "void":
 		return true
 	}
-	return l.isStructType(t)
+	return l.isStructType(t) || l.isIfaceType(t)
 }
 
 // ---------- 作用域 ----------
@@ -526,6 +571,42 @@ type funcCtx struct {
 	// discarded 是当前「值被丢弃」的调用（表达式语句的顶层调用）：
 	// 含 log 的函数返回值可能是 nil，只允许在这个位置调用。
 	discarded *lang.CallExpr
+
+	// expectT 是当前表达式的期望类型（用于补全泛型 struct 字面量的类型实参：
+	// typecheck 只把 .{...} 的名字填成基名 "Box"，实参在声明类型里）。
+	expectT string
+
+	// subst 是当前泛型实例的类型参数替换表（T → int）。
+	subst map[string]string
+}
+
+// resolveT 展开当前实例的类型参数（T → int；Box<T> → Box<int>）。
+func (fc *funcCtx) resolveT(t string) string {
+	if len(fc.subst) == 0 {
+		return t
+	}
+	return substType(t, fc.subst)
+}
+
+// typeOfAs 在「期望类型 want」的上下文里推断表达式类型。
+func (fc *funcCtx) typeOfAs(x lang.Expr, want string) string {
+	old := fc.expectT
+	fc.expectT = want
+	t := fc.typeOf(x)
+	fc.expectT = old
+	return t
+}
+
+// exprAs 在「期望类型 want」的上下文里 lower 表达式（含接口装箱）。
+func (fc *funcCtx) exprAs(x lang.Expr, want string) (*expr, error) {
+	old := fc.expectT
+	fc.expectT = want
+	defer func() { fc.expectT = old }()
+	e, err := fc.expr(x)
+	if err != nil {
+		return nil, err
+	}
+	return fc.boxTo(e, want, exprPos(x, lang.Pos{Line: 1, Col: 1}))
 }
 
 func (l *lowerer) newCtx(fn, ret string) *funcCtx {
@@ -568,6 +649,7 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		return nil, l.errf(f.Pos, "暂未支持返回类型 %q（编译器支持 int/bool/float/String/void/struct）", f.Ret)
 	}
 	fc := l.newCtx(irName, ret)
+	fc.subst = subst
 	params := make([]funcParam, 0, len(f.Params))
 	start := 0
 	if selfTyp != "" {
@@ -703,11 +785,11 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 		if fc.ret == "void" {
 			return nil, l.errf(st.Pos, "void 函数不能 return 值（解释器会忽略返回值，编译器不静默忽略）")
 		}
-		t := fc.typeOf(st.X)
+		t := fc.typeOfAs(st.X, fc.ret)
 		if !fc.assignable(t, fc.ret) {
 			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持从 %s 函数返回 %s 值", fc.ret, t)
 		}
-		x, err := fc.expr(st.X)
+		x, err := fc.exprAs(st.X, fc.ret)
 		if err != nil {
 			return nil, err
 		}
@@ -847,12 +929,12 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 
 func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	l := fc.l
-	t := st.Type
+	t := fc.resolveT(st.Type)
 	if err := l.checkType(t, st.Pos, "变量"); err != nil {
 		return nil, err
 	}
 	switch t {
-	case "int", "bool", "float", "String":
+	case "int", "bool", "float", "String", "thread", "Channel", "channel":
 		if st.Init == nil {
 			if err := fc.declare(st.Name, t, st.Pos); err != nil {
 				return nil, err
@@ -909,6 +991,27 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		return &declStmt{name: st.Name, typ: t, init: &expr{kind: kList, typ: t, lst: &listLit{items: items}}}, nil
 	}
 
+	// 接口类型（vtable 装箱）
+	if l.isIfaceType(t) {
+		if st.Init == nil {
+			if err := fc.declare(st.Name, t, st.Pos); err != nil {
+				return nil, err
+			}
+			return &declStmt{name: st.Name, typ: t}, nil
+		}
+		it := fc.typeOfAs(st.Init, t)
+		if !fc.assignable(it, t) {
+			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化接口 %s 变量 %q", it, t, st.Name)
+		}
+		x, err := fc.exprAs(st.Init, t)
+		if err != nil {
+			return nil, err
+		}
+		if err := fc.declare(st.Name, t, st.Pos); err != nil {
+			return nil, err
+		}
+		return &declStmt{name: st.Name, typ: t, init: x}, nil
+	}
 	// struct 类型
 	l.ensureStructTy(t)
 	if st.Init == nil {
@@ -917,11 +1020,11 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		return &declStmt{name: st.Name, typ: t}, nil
 	}
-	it := fc.typeOf(st.Init)
+	it := fc.typeOfAs(st.Init, t)
 	if it != t {
 		return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
 	}
-	x, err := fc.expr(st.Init)
+	x, err := fc.exprAs(st.Init, t)
 	if err != nil {
 		return nil, err
 	}
@@ -969,10 +1072,10 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if !ok {
 			return nil, l.errf(tgt.Pos, "赋值目标 %q 未声明", tgt.Name)
 		}
-		if !fc.assignable(fc.typeOf(st.X), vt) {
+		if !fc.assignable(fc.typeOfAs(st.X, vt), vt) {
 			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s 变量 %q 赋值", fc.typeOf(st.X), vt, tgt.Name)
 		}
-		x, err := fc.expr(st.X)
+		x, err := fc.exprAs(st.X, vt)
 		if err != nil {
 			return nil, err
 		}
@@ -1017,7 +1120,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			if err != nil {
 				return nil, err
 			}
-			x, err := fc.expr(st.X)
+			x, err := fc.exprAs(st.X, ft)
 			if err != nil {
 				return nil, err
 			}
@@ -1083,7 +1186,7 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		return &expr{kind: kIndex, typ: elem, line: e.Pos.Line, idx: &indexExpr{name: id.Name, i: idx}}, nil
 
 	case *lang.StructLit:
-		return fc.structLit(e, "")
+		return fc.structLit(e, fc.expectT)
 
 	case *lang.NewExpr:
 		return nil, l.errf(e.Pos, "暂未支持 new %s（堆分配仅解释器可用）", e.Typ)
@@ -1105,8 +1208,12 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 	// 运算符重载：同 struct 类型且 impl 定义了 __add__ 等
 	if lt == rt && l.isStructType(lt) {
 		if op := opMethodFor(e.Op); op != "" {
-			if mi := l.selfMethod(lt, op); mi != nil && len(mi.fn.Params) == 2 {
-				return fc.methodCall(mi, lt, e.L, []lang.Expr{e.R}, e.Pos)
+			if mi := l.lookupSelf(lt, op); mi != nil && len(mi.fn.Params) == 2 {
+				imi, err := l.instantiateFor(mi, lt, []lang.Expr{e.L, e.R}, fc, e.Pos)
+				if err != nil {
+					return nil, err
+				}
+				return fc.methodCall(imi, lt, e.L, []lang.Expr{e.R}, e.Pos)
 			}
 		}
 	}
@@ -1284,8 +1391,12 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 	switch e.Op {
 	case "-":
 		if l.isStructType(t) {
-			if mi := l.selfMethod(t, "__neg__"); mi != nil {
-				return fc.methodCall(mi, t, e.X, nil, e.Pos)
+			if mi := l.lookupSelf(t, "__neg__"); mi != nil {
+				imi, err := l.instantiateFor(mi, t, []lang.Expr{e.X}, fc, e.Pos)
+				if err != nil {
+					return nil, err
+				}
+				return fc.methodCall(imi, t, e.X, nil, e.Pos)
 			}
 		}
 		if !numLike(t) {
@@ -1369,15 +1480,15 @@ func (fc *funcCtx) callNamed(name string, pos lang.Pos, c *lang.CallExpr) (*expr
 func (fc *funcCtx) callArgs(c *lang.CallExpr, params []lang.Param) ([]*expr, error) {
 	args := make([]*expr, 0, len(c.Args))
 	for i, a := range c.Args {
-		at := fc.typeOf(a)
 		want := "?"
 		if i < len(params) {
 			want = params[i].Type
 		}
+		at := fc.typeOfAs(a, want)
 		if want != "?" && !fc.assignable(at, want) {
 			return nil, fc.l.errf(exprPos(a, c.Pos), "暂未支持向 %s 传递 %s 参数（需要 %s）", identifierName(c.Fn), at, want)
 		}
-		x, err := fc.expr(a)
+		x, err := fc.exprAs(a, want)
 		if err != nil {
 			return nil, err
 		}
@@ -1481,17 +1592,41 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		}
 		return nil, l.errf(me.Pos, "暂未支持 List 方法 %q（编译器支持 size()/get(i)/append(v)）", me.Name)
 	}
+	// taskm 全局 / thread 变量 / Channel 变量
+	if id, ok := me.X.(*lang.Ident); ok {
+		if id.Name == "taskm" {
+			return fc.taskmCall(c, me)
+		}
+		if t, found := fc.lookup(id.Name); found {
+			switch t {
+			case "thread":
+				return fc.threadCall(c, me, &expr{kind: kIdent, typ: "thread", s: id.Name})
+			case "Channel", "channel":
+				return fc.channelCall(c, me, &expr{kind: kIdent, typ: t, s: id.Name})
+			}
+		}
+	}
+	// library FFI（外部符号：直接 call C 符号，参数按 C ABI 转换）
+	if id, ok := me.X.(*lang.Ident); ok {
+		if _, isLib := l.libs[id.Name]; isLib {
+			return fc.libCall(c, me, id.Name)
+		}
+	}
+	// 接口方法（vtable 分发）
+	if l.isIfaceType(rt) {
+		return fc.ifaceCall(c, me, rt)
+	}
 	// struct 实例方法
 	if l.isStructType(rt) {
-		if mi := l.selfMethod(rt, me.Name); mi != nil {
+		if mi := l.lookupSelf(rt, me.Name); mi != nil {
 			if len(mi.fn.Params)-1 != len(c.Args) {
 				return nil, l.errf(me.Pos, "方法 %s.%s 需要 %d 个参数，got %d", rt, me.Name, len(mi.fn.Params)-1, len(c.Args))
 			}
-			// 泛型 impl 的实例化在 Phase C；此处要求 impl 无未绑定类型参数
-			if err := l.checkImplInst(mi, rt, me.Pos); err != nil {
+			imi, err := l.instantiateFor(mi, rt, c.Args, fc, me.Pos)
+			if err != nil {
 				return nil, err
 			}
-			return fc.methodCall(mi, rt, me.X, c.Args, me.Pos)
+			return fc.methodCall(imi, rt, me.X, c.Args, me.Pos)
 		}
 		if l.hasMethod(rt, me.Name) {
 			return nil, l.errf(me.Pos, "暂未支持静态方法以实例方式调用 %s.%s（正典写法 %s::%s(...)）", rt, me.Name, rt, me.Name)
@@ -1549,7 +1684,7 @@ func (fc *funcCtx) methodCall(mi *methodInfo, recvTyp string, recv lang.Expr, ex
 // scopeCallCall lower T::m(...) / space::f(...) 调用形式。
 func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, error) {
 	l := fc.l
-	mi, err := l.staticMethod(sc.Scope, sc.Name, sc.Pos)
+	mi, err := l.staticMethodFor(sc.Scope, sc.Name, sc.Args, fc, sc.Pos)
 	if err != nil {
 		return nil, err
 	}
@@ -1617,6 +1752,16 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 	if typ == "" {
 		typ = target
 	}
+	base, targs := splitGeneric(typ)
+	if sd0, ok := l.structs[base]; ok && len(sd0.TypeParams) > 0 && len(targs) == 0 {
+		// 泛型 struct 字面量：typecheck 只填基名，实例类型由期望类型补全
+		tb, ta := splitGeneric(target)
+		if tb == base && len(ta) > 0 {
+			typ = target
+		} else {
+			return nil, l.errf(e.Pos, "暂未支持无法推断类型实参的泛型 struct 字面量 .{...}（%s，解释器可用）", base)
+		}
+	}
 	sd, sub := l.structSubst(typ)
 	if sd == nil {
 		return nil, l.errf(e.Pos, "暂未支持匿名 struct 字面量 .{...}（编译器要求有名 struct）")
@@ -1643,11 +1788,11 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 			return nil, l.errf(e.Pos, "struct %s 字面量字段过多", typ)
 		}
 		ft := substType(sd.Members[idx].Type, sub)
-		vt := fc.typeOf(f.X)
+		vt := fc.typeOfAs(f.X, ft)
 		if !fc.assignable(vt, ft) {
 			return nil, l.errf(exprPos(f.X, e.Pos), "暂未支持用 %s 初始化字段 %s.%s（%s）", vt, typ, sd.Members[idx].Name, ft)
 		}
-		x, err := fc.expr(f.X)
+		x, err := fc.exprAs(f.X, ft)
 		if err != nil {
 			return nil, err
 		}
@@ -1671,9 +1816,10 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 
 // ---------- 方法表查询 ----------
 
-// hasMethod 判断类型是否声明了该方法名。
+// hasMethod 判断类型（基类型）是否声明了该方法名。
 func (l *lowerer) hasMethod(typ, name string) bool {
-	m, ok := l.methods[typ]
+	base, _ := splitGeneric(typ)
+	m, ok := l.methods[base]
 	if !ok {
 		return false
 	}
@@ -1681,9 +1827,10 @@ func (l *lowerer) hasMethod(typ, name string) bool {
 	return ok
 }
 
-// selfMethod 查实例方法（有 self 首参）。
-func (l *lowerer) selfMethod(typ, name string) *methodInfo {
-	if m, ok := l.methods[typ]; ok {
+// lookupSelf 查实例方法（有 self 首参）的**基类型**声明，未单态化。
+func (l *lowerer) lookupSelf(typ, name string) *methodInfo {
+	base, _ := splitGeneric(typ)
+	if m, ok := l.methods[base]; ok {
 		if mi, ok := m[name]; ok && mi.isSelf {
 			return mi
 		}
@@ -1691,38 +1838,65 @@ func (l *lowerer) selfMethod(typ, name string) *methodInfo {
 	return nil
 }
 
-// staticMethod 查静态方法（T::m / space::f）。
-func (l *lowerer) staticMethod(scope, name string, pos lang.Pos) (*methodInfo, error) {
-	m, ok := l.methods[scope]
-	if !ok {
+// lookupStatic 查静态方法的基类型声明，未单态化。
+func (l *lowerer) lookupStatic(scope, name string) *methodInfo {
+	if m, ok := l.methods[scope]; ok {
+		if mi, ok := m[name]; ok && !mi.isSelf {
+			return mi
+		}
+	}
+	return nil
+}
+
+// inferStaticSubst 从静态方法调用实参推断 impl 类型参数。
+func (l *lowerer) inferStaticSubst(mi *methodInfo, args []lang.Expr, fc *funcCtx) map[string]string {
+	sub := map[string]string{}
+	for i, p := range mi.fn.Params {
+		if i >= len(args) || fc == nil {
+			break
+		}
+		at := fc.typeOf(args[i])
+		for _, tp := range mi.impl.TypeParams {
+			if _, ok := sub[tp]; ok {
+				continue
+			}
+			if strings.Contains(p.Type, tp) && at != "?" && at != "function" {
+				sub[tp] = at
+			}
+		}
+	}
+	return sub
+}
+
+// staticMethodFor 查静态方法并完成单态化（T::m / space::f）。
+func (l *lowerer) staticMethodFor(scope, name string, args []lang.Expr, fc *funcCtx, pos lang.Pos) (*methodInfo, error) {
+	mi := l.lookupStatic(scope, name)
+	if mi == nil {
 		if _, isStruct := l.structs[scope]; isStruct {
 			return nil, l.errf(pos, "暂未支持 struct %s 的静态方法 %s（该类型未声明 impl）", scope, name)
 		}
-		return nil, l.errf(pos, "暂未支持 space 调用 %s::%s（解释器可用；编译器只支持同一程序内声明的 space/impl）", scope, name)
-	}
-	mi, ok := m[name]
-	if !ok {
+		if _, ok := l.methods[scope]; !ok {
+			return nil, l.errf(pos, "暂未支持 space 调用 %s::%s（解释器可用；编译器只支持同一程序内声明的 space/impl）", scope, name)
+		}
+		if l.hasMethod(scope, name) {
+			return nil, l.errf(pos, "%s::%s 是实例方法（需要 self 接收者）", scope, name)
+		}
 		return nil, l.errf(pos, "暂未支持 %s::%s（该 space/类型未声明此方法）", scope, name)
 	}
-	if mi.isSelf {
-		return nil, l.errf(pos, "%s::%s 是实例方法（需要 self 接收者）", scope, name)
-	}
-	if err := l.checkImplInst(mi, scope, pos); err != nil {
-		return nil, err
-	}
-	return mi, nil
+	return l.instantiateFor(mi, scope, args, fc, pos)
 }
 
-// checkImplInst 检查 impl 的类型参数是否已具体化（Phase C 才做单态化）。
-func (l *lowerer) checkImplInst(mi *methodInfo, typ string, pos lang.Pos) error {
-	if len(mi.impl.TypeParams) == 0 {
-		return nil
+// methodRetType 方法在 receiver 类型下的返回类型（不实例化函数体，用于类型推断）。
+func (l *lowerer) methodRetType(mi *methodInfo, recvType string) string {
+	sub := mi.subst
+	if len(mi.impl.TypeParams) > 0 {
+		sub = l.recvSubst(mi, recvType)
 	}
-	_, args := splitGeneric(typ)
-	if len(args) == 0 {
-		return l.errf(pos, "暂未支持泛型 impl 的实例化 %s（解释器可用）", typ)
+	ret := substType(mi.fn.Ret, sub)
+	if ret == "" {
+		return "void"
 	}
-	return nil
+	return ret
 }
 
 // callGeneric / lowerGeneric 由 lower_generic.go 实现（泛型单态化）。
@@ -1735,6 +1909,10 @@ func (fc *funcCtx) assignable(from, to string) bool {
 		return true
 	}
 	if from == "int" && to == "float" {
+		return true
+	}
+	// 接口：具体 struct / 接口 → 接口（结构化满足由 typecheck 在赋值/传参处校验）
+	if fc.l.isIfaceType(to) && (fc.l.isStructType(from) || fc.l.isIfaceType(from)) {
 		return true
 	}
 	// null 只在指针/引用位置合法（编译器暂不支持 null 字面量）
@@ -1781,6 +1959,12 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 		return "?"
 	case *lang.StructLit:
 		if e.Name != "" {
+			base, targs := splitGeneric(e.Name)
+			if sd, ok := l.structs[base]; ok && len(sd.TypeParams) > 0 && len(targs) == 0 {
+				if tb, ta := splitGeneric(fc.expectT); tb == base && len(ta) > 0 {
+					return fc.expectT
+				}
+			}
 			return e.Name
 		}
 		return "?"
@@ -1805,8 +1989,8 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 				return "String"
 			}
 			if lt == rt && l.isStructType(lt) {
-				if mi := l.selfMethod(lt, "__add__"); mi != nil {
-					return substType(mi.fn.Ret, mi.subst)
+				if mi := l.lookupSelf(lt, "__add__"); mi != nil {
+					return l.methodRetType(mi, lt)
 				}
 			}
 			if numLike(lt) && numLike(rt) {
@@ -1815,8 +1999,8 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 			return "?"
 		case "-", "*", "/":
 			if lt == rt && l.isStructType(lt) {
-				if mi := l.selfMethod(lt, opMethodFor(e.Op)); mi != nil {
-					return substType(mi.fn.Ret, mi.subst)
+				if mi := l.lookupSelf(lt, opMethodFor(e.Op)); mi != nil {
+					return l.methodRetType(mi, lt)
 				}
 			}
 			if numLike(lt) && numLike(rt) {
@@ -1836,8 +2020,8 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 		case "-":
 			t := fc.typeOf(e.X)
 			if l.isStructType(t) {
-				if mi := l.selfMethod(t, "__neg__"); mi != nil {
-					return substType(mi.fn.Ret, mi.subst)
+				if mi := l.lookupSelf(t, "__neg__"); mi != nil {
+					return l.methodRetType(mi, t)
 				}
 			}
 			return t
@@ -1848,11 +2032,15 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 	case *lang.CallExpr:
 		return fc.callType(e)
 	case *lang.ScopeCall:
-		mi, err := l.staticMethod(e.Scope, e.Name, e.Pos)
-		if err != nil {
+		mi := l.lookupStatic(e.Scope, e.Name)
+		if mi == nil {
 			return "?"
 		}
-		ret := substType(mi.fn.Ret, mi.subst)
+		sub := mi.subst
+		if len(mi.impl.TypeParams) > 0 {
+			sub = l.inferStaticSubst(mi, e.Args, fc)
+		}
+		ret := substType(mi.fn.Ret, sub)
 		if ret == "" {
 			return "void"
 		}
@@ -1885,13 +2073,60 @@ func (fc *funcCtx) callType(e *lang.CallExpr) string {
 				return "void"
 			}
 		}
-		if l.isStructType(rt) {
-			if mi := l.selfMethod(rt, me.Name); mi != nil {
-				ret := substType(mi.fn.Ret, mi.subst)
-				if ret == "" {
+		if id, ok := me.X.(*lang.Ident); ok {
+			if _, isLib := l.libs[id.Name]; isLib {
+				return l.libRetType(id.Name, me.Name)
+			}
+			if id.Name == "taskm" {
+				switch me.Name {
+				case "spawn":
+					return "thread"
+				case "channel":
+					return "Channel"
+				case "done":
+					return "bool"
+				case "block", "merge":
 					return "void"
 				}
-				return ret
+				return "?"
+			}
+			if t, found := fc.lookup(id.Name); found {
+				switch t {
+				case "thread":
+					switch me.Name {
+					case "pid":
+						return "int"
+					case "merge":
+						return "void"
+					}
+				case "Channel", "channel":
+					switch me.Name {
+					case "send":
+						return "void"
+					case "recv":
+						return "int"
+					}
+				}
+			}
+		}
+		if l.isIfaceType(rt) {
+			for _, m := range l.ifaceMethodList(rt) {
+				if m.name == me.Name {
+					ret := m.ret
+					if ret == "Self" {
+						return rt
+					}
+					if ret == "" {
+						return "void"
+					}
+					return ret
+				}
+			}
+			return "?"
+		}
+		if l.isStructType(rt) {
+			if mi := l.lookupSelf(rt, me.Name); mi != nil {
+				return l.methodRetType(mi, rt)
 			}
 		}
 		return "?"
@@ -1953,6 +2188,163 @@ func identifierName(fn lang.Expr) string {
 		return sc.Scope + "::" + sc.Name
 	}
 	return "?"
+}
+
+// ---------- library FFI ----------
+
+// ffiLangType 把 library 声明里的 C 类型映射为 cgen 内部类型：
+// int/char → int；bool → cbool（C int）；float/double → double；f32 → f32；String → String。
+func (l *lowerer) ffiLangType(t string, pos lang.Pos) (string, error) {
+	switch t {
+	case "", "void":
+		return "void", nil
+	case "int", "char":
+		return "int", nil
+	case "bool":
+		return "cbool", nil
+	case "float", "double":
+		return "double", nil
+	case "f32":
+		return "f32", nil
+	case "String":
+		return "String", nil
+	}
+	if strings.TrimSpace(t) == "pointer" {
+		return "", l.errf(pos, "暂未支持 library FFI 的 pointer 参数/返回（不透明句柄仅解释器可用）")
+	}
+	if t == "long" {
+		return "", l.errf(pos, "暂未支持 library FFI 的 long 参数/返回（解释器为 64 位，编译器未 lower）")
+	}
+	return "", l.errf(pos, "暂未支持 library FFI 的类型 %q", t)
+}
+
+// libRetType 返回 library 调用在语言层的可见类型。
+func (l *lowerer) libRetType(libName, method string) string {
+	ld, ok := l.libs[libName]
+	if !ok {
+		return "?"
+	}
+	for _, fn := range ld.Methods {
+		if fn.Name != method {
+			continue
+		}
+		t, err := l.ffiLangType(fn.Ret, fn.Pos)
+		if err != nil {
+			return "?"
+		}
+		switch t {
+		case "cbool":
+			return "bool"
+		case "f32":
+			return "float"
+		case "double":
+			return "float"
+		case "void":
+			return "void"
+		}
+		return t
+	}
+	return "?"
+}
+
+// libCall lower library FFI 调用 m.f(args)（LLVM declare + C ABI 直调）。
+func (fc *funcCtx) libCall(c *lang.CallExpr, me *lang.MemberExpr, libName string) (*expr, error) {
+	l := fc.l
+	ld := l.libs[libName]
+	var fn *lang.Func
+	for _, f := range ld.Methods {
+		if f.Name == me.Name {
+			fn = f
+			break
+		}
+	}
+	if fn == nil {
+		return nil, l.errf(me.Pos, "library %s 没有声明函数 %q", libName, me.Name)
+	}
+	if len(c.Args) != len(fn.Params) {
+		return nil, l.errf(me.Pos, "library 函数 %s.%s 需要 %d 个参数，got %d", libName, me.Name, len(fn.Params), len(c.Args))
+	}
+	ret, err := l.ffiLangType(fn.Ret, fn.Pos)
+	if err != nil {
+		return nil, err
+	}
+	params := make([]funcParam, 0, len(fn.Params))
+	for i, p := range fn.Params {
+		pt, err := l.ffiLangType(p.Type, p.Pos)
+		if err != nil {
+			return nil, err
+		}
+		if pt == "void" {
+			return nil, l.errf(p.Pos, "library 函数参数不能是 void")
+		}
+		if !fc.ffiArgOK(pt) {
+			return nil, l.errf(p.Pos, "暂未支持 library FFI 参数类型 %q（编译器支持 int/bool/f32/float/double/String）", p.Type)
+		}
+		params = append(params, funcParam{name: p.Name, typ: pt})
+		// 实参可赋值性：int → double/f32、bool → cbool、float → f32 允许
+		at := fc.typeOf(c.Args[i])
+		if !fc.ffiAssignable(at, pt) {
+			return nil, l.errf(exprPos(c.Args[i], me.Pos), "暂未支持向 %s.%s 传递 %s 参数（需要 %s）", libName, me.Name, at, p.Type)
+		}
+	}
+	args := make([]*expr, 0, len(c.Args))
+	for _, a := range c.Args {
+		x, err := fc.expr(a)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, x)
+	}
+	l.addExtern(fn.Name, ld.Lib, params, ret)
+	vis := ret
+	switch ret {
+	case "cbool":
+		vis = "bool"
+	case "f32":
+		vis = "float"
+	case "double":
+		vis = "float"
+	}
+	if vis == "void" {
+		return &expr{kind: kCall, typ: "void", call: &callExpr{name: fn.Name, args: args}}, nil
+	}
+	return &expr{kind: kCall, typ: vis, line: me.Pos.Line, call: &callExpr{name: fn.Name, args: args}}, nil
+}
+
+// ffiArgOK 判断 FFI 形参类型是否可 lower。
+func (fc *funcCtx) ffiArgOK(t string) bool {
+	switch t {
+	case "int", "cbool", "f32", "double", "String":
+		return true
+	}
+	return false
+}
+
+// ffiAssignable 判断语言类型实参能否传给 FFI 形参。
+func (fc *funcCtx) ffiAssignable(from, to string) bool {
+	if from == "?" {
+		return true
+	}
+	switch to {
+	case "int":
+		return from == "int" || from == "long"
+	case "cbool":
+		return from == "bool" || from == "int"
+	case "f32", "double":
+		return from == "int" || from == "float" || from == "double" || from == "f32"
+	case "String":
+		return from == "String"
+	}
+	return false
+}
+
+// addExtern 登记外部符号（去重）。
+func (l *lowerer) addExtern(name, lib string, params []funcParam, ret string) {
+	if _, ok := l.extSeen[name]; ok {
+		return
+	}
+	l.extSeen[name] = true
+	l.out.externs = append(l.out.externs, externDef{name: name, params: params, ret: ret, lib: lib})
 }
 
 // ---------- catch 变量使用检测 ----------

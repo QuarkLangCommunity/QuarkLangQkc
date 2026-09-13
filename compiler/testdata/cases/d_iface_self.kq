@@ -1,0 +1,24 @@
+// 接口 Self 返回（运算符协议）+ 接口变量互赋
+type interface { fn __add__(Self self, Self o) Self; fn show(Self self) String; } Addable;
+type struct { int v; } N;
+impl {
+    fn __add__(N self, N o) N { N r; r.v = self.v + o.v; return r; }
+    fn show(N self) String { return "N" + self.v.toString(); }
+} N;
+type struct { String s; } S;
+impl {
+    fn __add__(S self, S o) S { S r; r.s = self.s + o.s; return r; }
+    fn show(S self) String { return "S:" + self.s; }
+} S;
+fn pick(int k, Addable a, Addable b) Addable { if (k > 0) { return a; } return b; }
+fn main(IOStream io) {
+    N a = .{v: 1};
+    N b = .{v: 2};
+    Addable x = a;
+    Addable y = b;
+    Addable z = x.__add__(y);
+    io.println(z.show());
+    S s1 = .{s: "he"};
+    S s2 = .{s: "y"};
+    io.println(pick(1, s1, s2).show(), pick(0, s1, s2).show());
+}

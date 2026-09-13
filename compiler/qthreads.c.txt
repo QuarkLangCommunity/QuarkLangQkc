@@ -30,11 +30,24 @@ int ql_recv(ql_channel* c) {
     WakeAllConditionVariable(&c->cv); ReleaseSRWLockExclusive(&c->mu);
     return v;
 }
-ql_task* ql_spawn(void) { ql_task* t = calloc(1, sizeof(ql_task)); InitializeSRWLock(&t->mu); return t; }
+/* 线程句柄：pid = 小整数 id（编译器把 thread 变量表示成 i32，与语言 pid 一致） */
+#define QMAXTASK 4096
+static ql_task* qtasks[QMAXTASK]; static int qtasks_n = 0;
+int ql_spawn(void) {
+    if (qtasks_n >= QMAXTASK - 1) return 0;
+    ql_task* t = calloc(1, sizeof(ql_task));
+    InitializeSRWLock(&t->mu);
+    t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
+    int id = ++qtasks_n; qtasks[id] = t; return id;
+}
 static unsigned __stdcall runner_w(void* p) { ql_task* t = p; t->fn(t->arg); AcquireSRWLockExclusive(&t->mu); t->done = 1; ReleaseSRWLockExclusive(&t->mu); return 0; }
-void ql_merge(ql_task* t, void* fn, int arg) { t->fn = fn; t->arg = arg; t->done = 0; _beginthreadex(0, 0, runner_w, t, 0, 0); }
-void ql_block(ql_task* t) { while (1) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); if (d) break; } }
-int ql_done(ql_task* t) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); return d; }
+void ql_merge(int id, void* fn, int arg) {
+    if (id <= 0 || id >= QMAXTASK) return;
+    ql_task* t = qtasks[id]; if (!t) return;
+    t->fn = fn; t->arg = arg; t->done = 0; _beginthreadex(0, 0, runner_w, t, 0, 0);
+}
+void ql_block(int id) { if (id <= 0 || id >= QMAXTASK) return; ql_task* t = qtasks[id]; if (!t) return; while (1) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); if (d) break; } }
+int ql_done(int id) { if (id <= 0 || id >= QMAXTASK) return 1; ql_task* t = qtasks[id]; if (!t) return 1; AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); return d; }
 #else
 /* POSIX 实现（原有） */
 #include <pthread.h>
@@ -111,16 +124,56 @@ static void qpool_ensure(void) {
     for (int i = 0; i < QPOOL_N; i++) pthread_create(&qpool[i], 0, qworker, 0);
     qpool_started = 1;
 }
-ql_task* ql_spawn(void) { ql_task* t = calloc(1, sizeof(ql_task)); return t; }
-void ql_merge(ql_task* t, void* fn, int arg) {
+/* 通道：mutex + cond 有界 FIFO（容量 cap；与 Windows 分支语义一致） */
+ql_channel* ql_channel_new(int cap) {
+    ql_channel* c = calloc(1, sizeof(ql_channel));
+    if (cap <= 0) cap = 1024;
+    c->cap = cap; c->buf = malloc(sizeof(int) * cap);
+    pthread_mutex_init(&c->mu, 0); pthread_cond_init(&c->cv, 0);
+    return c;
+}
+int ql_send(ql_channel* c, int v) {
+    pthread_mutex_lock(&c->mu);
+    while (c->cnt >= c->cap) pthread_cond_wait(&c->cv, &c->mu);
+    c->buf[(c->head + c->cnt) % c->cap] = v; c->cnt++;
+    pthread_cond_broadcast(&c->cv);
+    pthread_mutex_unlock(&c->mu);
+    return 0;
+}
+int ql_recv(ql_channel* c) {
+    pthread_mutex_lock(&c->mu);
+    while (c->cnt <= 0) pthread_cond_wait(&c->cv, &c->mu);
+    int v = c->buf[c->head]; c->head = (c->head + 1) % c->cap; c->cnt--;
+    pthread_cond_broadcast(&c->cv);
+    pthread_mutex_unlock(&c->mu);
+    return v;
+}
+/* 线程句柄：pid = 小整数 id（编译器把 thread 变量表示成 i32，与语言 pid 一致） */
+#define QMAXTASK 4096
+static ql_task* qtasks[QMAXTASK]; static int qtasks_n = 0;
+int ql_spawn(void) {
+    if (qtasks_n >= QMAXTASK - 1) return 0;
+    ql_task* t = calloc(1, sizeof(ql_task));
+    t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
+    int id = ++qtasks_n; qtasks[id] = t; return id;
+}
+void ql_merge(int id, void* fn, int arg) {
+    if (id <= 0 || id >= QMAXTASK) return;
+    ql_task* t = qtasks[id]; if (!t) return;
     qpool_ensure();
     t->fn = fn; t->arg = arg; t->done = 0;
     qpush(t);
 }
-void ql_block(ql_task* t) {
+void ql_block(int id) {
+    if (id <= 0 || id >= QMAXTASK) return;
+    ql_task* t = qtasks[id]; if (!t) return;
     while (__atomic_load_n(&t->done, __ATOMIC_ACQUIRE) == 0) { }
 }
-int ql_done(ql_task* t) { return __atomic_load_n(&t->done, __ATOMIC_ACQUIRE); }
+int ql_done(int id) {
+    if (id <= 0 || id >= QMAXTASK) return 1;
+    ql_task* t = qtasks[id]; if (!t) return 1;
+    return __atomic_load_n(&t->done, __ATOMIC_ACQUIRE);
+}
 
 /* 字符串拼接：malloc + 拷贝（String 变量 + 运算符） */
 char* ql_strcat(const char* a, const char* b) {

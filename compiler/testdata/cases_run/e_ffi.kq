@@ -1,0 +1,28 @@
+// M5/§9：library FFI（LLVM declare + C ABI 直调；qkc 读 ; qkc-link 追加 -lm/-lc）
+library m {
+    fn sqrt(double x) double;
+    fn pow(double x, double y) double;
+    fn fabs(double x) double;
+    fn cos(double x) double;
+    fn sqrtf(f32 x) f32;
+    fn ldexp(double x, int e) double;
+}
+library c {
+    fn abs(int x) int;
+    fn atoi(String s) int;
+    fn srand(int seed) void;
+    fn rand() int;
+}
+fn main(IOStream io) {
+    io.println(m.sqrt(16.0));
+    io.println(m.pow(2.0, 10.0));
+    io.println(m.fabs(0.0 - 3.5));
+    io.println(m.cos(0.0));
+    io.println(m.sqrtf(9.0));
+    io.println(m.ldexp(1.5, 3));
+    io.println(m.sqrt(2.0).toString());
+    io.println(c.abs(0 - 7));
+    io.println(c.atoi("123"));
+    c.srand(1);
+    io.println(c.rand());
+}

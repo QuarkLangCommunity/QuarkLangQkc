@@ -1,0 +1,26 @@
+// S2/S5/S9：泛型函数、泛型 struct、泛型 impl 的单态化
+fn<T> id(T v) T { return v; }
+fn<T, U> pair(T a, U b) T { return a; }
+fn<T> pass(T v) T { T x = v; return x; }
+type struct<T> { T v; } Box;
+impl<T> {
+    fn new(T x) Box<T> { Box<T> b; b.v = x; return b; }
+    fn get(Box<T> self) T { return self.v; }
+    fn put(Box<T> self, T x) void { self.v = x; }
+} Box;
+fn main(IOStream io) {
+    io.println(id(5), id("ab"), id(1.5), id(true));
+    io.println(id(pass(21)), pass("xy"));
+    io.println(id(id(3)));
+    io.println(pair(7, "x"), pair("y", 1.5));
+    Box<int> a = Box::new(3);
+    io.println(a.get(), a.v);
+    a.put(8);
+    io.println(a.get());
+    Box<String> s = Box::new("hey");
+    io.println(s.get());
+    Box<int> lit = .{v: 42};
+    io.println(lit.get());
+    Box<Box<int>> nest = Box::new(a);
+    io.println(nest.get().get());
+}

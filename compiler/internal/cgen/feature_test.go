@@ -253,6 +253,150 @@ func TestPhaseBStructCompile(t *testing.T) {
 	}
 }
 
+// Phase C：泛型函数 / 泛型 struct / 泛型 impl 的按调用点单态化。
+func TestPhaseCGenerics(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "generic-function",
+			src: "fn<T> id(T v) T { return v; }\n" +
+				"fn<T, U> pair(T a, U b) T { return a; }\n" +
+				"fn<T> pass(T v) T { T x = v; return x; }\n" +
+				"fn main(IOStream io) {\n" +
+				"    io.println(id(5), id(\"ab\"), id(1.5), id(true));\n" +
+				"    io.println(id(pass(21)), pass(\"xy\"));\n" +
+				"    io.println(id(id(3)));\n" +
+				"    io.println(pair(7, \"x\"), pair(\"y\", 1.5));\n" +
+				"}\n",
+			want: "5 ab 1.5 true\n21 xy\n3\n7 y\n",
+		},
+		{
+			name: "generic-struct-and-impl",
+			src: "type struct<T> { T v; } Box;\n" +
+				"impl<T> {\n" +
+				"    fn new(T x) Box<T> { Box<T> b; b.v = x; return b; }\n" +
+				"    fn get(Box<T> self) T { return self.v; }\n" +
+				"    fn put(Box<T> self, T x) void { self.v = x; }\n" +
+				"} Box;\n" +
+				"fn main(IOStream io) {\n" +
+				"    Box<int> a = Box::new(3);\n" +
+				"    io.println(a.get(), a.v);\n" +
+				"    a.put(8);\n" +
+				"    io.println(a.get());\n" +
+				"    Box<String> s = Box::new(\"hey\");\n" +
+				"    io.println(s.get());\n" +
+				"    Box<int> lit = .{v: 42};\n" +
+				"    io.println(lit.get());\n" +
+				"    Box<Box<int>> nest = Box::new(a);\n" +
+				"    io.println(nest.get().get());\n" +
+				"}\n",
+			want: "3 3\n8\nhey\n42\n8\n",
+		},
+		{
+			name: "interface-vtable-dispatch",
+			src: "type interface { fn sum(Self self) int; fn tag(Self self) String; } Iface;\n" +
+				"type struct { int a; } A;\n" +
+				"impl {\n" +
+				"    fn sum(A self) int { return self.a + 1; }\n" +
+				"    fn tag(A self) String { return \"A\"; }\n" +
+				"} A;\n" +
+				"type struct { int b; int c; } B;\n" +
+				"impl {\n" +
+				"    fn sum(B self) int { return self.b + self.c; }\n" +
+				"    fn tag(B self) String { return \"B\"; }\n" +
+				"} B;\n" +
+				"fn call(Iface x) int { return x.sum(); }\n" +
+				"type struct { Iface x; int tag; } Holder;\n" +
+				"fn main(IOStream io) {\n" +
+				"    A a = .{a: 5};\n" +
+				"    Iface x = a;\n" +
+				"    io.println(x.sum(), x.tag());\n" +
+				"    B b = .{b: 1, c: 2};\n" +
+				"    x = b;\n" +
+				"    io.println(x.sum(), x.tag());\n" +
+				"    io.println(call(a), call(b));\n" +
+				"    Holder h = .{x: a, tag: 7};\n" +
+				"    io.println(h.x.sum(), h.tag);\n" +
+				"}\n",
+			want: "6 A\n3 B\n6 3\n6 7\n",
+		},
+		{
+			name: "interface-self-return",
+			src: "type interface { fn __add__(Self self, Self o) Self; fn show(Self self) String; } Addable;\n" +
+				"type struct { int v; } N;\n" +
+				"impl {\n" +
+				"    fn __add__(N self, N o) N { N r; r.v = self.v + o.v; return r; }\n" +
+				"    fn show(N self) String { return \"N\" + self.v.toString(); }\n" +
+				"} N;\n" +
+				"fn main(IOStream io) {\n" +
+				"    N a = .{v: 1};\n" +
+				"    N b = .{v: 2};\n" +
+				"    Addable x = a;\n" +
+				"    Addable y = b;\n" +
+				"    Addable z = x.__add__(y);\n" +
+				"    io.println(z.show());\n" +
+				"}\n",
+			want: "N3\n",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := lliRun(t, withTestRuntime(transpile(t, c.src)))
+			if got != c.want {
+				t.Fatalf("got %q want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// Phase D：library FFI（LLVM declare + C ABI 直调）与 taskm（qthreads 运行时）。
+// 这两类需要 clang 链接（-lm / qthreads.c），lli 单测只校验 IR 形状；
+// 端到端输出对齐由 compiler/testdata/compare.sh 覆盖（cases_run/e_ffi、f_taskm）。
+func TestPhaseDFFIAndTaskm(t *testing.T) {
+	ffi := transpile(t, "library m {\n"+
+		"    fn sqrt(double x) double;\n"+
+		"    fn sqrtf(f32 x) f32;\n"+
+		"}\n"+
+		"fn main(IOStream io) { io.println(m.sqrt(16.0), m.sqrtf(9.0)); }\n")
+	for _, want := range []string{
+		"declare double @sqrt(double)",
+		"declare float @sqrtf(float)",
+		"call double @sqrt(",
+		"fpext float",
+		"; qkc-link: -lm",
+	} {
+		if !strings.Contains(ffi, want) {
+			t.Fatalf("FFI IR missing %q:\n%s", want, ffi)
+		}
+	}
+	taskm := transpile(t, "fn work(int n) int { return n; }\n"+
+		"fn main(IOStream io) {\n"+
+		"    thread t = taskm.spawn();\n"+
+		"    t.merge(work, 1);\n"+
+		"    taskm.block(t.pid());\n"+
+		"    io.println(taskm.done(t.pid()));\n"+
+		"    Channel c = taskm.channel();\n"+
+		"    c.send(3);\n"+
+		"    io.println(c.recv());\n"+
+		"}\n")
+	for _, want := range []string{
+		"declare i32 @ql_spawn()",
+		"declare void @ql_merge(i32, i8*, i32)",
+		"define void @runner_0(i32 %a)",
+		"call void @ql_merge(i32",
+		"call void @ql_block(i32",
+		"call i32 @ql_send(i8*",
+		"call i32 @ql_recv(i8*",
+	} {
+		if !strings.Contains(taskm, want) {
+			t.Fatalf("taskm IR missing %q:\n%s", want, taskm)
+		}
+	}
+}
+
 // 后端暂未 lower 的构造必须给出带位置的明确「暂未支持」错误，
 // 而不是 parse 错误，更不允许静默错编。
 func TestUnsupportedConstructs(t *testing.T) {
@@ -261,37 +405,6 @@ func TestUnsupportedConstructs(t *testing.T) {
 		src  string
 		want string
 	}{
-		{
-			name: "接口参数（dynamic 分发）",
-			src: "type interface { fn sum(Self self) int; } Iface;\n" +
-				"fn need(Iface s) int { return 0; }\n" +
-				"fn main(IOStream io) { io.println(1); }\n",
-			want: "暂未支持接口类型",
-		},
-		{
-			name: "泛型实例化",
-			src: "fn<T> id(T v) T { return v; }\n" +
-				"fn main(IOStream io) { io.println(id(5)); }\n",
-			want: "暂未支持泛型实例化 id",
-		},
-		{
-			name: "library FFI",
-			src: "library m {\n" +
-				"    fn sqrt(double x) double;\n" +
-				"}\n" +
-				"fn main(IOStream io) { io.println(m.sqrt(16.0)); }\n",
-			want: "暂未支持 library FFI 调用 m.sqrt",
-		},
-		{
-			name: "taskm 线程",
-			src:  "fn main(IOStream io) { thread t = taskm.spawn(); }\n",
-			want: "暂未支持 taskm",
-		},
-		{
-			name: "taskm 通道",
-			src:  "fn main(IOStream io) { Channel c = taskm.channel(); }\n",
-			want: "暂未支持 taskm",
-		},
 		{
 			name: "catch 变量使用",
 			src: "fn main(IOStream io) {\n" +

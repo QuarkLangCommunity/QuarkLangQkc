@@ -19,7 +19,8 @@ echo "构建解释器 /tmp/quark 与编译器 /tmp/qkc ..."
 
 cases=("$@")
 if [ ${#cases[@]} -eq 0 ]; then
-  cases=("$ROOT"/compiler/testdata/cases/*.kq)
+  # cases/：llvm-as + lli 可跑（go test 也覆盖）；cases_run/：需要 clang 链接（FFI/taskm）
+  cases=("$ROOT"/compiler/testdata/cases/*.kq "$ROOT"/compiler/testdata/cases_run/*.kq)
 fi
 
 fail=0

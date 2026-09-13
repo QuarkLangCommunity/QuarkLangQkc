@@ -1,0 +1,25 @@
+// S6/S14：接口结构化满足 + dynamic 分发（vtable）
+type interface { fn sum(Self self) int; fn tag(Self self) String; } Iface;
+type struct { int a; } A;
+impl {
+    fn sum(A self) int { return self.a + 1; }
+    fn tag(A self) String { return "A"; }
+} A;
+type struct { int b; int c; } B;
+impl {
+    fn sum(B self) int { return self.b + self.c; }
+    fn tag(B self) String { return "B"; }
+} B;
+fn call(Iface x) int { return x.sum(); }
+type struct { Iface x; int tag; } Holder;
+fn main(IOStream io) {
+    A a = .{a: 5};
+    Iface x = a;
+    io.println(x.sum(), x.tag());
+    B b = .{b: 1, c: 2};
+    x = b;
+    io.println(x.sum(), x.tag());
+    io.println(call(a), call(b));
+    Holder h = .{x: a, tag: 7};
+    io.println(h.x.sum(), h.tag);
+}

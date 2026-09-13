@@ -19,6 +19,7 @@ package cgen
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -63,6 +64,7 @@ const (
 	kStructLit
 	kField
 	kToString
+	kRunner // taskm.merge 的 runner 函数引用（i8* 函数指针）
 )
 
 // expr 是 cgen IR 表达式。typ 由 lowering 填入语言类型（"?" = 未判定）。
@@ -86,6 +88,8 @@ type expr struct {
 	sc     strConst // 预注册的字符串常量（kString）
 	strcat bool     // kBin "+" 且为 String 拼接（有 ql_strcat 副作用）
 	line   int      // 运行期错误定位（除零等）
+
+	ifaceBox string // 非空：把具体 struct 值装箱成接口值（值为 vtable 符号）
 }
 
 type indexExpr struct {
@@ -99,6 +103,10 @@ type methodExpr struct {
 	args   []*expr
 	sig    string // IR 函数名（lowering 解析后填入）
 	isSelf bool   // 实例方法（需要 receiver 实参）
+
+	iface    string   // 非空：接口方法调用（vtable 分发）
+	idx      int      // 方法在接口派发表中的槽位
+	ifaceSig *funcSig // 调用签名（Self 形参以 "Self" 标记）
 }
 
 type fieldExpr struct {
@@ -212,6 +220,68 @@ type lowered struct {
 	funcs     []*funcDef // 非 main 函数
 	mainStmts []stmt     // fn main 的函数体
 	structs   []structDef
+	vtables   []*vtableDef
+	ifaces    []string
+	externs   []externDef
+	runners   []runnerDef
+}
+
+// sortVTables 让 vtable 发射顺序稳定（便于回归对比）。
+func (lp *lowered) sortVTables() {
+	sort.Slice(lp.vtables, func(i, j int) bool { return lp.vtables[i].sym < lp.vtables[j].sym })
+}
+
+// runnerDef 是 taskm.merge 的执行器（qthreads.c 以 void (*)(int) 调用）。
+type runnerDef struct {
+	fn     string // 目标函数 IR 名
+	hasArg bool   // 目标函数是否有 1 个 int 参数
+}
+
+// emitRunners 生成 taskm.merge 的 runner：调目标函数并丢弃返回值。
+func emitRunners(rs []runnerDef) string {
+	if len(rs) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for i, r := range rs {
+		sig := ""
+		call := "call void @" + r.fn + "()"
+		if r.hasArg {
+			sig = "i32 %a"
+			call = "call void @" + r.fn + "(i32 %a)"
+		}
+		fmt.Fprintf(&sb, "define void @runner_%d(%s) {\nentry:\n  %s\n  ret void\n}\n", i, sig, call)
+	}
+	return sb.String()
+}
+
+// externDef 是 library FFI 外部符号声明（LLVM declare + C ABI 调用）。
+type externDef struct {
+	name   string // C 符号名
+	params []funcParam
+	ret    string // cgen 类型（cbool/f32/double/…）
+	lib    string // 链接库名（qkc-link 标记）
+}
+
+// vtableDef 是 (具体类型, 接口) 的派发表。
+type vtableDef struct {
+	sym    string // @vt$A$Iface
+	iface  string
+	typ    string
+	thunks []*ifaceThunk
+}
+
+// ifaceThunk 把接口调用还原为具体类型方法调用。
+type ifaceThunk struct {
+	iface   string
+	typ     string
+	method  string
+	irName  string   // 具体方法 IR 名
+	ret     string   // 具体返回类型（"void" = 无返回）
+	params  []string // 具体参数类型（不含 self）
+	selfIdx []int    // 接口声明为 Self 的参数下标（thunk 收 i8*）
+	boxRet  bool     // 接口返回 Self → thunk 装箱后返回 %Iface
+	vtSym   string   // 装箱用的 vtable 符号
 }
 
 // ---------- LLVM IR 发射器 ----------
@@ -271,6 +341,9 @@ type emitter struct {
 	emitted        map[string]bool
 	hasList        bool
 	hasEmpty       bool
+	hasIface       bool
+	ifaces         map[string]bool
+	vtables        []*vtableDef
 	needIntToStr   bool
 	needFloatToStr bool
 	needStrCmp     bool
@@ -299,7 +372,51 @@ func newEmitter(lp *lowered) *emitter {
 	for _, fd := range lp.funcs {
 		e.sigs[fd.name] = &funcSig{name: fd.name, params: fd.params, ret: fd.ret}
 	}
+	e.ifaces = map[string]bool{}
+	for _, n := range lp.ifaces {
+		e.ifaces[n] = true
+	}
+	e.vtables = lp.vtables
+	for _, ed := range lp.externs {
+		e.sigs[ed.name] = &funcSig{name: ed.name, params: ed.params, ret: ed.ret}
+	}
+	// taskm 运行时（qthreads.c）：pid = 小整数句柄
+	e.sigs["ql_spawn"] = &funcSig{name: "ql_spawn", ret: "int"}
+	e.sigs["ql_channel_new"] = &funcSig{name: "ql_channel_new", params: []funcParam{{typ: "int"}}, ret: "Channel"}
+	e.sigs["ql_block"] = &funcSig{name: "ql_block", params: []funcParam{{typ: "int"}}, ret: "void"}
+	e.sigs["ql_done"] = &funcSig{name: "ql_done", params: []funcParam{{typ: "int"}}, ret: "cbool"}
+	e.sigs["ql_merge"] = &funcSig{name: "ql_merge", params: []funcParam{{typ: "int"}, {typ: "runner"}, {typ: "int"}}, ret: "void"}
+	e.sigs["ql_send"] = &funcSig{name: "ql_send", params: []funcParam{{typ: "Channel"}, {typ: "int"}}, ret: "int"}
+	e.sigs["ql_recv"] = &funcSig{name: "ql_recv", params: []funcParam{{typ: "Channel"}}, ret: "int"}
 	return e
+}
+
+// builtinDecls 是发射器固定声明的符号（FFI 重复声明会报 invalid redefinition）。
+var builtinDecls = map[string]bool{
+	"printf": true, "malloc": true, "calloc": true, "free": true, "realloc": true,
+	"gettimeofday": true, "ql_strcat": true, "snprintf": true, "strcmp": true,
+	"strtod": true, "write": true, "exit": true,
+}
+
+// linkerFlag 把 library 名映射为链接参数（裸名 → -lX；路径/带点 → 原样）。
+func linkerFlag(lib string) string {
+	if strings.ContainsAny(lib, "/.") {
+		return lib
+	}
+	switch lib {
+	case "c", "m", "dl", "pthread", "rt", "stdc++":
+		return "-l" + lib
+	}
+	return "-l" + lib
+}
+
+// ensureIface 发射接口值类型：{ i8* data, i8** vt }。
+func (e *emitter) ensureIface() {
+	if e.hasIface {
+		return
+	}
+	e.hasIface = true
+	e.types.WriteString("%Iface = type { i8*, i8** }\n")
 }
 
 func (e *emitter) emitInstr(f string, args ...interface{}) {
@@ -404,8 +521,6 @@ func (e *emitter) ensureStruct(name string) {
 	e.types.WriteString(sb.String())
 }
 
-
-
 // ensureList 保证 List 类型的 LLVM 定义已发射。
 func (e *emitter) ensureList() {
 	if e.hasList {
@@ -438,6 +553,30 @@ func (e *emitter) ir(t string) string {
 	case "void", "":
 		return "void"
 	}
+	if e.ifaces[t] {
+		e.ensureIface()
+		return "%Iface" // 接口是值类型（data + vtable 两个指针）
+	}
+	// library FFI 的 C ABI 类型（f32 = 单精度 float；double = 双精度；cbool = C int；long = i64）
+	// 以及 taskm 运行时类型（thread = pid 句柄 i32；Channel = i8*；runner = 函数指针 i8*）
+	switch t {
+	case "f32":
+		return "float"
+	case "double":
+		return "double"
+	case "cbool":
+		return "i32"
+	case "long":
+		return "i64"
+	case "pointer":
+		return "i8*"
+	case "thread":
+		return "i32"
+	case "Channel", "channel":
+		return "i8*"
+	case "runner":
+		return "i8*"
+	}
 	if t == "List<int>" || t == "List<String>" || t == "List<float>" || t == "List<bool>" {
 		e.ensureList()
 		return "%List*"
@@ -454,7 +593,12 @@ func (e *emitter) alignOf(t string) int {
 	switch t {
 	case "bool":
 		return 1
+	case "thread":
+		return 4
 	case "float", "String", "List<int>", "List<String>", "List<float>", "List<bool>":
+		return 8
+	}
+	if e.ifaces[t] {
 		return 8
 	}
 	return 4
@@ -475,7 +619,7 @@ func (e *emitter) emptyString() string {
 // zeroOf 返回语言类型的零值（按 LLVM 类型）。
 func (e *emitter) zeroOf(t string) string {
 	switch t {
-	case "int":
+	case "int", "thread":
 		return "0"
 	case "bool":
 		return "false"
@@ -483,6 +627,9 @@ func (e *emitter) zeroOf(t string) string {
 		return "0.0"
 	case "String":
 		return e.emptyString()
+	}
+	if e.ifaces[t] {
+		return "zeroinitializer"
 	}
 	return "null" // List / struct：引用零值 = null
 }
@@ -528,9 +675,46 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i32 @strcmp(i8*, i8*)\n")
 	e.decls.WriteString("declare double @strtod(i8*, i8**)\n")
 	e.decls.WriteString("declare i64 @write(i32, i8*, i64)\n")
-	e.decls.WriteString("declare void @exit(i32)\n\n")
+	e.decls.WriteString("declare void @exit(i32)\n")
+	e.decls.WriteString("declare i32 @ql_spawn()\n")
+	e.decls.WriteString("declare void @ql_merge(i32, i8*, i32)\n")
+	e.decls.WriteString("declare void @ql_block(i32)\n")
+	e.decls.WriteString("declare i32 @ql_done(i32)\n")
+	e.decls.WriteString("declare i8* @ql_channel_new(i32)\n")
+	e.decls.WriteString("declare i32 @ql_send(i8*, i32)\n")
+	e.decls.WriteString("declare i32 @ql_recv(i8*)\n\n")
+
+	// library FFI：外部符号声明 + 链接库标记（main.go 解析 ; qkc-link:）
+	seenExt := map[string]bool{}
+	for _, ed := range lp.externs {
+		if seenExt[ed.name] || builtinDecls[ed.name] {
+			continue
+		}
+		seenExt[ed.name] = true
+		fmt.Fprintf(&e.decls, "declare %s @%s(", e.ir(ed.ret), ed.name)
+		for i, p := range ed.params {
+			if i > 0 {
+				e.decls.WriteString(", ")
+			}
+			e.decls.WriteString(e.ir(p.typ))
+		}
+		e.decls.WriteString(")\n")
+	}
+	var link strings.Builder
+	libs := map[string]bool{}
+	for _, ed := range lp.externs {
+		if ed.lib == "" || libs[ed.lib] {
+			continue
+		}
+		libs[ed.lib] = true
+		link.WriteString("; qkc-link: " + linkerFlag(ed.lib) + "\n")
+	}
 
 	e.vars = map[string]varSlot{}
+	// 按依赖顺序预发射全部 struct 类型定义（lower 已保证被依赖者在前）
+	for _, sd := range lp.structs {
+		e.ensureStruct(sd.name)
+	}
 	// 预注册全部字符串常量
 	e.strConst("true")
 	e.strConst("false")
@@ -579,8 +763,8 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	if e.needPanic {
 		helpers += panicHelper
 	}
-	return e.types.String() + e.globals.String() + e.decls.String() +
-		helpers + e.bodies.String()
+	return link.String() + e.types.String() + e.globals.String() + e.decls.String() +
+		helpers + e.bodies.String() + e.emitVtables(e.vtables) + emitRunners(lp.runners)
 }
 
 // emitFunc 生成单个非 main 函数的定义。
@@ -872,15 +1056,43 @@ func (e *emitter) sigRet(name string) string {
 	return "int"
 }
 
-// coerce 在语言类型间做隐式转换（typecheck 允许的唯一隐式转换：int → float）。
+// coerce 在类型间做隐式转换：语言层 int → float（double），以及 FFI 的
+// f32 ↔ double / bool ↔ C int 边界转换。
 func (e *emitter) coerce(reg, from, to string) string {
 	if from == to || to == "" || to == "?" {
 		return reg
 	}
-	if from == "int" && to == "float" {
+	switch {
+	case from == "int" && (to == "float" || to == "double"):
 		r := e.newReg()
 		e.emitInstr("%s = sitofp i32 %s to double", r, reg)
 		return r
+	case from == "int" && to == "f32":
+		r := e.newReg()
+		e.emitInstr("%s = sitofp i32 %s to float", r, reg)
+		return r
+	case from == "f32" && (to == "float" || to == "double"):
+		r := e.newReg()
+		e.emitInstr("%s = fpext float %s to double", r, reg)
+		return r
+	case (from == "float" || from == "double") && to == "f32":
+		r := e.newReg()
+		e.emitInstr("%s = fptrunc double %s to float", r, reg)
+		return r
+	case from == "bool" && to == "cbool":
+		r := e.newReg()
+		e.emitInstr("%s = zext i1 %s to i32", r, reg)
+		return r
+	case from == "cbool" && to == "bool":
+		r := e.newReg()
+		e.emitInstr("%s = icmp ne i32 %s, 0", r, reg)
+		return r
+	case from == "int" && to == "cbool":
+		r := e.newReg()
+		e.emitInstr("%s = icmp ne i32 %s, 0", r, reg)
+		return r
+	case from == "cbool" && to == "int":
+		return reg
 	}
 	return reg
 }
@@ -946,6 +1158,19 @@ func (e *emitter) emitDecl(st *declStmt) {
 		e.emitInstr("store i32 %d, i32* %s", n, tf)
 		e.vars[st.name] = varSlot{reg: e.listSlot(lo), typ: st.typ}
 	default:
+		if e.ifaces[st.typ] {
+			e.ensureIface()
+			reg := e.newReg()
+			e.emitInstr("%s = alloca %%Iface, align 8", reg)
+			v := "zeroinitializer"
+			if st.init != nil {
+				x, _ := e.compileExpr(st.init)
+				v = x
+			}
+			e.emitInstr("store %%Iface %s, %%Iface* %s", v, reg)
+			e.vars[st.name] = varSlot{reg: reg, typ: st.typ}
+			return
+		}
 		// struct 类型：引用语义（calloc 零值 + 可选字面量字段写入）
 		reg := e.newReg()
 		ptrTy := e.ir(st.typ)
@@ -1370,8 +1595,30 @@ func (e *emitter) toI64(reg string) string {
 
 // ---------- 表达式 ----------
 
-// compileExpr 编译表达式，返回 (寄存器, 语言类型)。
+// compileExpr 编译表达式，返回 (寄存器, 语言类型)（含接口装箱）。
 func (e *emitter) compileExpr(x *expr) (string, string) {
+	v, t := e.compileExprRaw(x)
+	if x.ifaceBox != "" && t != x.typ {
+		v = e.boxIface(v, t, x.ifaceBox)
+		t = x.typ
+	}
+	return v, t
+}
+
+// boxIface 把具体 struct 指针装箱为接口值 { data, vtable }。
+func (e *emitter) boxIface(reg, from, sym string) string {
+	e.ensureIface()
+	ptr := e.newReg()
+	e.emitInstr("%s = bitcast %s %s to i8*", ptr, e.ir(from), reg)
+	i0 := e.newReg()
+	e.emitInstr("%s = insertvalue %%Iface undef, i8* %s, 0", i0, ptr)
+	i1 := e.newReg()
+	e.emitInstr("%s = insertvalue %%Iface %s, i8** %s, 1", i1, i0, sym)
+	return i1
+}
+
+// compileExprRaw 编译表达式（不含装箱包装）。
+func (e *emitter) compileExprRaw(x *expr) (string, string) {
 	switch x.kind {
 	case kInt:
 		return fmt.Sprintf("%d", int32(x.i)), "int"
@@ -1382,6 +1629,10 @@ func (e *emitter) compileExpr(x *expr) (string, string) {
 			x.sc = e.strConst(x.s)
 		}
 		return e.i8Ptr(x.sc), "String"
+	case kRunner:
+		r := e.newReg()
+		e.emitInstr("%s = bitcast void (i32)* @%s to i8*", r, x.s)
+		return r, "runner"
 	case kBool:
 		if x.b {
 			return "true", "bool"
@@ -1543,12 +1794,27 @@ func (e *emitter) compileCall(x *expr) (string, string) {
 	}
 	r := e.newReg()
 	e.body.WriteString(r + " = call " + e.ir(ret) + " @" + c.name + "(" + strings.Join(args, ", ") + ")\n")
+	switch ret {
+	case "cbool":
+		b := e.newReg()
+		e.emitInstr("%s = icmp ne i32 %s, 0", b, r)
+		return b, "bool"
+	case "f32":
+		d := e.newReg()
+		e.emitInstr("%s = fpext float %s to double", d, r)
+		return d, "float"
+	case "double":
+		return r, "float" // FFI double → 语言 float
+	}
 	return r, ret
 }
 
 // compileMethod 编译实例方法调用与内建方法。
 func (e *emitter) compileMethod(x *expr) (string, string) {
 	m := x.method
+	if m.iface != "" {
+		return e.compileIfaceCall(x)
+	}
 	recv, rtyp := e.compileExpr(m.recv)
 	// List 内建方法
 	if rtyp == "List<int>" {
@@ -1642,6 +1908,171 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 		return r, ret
 	}
 	return "0", "int"
+}
+
+// compileIfaceCall 编译接口方法调用：从 vtable 取函数指针，经 thunk 调具体方法。
+func (e *emitter) compileIfaceCall(x *expr) (string, string) {
+	m := x.method
+	e.ensureIface()
+	recv, _ := e.compileExpr(m.recv)
+	data := e.newReg()
+	e.emitInstr("%s = extractvalue %%Iface %s, 0", data, recv)
+	vt := e.newReg()
+	e.emitInstr("%s = extractvalue %%Iface %s, 1", vt, recv)
+	slot := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i32 %d", slot, vt, m.idx)
+	fp := e.newReg()
+	e.emitInstr("%s = load i8*, i8** %s", fp, slot)
+	pty := []string{"i8*"}
+	callArgs := []string{"i8* " + data}
+	for i, a := range m.args {
+		av, at := e.compileExpr(a)
+		want := "?"
+		if m.ifaceSig != nil && i < len(m.ifaceSig.params) {
+			want = m.ifaceSig.params[i].typ
+		}
+		if want == "Self" {
+			// Self 形参：接口值 → 取 data（具体实例指针）
+			d := e.newReg()
+			e.emitInstr("%s = extractvalue %%Iface %s, 0", d, av)
+			pty = append(pty, "i8*")
+			callArgs = append(callArgs, "i8* "+d)
+			continue
+		}
+		av = e.coerce(av, at, want)
+		pty = append(pty, e.ir(want))
+		callArgs = append(callArgs, e.ir(want)+" "+av)
+	}
+	retIR := "void"
+	if m.ifaceSig != nil {
+		retIR = e.ir(m.ifaceSig.ret)
+	}
+	fnty := retIR + " (" + strings.Join(pty, ", ") + ")*"
+	fn := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %s", fn, fp, fnty)
+	if retIR == "void" {
+		e.body.WriteString("  call void " + fn + "(" + strings.Join(callArgs, ", ") + ")\n")
+		return "0", "void"
+	}
+	r := e.newReg()
+	e.body.WriteString(r + " = call " + retIR + " " + fn + "(" + strings.Join(callArgs, ", ") + ")\n")
+	ret := "int"
+	if m.ifaceSig != nil {
+		ret = m.ifaceSig.ret
+	}
+	return r, ret
+}
+
+// thunkName 是 (具体类型, 接口, 方法) 的 thunk 名。
+func thunkName(th *ifaceThunk) string {
+	return "thunk$" + tyName(th.typ) + "$" + tyName(th.iface) + "$" + th.method
+}
+
+// thunkSig 返回 thunk 的 LLVM 函数签名 "ret (params)"（self data 恒为 i8*）。
+func (e *emitter) thunkSig(th *ifaceThunk) string {
+	ps := []string{"i8*"}
+	for i, p := range th.params {
+		if isSelfIdx(th.selfIdx, i) {
+			ps = append(ps, "i8*")
+			continue
+		}
+		ps = append(ps, e.ir(p))
+	}
+	retIR := e.ir(th.ret)
+	if th.boxRet {
+		e.ensureIface()
+		retIR = "%Iface" // Self 返回：装箱后以接口值返回
+	}
+	return retIR + " (" + strings.Join(ps, ", ") + ")"
+}
+
+func isSelfIdx(idx []int, i int) bool {
+	for _, v := range idx {
+		if v == i {
+			return true
+		}
+	}
+	return false
+}
+
+// emitVtables 发射全部 vtable 常量与 thunk 函数（模块尾部；前向引用合法）。
+func (e *emitter) emitVtables(vts []*vtableDef) string {
+	if len(vts) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, v := range vts {
+		fmt.Fprintf(&sb, "%s = private constant [%d x i8*] [", v.sym, len(v.thunks))
+		for i, th := range v.thunks {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			fmt.Fprintf(&sb, "i8* bitcast (%s* @%s to i8*)", e.thunkSig(th), thunkName(th))
+		}
+		sb.WriteString("]\n")
+	}
+	for _, v := range vts {
+		for _, th := range v.thunks {
+			sb.WriteString(e.emitThunk(th))
+		}
+	}
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+// emitThunk 生成一个 thunk：i8* data → 具体类型指针 → 调具体方法（Self 返回再装箱）。
+func (e *emitter) emitThunk(th *ifaceThunk) string {
+	savedBody := e.body
+	e.body = strings.Builder{}
+	e.ensureStruct(th.typ)
+	ptrTy := e.ir(th.typ)
+	retIR0 := e.ir(th.ret)
+	if th.boxRet {
+		e.ensureIface()
+		retIR0 = "%Iface"
+	}
+	var sig strings.Builder
+	sig.WriteString("define " + retIR0 + " @" + thunkName(th) + "(i8* noundef %d")
+	regs := make([]string, len(th.params))
+	for i, p := range th.params {
+		regs[i] = fmt.Sprintf("%%p%d", i)
+		if isSelfIdx(th.selfIdx, i) {
+			sig.WriteString(", i8* noundef " + regs[i])
+		} else {
+			sig.WriteString(", " + e.ir(p) + " noundef " + regs[i])
+		}
+	}
+	sig.WriteString(")\n")
+	e.body.WriteString("entry:\n")
+	self := e.newReg()
+	e.emitInstr("%s = bitcast i8* %%d to %s", self, ptrTy)
+	callArgs := []string{ptrTy + " " + self}
+	for i, p := range th.params {
+		if isSelfIdx(th.selfIdx, i) {
+			c := e.newReg()
+			e.emitInstr("%s = bitcast i8* %s to %s", c, regs[i], e.ir(p))
+			callArgs = append(callArgs, e.ir(p)+" "+c)
+			continue
+		}
+		callArgs = append(callArgs, e.ir(p)+" "+regs[i])
+	}
+	callRet := e.ir(th.ret) // 具体方法的真实返回类型（装箱前）
+	if callRet == "void" {
+		e.body.WriteString("  call void @" + th.irName + "(" + strings.Join(callArgs, ", ") + ")\n")
+		e.body.WriteString("  ret void\n")
+	} else {
+		r := e.newReg()
+		e.body.WriteString(r + " = call " + callRet + " @" + th.irName + "(" + strings.Join(callArgs, ", ") + ")\n")
+		if th.boxRet {
+			boxed := e.boxIface(r, th.typ, th.vtSym)
+			e.emitInstr("ret %%Iface %s", boxed)
+		} else {
+			e.emitInstr("ret %s %s", callRet, r)
+		}
+	}
+	out := sig.String() + "{\n" + e.body.String() + "}\n"
+	e.body = savedBody
+	return out
 }
 
 // emitClock 发射 clock()（gettimeofday 微秒）。
@@ -1936,6 +2367,7 @@ func analyzeExpr(e *expr, m *fnMeta) {
 			analyzeExpr(v, m)
 		}
 	case kField:
+		m.impure = true // 通过指针读 struct 字段：不是纯函数（禁止 memory(none)）
 		analyzeExpr(e.field.recv, m)
 	case kAndOr:
 		analyzeExpr(e.l, m)

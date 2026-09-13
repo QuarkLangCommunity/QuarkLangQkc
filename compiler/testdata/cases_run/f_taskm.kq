@@ -1,0 +1,26 @@
+// taskm：线程（spawn/merge/block/done）与通道（channel/send/recv）
+fn work(int n) int {
+    int s = 0;
+    int i = 0;
+    while (i < n) { s = s + i; i = i + 1; }
+    return s;
+}
+fn noarg() int { return 7; }
+fn main(IOStream io) {
+    thread t = taskm.spawn();
+    io.println(taskm.done(t.pid()));
+    t.merge(work, 100);
+    taskm.block(t.pid());
+    io.println(taskm.done(t.pid()), work(100));
+    thread t2 = taskm.spawn();
+    taskm.merge(t2.pid(), noarg);
+    taskm.block(t2.pid());
+    io.println(taskm.done(t2.pid()));
+    Channel c = taskm.channel();
+    c.send(42);
+    io.println(c.recv());
+    Channel c2 = taskm.channel(4);
+    c2.send(1);
+    c2.send(2);
+    io.println(c2.recv(), c2.recv());
+}
