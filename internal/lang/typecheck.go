@@ -1658,8 +1658,11 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		for _, sig := range methods {
 			if sig.Name == name {
 				want := len(sig.Params)
-				if want > 0 && strings.TrimSpace(sig.Params[0].Type) == "Self" {
-					want-- // 接口签名的接收者按**类型**识别（Self），与形参名无关
+				if want > 0 {
+					p0 := sig.Params[0]
+					if isRecvParam(recv.FName, &p0) {
+						want-- // 接口签名的接收者按**类型**识别（Self 或接口自身类型），与形参名无关
+					}
 				}
 				if len(args) != want {
 					return nil, c.errf(pos, "TypeError: %s.%s 需要 %d 个参数，给了 %d", recv.FName, name, want, len(args))
