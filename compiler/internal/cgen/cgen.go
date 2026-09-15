@@ -68,6 +68,8 @@ const (
 	kNull     // null 字面量（指针零值）
 	kMemoCall // 签名调用：f(args) @memorize（记忆化包装）
 	kMerge    // taskm.merge / t.merge：i64 槽携带 0..4 个实参
+	kTable    // HashTable 方法调用（put/get/contains/remove/size/keys）
+	kNewRef   // new T：分配单元素存储，返回 T& 指针
 )
 
 // expr 是 cgen IR 表达式。typ 由 lowering 填入语言类型（"?" = 未判定）。
@@ -83,6 +85,7 @@ type expr struct {
 
 	call   *callExpr   // kCall / kMemoCall
 	memo   *memoExpr   // kMemoCall
+	tbl    *tableExpr  // kTable
 	lst    *listLit    // kList
 	idx    *indexExpr  // kIndex
 	method *methodExpr // kMethod
@@ -95,6 +98,7 @@ type expr struct {
 
 	ifaceBox string // 非空：把具体 struct 值装箱成接口值（值为 vtable 符号）
 	anyBox   string // 非空：把该具体类型的值装箱成 interface{}（RTTI 描述符按类型发射）
+	noDeref  bool   // kIdent 指向 T& 变量：取指针本身而非解引用值（指针比较/重绑定）
 }
 
 type indexExpr struct {
@@ -142,6 +146,7 @@ type declStmt struct {
 type assignStmt struct {
 	name string
 	x    *expr
+	thru bool // 目标是 T& 变量且 RHS 是 T 值：写穿指针指向的单元
 }
 
 type indexAssignStmt struct {
@@ -201,6 +206,18 @@ type callExpr struct {
 	args      []*expr
 	byValArgs bool // 实参按值传递（签名 memorize 包装：解释器 derefArgs 后调用）
 }
+
+// tableExpr 是 HashTable 方法调用（kTable）的上下文。
+type tableExpr struct {
+	recv *expr   // 表句柄（i8*）
+	name string  // put/get/contains/remove/size/keys
+	args []*expr // put: [key, value]；其余: [key]（size/keys 无参）
+	keyT string  // 键静态类型
+	valT string  // 值静态类型
+}
+
+// isTableT 判断语言类型是否 HashTable<...>。
+func isTableT(t string) bool { return strings.HasPrefix(strings.TrimSpace(t), "HashTable<") }
 
 // memoExpr 是签名 memorize 调用（kMemoCall）的上下文。
 type memoExpr struct {
@@ -386,6 +403,7 @@ type emitter struct {
 	rtti           map[string]bool // 已发射的 interface{} 类型描述符（按需）
 	rttiFns        map[string]bool // 已发射的 struct 打印助手（按需）
 	hasList        bool
+	hasListS       bool
 	hasEmpty       bool
 	hasIface       bool
 	hasRT          bool
@@ -437,11 +455,16 @@ func newEmitter(lp *lowered) *emitter {
 	e.sigs["ql_channel_new"] = &funcSig{name: "ql_channel_new", params: []funcParam{{typ: "int"}}, ret: "Channel"}
 	e.sigs["ql_block"] = &funcSig{name: "ql_block", params: []funcParam{{typ: "int"}}, ret: "void"}
 	e.sigs["ql_done"] = &funcSig{name: "ql_done", params: []funcParam{{typ: "int"}}, ret: "cbool"}
-	e.sigs["ql_merge"] = &funcSig{name: "ql_merge", params: []funcParam{{typ: "int"}, {typ: "runner"}, {typ: "long"}, {typ: "long"}, {typ: "long"}, {typ: "long"}}, ret: "void"}
+	e.sigs["ql_merge"] = &funcSig{name: "ql_merge", params: []funcParam{
+		{typ: "int"}, {typ: "runner"}, {typ: "long"}, {typ: "long"}, {typ: "long"}, {typ: "long"},
+		{typ: "long"}, {typ: "long"}, {typ: "long"}, {typ: "long"}}, ret: "void"}
 	e.sigs["ql_send"] = &funcSig{name: "ql_send", params: []funcParam{{typ: "Channel"}, {typ: "int"}}, ret: "int"}
 	e.sigs["ql_recv"] = &funcSig{name: "ql_recv", params: []funcParam{{typ: "Channel"}}, ret: "int"}
 	// 签名 memorize（builtin，非用户函数：按值调用）
 	e.sigs["ql_memo_new"] = &funcSig{name: "ql_memo_new", ret: "memorize"}
+	// HashTable 构造/键列表（其余方法由 compileTable 直接发射）
+	e.sigs["ql_table_new"] = &funcSig{name: "ql_table_new", ret: "HashTable"}
+	e.sigs["ql_table_keys"] = &funcSig{name: "ql_table_keys", params: []funcParam{{typ: "HashTable"}}, ret: "List<String>"}
 	// String 内建方法
 	str := func(name, ret string, params ...string) {
 		ps := make([]funcParam, 0, len(params))
@@ -463,6 +486,7 @@ func newEmitter(lp *lowered) *emitter {
 	str("ql_str_replace", "String", "String", "String", "String")
 	str("ql_str_toint", "int", "String", "int")
 	str("ql_str_tofloat", "double", "String", "int")
+	str("ql_str_split", "List<String>", "String", "String")
 	str("ql_list_int_sort", "void", "intptr", "int", "int")
 	str("ql_list_int_str", "String", "intptr", "int", "int")
 	return e
@@ -624,6 +648,15 @@ func (e *emitter) ensureList() {
 	e.types.WriteString("%List = type { i32*, i32, i32 }\n") // buf, head, tail
 }
 
+// ensureListS 保证 List<String> 的 LLVM 定义已发射（元素是 i8* 指针）。
+func (e *emitter) ensureListS() {
+	if e.hasListS {
+		return
+	}
+	e.hasListS = true
+	e.types.WriteString("%ListS = type { i8**, i32, i32 }\n") // buf, head, tail
+}
+
 // irElem 返回聚合类型的元素类型（GEP 的源类型）：%Point* → %Point；标量原样。
 func (e *emitter) irElem(t string) string {
 	p := e.ir(t)
@@ -672,16 +705,28 @@ func (e *emitter) ir(t string) string {
 		return "i8*"
 	case "memorize":
 		return "i8*" // 签名实例句柄（ql_memo_new）
+	case "HashTable":
+		return "i8*" // HashTable<K,V> 句柄（上面已判过 HasPrefix）
 	case "intptr":
 		return "i32*"
 	}
-	if t == "List<int>" || t == "List<String>" || t == "List<float>" || t == "List<bool>" {
+	if t == "List<int>" {
 		e.ensureList()
 		return "%List*"
+	}
+	if t == "List<String>" {
+		e.ensureListS()
+		return "%ListS*"
 	}
 	if _, ok := e.structs[t]; ok {
 		e.ensureStruct(t)
 		return "%" + tyName(t) + "*"
+	}
+	if isTableT(t) {
+		return "i8*"
+	}
+	if _, base, ok := ptrRefBase(t); ok {
+		return e.ir(base) + "*"
 	}
 	return "i32"
 }
@@ -695,6 +740,8 @@ func (e *emitter) alignOf(t string) int {
 		return 4
 	case "float", "double", "long", "pointer", "null", "String",
 		"List<int>", "List<String>", "List<float>", "List<bool>", "memorize":
+		return 8
+	case "HashTable":
 		return 8
 	}
 	if e.ifaces[t] {
@@ -727,6 +774,14 @@ func (e *emitter) zeroOf(t string) string {
 	case "String":
 		return e.emptyString()
 	case "memorize":
+		return "null"
+	case "HashTable":
+		return "null"
+	}
+	if isTableT(t) {
+		return "null"
+	}
+	if _, _, ok := ptrRefBase(t); ok {
 		return "null"
 	}
 	if e.ifaces[t] {
@@ -778,7 +833,7 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i64 @write(i32, i8*, i64)\n")
 	e.decls.WriteString("declare void @exit(i32)\n")
 	e.decls.WriteString("declare i32 @ql_spawn()\n")
-	e.decls.WriteString("declare void @ql_merge(i32, i8*, i64, i64, i64, i64)\n")
+	e.decls.WriteString("declare void @ql_merge(i32, i8*, i64, i64, i64, i64, i64, i64, i64, i64)\n")
 	e.decls.WriteString("declare void @ql_block(i32)\n")
 	e.decls.WriteString("declare i32 @ql_done(i32)\n")
 	e.decls.WriteString("declare i8* @ql_channel_new(i32)\n")
@@ -811,6 +866,26 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_any_str_string(i8*)\n")
 	e.decls.WriteString("declare i8* @ql_any_str_list(i8*)\n")
 	e.decls.WriteString("declare i8* @ql_long_to_str(i64)\n")
+	// HashTable<K,V> 运行期
+	e.decls.WriteString("declare i8* @ql_table_new()\n")
+	e.decls.WriteString("declare i8* @ql_table_key(i8*, i8**)\n")
+	e.decls.WriteString("declare void @ql_table_put(i8*, i8*, i8*, i8**)\n")
+	e.decls.WriteString("declare i8* @ql_table_get(i8*, i8*, i8**)\n")
+	e.decls.WriteString("declare i32 @ql_table_contains(i8*, i8*)\n")
+	e.decls.WriteString("declare void @ql_table_remove(i8*, i8*)\n")
+	e.decls.WriteString("declare i32 @ql_table_size(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_table_keys(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_int(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_float(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_bool(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_string(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_list(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_identity(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_copy_nil(i8*)\n")
+	e.decls.WriteString("declare i8* @ql_any_ptr(i8*, i8**)\n")
+	e.decls.WriteString("declare i8* @ql_list_str_str(i8**, i32, i32)\n")
+	e.ensureListS() // declare 引用了 %ListS，类型定义必须先于声明发射
+	e.decls.WriteString("declare %ListS* @ql_str_split(i8*, i8*)\n")
 	// 签名 memorize 运行时（@mb() 记忆化：int 键 → int 值）
 	e.decls.WriteString("declare i8* @ql_memo_new()\n")
 	e.decls.WriteString("declare i32 @ql_memo_get(i8*, i32, i32*, i32*)\n")
@@ -1268,6 +1343,12 @@ func (e *emitter) preRegister(x *expr) {
 			e.preRegister(a)
 		}
 	}
+	if x.tbl != nil {
+		e.preRegister(x.tbl.recv)
+		for _, a := range x.tbl.args {
+			e.preRegister(a)
+		}
+	}
 	if x.method != nil {
 		e.preRegister(x.method.recv)
 		for _, a := range x.method.args {
@@ -1475,6 +1556,18 @@ func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
 			return "", "", false, false
 		}
 		lo, lt := e.compileExpr(x.idx.recv)
+		if lt == "List<String>" {
+			p, head, size := e.listSRange(lo)
+			i, it := e.compileExpr(x.idx.i)
+			i = e.coerce(i, it, "int")
+			e.emitBoundsCheck(i, size, x.line)
+			idx := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+			i64 := e.toI64(idx)
+			g := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g, p, i64)
+			return g, "String", true, true
+		}
 		if !isListType(lt) {
 			return "", "", false, false
 		}
@@ -1587,6 +1680,31 @@ func (e *emitter) coerce(reg, from, to string) string {
 // ---------- 声明 / 赋值 ----------
 
 func (e *emitter) emitDecl(st *declStmt) {
+	// T& / pointer T：槽里放指针；new T 分配单元，无初值 → null
+	if _, _, isRef := ptrRefBase(st.typ); isRef {
+		slot := e.newReg()
+		llt := e.ir(st.typ)
+		e.emitInstr("%s = alloca %s, align %d", slot, llt, e.alignOf(st.typ))
+		v := "null"
+		if st.init != nil {
+			v, _ = e.compileExpr(st.init)
+		}
+		e.emitInstr("store %s %s, %s* %s", llt, v, llt, slot)
+		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
+		return
+	}
+	// HashTable<K,V>：i8* 句柄（构造已由 HashTable::new() 发射）
+	if isTableT(st.typ) {
+		slot := e.newReg()
+		e.emitInstr("%s = alloca i8*, align 8", slot)
+		v := "null"
+		if st.init != nil {
+			v, _ = e.compileExpr(st.init)
+		}
+		e.emitInstr("store i8* %s, i8** %s", v, slot)
+		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
+		return
+	}
 	switch st.typ {
 	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel", "memorize":
 		// SSA 直通：单赋值标量直接用寄存器（免 alloca/load/store）
@@ -1605,6 +1723,16 @@ func (e *emitter) emitDecl(st *declStmt) {
 		}
 		e.emitInstr("store %s %s, %s* %s", llt, v, llt, reg)
 		e.vars[st.name] = varSlot{reg: reg, typ: st.typ}
+	case "List<String>":
+		e.ensureListS()
+		slot := e.newReg()
+		e.emitInstr("%s = alloca %%ListS*, align 8", slot)
+		v := "null"
+		if st.init != nil {
+			v, _ = e.compileExpr(st.init)
+		}
+		e.emitInstr("store %%ListS* %s, %%ListS** %s", v, slot)
+		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
 	case "List<int>":
 		e.ensureList()
 		if st.init != nil && st.init.kind != kList {
@@ -1676,6 +1804,50 @@ func (e *emitter) emitDecl(st *declStmt) {
 	}
 }
 
+// listSObj 取 List<String> 变量的对象指针。
+func (e *emitter) listSObj(name string) string {
+	e.ensureListS()
+	info, ok := e.vars[name]
+	if !ok {
+		return "null"
+	}
+	if info.param || info.direct {
+		return info.reg
+	}
+	r := e.newReg()
+	e.emitInstr("%s = load %%ListS*, %%ListS** %s", r, info.reg)
+	return r
+}
+
+// listSRange 取 List<String> 的可见区间与缓冲区。
+func (e *emitter) listSRange(obj string) (buf, head, size string) {
+	e.ensureListS()
+	hf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 1", hf, obj)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 2", tf, obj)
+	h := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", h, hf)
+	t := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", t, tf)
+	sz := e.newReg()
+	e.emitInstr("%s = sub i32 %s, %s", sz, t, h)
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, obj)
+	p := e.newReg()
+	e.emitInstr("%s = load i8**, i8*** %s", p, bf)
+	return p, h, sz
+}
+
+// listSSlot 把 List<String> 对象指针存进 alloca 槽（变量引用语义）。
+func (e *emitter) listSSlot(objPtr string) string {
+	e.ensureListS()
+	slot := e.newReg()
+	e.emitInstr("%s = alloca %%ListS*, align 8", slot)
+	e.emitInstr("store %%ListS* %s, %%ListS** %s", objPtr, slot)
+	return slot
+}
+
 // listSlot 把 List 对象指针存进 alloca 槽（变量引用语义：槽里放指针）。
 func (e *emitter) listSlot(objPtr string) string {
 	slot := e.newReg()
@@ -1703,6 +1875,28 @@ func (e *emitter) emitAssign(st *assignStmt) {
 		e.emitInstr("; undeclared variable %s", st.name)
 		return
 	}
+	if st.thru {
+		// T& 变量：写穿指针指向的单元；指针为 null（未初始化）时惰性分配单元
+		// （解释器语义：int& q; q = 7 → q 自己持有该值）
+		_, base, _ := ptrRefBase(info.typ)
+		ptr := e.newReg()
+		pllt := e.ir(info.typ)
+		e.emitInstr("%s = load %s, %s* %s", ptr, pllt, pllt, info.reg)
+		isnull := e.newReg()
+		e.emitInstr("%s = icmp eq %s %s, null", isnull, pllt, ptr)
+		raw := e.newReg()
+		e.emitInstr("%s = call i8* @calloc(i64 1, i64 %d)", raw, e.sizeOf(base))
+		blt := e.ir(base)
+		fresh := e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %s", fresh, raw, pllt)
+		cell := e.newReg()
+		e.emitInstr("%s = select i1 %s, %s %s, %s %s", cell, isnull, pllt, fresh, pllt, ptr)
+		e.emitInstr("store %s %s, %s* %s", pllt, cell, pllt, info.reg)
+		v, vt := e.compileExpr(st.x)
+		v = e.coerce(v, vt, base)
+		e.emitInstr("store %s %s, %s* %s", blt, v, blt, cell)
+		return
+	}
 	v, vt := e.compileExpr(st.x)
 	v = e.coerce(v, vt, info.typ)
 	if info.param || info.direct {
@@ -1715,8 +1909,23 @@ func (e *emitter) emitAssign(st *assignStmt) {
 }
 
 func (e *emitter) emitIndexAssign(st *indexAssignStmt) {
-	// l[i] = v（接收者可以是任意 List<int> 表达式）
-	lo, _ := e.compileExpr(st.recv)
+	// l[i] = v（接收者可以是任意 List<int>/List<String> 表达式）
+	lo, lt := e.compileExpr(st.recv)
+	if lt == "List<String>" {
+		p, head, size := e.listSRange(lo)
+		i, it := e.compileExpr(st.idx)
+		i = e.coerce(i, it, "int")
+		e.emitBoundsCheck(i, size, st.idx.line)
+		idx := e.newReg()
+		e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+		i64 := e.toI64(idx)
+		g := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g, p, i64)
+		v, vt := e.compileExpr(st.x)
+		v = e.coerce(v, vt, "String")
+		e.emitInstr("store i8* %s, i8** %s", v, g)
+		return
+	}
 	head, size := e.listHeadSize(lo)
 	i, it := e.compileExpr(st.idx)
 	i = e.coerce(i, it, "int")
@@ -1961,8 +2170,54 @@ func (e *emitter) emitForIn(st *forInStmt) {
 	llt := e.ir(st.typ)
 	e.emitInstr("%s = alloca %s, align %d", slot, llt, e.alignOf(st.typ))
 	e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
-	lo := e.listObj(st.list)
 	condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
+	if st.typ == "String" {
+		// List<String>：元素是 i8*（滑动的 head 游标语义与 List<int> 一致）
+		lo := e.listSObj(st.list)
+		_, _, _ = lo, condB, bodyB
+		p, _, _ := e.listSRange(lo)
+		bf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, lo)
+		hf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 1", hf, lo)
+		tf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 2", tf, lo)
+		e.emitInstr("br label %%%s", condB)
+		e.setBlock(condB)
+		h := e.newReg()
+		e.emitInstr("%s = load i32, i32* %s", h, hf)
+		t := e.newReg()
+		e.emitInstr("%s = load i32, i32* %s", t, tf)
+		c := e.newReg()
+		e.emitInstr("%s = icmp slt i32 %s, %s", c, h, t)
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", c, bodyB, endB)
+		saved := e.funcReturned
+		e.breaks = append(e.breaks, endB)
+		e.setBlock(bodyB)
+		h2 := e.newReg()
+		e.emitInstr("%s = load i32, i32* %s", h2, hf)
+		h64 := e.toI64(h2)
+		ep := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", ep, p, h64)
+		ev := e.newReg()
+		e.emitInstr("%s = load i8*, i8** %s", ev, ep)
+		e.emitInstr("store i8* %s, i8** %s", ev, slot)
+		nx := e.newReg()
+		e.emitInstr("%s = add i32 %s, 1", nx, h2)
+		e.emitInstr("store i32 %s, i32* %s", nx, hf)
+		e.emitBlock(st.body)
+		bodyRet := e.funcReturned || e.term
+		e.funcReturned = saved
+		if !bodyRet {
+			e.emitInstr("br label %%%s", condB)
+		}
+		e.funcReturned = saved
+		e.breaks = e.breaks[:len(e.breaks)-1]
+		e.setBlock(endB)
+		_ = bf
+		return
+	}
+	lo := e.listObj(st.list)
 	e.emitInstr("br label %%%s", condB)
 	e.setBlock(condB)
 	hf := e.newReg()
@@ -2012,9 +2267,24 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 	fmts := make([]string, 0, len(args))
 	for _, a := range args {
 		v, t := e.compileExpr(a)
+		// T& 实参：null → "nil"（解释器 nil 值打印为 nil）；统一转 String 后 select
+		ptrNil := ""
+		if _, _, isRef := ptrRefBase(a.typ); isRef && a.kind == kIdent {
+			ptr, pt := e.loadVar(a.s, true)
+			ptrNil = e.newReg()
+			e.emitInstr("%s = icmp eq %s %s, null", ptrNil, e.ir(pt), ptr)
+		}
 		vals = append(vals, av{v, t})
 		switch t {
 		case "int":
+			if ptrNil != "" {
+				e.needIntToStr = true
+				s := e.newReg()
+				e.emitInstr("%s = call i8* @ql_int_to_str(i32 %s)", s, v)
+				vals[len(vals)-1] = av{e.nilSelect(ptrNil, s), "String"}
+				fmts = append(fmts, "%s")
+				break
+			}
 			fmts = append(fmts, "%d")
 		case "long":
 			fmts = append(fmts, "%lld")
@@ -2022,6 +2292,15 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 			e.needPtrToStr = true
 			r := e.newReg()
 			e.emitInstr("%s = call i8* @ql_ptr_to_str(i8* %s)", r, v)
+			vals[len(vals)-1].val = r
+			vals[len(vals)-1].typ = "String"
+			fmts = append(fmts, "%s")
+		case "List<String>":
+			p, head, size := e.listSRange(v)
+			tail := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_list_str_str(i8** %s, i32 %s, i32 %s)", r, p, head, tail)
 			vals[len(vals)-1].val = r
 			vals[len(vals)-1].typ = "String"
 			fmts = append(fmts, "%s")
@@ -2040,6 +2319,9 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 			e.needFloatToStr = true
 			r := e.newReg()
 			e.emitInstr("%s = call i8* @ql_float_to_str(double %s)", r, v)
+			if ptrNil != "" {
+				r = e.nilSelect(ptrNil, r)
+			}
 			vals[len(vals)-1].val = r
 			vals[len(vals)-1].typ = "String"
 			fmts = append(fmts, "%s")
@@ -2048,11 +2330,24 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 			fp := e.i8Ptr(e.strs["false"])
 			r := e.newReg()
 			e.emitInstr("%s = select i1 %s, i8* %s, i8* %s", r, e.toI1(v), tp, fp)
+			if ptrNil != "" {
+				r = e.nilSelect(ptrNil, r)
+			}
 			vals[len(vals)-1].val = r
 			vals[len(vals)-1].typ = "String"
 			fmts = append(fmts, "%s")
 		default:
+			if ptrNil != "" {
+				vals[len(vals)-1].val = e.nilSelect(ptrNil, v)
+				vals[len(vals)-1].typ = "String"
+			}
 			fmts = append(fmts, "%s")
+		}
+		if ptrNil != "" && t == "long" {
+			e.needLLongToStr = true
+			s := e.newReg()
+			e.emitInstr("%s = call i8* @ql_long_to_str(i64 %s)", s, v)
+			vals[len(vals)-1] = av{e.nilSelect(ptrNil, s), "String"}
 		}
 	}
 	line := strings.Join(fmts, " ")
@@ -2150,13 +2445,48 @@ func anyKindOf(t string) int {
 	return 5 // struct
 }
 
+// anyTypeName 返回与解释器 Value.TypeName() 一致的类型名（HashTable 键规则、
+// interface{} 拆箱诊断都依赖它）。
+func anyTypeName(t string) string {
+	switch t {
+	case "int", "float", "bool", "String":
+		return t
+	case "null", "void", "interface{}":
+		return "nil"
+	}
+	if isListType(t) {
+		return "List"
+	}
+	return t // struct：SType
+}
+
+// anyCopyFn 返回该类型的 RTTI 深拷贝函数（语义对齐解释器 deepCopy：
+// List 复制缓冲区、struct 共享指针、标量/String 堆单元复制）。
+func anyCopyFn(t string) string {
+	switch anyKindOf(t) {
+	case 0:
+		return "@ql_any_copy_int"
+	case 1:
+		return "@ql_any_copy_float"
+	case 2:
+		return "@ql_any_copy_bool"
+	case 3:
+		return "@ql_any_copy_string"
+	case 4:
+		return "@ql_any_copy_list"
+	case 6:
+		return "@ql_any_copy_nil"
+	}
+	return "@ql_any_copy_identity"
+}
+
 // ensureRT 发射类型描述符的 LLVM 结构定义。
 func (e *emitter) ensureRT() {
 	if e.hasRT {
 		return
 	}
 	e.hasRT = true
-	e.types.WriteString("%RT = type { i8* (i8*)*, i8*, i32 }\n")
+	e.types.WriteString("%RT = type { i8* (i8*)*, i8* (i8*)*, i8*, i32 }\n")
 }
 
 // rttiSym 返回（按需发射）类型描述符符号。
@@ -2186,9 +2516,9 @@ func (e *emitter) rttiSym(typ string) string {
 	default:
 		strFn = "@" + e.emitStructAnyStr(typ)
 	}
-	nameC := e.strConst(typ)
-	fmt.Fprintf(&e.globals, "%s = private constant %%RT { i8* (i8*)* %s, i8* getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0), i32 %d }\n",
-		sym, strFn, nameC.size, nameC.size, nameC.name, kind)
+	nameC := e.strConst(anyTypeName(typ))
+	fmt.Fprintf(&e.globals, "%s = private constant %%RT { i8* (i8*)* %s, i8* (i8*)* %s, i8* getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0), i32 %d }\n",
+		sym, strFn, anyCopyFn(typ), nameC.size, nameC.size, nameC.name, kind)
 	return sym
 }
 
@@ -2426,7 +2756,7 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		}
 		return "false", "bool"
 	case kIdent:
-		return e.loadVar(x.s)
+		return e.loadVar(x.s, x.noDeref)
 	case kField:
 		return e.compileField(x)
 	case kCmp, kBin:
@@ -2443,6 +2773,10 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		return e.compileCall(x)
 	case kMemoCall:
 		return e.compileMemoCall(x), "int"
+	case kTable:
+		return e.compileTable(x)
+	case kNewRef:
+		return e.compileNewRef(x)
 	case kMerge:
 		return e.compileMerge(x), "void"
 	case kToString:
@@ -2474,10 +2808,36 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 }
 
 // loadVar 读取变量（槽 → load；参数/直通 → 直接用）。
-func (e *emitter) loadVar(name string) (string, string) {
+// T& / pointer T 变量默认自动解引用（解释器语义）；noDeref 时取指针本身。
+func (e *emitter) loadVar(name string, noDeref bool) (string, string) {
 	info, ok := e.vars[name]
 	if !ok {
 		return name, "int" // 未声明变量：让生成的 IR 报错（llvm-as 校验会拦截）
+	}
+	pt := info.typ
+	if _, base, isRef := ptrRefBase(pt); isRef {
+		var ptr string
+		if info.param || info.direct {
+			ptr = info.reg
+		} else {
+			llt := e.ir(pt)
+			ptr = e.newReg()
+			e.emitInstr("%s = load %s, %s* %s", ptr, llt, llt, info.reg)
+		}
+		if noDeref {
+			return ptr, pt
+		}
+		// 可空引用：null 时读临时单元（不崩；打印/比较由调用点按 nil 语义处理）
+		blt := e.ir(base)
+		isnull := e.newReg()
+		e.emitInstr("%s = icmp eq %s %s, null", isnull, e.ir(pt), ptr)
+		dummy := e.newReg()
+		e.emitInstr("%s = alloca %s, align %d", dummy, blt, e.alignOf(base))
+		safe := e.newReg()
+		e.emitInstr("%s = select i1 %s, %s %s, %s %s", safe, isnull, e.ir(pt), dummy, e.ir(pt), ptr)
+		v := e.newReg()
+		e.emitInstr("%s = load %s, %s* %s", v, blt, blt, safe)
+		return v, base
 	}
 	if info.param || info.direct {
 		return info.reg, info.typ
@@ -2525,7 +2885,21 @@ func (e *emitter) compileStructLit(x *expr) (string, string) {
 }
 
 func (e *emitter) compileIndex(x *expr) (string, string) {
-	lo, _ := e.compileExpr(x.idx.recv)
+	lo, lt := e.compileExpr(x.idx.recv)
+	if lt == "List<String>" {
+		p, head, size := e.listSRange(lo)
+		i, it := e.compileExpr(x.idx.i)
+		i = e.coerce(i, it, "int")
+		e.emitBoundsCheck(i, size, x.line)
+		idx := e.newReg()
+		e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+		i64 := e.toI64(idx)
+		g := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g, p, i64)
+		v := e.newReg()
+		e.emitInstr("%s = load i8*, i8** %s", v, g)
+		return v, "String"
+	}
 	head, size := e.listHeadSize(lo)
 	i, it := e.compileExpr(x.idx.i)
 	i = e.coerce(i, it, "int")
@@ -2665,12 +3039,12 @@ func (e *emitter) compileMerge(x *expr) string {
 	c := x.call
 	pid, _ := e.compileExpr(c.args[0])
 	runners, _ := e.compileExpr(c.args[1])
-	slots := make([]string, 0, 4)
+	slots := make([]string, 0, 8)
 	for _, a := range c.args[2:] {
 		v, vt := e.compileExpr(a)
 		slots = append(slots, e.packI64(v, vt))
 	}
-	for len(slots) < 4 {
+	for len(slots) < 8 {
 		slots = append(slots, "0")
 	}
 	e.body.WriteString("  call void @ql_merge(i32 " + pid + ", i8* " + runners + ", i64 " +
@@ -2699,6 +3073,181 @@ func (e *emitter) packI64(v, typ string) string {
 	return r
 }
 
+// compileNewRef 编译 new T：分配一个清零的 T 单元，返回 T& 指针。
+func (e *emitter) compileNewRef(x *expr) (string, string) {
+	base := x.s
+	ptlt := e.ir(x.typ) // T& 的指针类型（i32* / %P* / i8** …）
+	// 大小：标量按 LLVM 类型大小，struct 用 GEP null,1
+	var sz string
+	if e.isStruct(base) {
+		elem := e.irElem(base)
+		g := e.newReg()
+		e.emitInstr("%s = getelementptr %s, %s* null, i32 1", g, elem, elem)
+		sz = e.newReg()
+		e.emitInstr("%s = ptrtoint %s* %s to i64", sz, elem, g)
+	} else {
+		sz = strconv.Itoa(e.sizeOf(base))
+		if sz == "0" {
+			sz = "8"
+		}
+	}
+	obj := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 1, i64 %s)", obj, sz)
+	p := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %s", p, obj, ptlt)
+	return p, base + "&"
+}
+
+// nilSelect 按 null 判定选择 "nil" 或给定字符串（可空引用解引用的 nil 语义）。
+func (e *emitter) nilSelect(isnull, s string) string {
+	nilp := e.i8Ptr(e.strConst("nil"))
+	r := e.newReg()
+	e.emitInstr("%s = select i1 %s, i8* %s, i8* %s", r, isnull, nilp, s)
+	return r
+}
+
+// sizeOf 返回标量类型的字节大小（struct 走 GEP 计算）。
+func (e *emitter) sizeOf(t string) int {
+	switch t {
+	case "bool", "char":
+		return 1
+	case "int", "thread", "cbool", "f32":
+		return 4
+	case "float", "double", "long", "pointer", "null", "String", "Channel", "channel", "runner", "memorize":
+		return 8
+	}
+	if isTableT(t) || isListType(t) || e.ifaces[t] {
+		return 8
+	}
+	return 8
+}
+
+// compileTable 编译 HashTable 方法调用：键按解释器规则结构化成字符串
+// （TypeName:String()），值装箱成 interface{}（Put 时按 RTTI 深拷贝）。
+func (e *emitter) compileTable(x *expr) (string, string) {
+	t := x.tbl
+	h, _ := e.compileExpr(t.recv)
+	switch t.name {
+	case "size":
+		r := e.newReg()
+		e.emitInstr("%s = call i32 @ql_table_size(i8* %s)", r, h)
+		return r, "int"
+	case "contains":
+		k := e.tableKey(t.args[0])
+		r := e.newReg()
+		e.emitInstr("%s = call i32 @ql_table_contains(i8* %s, i8* %s)", r, h, k)
+		b := e.newReg()
+		e.emitInstr("%s = icmp ne i32 %s, 0", b, r)
+		return b, "bool"
+	case "remove":
+		k := e.tableKey(t.args[0])
+		e.emitInstr("call void @ql_table_remove(i8* %s, i8* %s)", h, k)
+		return "0", "void"
+	case "put":
+		k := e.tableKey(t.args[0])
+		d, rt := e.anyPair(t.args[1])
+		e.emitInstr("call void @ql_table_put(i8* %s, i8* %s, i8* %s, i8** %s)", h, k, d, rt)
+		return "0", "void"
+	case "get":
+		k := e.tableKey(t.args[0])
+		slot := e.newReg()
+		e.emitInstr("%s = alloca i8**, align 8", slot)
+		d := e.newReg()
+		e.emitInstr("%s = call i8* @ql_table_get(i8* %s, i8* %s, i8** %s)", d, h, k, slot)
+		rt := e.newReg()
+		e.emitInstr("%s = load i8**, i8** %s", rt, slot)
+		if isAnyType(t.valT) {
+			// 缺键 → (null, null) = nil（与解释器 get 返回 NilV 一致）
+			i0 := e.newReg()
+			e.emitInstr("%s = insertvalue %%Iface undef, i8* %s, 0", i0, d)
+			i1 := e.newReg()
+			e.emitInstr("%s = insertvalue %%Iface %s, i8** %s, 1", i1, i0, rt)
+			return i1, "interface{}"
+		}
+		// 具体 V：按 RTTI 拆箱；缺键/类型不符 → 明确运行期错误（nil 无法用静态类型承载）
+		switch anyKindOf(t.valT) {
+		case 0:
+			r := e.newReg()
+			e.emitInstr("%s = call i32 @ql_any_int(i8* %s, i8** %s)", r, d, rt)
+			return r, "int"
+		case 1:
+			r := e.newReg()
+			e.emitInstr("%s = call double @ql_any_float(i8* %s, i8** %s)", r, d, rt)
+			return r, "float"
+		case 2:
+			r := e.newReg()
+			e.emitInstr("%s = call i32 @ql_any_bool(i8* %s, i8** %s)", r, d, rt)
+			b := e.newReg()
+			e.emitInstr("%s = icmp ne i32 %s, 0", b, r)
+			return b, "bool"
+		case 3:
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_any_string(i8* %s, i8** %s)", r, d, rt)
+			return r, "String"
+		default:
+			// struct / List：存的就是对象指针（Put 时 struct 共享、List 深拷贝）
+			p := e.newReg()
+			e.emitInstr("%s = call i8* @ql_any_ptr(i8* %s, i8** %s)", p, d, rt)
+			ir := e.newReg()
+			e.emitInstr("%s = bitcast i8* %s to %s", ir, p, e.ir(t.valT))
+			return ir, t.valT
+		}
+	case "keys":
+		l := e.newReg()
+		e.emitInstr("%s = call i8* @ql_table_keys(i8* %s)", l, h)
+		return l, "List<String>"
+	}
+	return "0", "void"
+}
+
+// tableKey 把键表达式装箱后转成解释器同款键串（TypeName:String()）。
+func (e *emitter) tableKey(k *expr) string {
+	d, rt := e.anyPair(k)
+	r := e.newReg()
+	e.emitInstr("%s = call i8* @ql_table_key(i8* %s, i8** %s)", r, d, rt)
+	return r
+}
+
+// anyPair 取表达式的 packed interface{} 值 (data, rt)。
+func (e *emitter) anyPair(x *expr) (string, string) {
+	v, typ := e.compileExpr(x)
+	if !isAnyType(typ) {
+		v = e.boxAny(v, typ)
+	}
+	d := e.newReg()
+	e.emitInstr("%s = extractvalue %%Iface %s, 0", d, v)
+	rt := e.newReg()
+	e.emitInstr("%s = extractvalue %%Iface %s, 1", rt, v)
+	return d, rt
+}
+
+// isAnyType 判断是否是空接口 interface{}。
+func isAnyType(t string) bool { return strings.TrimSpace(t) == "interface{}" }
+
+// ptrRefBase 判断语言类型是否 T& / pointer T（可空引用）：
+// 返回 (完整类型, 指向的类型, 是否)。
+func ptrRefBase(t string) (string, string, bool) {
+	t = strings.TrimSpace(t)
+	if t == "pointer" || t == "" {
+		return "", "", false // 裸 pointer = FFI 不透明句柄（i8*），不是 T&
+	}
+	if strings.HasPrefix(t, "pointer ") {
+		inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(t[len("pointer "):]), "&"))
+		if inner == "" {
+			return "", "", false
+		}
+		return inner + "&", inner, true
+	}
+	if strings.HasSuffix(t, "&") {
+		inner := strings.TrimSpace(strings.TrimSuffix(t, "&"))
+		if inner == "" {
+			return "", "", false
+		}
+		return inner + "&", inner, true
+	}
+	return "", "", false
+}
+
 // compileMethod 编译实例方法调用与内建方法。
 func (e *emitter) compileMethod(x *expr) (string, string) {
 	m := x.method
@@ -2706,6 +3255,34 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 		return e.compileIfaceCall(x)
 	}
 	recv, rtyp := e.compileExpr(m.recv)
+	// List<String> 内建方法（keys() 结果等；只 lower 只读子集）
+	if rtyp == "List<String>" {
+		switch m.name {
+		case "size":
+			_, _, size := e.listSRange(recv)
+			return size, "int"
+		case "get":
+			p, head, size := e.listSRange(recv)
+			i, it := e.compileExpr(m.args[0])
+			i = e.coerce(i, it, "int")
+			e.emitBoundsCheck(i, size, x.line)
+			idx := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+			i64 := e.toI64(idx)
+			g := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g, p, i64)
+			v := e.newReg()
+			e.emitInstr("%s = load i8*, i8** %s", v, g)
+			return v, "String"
+		case "toString":
+			p, head, size := e.listSRange(recv)
+			tail := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+			r := e.newReg()
+			e.emitInstr("%s = call i8* @ql_list_str_str(i8** %s, i32 %s, i32 %s)", r, p, head, tail)
+			return r, "String"
+		}
+	}
 	// List 内建方法
 	if rtyp == "List<int>" {
 		switch m.name {
@@ -3441,7 +4018,13 @@ func (e *emitter) isStruct(t string) bool {
 }
 
 // isPtrLike 判断是否是 FFI 不透明指针 / null（i8* 引用比较）。
-func isPtrLike(t string) bool { return t == "pointer" || t == "null" }
+func isPtrLike(t string) bool {
+	if t == "pointer" || t == "null" {
+		return true
+	}
+	_, _, ok := ptrRefBase(t)
+	return ok
+}
 
 var cmpOps = map[string]string{"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
 
@@ -3463,6 +4046,14 @@ func analyzeExpr(e *expr, m *fnMeta) {
 		m.impure = true // 装箱调用 malloc（标量堆单元），不是纯函数
 	}
 	switch e.kind {
+	case kTable:
+		m.impure = true // ql_table_*：堆表读写
+		if e.tbl != nil {
+			analyzeExpr(e.tbl.recv, m)
+			for _, a := range e.tbl.args {
+				analyzeExpr(a, m)
+			}
+		}
 	case kMerge:
 		m.impure = true // ql_merge：启动线程
 		if e.call != nil {
@@ -3720,6 +4311,13 @@ func scanByRefArgs(stmts []stmt, sigs map[string]*funcSig, out map[string]bool) 
 			return
 		}
 		switch x.kind {
+		case kTable:
+			if x.tbl != nil {
+				walkExpr(x.tbl.recv)
+				for _, a := range x.tbl.args {
+					walkExpr(a)
+				}
+			}
 		case kMerge:
 			if x.call != nil {
 				for _, a := range x.call.args {

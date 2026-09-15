@@ -7,6 +7,12 @@ fn mix(int a, String s, float f, bool b) int {
     return r + s.size() + f.toString().size();
 }
 fn touch(P p, int d) int { p.v = p.v + d; return p.v; }
+
+// merge 最多 8 个实参（qthreads 运行时 8 个 i64 槽）
+fn sum8(int a, int b, int c, int d, int e, int f, int g, int h) int {
+    return a + b + c + d + e + f + g + h;
+}
+
 fn main(IOStream io) {
     thread t = taskm.spawn();
     t.merge(work, 1);
@@ -26,4 +32,12 @@ fn main(IOStream io) {
     taskm.block(t4.pid());
     io.println(p.v);
     io.println(taskm.done(t4.pid()));
+    thread t5 = taskm.spawn();
+    t5.merge(sum8, 1, 2, 3, 4, 5, 6, 7, 8);
+    taskm.block(t5.pid());
+    io.println(taskm.done(t5.pid()));
+    thread t6 = taskm.spawn();
+    taskm.merge(t6.pid(), sum8, 10, 20, 30, 40, 50, 60, 70, 80);
+    taskm.block(t6.pid());
+    io.println(taskm.done(t6.pid()));
 }

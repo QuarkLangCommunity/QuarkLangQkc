@@ -8,7 +8,7 @@
 #include <process.h>
 #include <windows.h>
 typedef struct { int cap, head, tail, cnt; int* buf; SRWLOCK mu; CONDITION_VARIABLE cv; } ql_channel;
-typedef struct { void (*fn)(long long, long long, long long, long long); long long args[4]; volatile int done; SRWLOCK mu; } ql_task;
+typedef struct { void (*fn)(long long, long long, long long, long long, long long, long long, long long, long long); long long args[8]; volatile int done; SRWLOCK mu; } ql_task;
 ql_channel* ql_channel_new(int cap) {
     ql_channel* c = calloc(1, sizeof(ql_channel));
     if (cap <= 0) cap = 1024;
@@ -40,11 +40,12 @@ int ql_spawn(void) {
     t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
-static unsigned __stdcall runner_w(void* p) { ql_task* t = p; t->fn(t->args[0], t->args[1], t->args[2], t->args[3]); AcquireSRWLockExclusive(&t->mu); t->done = 1; ReleaseSRWLockExclusive(&t->mu); return 0; }
-void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3) {
+static unsigned __stdcall runner_w(void* p) { ql_task* t = p; t->fn(t->args[0], t->args[1], t->args[2], t->args[3], t->args[4], t->args[5], t->args[6], t->args[7]); AcquireSRWLockExclusive(&t->mu); t->done = 1; ReleaseSRWLockExclusive(&t->mu); return 0; }
+void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3, long long a4, long long a5, long long a6, long long a7) {
     if (id <= 0 || id >= QMAXTASK) return;
     ql_task* t = qtasks[id]; if (!t) return;
-    t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3; t->done = 0;
+    t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3;
+    t->args[4] = a4; t->args[5] = a5; t->args[6] = a6; t->args[7] = a7; t->done = 0;
     _beginthreadex(0, 0, runner_w, t, 0, 0);
 }
 void ql_block(int id) { if (id <= 0 || id >= QMAXTASK) return; ql_task* t = qtasks[id]; if (!t) return; while (1) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); if (d) break; } }
@@ -60,7 +61,7 @@ typedef struct { int cap, head, tail, cnt; int* buf; pthread_mutex_t mu; pthread
 /* ---- 线程池（固定 8 工作线程 + 任务队列，amortized 无线程创建开销） ---- */
 #define QPOOL_N 8
 #define QCAP 65536
-typedef struct { void (*fn)(long long, long long, long long, long long); long long args[4]; volatile int done; } ql_task;   /* done 原子化：免每任务 mutex */
+typedef struct { void (*fn)(long long, long long, long long, long long, long long, long long, long long, long long); long long args[8]; volatile int done; } ql_task;   /* done 原子化：免每任务 mutex */
 /* 无锁 MPSC 环形队列：单调计数器 head/tail（原子），快路径零锁；
    工人有限自旋后锁+条件睡眠，生产者入队后仅在有睡者时 signal——消除了 8 核互斥乒乓与逐任务 futex 唤醒 */
 #define QMASK (QCAP - 1)
@@ -115,7 +116,8 @@ static ql_task* qpop(void) {
 static void* qworker(void* p) {
     for (;;) {
         ql_task* t = qpop();
-        t->fn(t->args[0], t->args[1], t->args[2], t->args[3]);
+        t->fn(t->args[0], t->args[1], t->args[2], t->args[3],
+              t->args[4], t->args[5], t->args[6], t->args[7]);
         __atomic_store_n(&t->done, 1, __ATOMIC_RELEASE);
     }
     return 0;
@@ -158,11 +160,12 @@ int ql_spawn(void) {
     t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
-void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3) {
+void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3, long long a4, long long a5, long long a6, long long a7) {
     if (id <= 0 || id >= QMAXTASK) return;
     ql_task* t = qtasks[id]; if (!t) return;
     qpool_ensure();
-    t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3; t->done = 0;
+    t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3;
+    t->args[4] = a4; t->args[5] = a5; t->args[6] = a6; t->args[7] = a7; t->done = 0;
     qpush(t);
 }
 void ql_block(int id) {
@@ -474,7 +477,7 @@ void ql_memo_put(void* mp, int n, int* keys, int val) {
  * 描述符布局必须与 IR 的 %RT = type { i8* (i8*)*, i8*, i32 } 一致：
  *   { char* (*str)(void*); const char* name; int kind; }
  * kind: 0=int 1=float 2=bool 3=String 4=List<int> 5=struct 6=null */
-typedef struct ql_rt { char* (*str)(void*); const char* name; int kind; } ql_rt;
+typedef struct ql_rt { char* (*str)(void*); void* (*copy)(void*); const char* name; int kind; } ql_rt;
 char* ql_int_to_str(int v);      /* qkc 生成的 IR 助手（复用同一格式化） */
 char* ql_float_to_str(double v);
 char* ql_long_to_str(long long v) {
@@ -537,6 +540,193 @@ int ql_any_eq(void* d1, void* rt1, void* d2, void* rt2) {
     }
     return 0;
 }
+/* ---- interface{} 值的深拷贝（按 RTTI；HashTable.Put 与 copyd 复用） ----
+ * 语义对齐解释器 deepCopy：List 复制缓冲区，struct 不复制（共享指针），
+ * String/标量按值快照（堆单元复制）。 */
+void* ql_any_copy_int(void* d) { int* p = (int*)malloc(4); *p = *(int*)d; return p; }
+void* ql_any_copy_float(void* d) { double* p = (double*)malloc(8); *p = *(double*)d; return p; }
+void* ql_any_copy_bool(void* d) { int* p = (int*)malloc(4); *p = *(int*)d; return p; }
+void* ql_any_copy_string(void* d) { char** p = (char**)malloc(8); *p = *(char**)d; return p; }
+void* ql_any_copy_identity(void* d) { return d; }
+void* ql_any_copy_nil(void* d) { (void)d; return 0; }
+
+
+
+/* String.split(sep) → List<String>：与 Go strings.Split 一致（sep 空 → 按 UTF-8 字符） */
+static void ql_strlist_push(char*** buf, int* cap, int* n, const char* p, size_t len) {
+    if (*n >= *cap) { *cap = *cap ? *cap * 2 : 4; *buf = (char**)realloc(*buf, sizeof(char*) * (size_t)(*cap)); }
+    char* e = (char*)malloc(len + 1);
+    memcpy(e, p, len); e[len] = 0;
+    (*buf)[(*n)++] = e;
+}
+void* ql_str_split(const char* s, const char* sep) {
+    char** buf = 0; int cap = 0, n = 0;
+    size_t sn = strlen(sep);
+    if (sn == 0) {
+        const char* p = s;
+        while (*p) {
+            unsigned char c = (unsigned char)*p;
+            int l = (c >= 0xF0) ? 4 : (c >= 0xE0) ? 3 : (c >= 0xC0) ? 2 : 1;
+            ql_strlist_push(&buf, &cap, &n, p, (size_t)l);
+            p += l;
+        }
+    } else {
+        const char* p = s;
+        for (;;) {
+            const char* q = strstr(p, sep);
+            if (!q) { ql_strlist_push(&buf, &cap, &n, p, strlen(p)); break; }
+            ql_strlist_push(&buf, &cap, &n, p, (size_t)(q - p));
+            p = q + sn;
+        }
+    }
+    if (!buf) buf = (char**)malloc(sizeof(char*));
+    struct ql_split_list { char** buf; int head; int tail; };
+    struct ql_split_list* l = (struct ql_split_list*)calloc(1, sizeof(struct ql_split_list));
+    l->buf = buf; l->head = 0; l->tail = n;
+    return l;
+}
+
+/* List<String>：与 %ListS { i8** buf, i32 head, i32 tail } 同布局；toString 同解释器 List.String() */
+typedef struct { char** buf; int head; int tail; } ql_list_s;
+char* ql_list_str_str(char** buf, int head, int tail) {
+    size_t cap = 16, o = 0;
+    char* r = (char*)malloc(cap);
+    r[o++] = '[';
+    for (int i = head; i < tail; i++) {
+        const char* e = buf[i];
+        size_t n = strlen(e);
+        if (i > head) {
+            if (o + 2 > cap) { cap *= 2; r = (char*)realloc(r, cap); }
+            r[o++] = ','; r[o++] = ' ';
+        }
+        if (o + n + 2 > cap) { while (o + n + 2 > cap) cap *= 2; r = (char*)realloc(r, cap); }
+        memcpy(r + o, e, n); o += n;
+    }
+    if (o + 2 > cap) { cap += 2; r = (char*)realloc(r, cap); }
+    r[o++] = ']'; r[o] = 0;
+    return r;
+}
+
+/* ================= HashTable<K,V> 运行期 =================
+ * 键 = 解释器同款结构化字符串 TypeName + ":" + String()（ql_table_key 生成）；
+ * 值 = 装箱的 interface{} 值（data + RTTI 描述符），Put 时按 RTTI copy 深拷贝。 */
+typedef struct ql_tent { char* key; void* data; void* rt; struct ql_tent* next; } ql_tent;
+typedef struct { ql_tent** b; int cap; int len; } ql_table;
+static unsigned ql_tbl_hash(const char* s) {
+    unsigned h = 2166136261u;
+    while (*s) { h ^= (unsigned char)*s++; h *= 16777619u; }
+    return h;
+}
+void* ql_table_new(void) {
+    ql_table* t = (ql_table*)calloc(1, sizeof(ql_table));
+    t->cap = 64;
+    t->b = (ql_tent**)calloc((size_t)t->cap, sizeof(ql_tent*));
+    return t;
+}
+static ql_tent* ql_table_find(ql_table* t, const char* key) {
+    ql_tent* e = t->b[ql_tbl_hash(key) % (unsigned)t->cap];
+    while (e) { if (strcmp(e->key, key) == 0) return e; e = e->next; }
+    return 0;
+}
+/* ql_table_key：把装箱键转成解释器同款键串（TypeName:String()）。 */
+char* ql_table_key(void* data, void* rt) {
+    ql_rt* r = (ql_rt*)rt;
+    const char* tn = r ? r->name : "nil";
+    const char* sv = (r && data) ? r->str(data) : "nil";
+    size_t n = strlen(tn) + strlen(sv) + 2;
+    char* k = (char*)malloc(n);
+    snprintf(k, n, "%s:%s", tn, sv);
+    return k;
+}
+static void ql_table_grow(ql_table* t);
+void ql_table_put(void* tp, char* key, void* data, void* rt) {
+    ql_table* t = (ql_table*)tp;
+    ql_rt* r = (ql_rt*)rt;
+    void* cp = r ? (r->copy ? r->copy(data) : data) : 0;
+    ql_tent* e = ql_table_find(t, key);
+    if (e) { e->data = cp; e->rt = rt; return; }
+    e = (ql_tent*)calloc(1, sizeof(ql_tent));
+    e->key = key; e->data = cp; e->rt = rt;
+    unsigned h = ql_tbl_hash(key) % (unsigned)t->cap;
+    e->next = t->b[h]; t->b[h] = e; t->len++;
+    if (t->len > t->cap * 2) ql_table_grow(t);
+}
+static void ql_table_grow(ql_table* t) {
+    int nc = t->cap * 2;
+    ql_tent** nb = (ql_tent**)calloc((size_t)nc, sizeof(ql_tent*));
+    for (int i = 0; i < t->cap; i++) {
+        ql_tent* e = t->b[i];
+        while (e) {
+            ql_tent* nx = e->next;
+            unsigned h = ql_tbl_hash(e->key) % (unsigned)nc;
+            e->next = nb[h]; nb[h] = e;
+            e = nx;
+        }
+    }
+    free(t->b); t->b = nb; t->cap = nc;
+}
+void* ql_table_get(void* tp, char* key, void** out_rt) {
+    ql_table* t = (ql_table*)tp;
+    ql_tent* e = ql_table_find(t, key);
+    if (!e) { if (out_rt) *out_rt = 0; return 0; }
+    if (out_rt) *out_rt = e->rt;
+    return e->data;
+}
+int ql_table_contains(void* tp, char* key) { return ql_table_find((ql_table*)tp, key) != 0; }
+void ql_table_remove(void* tp, char* key) {
+    ql_table* t = (ql_table*)tp;
+    unsigned h = ql_tbl_hash(key) % (unsigned)t->cap;
+    ql_tent** pp = &t->b[h];
+    while (*pp) {
+        if (strcmp((*pp)->key, key) == 0) { *pp = (*pp)->next; t->len--; return; }
+        pp = &(*pp)->next;
+    }
+}
+int ql_table_size(void* tp) { return ((ql_table*)tp)->len; }
+/* 键列表（确定性序：strcmp 升序；解释器 keys() 是 Go map 序，本身不确定）。 */
+typedef struct { char** buf; int head; int tail; } ql_strlist;
+static int ql_cmp_cstr(const void* a, const void* b) {
+    return strcmp(*(char* const*)a, *(char* const*)b);
+}
+void* ql_table_keys(void* tp) {
+    ql_table* t = (ql_table*)tp;
+    int n = t->len;
+    char** buf = (char**)malloc(sizeof(char*) * (size_t)(n > 0 ? n : 1));
+    int k = 0;
+    for (int i = 0; i < t->cap; i++)
+        for (ql_tent* e = t->b[i]; e; e = e->next) {
+            /* Keys() 返回键的**原值**：String 键去掉 "String:" 前缀（解释器 Keys 同规则） */
+            buf[k++] = (strncmp(e->key, "String:", 7) == 0) ? (e->key + 7) : e->key;
+        }
+    if (n > 1) qsort(buf, (size_t)n, sizeof(char*), ql_cmp_cstr);
+    ql_strlist* l = (ql_strlist*)calloc(1, sizeof(ql_strlist));
+    l->buf = buf; l->head = 0; l->tail = n;
+    return l;
+}
+
+
+/* 具体 V 取值：确认非 nil 后返回对象指针（struct/List 用；缺键 → 明确运行期错误） */
+void* ql_any_ptr(void* d, void* rt) {
+    if (!rt || !d) {
+        fprintf(stderr, "error: TypeError: HashTable.get: missing key (nil value)\n");
+        exit(1);
+    }
+    return d;
+}
+/* List<int> 的 RTTI 深拷贝（可见区间复制到新缓冲区） */
+typedef struct { int* buf; int head; int tail; } ql_list_c;
+void* ql_any_copy_list(void* d) {
+    ql_list_c* src = (ql_list_c*)d;
+    if (!src) return 0;
+    int n = src->tail - src->head;
+    if (n < 0) n = 0;
+    int* buf = (int*)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    for (int i = 0; i < n; i++) buf[i] = src->buf[src->head + i];
+    ql_list_c* cp = (ql_list_c*)calloc(1, sizeof(ql_list_c));
+    cp->buf = buf; cp->head = 0; cp->tail = n;
+    return cp;
+}
+
 char* ql_any_str_list(void* d) {
     struct ql_list_s { int* buf; int head; int tail; };
     struct ql_list_s* l = (struct ql_list_s*)d;

@@ -117,7 +117,7 @@ func (fc *funcCtx) boxTo(e *expr, want string, pos lang.Pos) (*expr, error) {
 		switch e.typ {
 		case "int", "float", "bool", "String", "interface{}", "null":
 		default:
-			if !fc.l.isStructType(e.typ) && !fc.l.isListTypeE(e.typ) {
+			if !fc.l.isStructType(e.typ) && e.typ != "List<int>" {
 				return nil, fc.l.errf(pos, "暂未支持把 %s 值装箱成 interface{}（编译器支持 int/float/bool/String/List<int>/struct）", e.typ)
 			}
 		}

@@ -1,0 +1,68 @@
+// t_table：HashTable<K,V>（put/get/contains/remove/size/keys）。
+// 键按解释器规则结构化成 "TypeName:值" 字符串；值装箱成 interface{}，
+// Put 时按 RTTI 深拷贝（List 复制缓冲区、struct 共享指针、标量/String 快照）。
+// keys() 解释器是 Go map 序（自身不确定）→ 编译器用 strcmp 升序；语料只做确定序断言。
+type struct { int v; } P;
+fn main(IOStream io) {
+    HashTable<String, interface{}> a = HashTable::new();
+    a.put("k", 5);
+    a.put("s", "str");
+    a.put("f", 1.5);
+    a.put("b", true);
+    io.println(a.get("k"));
+    io.println(a.get("s"));
+    io.println(a.get("f"));
+    io.println(a.get("b"));
+    io.println(a.get("missing"));            // 缺键 → nil
+    io.println(a.size(), a.contains("k"), a.contains("zz"));
+    a.remove("k");
+    io.println(a.size(), a.contains("k"));
+
+    HashTable<String, int> t = HashTable::new();
+    t.put("a", 1);
+    t.put("b", 2);
+    t.put("c", 3);
+    io.println(t.get("a"), t.get("b"), t.get("c"));
+    io.println(t.size(), t.contains("b"));
+    t.remove("b");
+    io.println(t.size(), t.contains("b"));
+    t.put("b", 20);
+    io.println(t.size(), t.get("b"));
+
+    HashTable<int, String> n = HashTable::new();
+    n.put(7, "seven");
+    n.put(8, "eight");
+    io.println(n.get(7), n.get(8), n.size());
+
+    // keys() → List<String>：解释器是 Go map 序（每次运行都可能不同）→ 语料只做**确定序断言**
+    // （元素个数；单键表的顺序唯一）。编译器侧固定 strcmp 升序（见报告）。
+    io.println(t.keys().size());
+    HashTable<String, int> solo = HashTable::new();
+    solo.put("only", 1);
+    List<String> sk = solo.keys();
+    io.println(sk.size(), sk.toString(), sk.get(0));
+    int cnt = 0;
+    for (String k : sk) { cnt = cnt + 1; }
+    io.println(cnt);
+
+    // 值语义：List 值 Put 时深拷贝（改原列表不影响表内快照）
+    HashTable<String, List<int>> tl = HashTable::new();
+    List<int> l = [1, 2];
+    tl.put("k", l);
+    l.append(3);
+    List<int> got = tl.get("k");
+    io.println(got.toString(), l.toString());
+
+    // struct 值：解释器 deepCopy 不复制 struct → 表内是同一对象
+    HashTable<String, P> tp = HashTable::new();
+    P p; p.v = 1;
+    tp.put("k", p);
+    p.v = 2;
+    P q = tp.get("k");
+    io.println(q.v);
+
+    // 多张表互不影响
+    HashTable<String, int> t2 = HashTable::new();
+    t2.put("a", 100);
+    io.println(t.get("a"), t2.get("a"));
+}

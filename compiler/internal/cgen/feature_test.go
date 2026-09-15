@@ -391,9 +391,20 @@ func TestBuiltinMethodsIR(t *testing.T) {
 			t.Fatalf("List method IR missing %q:\n%s", want, lst)
 		}
 	}
-	// split 需要 List<String>：明确报错
-	if _, err := Transpile("fn main(IOStream io) { String s = \"a,b\"; io.println(s.split(\",\")); }\n", "test.qk"); err == nil {
-		t.Fatal("String.split must report unsupported (List<String>)")
+	// split → List<String>（已 lower；只读子集 size/get/toString/for-in）
+	sp := transpile(t, "fn main(IOStream io) { String s = \"a,b\"; List<String> l = s.split(\",\"); io.println(l.size(), l.get(0), l.toString()); }\n")
+	for _, want := range []string{"call %ListS* @ql_str_split(", "declare i8* @ql_list_str_str("} {
+		if !strings.Contains(sp, want) {
+			t.Fatalf("String.split IR missing %q:\n%s", want, sp)
+		}
+	}
+	// List<String> 未 lower 的操作：明确报错
+	if _, err := Transpile("fn main(IOStream io) { String s = \"a,b\"; List<String> l = s.split(\",\"); l.append(\"c\"); io.println(1); }\n", "test.qk"); err == nil {
+		t.Fatal("List<String>.append must report unsupported")
+	}
+	// keys() 只支持 String 键
+	if _, err := Transpile("fn main(IOStream io) { HashTable<int, int> t = HashTable::new(); t.put(1, 2); List<String> k = t.keys(); io.println(k.size()); }\n", "test.qk"); err == nil {
+		t.Fatal("keys() on int-keyed table must report unsupported")
 	}
 }
 
@@ -503,7 +514,7 @@ func TestAnyInterfaceIR(t *testing.T) {
 		"    io.println(n);\n"+
 		"}\n")
 	for _, want := range []string{
-		"%RT = type { i8* (i8*)*, i8*, i32 }",
+		"%RT = type { i8* (i8*)*, i8* (i8*)*, i8*, i32 }",
 		"@rt$int = private constant %RT",
 		"@rt$String = private constant %RT",
 		"declare i8* @ql_any_str(i8*, i8**)",
@@ -610,7 +621,7 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 		"}\n")
 	for _, want := range []string{
 		"declare i32 @ql_spawn()",
-		"declare void @ql_merge(i32, i8*, i64, i64, i64, i64)",
+		"declare void @ql_merge(i32, i8*, i64, i64, i64, i64, i64, i64, i64, i64)",
 		"define void @runner_0(i64 %a0)",
 		"call void @ql_merge(i32",
 		"call void @ql_block(i32",
@@ -661,9 +672,15 @@ func TestUnsupportedConstructs(t *testing.T) {
 			want: "暂未支持",
 		},
 		{
-			name: "指针/new",
-			src:  "fn main(IOStream io) { int& p = new int; io.println(1); }\n",
-			want: "暂未支持指针/传时复制类型",
+			name: "指针成员访问",
+			src: "type struct { int v; } P;\n" +
+				"fn main(IOStream io) { P& p = new P; io.println(p.v); }\n",
+			want: "暂未支持",
+		},
+		{
+			name: "Copyd<T> 类型标注",
+			src:  "fn f(Copyd<int> a) int { return a.ptr(); }\nfn main(IOStream io) { io.println(f(1)); }\n",
+			want: "暂未支持",
 		},
 		{
 			name: "打印 struct 值（解释器字段序不确定）",

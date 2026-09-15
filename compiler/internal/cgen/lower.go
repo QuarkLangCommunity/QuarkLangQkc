@@ -619,6 +619,12 @@ func (l *lowerer) isIfaceType(t string) bool {
 	return ok
 }
 
+// isPtrRefT 判断类型是否是 T& / pointer T（可空引用）。
+func isPtrRefT(t string) bool {
+	_, _, ok := ptrRefBase(t)
+	return ok
+}
+
 // isAnyT 判断是否是空接口 interface{}（装箱 + RTTI 路径）。
 func isAnyT(t string) bool { return strings.TrimSpace(t) == "interface{}" }
 
@@ -632,7 +638,10 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		return l.errf(pos, "暂未支持 void 类型 %s", what)
 	}
 	if elem, ok := listElem(t); ok {
-		return l.errf(pos, "暂未支持 %s 类型 %q（编译器暂只支持 List<int>，元素 %s）", what, t, elem)
+		if elem == "String" {
+			return nil // List<String>：只读子集（keys() 结果 / size/get/toString/for-in/下标）
+		}
+		return l.errf(pos, "暂未支持 %s 类型 %q（编译器支持 List<int> 与 List<String>，元素 %s）", what, t, elem)
 	}
 	if l.isStructType(t) {
 		return nil
@@ -659,12 +668,28 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	if strings.HasPrefix(t, "List") {
 		return l.errf(pos, "暂未支持 %s 类型 %q（编译器仅支持 List<int>）", what, t)
 	}
-	if strings.HasPrefix(t, "HashTable") {
-		return l.errf(pos, "暂未支持 %s 类型 %q（HashTable 仅解释器可用）", what, t)
+	if isTableT(t) {
+		return nil // HashTable<K,V>：i8* 句柄 + 运行期结构化键（解释器同款键规则）
 	}
-	if strings.HasPrefix(t, "pointer ") || strings.HasSuffix(t, "&") ||
-		strings.Contains(t, "[Copyd]") || strings.HasPrefix(t, "Copyd<") || strings.HasSuffix(t, "[]") {
-		return l.errf(pos, "暂未支持指针/传时复制类型 %q（解释器可用；copyd 作为形参修饰已支持）", t)
+	if strings.HasPrefix(t, "HashTable") {
+		return l.errf(pos, "暂未支持 %s 类型 %q（HashTable 写法：HashTable<K, V>）", what, t)
+	}
+	if _, base, ok := ptrRefBase(t); ok {
+		// T& / pointer T：可空引用（零值 null）；只有标量/String/struct 单元素
+		if err := l.checkType(base, pos, what); err != nil {
+			return err
+		}
+		switch {
+		case base == "int", base == "float", base == "bool", base == "String", base == "long":
+			return nil
+		}
+		if l.isStructType(base) {
+			return nil
+		}
+		return l.errf(pos, "暂未支持 %s 类型 %q（编译器只 lower 标量/String/struct 的 T&）", what, t)
+	}
+	if strings.Contains(t, "[Copyd]") || strings.HasPrefix(t, "Copyd<") || strings.HasSuffix(t, "[]") {
+		return l.errf(pos, "暂未支持指针/传时复制类型 %q（copyd 作为形参修饰已支持；Copyd<T> 形参见 copyd 语义）", t)
 	}
 	return l.errf(pos, "未知类型 %q（%s 声明）", t, what)
 }
@@ -675,7 +700,10 @@ func (l *lowerer) retOK(t string) bool {
 	case "int", "bool", "float", "String", "long", "pointer", "void", "interface{}":
 		return true
 	}
-	return l.isStructType(t) || l.isIfaceType(t)
+	if _, _, isRef := ptrRefBase(t); isRef {
+		return true
+	}
+	return l.isStructType(t) || l.isIfaceType(t) || isTableT(t)
 }
 
 // ---------- 作用域 ----------
@@ -772,6 +800,9 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		ret = "void"
 	}
 	ret = substType(ret, subst)
+	if canon, _, ok := ptrRefBase(ret); ok {
+		ret = canon // pointer T → T&
+	}
 	if !l.retOK(ret) {
 		return nil, l.errf(f.Pos, "暂未支持返回类型 %q（编译器支持 int/bool/float/String/void/struct）", f.Ret)
 	}
@@ -790,6 +821,9 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 	}
 	for _, p := range f.Params[start:] {
 		pt := substType(p.Type, subst)
+		if canon, _, ok := ptrRefBase(pt); ok {
+			pt = canon // pointer T → T&
+		}
 		if err := l.checkType(pt, p.Pos, "参数"); err != nil {
 			return nil, err
 		}
@@ -833,6 +867,12 @@ func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
 	}
 	if l.isIfaceType(t) {
 		return l.errf(pos, "暂未支持 copyd 接口形参 %s（运行期类型未知，无法深拷贝）", t)
+	}
+	if isTableT(t) {
+		return l.errf(pos, "暂未支持 copyd HashTable 形参 %s（表值深拷贝未 lower）", t)
+	}
+	if t == "List<String>" {
+		return l.errf(pos, "暂未支持 copyd List<String> 形参（字符串列表深拷贝未 lower）")
 	}
 	sd, sub := l.structSubst(t)
 	if sd == nil {
@@ -960,6 +1000,9 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 		if err != nil {
 			return nil, err
 		}
+		if isPtrRefT(fc.ret) {
+			x.noDeref = true // 返回 T& 本身（指针值），不解引用
+		}
 		return &returnStmt{x: x}, nil
 
 	case *lang.IfStmt:
@@ -1069,16 +1112,16 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 		return nil, l.errf(st.Pos, "暂未支持对 %s 的 for 迭代（编译器支持 List<int>）", lt)
 	}
 	elem := args[0]
-	if elem != "int" {
-		return nil, l.errf(st.Pos, "暂未支持迭代 List<%s>（编译器暂只支持 List<int>）", elem)
+	if elem != "int" && elem != "String" {
+		return nil, l.errf(st.Pos, "暂未支持迭代 List<%s>（编译器支持 List<int> 与 List<String>）", elem)
 	}
 	id, ok := st.Iter.(*lang.Ident)
 	if !ok {
 		return nil, l.errf(st.Pos, "暂未支持对非变量列表的 for 迭代（编译器要求 List 变量）")
 	}
 	vt, _ := fc.lookup(id.Name)
-	if vt != "List<int>" {
-		return nil, l.errf(st.Pos, "暂未支持对 %s 的 for 迭代（编译器支持 List<int>）", vt)
+	if vt != "List<int>" && vt != "List<String>" {
+		return nil, l.errf(st.Pos, "暂未支持对 %s 的 for 迭代（编译器支持 List<int> 与 List<String>）", vt)
 	}
 	fc.push()
 	defer fc.pop()
@@ -1121,6 +1164,23 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		return &declStmt{name: st.Name, typ: t, init: x}, nil
 
+	case "List<String>":
+		if err := fc.declare(st.Name, t, st.Pos); err != nil {
+			return nil, err
+		}
+		if st.Init == nil {
+			return nil, l.errf(st.Pos, "暂未支持无初值的 List<String> %q（编译器只 lower keys() 等已有列表）", st.Name)
+		}
+		it := fc.typeOfAs(st.Init, t)
+		if it != "List<String>" {
+			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 List<String>（编译器只 lower HashTable.keys() 结果与 List<String> 变量）", it)
+		}
+		x, err := fc.exprAs(st.Init, t)
+		if err != nil {
+			return nil, err
+		}
+		return &declStmt{name: st.Name, typ: t, init: x}, nil
+
 	case "List<int>":
 		if st.Init == nil {
 			return nil, l.errf(st.Pos, "暂未支持无初值的 List<int> %q（解释器零值为空列表，编译器后端未 lower）", st.Name)
@@ -1156,6 +1216,46 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 			return nil, err
 		}
 		return &declStmt{name: st.Name, typ: t, init: &expr{kind: kList, typ: t, lst: &listLit{items: items}}}, nil
+	}
+
+	// T& / pointer T：可空引用（new T 分配单元；无初值 = null）；统一规范成 T&
+	if canon, _, isRef := ptrRefBase(t); isRef {
+		t = canon
+		if err := fc.declare(st.Name, t, st.Pos); err != nil {
+			return nil, err
+		}
+		if st.Init == nil {
+			return &declStmt{name: st.Name, typ: t}, nil
+		}
+		it := fc.typeOfAs(st.Init, t)
+		if !fc.assignable(it, t) {
+			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
+		}
+		x, err := fc.expr(st.Init)
+		if err != nil {
+			return nil, err
+		}
+		return &declStmt{name: st.Name, typ: t, init: x}, nil
+	}
+
+	// HashTable<K,V>：i8* 句柄（HashTable::new() 或另一张表）
+	// （T& 分支已在上面用规范名 t 处理）
+	if isTableT(t) {
+		if err := fc.declare(st.Name, t, st.Pos); err != nil {
+			return nil, err
+		}
+		if st.Init == nil {
+			return &declStmt{name: st.Name, typ: t}, nil
+		}
+		it := fc.typeOfAs(st.Init, t)
+		if !fc.assignable(it, t) {
+			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
+		}
+		x, err := fc.exprAs(st.Init, t)
+		if err != nil {
+			return nil, err
+		}
+		return &declStmt{name: st.Name, typ: t, init: x}, nil
 	}
 
 	// 接口类型（vtable 装箱）
@@ -1210,7 +1310,8 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 			return nil, err
 		}
 		switch t := fc.typeOf(a); t {
-		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}":
+		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}", "List<String>":
+		case "int&", "float&", "bool&", "String&", "long&": // T&：打印解引用值（解释器同）
 		default:
 			return nil, fc.l.errf(exprPos(a, call.Pos), "暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String/interface{}）", t)
 		}
@@ -1239,8 +1340,21 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if !ok {
 			return nil, l.errf(tgt.Pos, "赋值目标 %q 未声明", tgt.Name)
 		}
-		if !fc.assignable(fc.typeOfAs(st.X, vt), vt) {
-			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s 变量 %q 赋值", fc.typeOf(st.X), vt, tgt.Name)
+		xt := fc.typeOfAs(st.X, vt)
+		if _, base, isRef := ptrRefBase(vt); isRef {
+			// p = v（v 是 T）→ 写穿；p = q（q 是 T&）→ 重绑定指针
+			if !fc.assignable(xt, vt) && !fc.assignable(xt, base) {
+				return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s 变量 %q 赋值", xt, vt, tgt.Name)
+			}
+			x, err := fc.expr(st.X)
+			if err != nil {
+				return nil, err
+			}
+			// 解释器语义：p = q（q 是 T&）→ 把 q 指向的值写进 p 指向的单元（不重绑定）
+			return &assignStmt{name: tgt.Name, x: x, thru: true}, nil
+		}
+		if !fc.assignable(xt, vt) {
+			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s 变量 %q 赋值", xt, vt, tgt.Name)
 		}
 		x, err := fc.exprAs(st.X, vt)
 		if err != nil {
@@ -1356,7 +1470,17 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		return fc.structLit(e, fc.expectT)
 
 	case *lang.NewExpr:
-		return nil, l.errf(e.Pos, "暂未支持 new %s（堆分配仅解释器可用）", e.Typ)
+		if e.Size != nil {
+			return nil, l.errf(e.Pos, "暂未支持 new %s[n]（解释器产出 List<T>&，无法赋给 List<T>；请用 [..] 字面量）", e.Typ)
+		}
+		pt := strings.TrimSpace(e.Typ)
+		if err := l.checkType(pt, e.Pos, "new"); err != nil {
+			return nil, err
+		}
+		if _, _, ok := ptrRefBase(pt); ok {
+			return nil, l.errf(e.Pos, "暂未支持 new %s（new 的元素类型不能是指针）", e.Typ)
+		}
+		return &expr{kind: kNewRef, typ: pt + "&", s: pt}, nil
 	case *lang.ListLit:
 		// 列表字面量：任意表达式位置（编译器只 lower List<int>；元素必须可赋给 int）
 		t := "List<int>"
@@ -1476,6 +1600,70 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.typ = "int"
 		return x, nil
 	case "==", "!=", "<", "<=", ">", ">=":
+		// T& / pointer T 比较：与 null 比指针身份（解释器 equalValues(ref, nil)）；
+		// 与值比较时按解引用值（解释器 p == 0 → 比较指向的单元）。
+		if (isPtrRefT(lt) && rt == "null") || (lt == "null" && isPtrRefT(rt)) || (isPtrRefT(lt) && isPtrRefT(rt)) {
+			if e.Op != "==" && e.Op != "!=" {
+				return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）", lt, rt, e.Op)
+			}
+			x, err := fc.expr(e.L)
+			if err != nil {
+				return nil, err
+			}
+			y, err := fc.expr(e.R)
+			if err != nil {
+				return nil, err
+			}
+			if isPtrRefT(lt) {
+				x.noDeref = true
+			}
+			if isPtrRefT(rt) {
+				y.noDeref = true
+			}
+			return &expr{kind: kCmp, op: e.Op, typ: "bool", l: x, r: y, line: pos.Line}, nil
+		}
+		// T& 与值比较：解释器是 equalValues(解引用值, 值)，但可空引用为 nil 时
+		// equalValues(nil, 值) = false → 展开成 (ptr != null) && (deref OP 值)（== 时；
+		// != 时用 (ptr == null) || (deref != 值)）。要求指针侧是变量（避免重复求值）。
+		if isPtrRefT(lt) != isPtrRefT(rt) && lt != "null" && rt != "null" {
+			if e.Op != "==" && e.Op != "!=" {
+				return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（可空引用只支持 == / !=）", lt, rt, e.Op)
+			}
+			refSide, valSide := e.L, e.R
+			if isPtrRefT(rt) {
+				refSide, valSide = e.R, e.L
+			}
+			if _, ok := refSide.(*lang.Ident); !ok {
+				return nil, l.errf(exprPos(refSide, pos), "暂未支持对非变量的可空引用做比较（编译器要求 T& 变量）")
+			}
+			rv, err := fc.expr(refSide)
+			if err != nil {
+				return nil, err
+			}
+			rd, err := fc.expr(refSide)
+			if err != nil {
+				return nil, err
+			}
+			vv, err := fc.expr(valSide)
+			if err != nil {
+				return nil, err
+			}
+			rv.noDeref = true
+			nullCmp := &expr{kind: kCmp, op: "!=", typ: "bool", l: rv, r: &expr{kind: kNull, typ: "null"}, line: pos.Line}
+			valCmp := &expr{kind: kCmp, op: e.Op, typ: "bool", l: rd, r: vv, line: pos.Line}
+			if e.Op == "!=" {
+				nullCmp.op = "=="
+				return &expr{kind: kAndOr, op: "||", typ: "bool", l: nullCmp, r: valCmp, line: pos.Line}, nil
+			}
+			return &expr{kind: kAndOr, op: "&&", typ: "bool", l: nullCmp, r: valCmp, line: pos.Line}, nil
+		}
+		// T& 与值比较：按解引用后的值类型（解释器 p == 0 / p == "x" 都走值比较）
+		if _, b, ok := ptrRefBase(lt); ok {
+			lt = b
+		}
+		if _, b, ok := ptrRefBase(rt); ok {
+			rt = b
+		}
 		// interface{}（tAny）相等：任一侧是 any 就按 any 比较（运行期按 RTTI 分派；
 		// 与解释器 equalValues 一致：int/float 跨类型数值比较、String 按内容、struct/List 按引用）
 		if isAnyT(lt) || isAnyT(rt) {
@@ -1962,6 +2150,10 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, error) {
 	l := fc.l
 	rt := fc.typeOf(me.X)
+	// HashTable<K,V> 内建方法
+	if isTableT(rt) {
+		return fc.tableCall(c, me, rt)
+	}
 	// 内建 toString()
 	if me.Name == "toString" {
 		switch rt {
@@ -1984,6 +2176,42 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			}
 			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: recv, name: "toString"}}, nil
 		}
+	}
+	// List<String> 内建方法（只读子集：size/get/toString）
+	if elem, ok := listElem(rt); ok && elem == "String" {
+		rx, err := fc.expr(me.X)
+		if err != nil {
+			return nil, err
+		}
+		args := make([]*expr, 0, len(c.Args))
+		for _, a := range c.Args {
+			x, err := fc.expr(a)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, x)
+		}
+		switch me.Name {
+		case "size":
+			if len(c.Args) != 0 {
+				return nil, l.errf(me.Pos, "List.size() 不接受参数")
+			}
+			return &expr{kind: kMethod, typ: "int", method: &methodExpr{recv: rx, name: "size"}}, nil
+		case "get":
+			if len(c.Args) != 1 {
+				return nil, l.errf(me.Pos, "List.get(i) 需要 1 个参数")
+			}
+			if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
+				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List.get 的 %s 下标（需要 int）", t)
+			}
+			return &expr{kind: kMethod, typ: "String", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "get", args: args}}, nil
+		case "toString":
+			if len(c.Args) != 0 {
+				return nil, l.errf(me.Pos, "toString() 不接受参数")
+			}
+			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: rx, name: "toString"}}, nil
+		}
+		return nil, l.errf(me.Pos, "暂未支持 List<String>.%s（编译器只 lower size/get/toString 与 for-in 迭代）", me.Name)
 	}
 	// List 内建方法（接收者可以是任意 List<int> 表达式：变量 / struct 字段等）
 	if elem, ok := listElem(rt); ok && elem == "int" {
@@ -2142,9 +2370,117 @@ func (fc *funcCtx) methodCall(mi *methodInfo, recvTyp string, recv lang.Expr, ex
 	}}, nil
 }
 
+// tableKinds 拆 HashTable<K, V> 的键/值类型。
+func tableKinds(t string) (string, string) {
+	base, args := splitGeneric(t)
+	if base != "HashTable" || len(args) != 2 {
+		return "?", "?"
+	}
+	return args[0], args[1]
+}
+
+// tableCall lower HashTable 内建方法：put/get/contains/remove/size/keys。
+// 键在运行期按解释器规则结构化成字符串（TypeName:String()）；值装箱成 interface{}，
+// Put 时按 RTTI 深拷贝（与解释器 HashTable.Put 的 deepCopy 对齐）。
+func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (*expr, error) {
+	l := fc.l
+	keyT, valT := tableKinds(rt)
+	recv, err := fc.expr(me.X)
+	if err != nil {
+		return nil, err
+	}
+	boxed := func(a lang.Expr, what string) (*expr, error) {
+		at := fc.typeOf(a)
+		if !fc.assignable(at, "interface{}") {
+			return nil, l.errf(exprPos(a, me.Pos), "暂未支持 HashTable.%s 的 %s 参数", me.Name, at)
+		}
+		_ = what
+		return fc.exprAs(a, "interface{}")
+	}
+	switch me.Name {
+	case "size":
+		if len(c.Args) != 0 {
+			return nil, l.errf(me.Pos, "HashTable.size() 不接受参数")
+		}
+		return &expr{kind: kTable, typ: "int", tbl: &tableExpr{recv: recv, name: "size", keyT: keyT, valT: valT}}, nil
+	case "keys":
+		if len(c.Args) != 0 {
+			return nil, l.errf(me.Pos, "HashTable.keys() 不接受参数")
+		}
+		if keyT != "String" {
+			// 解释器 Keys() 返回键的原值（int 键 → int 值），List<String> 无法承载
+			return nil, l.errf(me.Pos, "暂未支持 HashTable<%s, %s>.keys()（解释器返回键的原值；编译器只 lower String 键 → List<String>）", keyT, valT)
+		}
+		return &expr{kind: kTable, typ: "List<String>", tbl: &tableExpr{recv: recv, name: "keys", keyT: keyT, valT: valT}}, nil
+	case "put":
+		if len(c.Args) != 2 {
+			return nil, l.errf(me.Pos, "HashTable.put(k, v) 需要 2 个参数")
+		}
+		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
+			return nil, l.errf(exprPos(c.Args[0], me.Pos), "HashTable<%s, %s>.put 键需要 %s，got %s", keyT, valT, keyT, t)
+		}
+		if t := fc.typeOf(c.Args[1]); !fc.assignable(t, valT) {
+			return nil, l.errf(exprPos(c.Args[1], me.Pos), "HashTable<%s, %s>.put 值需要 %s，got %s", keyT, valT, valT, t)
+		}
+		k, err := boxed(c.Args[0], "键")
+		if err != nil {
+			return nil, err
+		}
+		v, err := boxed(c.Args[1], "值")
+		if err != nil {
+			return nil, err
+		}
+		return &expr{kind: kTable, typ: "void", tbl: &tableExpr{recv: recv, name: "put", args: []*expr{k, v}, keyT: keyT, valT: valT}}, nil
+	case "get":
+		if len(c.Args) != 1 {
+			return nil, l.errf(me.Pos, "HashTable.get(k) 需要 1 个参数")
+		}
+		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
+			return nil, l.errf(exprPos(c.Args[0], me.Pos), "HashTable<%s, %s>.get 键需要 %s，got %s", keyT, valT, keyT, t)
+		}
+		k, err := boxed(c.Args[0], "键")
+		if err != nil {
+			return nil, err
+		}
+		t := valT
+		if t == "void" || t == "" {
+			t = "interface{}"
+		}
+		return &expr{kind: kTable, typ: t, tbl: &tableExpr{recv: recv, name: "get", args: []*expr{k}, keyT: keyT, valT: valT}}, nil
+	case "contains", "remove":
+		if len(c.Args) != 1 {
+			return nil, l.errf(me.Pos, "HashTable.%s(k) 需要 1 个参数", me.Name)
+		}
+		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
+			return nil, l.errf(exprPos(c.Args[0], me.Pos), "HashTable<%s, %s>.%s 键需要 %s，got %s", keyT, valT, me.Name, keyT, t)
+		}
+		k, err := boxed(c.Args[0], "键")
+		if err != nil {
+			return nil, err
+		}
+		ret := "void"
+		if me.Name == "contains" {
+			ret = "bool"
+		}
+		return &expr{kind: kTable, typ: ret, tbl: &tableExpr{recv: recv, name: me.Name, args: []*expr{k}, keyT: keyT, valT: valT}}, nil
+	}
+	return nil, l.errf(me.Pos, "暂未支持 HashTable 方法 %q（编译器支持 put/get/contains/remove/size/keys）", me.Name)
+}
+
 // scopeCallCall lower T::m(...) / space::f(...) 调用形式。
 func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, error) {
 	l := fc.l
+	// 内置 HashTable::new()：i8* 句柄（键/值类型取自声明处期望类型）
+	if sc.Scope == "HashTable" {
+		if sc.Name != "new" || len(sc.Args) != 0 {
+			return nil, l.errf(sc.Pos, "暂未支持 HashTable::%s（编译器只 lower HashTable::new()）", sc.Name)
+		}
+		t := "HashTable<interface{}, interface{}>"
+		if isTableT(fc.expectT) {
+			t = fc.expectT
+		}
+		return &expr{kind: kCall, typ: t, call: &callExpr{name: "ql_table_new"}}, nil
+	}
 	// 内置 memorize::new()：签名实例（@mb() 记忆化）
 	if sc.Scope == "memorize" {
 		if sc.Name != "new" || len(sc.Args) != 0 {
@@ -2311,6 +2647,15 @@ func (fc *funcCtx) strCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, bool, 
 			call: &callExpr{name: name, args: append([]*expr{rx}, args...)}}, true, nil
 	}
 	switch me.Name {
+	case "split":
+		if len(c.Args) != 1 {
+			return nil, true, l.errf(me.Pos, "split(sep) 需要 1 个参数")
+		}
+		a, err := strArg(0)
+		if err != nil {
+			return nil, true, err
+		}
+		return call("ql_str_split", "List<String>", a)
 	case "size":
 		return call("ql_str_size", "int")
 	case "contains", "startsWith", "endsWith":
@@ -2372,8 +2717,6 @@ func (fc *funcCtx) strCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, bool, 
 		return call("ql_str_toint", "int", line)
 	case "toFloat":
 		return call("ql_str_tofloat", "float", line)
-	case "split":
-		return nil, true, l.errf(me.Pos, "暂未支持 String.split()（返回 List<String>，编译器需要 List<T> 泛型容器）")
 	}
 	return nil, false, nil
 }
@@ -2478,6 +2821,18 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	if from == "int" && to == "long" {
 		return true
 	}
+	// T& / pointer T：可空引用（只能赋 null 或同基类型的引用；不能与值类型互赋）
+	if _, base, isRef := ptrRefBase(to); isRef {
+		if from == "null" {
+			return true
+		}
+		fb, fbase, isFromRef := ptrRefBase(from)
+		_ = fb
+		return isFromRef && fbase == base
+	}
+	if _, _, isFromRef := ptrRefBase(from); isFromRef {
+		return false // 解释器：int& 赋给 int / 参与算术都在运行期报错
+	}
 	// interface{}（tAny）：任意值可装箱；拆箱只支持标量/String（运行期按 kind 校验）
 	if to == "interface{}" {
 		return from != "void"
@@ -2502,6 +2857,10 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	}
 	// 接口：具体 struct / 接口 → 接口（结构化满足由 typecheck 在赋值/传参处校验）
 	if fc.l.isIfaceType(to) && (fc.l.isStructType(from) || fc.l.isIfaceType(from)) {
+		return true
+	}
+	// HashTable：键/值可赋值（跨具体类型的表互赋由 typecheck 把关）
+	if isTableT(from) && isTableT(to) {
 		return true
 	}
 	// null 只在指针/引用位置合法（编译器暂不支持 null 字面量）
@@ -2550,6 +2909,8 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 			return "function"
 		}
 		return "?"
+	case *lang.NewExpr:
+		return e.Typ + "&"
 	case *lang.StructLit:
 		if e.Name != "" {
 			base, targs := splitGeneric(e.Name)
@@ -2660,6 +3021,34 @@ func (fc *funcCtx) callType(e *lang.CallExpr) string {
 		if me.Name == "toString" {
 			switch rt {
 			case "int", "bool", "float", "String":
+				return "String"
+			}
+		}
+		if isTableT(rt) {
+			_, valT := tableKinds(rt)
+			switch me.Name {
+			case "size":
+				return "int"
+			case "contains":
+				return "bool"
+			case "keys":
+				return "List<String>"
+			case "get":
+				if valT == "void" || valT == "" {
+					return "interface{}"
+				}
+				return valT
+			case "put", "remove":
+				return "void"
+			}
+		}
+		if elem, ok := listElem(rt); ok && elem == "String" {
+			switch me.Name {
+			case "size":
+				return "int"
+			case "get":
+				return "String"
+			case "toString":
 				return "String"
 			}
 		}

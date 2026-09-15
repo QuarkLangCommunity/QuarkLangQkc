@@ -1,0 +1,25 @@
+// v_ptr_full：T& / pointer T 完整用例（含返回 T& 的函数、struct 指针、String& 的 nil 打印）。
+// 语义基准 = 解释器（compare.sh 逐字节对比；本用例走 clang 链接路径）。
+type struct { int v; } P;
+fn setRef(int& p, int v) void { p = v; }
+fn makeRef(int v) int& { int& p = new int; p = v; return p; }
+fn main(IOStream io) {
+    int& p = new int;
+    p = 5;
+    io.println(p == null, p != null);
+    int& q;
+    io.println(q == null);
+    io.println(q);
+    q = p;
+    io.println(q);
+    int& z = makeRef(42);
+    io.println(z, z == 42);
+    setRef(p, 9);
+    io.println(p);
+    String& s = new String;
+    s = "hi";   // 注：解释器的 new String 单元实际是 List 值（其实现在 new 非标量时不规范），
+                // 编译器按 T 零值处理 → 这里只断言赋值后的行为
+    io.println(s, s == "hi");
+    P& sp = new P;
+    io.println(sp == null);
+}

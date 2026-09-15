@@ -43,8 +43,8 @@ func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) 
 	if len(fn.Params) != len(extra) {
 		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", id.Name, len(fn.Params), len(extra))
 	}
-	if len(fn.Params) > 4 {
-		return nil, l.errf(pos, "暂未支持 merge 传 %d 个参数（运行时线程携带 4 个 i64 槽）", len(extra))
+	if len(fn.Params) > 8 {
+		return nil, l.errf(pos, "暂未支持 merge 传 %d 个参数（运行时线程携带 8 个 i64 槽）", len(extra))
 	}
 	var ptypes []string
 	for _, p := range fn.Params {
@@ -141,8 +141,8 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 		return &expr{kind: kCall, typ: "bool", call: &callExpr{name: "ql_done", args: []*expr{pid}}}, nil
 	case "merge":
 		// taskm.merge(pid, fn[, args...])
-		if len(c.Args) < 2 || len(c.Args) > 6 {
-			return nil, l.errf(me.Pos, "taskm.merge(pid, fn[, args...]) 需要 2..6 个参数（最多 4 个实参），got %d", len(c.Args))
+		if len(c.Args) < 2 || len(c.Args) > 10 {
+			return nil, l.errf(me.Pos, "taskm.merge(pid, fn[, args...]) 需要 2..10 个参数（最多 8 个实参），got %d", len(c.Args))
 		}
 		pid, err := fc.taskPid(c.Args[0])
 		if err != nil {
@@ -165,8 +165,8 @@ func (fc *funcCtx) threadCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr)
 		}
 		return recv, nil // 编译路径 thread 变量本身就是 pid（i32）
 	case "merge":
-		if len(c.Args) < 1 || len(c.Args) > 5 {
-			return nil, l.errf(me.Pos, "t.merge(fn[, args...]) 需要 1..5 个参数（最多 4 个实参），got %d", len(c.Args))
+		if len(c.Args) < 1 || len(c.Args) > 9 {
+			return nil, l.errf(me.Pos, "t.merge(fn[, args...]) 需要 1..9 个参数（最多 8 个实参），got %d", len(c.Args))
 		}
 		return fc.mergeCall(me, recv, c.Args[0], c.Args[1:])
 	case "talk":

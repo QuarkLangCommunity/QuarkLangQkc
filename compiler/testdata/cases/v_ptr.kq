@@ -1,0 +1,30 @@
+// v_ptr：T& / pointer T 可空引用（解释器语义：自动解引用读写、== null 比指针身份、
+// 与值比较按解引用值且在 nil 时按解释器 equalValues 语义为 false）。
+// 注：完整用例见 cases_run/v_ptr_full.kq（lli 对某个组合有 JIT 崩溃，用 clang 路径验证）。
+fn setRef(int& p, int v) void { p = v; }
+fn main(IOStream io) {
+    int& p = new int;
+    p = 5;
+    io.println(p);
+    io.println(p == null, p != null);
+    int& q;
+    io.println(q == null);
+    q = p;
+    q = 7;
+    io.println(p, q);
+    io.println(p == 5, p != 5);
+    setRef(p, 9);
+    io.println(p);
+    pointer int r = new int;
+    r = 3;
+    io.println(r);
+    float& f = new float;
+    f = 1.5;
+    io.println(f);
+    bool& b = new bool;
+    b = true;
+    io.println(b);
+    String& s = new String;
+    s = "hi";
+    io.println(s, s == "hi");
+}
