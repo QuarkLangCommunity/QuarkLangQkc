@@ -9,7 +9,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
-      - name: 构建与测试（解释器）
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 构建与测试（解释器 + 工具链）
         run: |
           go build ./...
           go test ./... -count=1
@@ -22,3 +25,29 @@ jobs:
         run: |
           go build -o /tmp/quark main.go
           cd compiler && ./testdata/compare.sh
+      - name: 构建工具链二进制（qkcheck/qkdoc/qkrepl/qklsp）
+        run: |
+          for t in qkcheck qkdoc qkrepl qklsp; do go build -o "/tmp/$t" "./cmd/$t"; done
+          /tmp/qkcheck --version && /tmp/qkdoc --version && /tmp/qkrepl --version && /tmp/qklsp --version
+      - name: 静态检查自举（qkcheck 扫本仓语料；-exit0 = 报告式，门禁在 Go 快照测试里）
+        run: /tmp/qkcheck -exit0 examples compiler/testdata
+      - name: 编辑器：tree-sitter 语法（可选，装了 CLI 才跑）
+        run: |
+          if command -v tree-sitter >/dev/null 2>&1; then
+            cd editors/tree-sitter-quarklang
+            tree-sitter generate
+            tree-sitter test -p .
+          else
+            echo "未安装 tree-sitter CLI，跳过"
+          fi
+      - name: 编辑器：VS Code 扩展的 LSP 客户端联调
+        run: QKLSP=/tmp/qklsp node editors/vscode/test/protocol.test.js
+      - name: 发布产物冒烟（仅本平台，验证脚本可用）
+        run: QUARK_TARGETS="linux/amd64" ./scripts/build-release.sh 0.0.0-ci dist-ci
+      - name: 变更日志生成冒烟
+        run: ./scripts/changelog.sh 0.0.0-ci | head -20
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quarklang-ci-linux-amd64
+          path: dist-ci/*
+          retention-days: 7

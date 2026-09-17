@@ -18,7 +18,8 @@ import (
 	"quarklang/internal/lang"
 )
 
-const qklspVersion = "0.1.0"
+// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+var version = "dev"
 
 type server struct {
 	conn    *rpcConn
@@ -51,7 +52,7 @@ func parseArgs(args []string) ([]string, error) {
 			i++
 			libDirs = append(libDirs, args[i])
 		case "--version", "-V":
-			fmt.Println("qklsp", qklspVersion)
+			fmt.Println("qklsp", version)
 			os.Exit(0)
 		case "-h", "--help":
 			fmt.Println("usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）")
@@ -99,7 +100,7 @@ func (s *server) handle(msg rpcMessage) error {
 				"renameProvider":             false,
 				"documentFormattingProvider": false,
 			},
-			"serverInfo": map[string]interface{}{"name": "qklsp", "version": qklspVersion},
+			"serverInfo": map[string]interface{}{"name": "qklsp", "version": version},
 		})
 	case "initialized":
 		return nil

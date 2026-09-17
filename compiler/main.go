@@ -47,7 +47,10 @@ func cacheDir() string {
 
 // engineVersion 编译器/运行时代次：任何 cgen/宏展开行为变化都必须递增，
 // 避免 IR/二进制缓存返回旧引擎产物（本次踩坑：宏展开模式与 done-bool 修复被缓存吞掉）。
-const engineVersion = "13" // 13：T&/pointer T 可空引用（new T + 自动解引用 + nil 语义）
+const engineVersion = "13"
+
+// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入。
+var version = "dev" // 13：T&/pointer T 可空引用（new T + 自动解引用 + nil 语义）
 
 // engineFingerprint 缓存键前缀：引擎代次 + 线程运行时指纹（运行时任何改动自动失效）。
 func engineFingerprint() string {
@@ -163,7 +166,7 @@ func main() {
 		case "--emit-ir":
 			args = args[1:] // 默认行为，显式写法
 		case "--version", "-V":
-			fmt.Println("qkc " + engineVersion)
+			fmt.Println("qkc " + version + " (engine " + engineVersion + ")")
 			return
 		case "-h", "--help":
 			qkcUsage()

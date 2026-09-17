@@ -17,3 +17,7 @@ out2.txt
 *.swp
 *.xmind
 lang.test
+
+dist/
+dist-ci/
+.editors-tmp/

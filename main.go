@@ -9,7 +9,14 @@ import (
 	"quarklang/internal/lang"
 )
 
+// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入。
+var version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-V") {
+		fmt.Println("quark " + version)
+		return
+	}
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: quark <file.qk> [args...] [--bp file:line,...]")
 		os.Exit(2)

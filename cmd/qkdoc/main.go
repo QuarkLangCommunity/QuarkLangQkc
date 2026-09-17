@@ -21,7 +21,8 @@ import (
 	"quarklang/internal/lang"
 )
 
-const qkdocVersion = "0.1.0"
+// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+var version = "dev"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -58,7 +59,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case "-all":
 			all = true
 		case "--version", "-V":
-			fmt.Fprintln(stdout, "qkdoc", qkdocVersion)
+			fmt.Fprintln(stdout, "qkdoc", version)
 			return 0
 		case "-h", "--help":
 			usage(stdout)

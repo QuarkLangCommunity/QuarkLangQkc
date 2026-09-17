@@ -133,6 +133,21 @@ go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
 （含 `style.qk` 1567 行、`cleg.qk`），`tree-sitter test` 5/5 通过；
 `editors/vscode/test/protocol.test.js` 用 Node 直连 `qklsp` 八项全过（初始化/诊断/跳转/补全/悬停/改动静默/退出）。
 
+### 发布产物与版本（`scripts/`、`.github/workflows/release.yml`）
+
+```sh
+./scripts/build-release.sh 0.3.0     # 3 平台 × 2 架构 × 6 工具 → dist/（版本注入 + sha256 清单）
+./scripts/changelog.sh 0.3.0         # 自上个 tag 以来，按类型分组的变更日志
+./scripts/changelog.sh --all > CHANGELOG.md
+git tag v0.3.0 && git push origin v0.3.0   # 触发 release 工作流：三平台原生构建 → GitHub Release
+```
+
+- **版本注入**：`VERSION` 文件是唯一版本源；构建时 `-ldflags "-X main.version=…"` 注入，`quark/qkc/qkcheck/qkdoc/qkrepl/qklsp --version` 均打印。
+- **产物**：`dist/<工具>-<版本>-<os>-<arch>[.exe]` + `MANIFEST-<版本>.txt`（sha256、字节数）；本地脚本用 `CGO_ENABLED=0` 交叉编译（便携、无系统依赖），
+  release 工作流在各平台**原生构建且开启 cgo**（FFI 可用：`library`/dlopen 等）。
+- **实测**：36 个二进制（6 工具 × 3 平台 × 2 架构）全部产出，格式正确（ELF / Mach-O / PE32+），
+  注入后 `--version` 输出 `0.3.0`（`qkc 0.3.0 (engine 13)`）。
+
 **跨系统**：qkc 产出与平台无关的 LLVM IR，目标平台 `clang`/`llc` 生成原生二进制；`.qlib` 库（gob）跨系统；线程运行时（`qthreads.c` 内嵌）POSIX/Windows 双载体。
 
 **优化旗标**：默认 `-O3`（便携）；`QUARK_CFLAGS="-O3 -march=native"` 本机极限（产物仅当前 CPU）；PGO 可用 `-fprofile-generate/-fprofile-use`（fib35 -29%）。
@@ -169,6 +184,7 @@ go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
 - `main.go` + `internal/lang/` —— 解释器（lexer/parser/typecheck/eval/runtime/宏）
 - `compiler/` —— LLVM 编译器（`qkc` + `internal/cgen` IR 发射器 + 内嵌线程运行时）
 - `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查、`qkdoc` API 文档、`qkrepl` 交互求值、`qklsp` 语言服务器
+- `scripts/` —— 发布与运维：`build-release.sh` 三平台产物（版本注入 + sha256 清单）、`changelog.sh` 变更日志
 - `editors/` —— 编辑器支持：VS Code 扩展（`vscode/`）+ tree-sitter 语法（`tree-sitter-quarklang/`）
 - `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）
 - `examples/` —— 示例

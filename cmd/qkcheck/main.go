@@ -26,7 +26,8 @@ import (
 	"quarklang/internal/lang"
 )
 
-const qkcheckVersion = "0.1.0"
+// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+var version = "dev"
 
 type finding struct {
 	File string `json:"file"`
@@ -76,7 +77,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			i++
 			libDirs = append(libDirs, args[i])
 		case "--version", "-V":
-			fmt.Fprintln(stdout, "qkcheck", qkcheckVersion)
+			fmt.Fprintln(stdout, "qkcheck", version)
 			return 0
 		case "-h", "--help":
 			usage(stdout)
@@ -270,7 +271,7 @@ func expandArgs(args []string) ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if !fi.IsDir() && strings.HasSuffix(p, ".qk") {
+			if !fi.IsDir() && (strings.HasSuffix(p, ".qk") || strings.HasSuffix(p, ".kq")) {
 				found = append(found, p)
 			}
 			return nil

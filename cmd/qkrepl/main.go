@@ -28,7 +28,8 @@ import (
 	"quarklang/internal/lang"
 )
 
-const qkreplVersion = "0.1.0"
+// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+var version = "dev"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -64,7 +65,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		case "-q":
 			quiet = true
 		case "--version", "-V":
-			fmt.Fprintln(stdout, "qkrepl", qkreplVersion)
+			fmt.Fprintln(stdout, "qkrepl", version)
 			return 0
 		case "-h", "--help":
 			usage(stdout)
@@ -101,7 +102,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	interactive := isTerminal(stdin)
 	if interactive && !quiet {
-		fmt.Fprintf(stdout, "qkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n", qkreplVersion)
+		fmt.Fprintf(stdout, "qkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n", version)
 	}
 
 	reader := bufio.NewReader(stdin)

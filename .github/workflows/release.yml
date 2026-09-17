@@ -1,0 +1,155 @@
+name: release
+
+# 打 tag（v*）即发布：三平台原生构建（含 cgo → FFI 可用）+ 版本注入 + 变更日志 + 校验清单。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 0.3.0；留空则用 VERSION 文件）'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 变更日志需要完整历史与 tag
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: 版本号
+        id: ver
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            v="${{ github.event.inputs.version }}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="$(cat VERSION)"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "版本: $v"
+
+      - name: 测试（解释器 + 编译器）
+        shell: bash
+        run: |
+          go test ./... -count=1
+          (cd compiler && go test ./... -count=1)
+
+      - name: 构建全部工具（本机平台，cgo 开启 → FFI 可用）
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          ext=""; [ "${RUNNER_OS}" = "Windows" ] && ext=".exe"
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64)    plat="linux-amd64" ;;
+            Linux-ARM64)  plat="linux-arm64" ;;
+            macOS-X64)    plat="darwin-amd64" ;;
+            macOS-ARM64)  plat="darwin-arm64" ;;
+            Windows-X64)  plat="windows-amd64" ;;
+            Windows-ARM64) plat="windows-arm64" ;;
+            *) plat="unknown" ;;
+          esac
+          mkdir -p out
+          for spec in "quark:." "qkcheck:./cmd/qkcheck" "qkdoc:./cmd/qkdoc" "qkrepl:./cmd/qkrepl" "qklsp:./cmd/qklsp"; do
+            name="${spec%%:*}"; pkg="${spec##*:}"
+            go build -trimpath -ldflags "-s -w -X main.version=$V" -o "out/${name}-${V}-${plat}${ext}" "$pkg"
+          done
+          (cd compiler && go build -trimpath -ldflags "-s -w -X main.version=$V" -o "../out/qkc-${V}-${plat}${ext}" .)
+          echo "构建完成："; ls -la out
+
+      - name: 校验清单（sha256）
+        shell: bash
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          { echo "# QuarkLang ${V} 发布产物（${RUNNER_OS}/${RUNNER_ARCH}，cgo 开启）"; } > "out/MANIFEST-${V}-${RUNNER_OS}.txt"
+          for f in out/*; do
+            case "$f" in *MANIFEST*) continue;; esac
+            printf '%s  %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$(basename "$f")" >> "out/MANIFEST-${V}-${RUNNER_OS}.txt"
+          done
+          cat "out/MANIFEST-${V}-${RUNNER_OS}.txt"
+
+      - name: 冒烟（跑一个示例 + --version）
+        shell: bash
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          ext=""; [ "${RUNNER_OS}" = "Windows" ] && ext=".exe"
+          bin="$(ls out/quark-*-$V-*${ext} 2>/dev/null | head -1 || true)"
+          [ -z "$bin" ] && bin="$(ls out/quark-*${ext} | head -1)"
+          chmod +x "$bin" || true
+          "./$bin" --version
+          "./$bin" examples/hello.qk
+          chmod +x out/qkcheck-*${ext} || true
+          "$(ls out/qkcheck-*${ext} | head -1)" examples/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quarklang-${{ steps.ver.outputs.version }}-${{ runner.os }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: 发布（GitHub Release + 变更日志）
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 版本号
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            v="${{ github.event.inputs.version }}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="$(cat VERSION)"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 生成变更日志
+        run: |
+          chmod +x scripts/changelog.sh
+          ./scripts/changelog.sh "${{ steps.ver.outputs.version }}" > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: 汇总产物
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release | head -50
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ steps.ver.outputs.version }}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then tag="${GITHUB_REF_NAME}"; fi
+          gh release create "$tag" \
+            --title "QuarkLang ${tag}" \
+            --notes-file RELEASE_NOTES.md \
+            --target "${GITHUB_SHA}" \
+            release/* 2>/dev/null || \
+          gh release upload "${tag}" release/* --clobber
