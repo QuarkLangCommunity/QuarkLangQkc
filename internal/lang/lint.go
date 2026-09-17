@@ -86,31 +86,6 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 	return l.diags
 }
 
-// ParseSource 只做前端：词法 → 宏展开 → 解析（不解析 import、不做类型检查）。
-// 供 qkcheck / qkdoc / qklsp 等工具在**单文件**坐标下工作（行号即文件行号）。
-func ParseSource(src string) (*Program, error) {
-	toks, err := Lex(src)
-	if err != nil {
-		return nil, err
-	}
-	macros, rest, err := SplitMacroDefs(toks)
-	if err != nil {
-		return nil, err
-	}
-	if len(macros) > 0 {
-		rest, err = ExpandMacros(rest, macros, "explain")
-		if err != nil {
-			return nil, err
-		}
-	}
-	prog, err := Parse(rest)
-	if err != nil {
-		return nil, err
-	}
-	prog.Src = src
-	return prog, nil
-}
-
 // LintSource 便捷入口：解析源码并静态检查（解析失败返回错误与已得诊断）。
 func LintSource(src string, opts LintOptions) ([]Diag, error) {
 	prog, err := ParseSource(src)

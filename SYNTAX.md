@@ -81,3 +81,5 @@
 | P3 | `qkm init/build/debug/install/update` 工程与依赖管理 |
 | P4 | 两条路径**语法与语义一致**（同一份源码到处可用） |
 | P5 | `qkcheck [-json] [-params] [-L dir] files...` 静态检查：未使用变量/形参、不可达代码、遮蔽、缺返回、接口未实现、void 值误用（码 QK101–QK107） |
+| P6 | `qkdoc [-o file] [-html] [-all] files...` API 文档：声明上方 `/* */`/`//` 注释 + `pub` 导出 → Markdown/HTML |
+| P7 | `qkrepl [-e code] [-q]` 交互式求值：多行块续行、跨输入持久环境（变量/函数/类型）、`:help/:load/:quit` |

@@ -409,80 +409,8 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 	}
 	in.globalScope = newScope(nil)
 	_ = in.globalScope.declare("DynamicStackAndHeap", StrV("DynamicStackAndHeap"), Pos{})
-	for _, f := range prog.Funcs {
-		nfn := &Func{Name: f.Name, Params: f.Params, Ret: f.Ret, Body: f.Body, Pos: f.Pos}
-		if _, dup := in.fns[f.Name]; dup {
-			if !sameSig(in.fns[f.Name], nfn) {
-				if in.overloads == nil {
-					in.overloads = map[string][]*Func{}
-				}
-				in.overloads[f.Name] = append(in.overloads[f.Name], nfn)
-			} else {
-				return nil, fmt.Errorf("CompileError: duplicate overload %q", f.Name)
-			}
-		} else {
-			in.fns[f.Name] = nfn
-		}
-	}
-	// 函数表（FnIdx 索引，顺序与 FnList 一致——fns 填充后）
-	for _, fd := range prog.FnList {
-		in.fnList = append(in.fnList, in.fns[fd.Name])
-	}
-	for _, s := range prog.Structs {
-		if _, dup := in.structs[s.Name]; dup {
-			return nil, fmt.Errorf("CompileError: duplicate struct %q", s.Name)
-		}
-		def := &StructDef{Name: s.Name, Types: map[string]string{}}
-		for _, m := range s.Members {
-			def.Types[m.Name] = m.Type
-			def.TypesOrder = append(def.TypesOrder, m.Name)
-		}
-		in.structs[s.Name] = def
-	}
-	registerBuiltinIfaces(in.interfaces)
-	for _, i := range prog.Interfaces {
-		if _, dup := in.interfaces[i.Name]; dup {
-			return nil, fmt.Errorf("CompileError: duplicate interface %q", i.Name)
-		}
-		in.interfaces[i.Name] = &InterfaceDef{Name: i.Name, Methods: i.Methods, Expands: i.Expands}
-	}
-	for _, im := range prog.Impls {
-		// 同一类型允许多个 impl 块：方法聚合（xmind §类：impl<T> {...} name;）
-		key := implKeyOf(im.Type, im.Iface)
-		def, exists := in.impls[key]
-		if !exists {
-			def = &ImplDef{Type: im.Type, Iface: im.Iface, TypeParams: im.TypeParams, Methods: map[string]*Func{}, SelfMethods: map[string]*Func{}}
-			in.impls[key] = def
-		}
-		for _, m := range im.Methods {
-			recv := false
-			if len(m.Params) > 0 {
-				recv = isRecvParam(im.Type, &m.Params[0]) // 按类型判定接收者（与形参名无关）
-			}
-			fn := &Func{Name: m.Name, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
-			if recv {
-				if _, dup := def.SelfMethods[fn.Name]; dup {
-					return nil, fmt.Errorf("CompileError: duplicate method %q on %s", fn.Name, im.Type)
-				}
-				def.SelfMethods[fn.Name] = fn
-			} else {
-				if _, dup := def.Methods[fn.Name]; dup {
-					return nil, fmt.Errorf("CompileError: duplicate method %q on %s", fn.Name, im.Type)
-				}
-				def.Methods[fn.Name] = fn
-			}
-		}
-	}
-	in.registerIOBuiltins()
-	for _, lb := range prog.Libraries {
-		if in.libObjs == nil {
-			in.libObjs = map[string]*libObj{}
-		}
-		obj := &libObj{name: lb.Name, lib: lb.Lib, methods: map[string]*Func{}}
-		for _, fn := range lb.Methods {
-			obj.methods[fn.Name] = fn
-		}
-		in.libObjs[lb.Name] = obj
+	if err := in.registerProgram(prog); err != nil {
+		return nil, err
 	}
 
 	if prog.Kind == "library" {
@@ -516,6 +444,113 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 		pendingDebug = nil
 	}
 	return in, in.execute(ctx)
+}
+
+// registerProgram 把程序里的声明登记进解释器：函数/重载、结构体、内置与自定义接口、
+// impl / space（实例方法与静态方法分开）、IO 内建、FFI 库对象。
+//
+// runWithInterp 与 REPL（qkrepl）共用这条路径：REPL 每段输入登记新声明时行为与整程序一致。
+func (in *interp) registerProgram(prog *Program) error {
+	return in.registerProgramMode(prog, false)
+}
+
+// registerProgramReplacing 同 registerProgram，但允许**重复定义覆盖**（REPL 语义：
+// 重新定义同名同签名的函数/结构体应生效，而不是报重复）。
+func (in *interp) registerProgramReplacing(prog *Program) error {
+	return in.registerProgramMode(prog, true)
+}
+
+func (in *interp) registerProgramMode(prog *Program, replace bool) error {
+	for _, f := range prog.Funcs {
+		nfn := &Func{Name: f.Name, Params: f.Params, Ret: f.Ret, Body: f.Body, Pos: f.Pos}
+		if cur, dup := in.fns[f.Name]; dup {
+			if !sameSig(cur, nfn) {
+				if in.overloads == nil {
+					in.overloads = map[string][]*Func{}
+				}
+				replaced := false
+				if replace {
+					for i, o := range in.overloads[f.Name] {
+						if sameSig(o, nfn) {
+							in.overloads[f.Name][i] = nfn
+							replaced = true
+							break
+						}
+					}
+				}
+				if !replaced {
+					in.overloads[f.Name] = append(in.overloads[f.Name], nfn)
+				}
+			} else if replace {
+				in.fns[f.Name] = nfn
+			} else {
+				return fmt.Errorf("CompileError: duplicate overload %q", f.Name)
+			}
+		} else {
+			in.fns[f.Name] = nfn
+		}
+	}
+	// 函数表（FnIdx 索引，顺序与 FnList 一致——fns 填充后）
+	for _, fd := range prog.FnList {
+		in.fnList = append(in.fnList, in.fns[fd.Name])
+	}
+	for _, s := range prog.Structs {
+		if _, dup := in.structs[s.Name]; dup && !replace {
+			return fmt.Errorf("CompileError: duplicate struct %q", s.Name)
+		}
+		def := &StructDef{Name: s.Name, Types: map[string]string{}}
+		for _, m := range s.Members {
+			def.Types[m.Name] = m.Type
+			def.TypesOrder = append(def.TypesOrder, m.Name)
+		}
+		in.structs[s.Name] = def
+	}
+	registerBuiltinIfaces(in.interfaces)
+	for _, i := range prog.Interfaces {
+		if _, dup := in.interfaces[i.Name]; dup && !replace {
+			return fmt.Errorf("CompileError: duplicate interface %q", i.Name)
+		}
+		in.interfaces[i.Name] = &InterfaceDef{Name: i.Name, Methods: i.Methods, Expands: i.Expands}
+	}
+	for _, im := range prog.Impls {
+		// 同一类型允许多个 impl 块：方法聚合（xmind §类：impl<T> {...} name;）
+		key := implKeyOf(im.Type, im.Iface)
+		def, exists := in.impls[key]
+		if !exists {
+			def = &ImplDef{Type: im.Type, Iface: im.Iface, TypeParams: im.TypeParams, Methods: map[string]*Func{}, SelfMethods: map[string]*Func{}}
+			in.impls[key] = def
+		}
+		for _, m := range im.Methods {
+			recv := false
+			if len(m.Params) > 0 {
+				recv = isRecvParam(im.Type, &m.Params[0]) // 按类型判定接收者（与形参名无关）
+			}
+			fn := &Func{Name: m.Name, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
+			if recv {
+				if _, dup := def.SelfMethods[fn.Name]; dup && !replace {
+					return fmt.Errorf("CompileError: duplicate method %q on %s", fn.Name, im.Type)
+				}
+				def.SelfMethods[fn.Name] = fn
+			} else {
+				if _, dup := def.Methods[fn.Name]; dup && !replace {
+					return fmt.Errorf("CompileError: duplicate method %q on %s", fn.Name, im.Type)
+				}
+				def.Methods[fn.Name] = fn
+			}
+		}
+	}
+	in.registerIOBuiltins()
+	for _, lb := range prog.Libraries {
+		if in.libObjs == nil {
+			in.libObjs = map[string]*libObj{}
+		}
+		obj := &libObj{name: lb.Name, lib: lb.Lib, methods: map[string]*Func{}}
+		for _, fn := range lb.Methods {
+			obj.methods[fn.Name] = fn
+		}
+		in.libObjs[lb.Name] = obj
+	}
+	return nil
 }
 
 // zeroInstance 构造结构体零值实例（成员按类型注解取零值）。

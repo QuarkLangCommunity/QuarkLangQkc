@@ -127,20 +127,47 @@ type lexer struct {
 	pos  int
 	line int
 	col  int
+
+	collectComments bool
+	comments        []Comment
+}
+
+// Comment 是源码注释（qkdoc / qklsp 等工具用；常规编译流程丢弃注释）。
+type Comment struct {
+	Text    string // 原文（含 `//` 或 `/* */` 定界符）
+	Pos     Pos    // 起始位置
+	EndLine int    // 结束行（行注释 = 起始行；块注释 = `*/` 所在行）
+	Block   bool   // true = /* */，false = //
+}
+
+func (lx *lexer) addComment(c Comment) {
+	if lx.collectComments {
+		lx.comments = append(lx.comments, c)
+	}
 }
 
 // Lex tokenizes QuarkLang source code.
 func Lex(src string) ([]Token, error) {
-	lx := &lexer{src: src, line: 1, col: 1}
+	toks, _, err := lex(src, false)
+	return toks, err
+}
+
+// LexWithComments 与 Lex 相同，但额外按出现顺序收集注释。
+func LexWithComments(src string) ([]Token, []Comment, error) {
+	return lex(src, true)
+}
+
+func lex(src string, collectComments bool) ([]Token, []Comment, error) {
+	lx := &lexer{src: src, line: 1, col: 1, collectComments: collectComments}
 	var toks []Token
 	for {
 		tok, err := lx.next()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		toks = append(toks, tok)
 		if tok.Kind == TEOF {
-			return toks, nil
+			return toks, lx.comments, nil
 		}
 	}
 }
@@ -183,11 +210,17 @@ func (lx *lexer) skipSpace() error {
 		case c == ' ' || c == '\t' || c == '\r' || c == '\n':
 			lx.advance()
 		case c == '/' && lx.peekByteAt(1) == '/':
+			startLine, startCol, start := lx.line, lx.col, lx.pos
 			for lx.pos < len(lx.src) && lx.src[lx.pos] != '\n' {
 				lx.advance()
 			}
+			lx.addComment(Comment{
+				Text: lx.src[start:lx.pos], Pos: Pos{Line: startLine, Col: startCol},
+				EndLine: startLine, Block: false,
+			})
 		case c == '/' && lx.peekByteAt(1) == '*':
 			line, col := lx.line, lx.col
+			start := lx.pos
 			lx.advance()
 			lx.advance()
 			closed := false
@@ -203,6 +236,10 @@ func (lx *lexer) skipSpace() error {
 			if !closed {
 				return lx.errf(line, col, "unterminated block comment")
 			}
+			lx.addComment(Comment{
+				Text: lx.src[start:lx.pos], Pos: Pos{Line: line, Col: col},
+				EndLine: lx.line, Block: true,
+			})
 		default:
 			return nil
 		}
@@ -359,6 +396,7 @@ func (lx *lexer) lexNumber(line, col int) (Token, error) {
 }
 
 // lexRawString 反引号原始字符串（同 Go：无转义、可多行、换行计入行号）。
+// 注意：与 Go 的差异是 \r 原样保留在字符串值中（本实现不做丢弃）。
 func (lx *lexer) lexRawString(line, col int) (Token, error) {
 	lx.advance() // `
 	start := lx.pos
@@ -369,15 +407,8 @@ func (lx *lexer) lexRawString(line, col int) (Token, error) {
 			lx.advance()
 			return Token{Kind: TStr, Text: text, Line: line, Col: col}, nil
 		}
-		if c == '\n' {
-			lx.line++
-			lx.col = 0
-		}
-		if c == '\r' {
-			// Go 语义：raw string 中的回车被丢弃
-			lx.advance()
-			continue
-		}
+		// 行/列推进统一交给 advance()：此前这里额外自增 line 会造成
+		// 多行原始字符串之后所有 token 的行号偏移（每个换行多算 1 行）。
 		lx.advance()
 	}
 	return Token{}, lx.errf(line, col, "unterminated raw string")

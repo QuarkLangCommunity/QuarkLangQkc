@@ -71,6 +71,47 @@ go build -o qkcheck ./cmd/qkcheck
 `return`、迭代变量未使用等）；4 个官方库仓约 4000 行（含 `style.qk` 1500 行、`cleg.qk`）→ 仅
 1 条真问题（局部变量从不读取）、0 误报。
 
+### API 文档 qkdoc（`cmd/qkdoc`）
+
+```sh
+go build -o qkdoc ./cmd/qkdoc
+./qkdoc lib.qk                       # Markdown 到 stdout
+./qkdoc -all -o API.md style.qk      # 含未 pub 符号，写入文件
+./qkdoc -html -o API.html style.qk   # 自包含 HTML（零外部资源）
+```
+
+- 文档注释：声明**上方紧邻**的 `//` 或 `/* */` 注释块（godoc 规则）；无上方注释时取**同行行尾**注释
+  （`int x; // 横坐标`）；文件头注释作为文件说明。
+- 默认只导出 `pub` 符号；文件没有 `pub`（如 `program main`）时导出全部；`impl`/`space`/`library`
+  不受 `pub` 过滤（语言中 `pub` 不能前缀它们，而它们正是库对外 API 的载体）。
+- 实测：`style.qk`（1567 行）→ 8ms 生成 335 行 Markdown（概览表 + 函数/类型/实现/空间分节）。
+
+### 交互式求值 qkrepl（`cmd/qkrepl`）
+
+```sh
+go build -o qkrepl ./cmd/qkrepl
+./qkrepl                      # 交互：qk> 提示符，块未闭合自动续行 ..>
+./qkrepl -e "int x = 6;" -e "x * 7"   # 一次性求值（多段共享环境）
+printf 'fib(20)\n' | ./qkrepl # 批处理（stdin 非终端）
+```
+
+```
+qk> fn fib(int n) int {      # 多行块：{ 未闭合 → 续行
+..>     if (n <= 1) { return n; }
+..>     return fib(n - 1) + fib(n - 2);
+..> }
+已定义 fn fib(int n) int
+qk> fib(20)
+6765
+```
+
+- **持久环境**：变量/函数/结构体/接口/impl 跨输入存活；同名函数可重定义（覆盖生效）。
+- 表达式直接回显值；`log` 的记录与 `io.println` 输出即时显示；语句可省略 `;`（自动补）。
+- 命令：`:help`、`:quit`、`:load <file.qk>`（登记文件内的定义，随后可 `main(io)`）。
+- 实现要点：会话持有一个解释器实例，每段输入按需走「顶层声明登记」或「包成函数体逐条求值」；
+  与 `quark file.qk` 共用注册路径（`registerProgram`），因此语义一致。
+- 实测：`fib(20)` → 6765；`:load examples/struct.qk` 后 `Point p = .{a:20, b:22}; p.sum()` → 42。
+
 **跨系统**：qkc 产出与平台无关的 LLVM IR，目标平台 `clang`/`llc` 生成原生二进制；`.qlib` 库（gob）跨系统；线程运行时（`qthreads.c` 内嵌）POSIX/Windows 双载体。
 
 **优化旗标**：默认 `-O3`（便携）；`QUARK_CFLAGS="-O3 -march=native"` 本机极限（产物仅当前 CPU）；PGO 可用 `-fprofile-generate/-fprofile-use`（fib35 -29%）。
@@ -106,7 +147,7 @@ go build -o qkcheck ./cmd/qkcheck
 
 - `main.go` + `internal/lang/` —— 解释器（lexer/parser/typecheck/eval/runtime/宏）
 - `compiler/` —— LLVM 编译器（`qkc` + `internal/cgen` IR 发射器 + 内嵌线程运行时）
-- `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查
+- `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查、`qkdoc` API 文档、`qkrepl` 交互求值
 - `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）
 - `examples/` —— 示例
 
