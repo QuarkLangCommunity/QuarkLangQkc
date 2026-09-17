@@ -1,0 +1,5 @@
+// 刻意不报：漏写 `program library;` 但有 pub 符号的文件同样是库（真实语料
+// compiler/testdata/mathlib.qk 就是这种），函数是对外 API，不算死代码。
+pub fn double(int n) int {
+    return n * 2;
+}

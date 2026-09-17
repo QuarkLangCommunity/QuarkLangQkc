@@ -1,0 +1,24 @@
+// 真实风格代码：分支、循环、容器、字符串、接口缺省实现（未实现者也只在近失配时报）。
+fn classify(int n) String {
+    if (n < 0) {
+        return "neg";
+    } else if (n == 0) {
+        return "zero";
+    } else {
+        return "pos";
+    }
+}
+fn total(List<int> l) int {
+    int sum = 0;
+    for (int v : l) {
+        sum = sum + v;
+    }
+    return sum;
+}
+fn main(IOStream io) void {
+    List<int> l = [1, 2, 3];
+    io.println(classify(total(l)));
+    HashTable<String, int> h = HashTable::new();
+    h.put("k", 1);
+    io.println(h.contains("k"));
+}

@@ -1,0 +1,9 @@
+fn neverCalled(int n) int {
+    return n * 2;
+}
+fn used(int n) int {
+    return n + 1;
+}
+fn main(IOStream io) void {
+    io.println(used(1));
+}

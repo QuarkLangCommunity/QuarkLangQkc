@@ -1,0 +1,11 @@
+fn pick(int x) int {
+    if (x > 0) {
+        return 1;
+    } else {
+        return 2;
+    }
+    return 3;
+}
+fn main(IOStream io) void {
+    io.println(pick(1));
+}

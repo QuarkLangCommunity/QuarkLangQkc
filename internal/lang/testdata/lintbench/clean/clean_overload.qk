@@ -1,0 +1,13 @@
+// 重载：void 判定必须跳过（否则会误报 void 当值）。
+fn fmt(int n) void {
+    if (n > 0) {
+        return;
+    }
+}
+fn fmt(String s) int {
+    return s.size();
+}
+fn main(IOStream io) void {
+    int n = fmt("abc");
+    io.println(n);
+}

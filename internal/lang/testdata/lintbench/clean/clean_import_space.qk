@@ -1,0 +1,8 @@
+// 刻意不报：导入的库**只用 space 形式**（api::twice），也属于「已使用」。
+// （只记录 `scope::name` 而漏记 scope / 方法名会导致误报——本用例锁住该行为。）
+program library;
+import "helperapi";
+
+pub fn use(int n) int {
+    return api::twice(n);
+}

@@ -1,0 +1,7 @@
+program library;
+import "helperlib";
+
+// 使用了 helperlib 的 pub 符号，不应报「未使用导入」。
+pub fn four(int n) int {
+    return triple(n) + 1;
+}

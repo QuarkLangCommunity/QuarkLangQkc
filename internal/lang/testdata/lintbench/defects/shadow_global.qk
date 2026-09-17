@@ -1,0 +1,7 @@
+fn double(int n) int {
+    return n * 2;
+}
+fn main(IOStream io) void {
+    int double = 3;
+    io.println(double);
+}

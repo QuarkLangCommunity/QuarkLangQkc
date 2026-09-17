@@ -58,9 +58,22 @@ func TestLintUnusedVarAssignOnly(t *testing.T) {
 }
 `
 	d := lintSrc(t, src, LintOptions{})
-	wantCodes(t, d, map[string]int{CodeUnusedVar: 1})
-	if !strings.Contains(d[0].Msg, "只被赋值") {
-		t.Errorf("应为「只被赋值」文案，got %q", d[0].Msg)
+	// 声明初值 0 从未被读取、随后被 5 覆盖 → QK101（未使用）+ QK113（死存储）各一条
+	wantCodes(t, d, map[string]int{CodeUnusedVar: 1, CodeDeadStore: 1})
+	var sawAssignOnly, sawDeadStore bool
+	for _, x := range d {
+		if x.Code == CodeUnusedVar && strings.Contains(x.Msg, "只被赋值") {
+			sawAssignOnly = true
+		}
+		if x.Code == CodeDeadStore {
+			sawDeadStore = true
+		}
+	}
+	if !sawAssignOnly {
+		t.Errorf("应含「只被赋值」文案: %+v", d)
+	}
+	if !sawDeadStore {
+		t.Errorf("应含死存储诊断: %+v", d)
 	}
 }
 
@@ -261,7 +274,8 @@ fn v(int x) void {
     }
 }
 fn main(IOStream io) {
-    io.println(f(1));
+    io.println(f(1) + g(2));
+    v(3);
 }
 `
 	wantCodes(t, lintSrc(t, src, LintOptions{}), map[string]int{})

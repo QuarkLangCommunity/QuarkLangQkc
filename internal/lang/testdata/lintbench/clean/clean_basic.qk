@@ -1,0 +1,8 @@
+// 正常函数：返回路径完整、变量均被读取。
+fn add(int a, int b) int {
+    int sum = a + b;
+    return sum;
+}
+fn main(IOStream io) void {
+    io.println(add(1, 2));
+}

@@ -1,0 +1,9 @@
+// 刻意不报：库文件里的函数是对外 API，从未被本文件调用也不算死代码。
+program library;
+
+pub fn api(int n) int {
+    return n;
+}
+fn helper(int n) int {
+    return n + 1;
+}

@@ -1,0 +1,12 @@
+// 接口完整实现：不应报「接口未实现」。
+type interface { fn get(Self self) int; fn put(Self self, int v) void; } Store;
+type struct { int v; } Box;
+impl {
+    fn get(Box self) int { return self.v; }
+    fn put(Box self, int v) void { self.v = v; }
+} Box;
+fn main(IOStream io) void {
+    Box b = .{v: 1};
+    b.put(2);
+    io.println(b.get());
+}

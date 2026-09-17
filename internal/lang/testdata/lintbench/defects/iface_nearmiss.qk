@@ -1,0 +1,7 @@
+type interface { fn get(Self self) int; fn put(Self self, int v) void; } Store;
+type struct { int v; } Box;
+impl { fn get(Box self) int { return self.v; } } Box;
+fn main(IOStream io) void {
+    Box b = .{v: 1};
+    io.println(b.get());
+}

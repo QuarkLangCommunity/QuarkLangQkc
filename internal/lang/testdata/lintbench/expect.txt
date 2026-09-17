@@ -1,0 +1,31 @@
+# qkcheck 基准集期望（人工标注；格式：<相对路径> [flags] <期望诊断，逗号分隔；- 表示零诊断>）
+# 码含义见 README「静态检查 qkcheck」；flags 传给 LintOptions（params=检查未使用形参）
+defects/unused_var.qk QK101@2
+defects/unused_param.qk params QK102@1
+defects/unreachable.qk QK103@7
+defects/shadow.qk QK104@3
+defects/missing_return.qk QK105@1
+defects/iface_nearmiss.qk QK106@3
+defects/void_as_value.qk QK107@7
+defects/self_assign.qk QK108@3,QK108@6
+defects/const_cond.qk QK109@2,QK109@5,QK109@8,QK109@11
+defects/div_zero.qk QK110@2,QK110@3
+defects/unused_import.qk QK111@2
+defects/shadow_global.qk QK112@5
+defects/dead_store.qk QK113@2
+defects/self_compare.qk QK114@3
+defects/unused_func.qk QK115@1
+clean/clean_basic.qk -
+clean/clean_try_divzero.qk -
+clean/clean_loop_break.qk -
+clean/clean_overload.qk -
+clean/clean_iface_full.qk -
+clean/clean_import_used.qk -
+clean/clean_patterns.qk -
+clean/clean_type_shadow.qk -
+clean/clean_ref_write.qk -
+clean/clean_loop_store.qk -
+clean/clean_import_space.qk -
+clean/clean_import_type.qk -
+clean/clean_lib_funcs.qk -
+clean/clean_lib_nopub_decl.qk -

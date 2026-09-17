@@ -1,0 +1,7 @@
+fn main(IOStream io) void {
+    int i = 9;
+    for (int i = 0; i < 2; i = i + 1) {
+        io.println(i);
+    }
+    io.println(i);
+}

@@ -1,0 +1,8 @@
+fn main(IOStream io) void {
+    int a = 1;
+    a = a;
+    io.println(a);
+    List<int> l = [1, 2];
+    l[0] = l[0];
+    io.println(l.size());
+}

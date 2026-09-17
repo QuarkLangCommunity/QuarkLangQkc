@@ -52,7 +52,8 @@ func main() {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...")
-	fmt.Fprintln(w, "  QuarkLang 静态检查：未使用变量/形参 · 不可达代码 · 遮蔽 · 缺返回 · 接口未实现 · void 误用")
+	fmt.Fprintln(w, "  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·")
+	fmt.Fprintln(w, "                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较")
 }
 
 func run(args []string, stdout, stderr io.Writer) int {

@@ -1,0 +1,13 @@
+// 刻意不报的两类「同名」：
+//   1) 局部变量遮蔽**类型名**：类型标注走类型串解析（`Point p` 与标识符查表无关），不会改变语义；
+//   2) 局部变量遮蔽 **space 名**：空间调用一律写 `space::fn`（正典 S10），也不会被局部变量劫持。
+// 只对「遮蔽全局函数」报警（那会改变 `f(...)` 的解析目标）。
+type struct { int v; } Point;
+space {
+    fn max(int a, int b) int { return a; }
+} math;
+fn main(IOStream io) void {
+    Point Point = .{v: 1};
+    int math = 2;
+    io.println(Point.v + math + math::max(1, 2));
+}

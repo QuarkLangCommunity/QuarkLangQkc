@@ -1,0 +1,9 @@
+fn noRet(int x) void {
+    if (x > 0) {
+        return;
+    }
+}
+fn main(IOStream io) void {
+    int y = noRet(1);
+    io.println(y);
+}

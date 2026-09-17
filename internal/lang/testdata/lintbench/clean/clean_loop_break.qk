@@ -1,0 +1,11 @@
+// while(true) 有 break 出口，不算死循环。
+fn main(IOStream io) void {
+    int i = 0;
+    while (true) {
+        i = i + 1;
+        if (i > 3) {
+            break;
+        }
+    }
+    io.println(i);
+}

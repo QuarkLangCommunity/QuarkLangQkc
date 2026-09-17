@@ -1,0 +1,6 @@
+fn helper(int a, int b) int {
+    return a;
+}
+fn main(IOStream io) void {
+    io.println(helper(1, 2));
+}

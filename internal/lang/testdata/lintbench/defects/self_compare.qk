@@ -1,0 +1,6 @@
+fn main(IOStream io) void {
+    int a = 1;
+    if (a == a) {
+        io.println("always equal");
+    }
+}

@@ -1,0 +1,12 @@
+program library;
+
+// 库函数：翻倍。
+pub fn double(int n) int {
+    return n * 2;
+}
+
+// 库类型：点。
+pub type struct {
+    int x;
+    int y;
+} LibPoint;

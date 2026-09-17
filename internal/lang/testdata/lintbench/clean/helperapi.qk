@@ -1,0 +1,11 @@
+program library;
+
+// 以 space 形式对外提供 API。
+space {
+    fn twice(int n) int { return n * 2; }
+} api;
+
+// 宏形式的 API。
+#macro inc(a) {
+    #return a + 1
+}

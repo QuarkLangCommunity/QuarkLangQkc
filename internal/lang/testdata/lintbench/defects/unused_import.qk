@@ -1,0 +1,7 @@
+program library;
+import "helperlib";
+
+// 导入了 helperlib 但没有使用它的任何符号。
+pub fn local(int n) int {
+    return n + 1;
+}

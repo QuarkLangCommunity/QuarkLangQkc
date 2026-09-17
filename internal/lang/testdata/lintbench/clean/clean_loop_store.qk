@@ -1,0 +1,12 @@
+// 刻意不报：循环体内的赋值会被下一轮读取（线性扫描无法判定），不做死存储判定。
+fn f(int n) int {
+    int i = 0;
+    while (i < n) {
+        i = i + 1;
+    }
+    i = n - 1;
+    return i;
+}
+fn main(IOStream io) void {
+    io.println(f(3));
+}

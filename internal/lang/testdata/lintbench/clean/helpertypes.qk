@@ -1,0 +1,10 @@
+program library;
+
+// 库类型 + 方法（调用方可能只用到类型）。
+pub type struct {
+    int v;
+} LibBox;
+
+impl {
+    fn value(LibBox self) int { return self.v; }
+} LibBox;

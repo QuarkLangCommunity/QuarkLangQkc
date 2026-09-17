@@ -1,0 +1,5 @@
+fn main(IOStream io) void {
+    int unusedOne = 1;
+    int used = 2;
+    io.println(used);
+}

@@ -1,0 +1,8 @@
+// 刻意不报：导入的库**只用到类型标注**（List<LibBox> / LibBox），类型串不是 Ident，
+// 必须显式从类型标注收集名字；本用例不含该库的方法调用，以隔离这一点。
+program library;
+import "helpertypes";
+
+pub fn count(List<LibBox> boxes) int {
+    return boxes.size();
+}

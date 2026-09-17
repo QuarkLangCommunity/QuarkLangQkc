@@ -1,0 +1,14 @@
+fn main(IOStream io) void {
+    if (false) {
+        io.println("dead branch");
+    }
+    if (true) {
+        io.println("always");
+    }
+    while (false) {
+        io.println("never loops");
+    }
+    while (true) {
+        io.println("no way out");
+    }
+}

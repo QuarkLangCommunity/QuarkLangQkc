@@ -1,0 +1,9 @@
+// try 内的除零是刻意的错误处理，不应报「常量除零」。
+fn main(IOStream io) void {
+    try {
+        int a = 10 / 0;
+        io.println(a);
+    } catch (void e) {
+        io.println("caught");
+    }
+}

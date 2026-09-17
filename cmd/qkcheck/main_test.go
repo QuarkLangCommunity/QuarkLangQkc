@@ -170,7 +170,11 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 			return err
 		}
 		if fi.IsDir() {
-			if fi.Name() == ".git" {
+			switch fi.Name() {
+			case ".git", "dist", "dist-ci":
+				return filepath.SkipDir
+			case "lintbench":
+				// 基准集（刻意植入缺陷）由 TestLintBenchmark 以自身清单门禁
 				return filepath.SkipDir
 			}
 			return nil
@@ -211,6 +215,15 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 		"compiler/testdata/cases_run/t_table.kq:45:5 QK101": true, // for (String k : sk) 循环变量未使用
 		"compiler/testdata/demo.qk:28:13 QK101":             true, // int bad = 10 / 0; 只用于触发异常
 		"examples/trycatch.qk:3:13 QK101":                   true, // int a = 10 / 0; 同上
+		// 以下 6 条为 QK108–QK114 加强后在**测试夹具**上的命中，逐条复核为真：
+		// 夹具刻意演示这些形态（与 qkc 双路径对齐用），不是误报。
+		"compiler/testdata/cases/a_scalars.kq:13:34 QK114":    true, // b == b 自身比较（演示 == 语义）
+		"compiler/testdata/cases/b_struct.kq:42:26 QK114":     true, // a == a（结构体值比较）
+		"compiler/testdata/cases/b_struct_ref.kq:21:36 QK114": true, // w == w（引用比较）
+		"compiler/testdata/cases/y_edge.kq:7:23 QK108":        true, // x = x 自赋值（边界用例）
+		"compiler/testdata/cases/y_edge.kq:19:13 QK113":       true, // List 字面量覆盖初值（演示赋值语义）
+		"compiler/testdata/cases_run/z_any.kq:22:5 QK113":     true, // void 变量连赋两次，首次为死存储
+		"compiler/testdata/cases_run/v_sign.kq:12:1 QK115":    true, // fn mix 全文件未被调用（夹具里的死函数）
 	}
 	gotWarnings := map[string]bool{}
 	for _, f := range got {
