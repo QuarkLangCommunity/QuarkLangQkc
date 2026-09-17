@@ -46,7 +46,30 @@ cd compiler && go build -o qkc .
 ./qkc hello.qk               # 仅输出 IR
 ```
 
-**依赖**：Go ≥ 1.21（零第三方 Go 依赖）；LLVM 工具链（`clang`/`lli`/`llvm-as`，系统包）。可选 `rustc`/`gcc` 仅用于跨语言对比基准。
+**依赖**：Go ≥ 1.26（零第三方 Go 依赖）；LLVM 工具链（`clang`/`lli`/`llvm-as`，系统包）。可选 `rustc`/`gcc` 仅用于跨语言对比基准。
+
+### 静态检查 qkcheck（`cmd/qkcheck`）
+
+```sh
+go build -o qkcheck ./cmd/qkcheck
+./qkcheck examples/                                  # 目录或文件；有诊断退出 1
+./qkcheck -json -L ../QuarkLangLibs-Style lib.qk     # CI/编辑器消费；-L 追加 import 搜索目录
+./qkcheck -params src.qk                             # 附带检查未使用形参
+```
+
+| 码 | 检查 | 说明 |
+|---|---|---|
+| QK101 | 未使用变量 | 声明后从未读取（含「只被赋值」）；`_` 前缀忽略 |
+| QK102 | 未使用形参 | 需 `-params`（接口实现常有忽略形参） |
+| QK103 | 不可达代码 | `return`/`log`/`break` 之后的语句；两分支皆返回之后的语句 |
+| QK104 | 遮蔽 | `for`（两种）/`catch` 变量遮蔽外层同名变量（编译器未拦截的三处） |
+| QK105 | 缺返回 | 声明非 void 返回类型却存在不返回值即结束的路径（解释器得 nil，`qkc` 补零值——两端不一致） |
+| QK106 | 接口未实现 | 近失配：实现了接口的部分方法、缺其余（列出缺失方法名） |
+| QK107 | void 值误用 | void 函数调用结果被当作值使用（运行期为 nil） |
+
+**实测**：主仓全部 `.qk/.kq` 语料 → 0 错误、5 条警告且逐条复核为真问题（`log` 结束函数后仍写
+`return`、迭代变量未使用等）；4 个官方库仓约 4000 行（含 `style.qk` 1500 行、`cleg.qk`）→ 仅
+1 条真问题（局部变量从不读取）、0 误报。
 
 **跨系统**：qkc 产出与平台无关的 LLVM IR，目标平台 `clang`/`llc` 生成原生二进制；`.qlib` 库（gob）跨系统；线程运行时（`qthreads.c` 内嵌）POSIX/Windows 双载体。
 
@@ -83,6 +106,7 @@ cd compiler && go build -o qkc .
 
 - `main.go` + `internal/lang/` —— 解释器（lexer/parser/typecheck/eval/runtime/宏）
 - `compiler/` —— LLVM 编译器（`qkc` + `internal/cgen` IR 发射器 + 内嵌线程运行时）
+- `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查
 - `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）
 - `examples/` —— 示例
 

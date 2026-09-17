@@ -25,6 +25,7 @@ type Program struct {
 	Kind        string // "main"（默认）| "library"（program 宏）
 	kindSet     bool
 	Imports     []string
+	ImportPos   []Pos    // 与 Imports 一一对应：import 关键字位置（工具报错定位用）
 	Pub         []string // pub 宏：库中公开的符号名
 	Src         string   // 原始源码（库导出时按函数体行区间切片）
 }

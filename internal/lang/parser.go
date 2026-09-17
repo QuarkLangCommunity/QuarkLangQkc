@@ -425,6 +425,7 @@ func (p *parser) parseProgram() (*Program, error) {
 					continue
 				case "import":
 					// 预制宏：import path;（同目录默认在搜索范围）
+					kw := p.cur()
 					p.advance()
 					var path string
 					if p.cur().Kind == TStr {
@@ -441,6 +442,7 @@ func (p *parser) parseProgram() (*Program, error) {
 						return nil, err
 					}
 					prog.Imports = append(prog.Imports, path)
+					prog.ImportPos = append(prog.ImportPos, Pos{Line: kw.Line, Col: kw.Col})
 					continue
 				case "pub":
 					// 预制宏：pub 前缀，公开下一个顶层符号（fn / type struct / type interface）

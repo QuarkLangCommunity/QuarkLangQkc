@@ -80,3 +80,4 @@
 | P2 | `qkc file.qk` 输出 LLVM IR；`qkc -run file.qk` 编译执行（原生路径为正典） |
 | P3 | `qkm init/build/debug/install/update` 工程与依赖管理 |
 | P4 | 两条路径**语法与语义一致**（同一份源码到处可用） |
+| P5 | `qkcheck [-json] [-params] [-L dir] files...` 静态检查：未使用变量/形参、不可达代码、遮蔽、缺返回、接口未实现、void 值误用（码 QK101–QK107） |
