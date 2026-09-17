@@ -21,3 +21,4 @@ lang.test
 dist/
 dist-ci/
 .editors-tmp/
+*.test
