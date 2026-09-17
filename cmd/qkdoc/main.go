@@ -85,12 +85,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "qkdoc:", err)
 			return 2
 		}
-		prog, comments, err := lang.ParseSourceWithComments(string(data))
+		prog, comments, macros, err := lang.ParseSourceAll(string(data))
 		if err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", f, err)
 			return 1
 		}
-		doc := lang.BuildDoc(prog, comments)
+		doc := lang.BuildDocWithMacros(prog, comments, macros)
 		doc.Path = f
 		t := title
 		if t == "" || len(files) > 1 {

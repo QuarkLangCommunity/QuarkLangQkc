@@ -19,6 +19,7 @@ const (
 	DocImpl      = "impl"
 	DocSpace     = "space"
 	DocLibrary   = "library"
+	DocMacro     = "macro"
 )
 
 // DocField 是结构体字段 / 接口方法 / 实现方法 / 库符号。
@@ -51,6 +52,7 @@ type Doc struct {
 	Types     []*DocItem // struct / interface / alias
 	Impls     []*DocItem // impl / space
 	Libraries []*DocItem
+	Macros    []*DocItem // #macro 命名参数宏（token 级展开，不在 AST）
 }
 
 // All 按源码顺序返回全部条目（用于概览表）。
@@ -59,6 +61,7 @@ func (d *Doc) All() []*DocItem {
 	out = append(out, d.Types...)
 	out = append(out, d.Impls...)
 	out = append(out, d.Libraries...)
+	out = append(out, d.Macros...)
 	out = append(out, d.Funcs...)
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Pos.Line != out[j].Pos.Line {
@@ -79,8 +82,13 @@ func (d *Doc) HasPub() bool {
 	return false
 }
 
-// BuildDoc 由单文件 AST 与注释构建文档模型。prog.Src 用于判定「行尾注释」。
+// BuildDoc 由单文件 AST 与注释构建文档模型（不含宏定义，见 BuildDocWithMacros）。
 func BuildDoc(prog *Program, comments []Comment) *Doc {
+	return BuildDocWithMacros(prog, comments, nil)
+}
+
+// BuildDocWithMacros 同上，另收录宏定义（#macro 在解析前被切出，需显式传入）。
+func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *Doc {
 	d := &Doc{Kind: prog.Kind, Imports: append([]string{}, prog.Imports...)}
 	if d.Kind == "" {
 		d.Kind = "main"
@@ -179,6 +187,15 @@ func BuildDoc(prog *Program, comments []Comment) *Doc {
 			it.Fields = append(it.Fields, DocField{Name: m.Name, Signature: libFuncSignature(m), Pos: m.Pos, Doc: docs.docFor(m.Pos.Line)})
 		}
 		d.Libraries = append(d.Libraries, it)
+	}
+	// 宏（命名参数宏）
+	for _, m := range macros {
+		noteDecl(m.Pos)
+		sig := "#macro " + m.Name + " (" + strings.Join(m.Params, ", ") + ")"
+		d.Macros = append(d.Macros, &DocItem{
+			Kind: DocMacro, Name: m.Name, Pos: m.Pos,
+			Signature: sig, Doc: docs.docFor(m.Pos.Line),
+		})
 	}
 	// 顶层函数
 	for _, fn := range prog.Funcs {

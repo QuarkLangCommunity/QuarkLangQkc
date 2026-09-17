@@ -24,8 +24,8 @@ func (d *Doc) visible(it *DocItem, opts DocOptions) bool {
 		return true
 	}
 	switch it.Kind {
-	case DocImpl, DocSpace, DocLibrary:
-		return true
+	case DocImpl, DocSpace, DocLibrary, DocMacro:
+		return true // 语言里 pub 不能前缀它们；宏/空间/实现正是库对外 API 的载体
 	}
 	return it.Pub
 }
@@ -59,6 +59,8 @@ func kindLabel(kind string) string {
 		return "空间"
 	case DocLibrary:
 		return "系统库"
+	case DocMacro:
+		return "宏"
 	}
 	return kind
 }
@@ -109,6 +111,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		{"类型", d.Types},
 		{"实现", impls},
 		{"空间", spaces},
+		{"宏", d.Macros},
 		{"系统库", d.Libraries},
 	}
 	for _, sec := range sections {

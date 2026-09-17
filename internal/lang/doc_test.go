@@ -266,3 +266,49 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 		t.Errorf("angle 无注释，不应继承上一行行尾注释，got %q", st.Fields[1].Doc)
 	}
 }
+
+// 宏定义在解析前被切出 AST，文档模型需显式收录（BuildDocWithMacros）。
+func TestDocMacros(t *testing.T) {
+	src := `/* 工具宏库。 */
+program library;
+
+// 翻倍宏。
+#macro twice (a) {
+    #return a + a
+}
+
+// 正常函数。
+pub fn dbl(int n) int {
+    return n * 2;
+}
+`
+	prog, comments, macros, err := ParseSourceAll(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(macros) != 1 || macros[0].Name != "twice" {
+		t.Fatalf("宏定义提取不对: %+v", macros)
+	}
+	d := BuildDocWithMacros(prog, comments, macros)
+	if len(d.Macros) != 1 {
+		t.Fatalf("文档模型应含 1 个宏，got %d", len(d.Macros))
+	}
+	m := d.Macros[0]
+	if m.Signature != "#macro twice (a)" {
+		t.Errorf("宏签名不对: %q", m.Signature)
+	}
+	if !strings.Contains(m.Doc, "翻倍宏") {
+		t.Errorf("宏文档注释不对: %q", m.Doc)
+	}
+	md := d.Markdown(DocOptions{})
+	if !strings.Contains(md, "## 宏") || !strings.Contains(md, "#macro twice (a)") {
+		t.Errorf("Markdown 应含宏章节:\n%s", md)
+	}
+	if !strings.Contains(md, "| 宏 | `twice` |") {
+		t.Errorf("概览表应含宏条目:\n%s", md)
+	}
+	// 无宏时应正常（nil 安全）
+	if got := BuildDocWithMacros(prog, comments, nil); len(got.Macros) != 0 {
+		t.Error("macros 为 nil 时不应产生宏条目")
+	}
+}

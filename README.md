@@ -82,8 +82,9 @@ go build -o qkdoc ./cmd/qkdoc
 
 - 文档注释：声明**上方紧邻**的 `//` 或 `/* */` 注释块（godoc 规则）；无上方注释时取**同行行尾**注释
   （`int x; // 横坐标`）；文件头注释作为文件说明。
-- 默认只导出 `pub` 符号；文件没有 `pub`（如 `program main`）时导出全部；`impl`/`space`/`library`
-  不受 `pub` 过滤（语言中 `pub` 不能前缀它们，而它们正是库对外 API 的载体）。
+- 默认只导出 `pub` 符号；文件没有 `pub`（如 `program main`）时导出全部；`impl`/`space`/`library`/`#macro`
+  不受 `pub` 过滤（语言中 `pub` 不能前缀它们，而它们正是库对外 API 的载体；宏定义在解析前被切出 AST，由
+  `ParseSourceAll` 显式提供）。
 - 实测：`style.qk`（1567 行）→ 8ms 生成 335 行 Markdown（概览表 + 函数/类型/实现/空间分节）。
 
 ### 交互式求值 qkrepl（`cmd/qkrepl`）
