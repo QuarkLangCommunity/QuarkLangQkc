@@ -149,12 +149,39 @@ func srcHash(path string) (string, error) {
 func main() {
 	args := os.Args[1:]
 	run := false
-	if len(args) > 0 && args[0] == "-run" {
-		run = true
-		args = args[1:]
+	compileOnly := false
+	outPath := ""
+	for len(args) > 0 {
+		a := args[0]
+		switch a {
+		case "-run":
+			run = true
+			args = args[1:]
+		case "-c":
+			compileOnly = true
+			args = args[1:]
+		case "--emit-ir":
+			args = args[1:] // 默认行为，显式写法
+		case "--version", "-V":
+			fmt.Println("qkc " + engineVersion)
+			return
+		case "-h", "--help":
+			qkcUsage()
+			return
+		case "-o":
+			if len(args) < 2 {
+				qkcUsage()
+				os.Exit(2)
+			}
+			outPath = args[1]
+			args = args[2:]
+		default:
+			goto parsed
+		}
 	}
+parsed:
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: qkc [-run] <file.qk>   # 输出 LLVM IR；-run 编译并执行")
+		qkcUsage()
 		os.Exit(2)
 	}
 	hash, err := srcHash(args[0])
@@ -174,9 +201,23 @@ func main() {
 	binPath := filepath.Join(cacheDir(), binKey+".bin")
 
 	// -run：二进制缓存命中 → 直接执行（跳过全编译 + clang）
-	if run {
+	if run || compileOnly {
 		if _, err := os.Stat(binPath); err == nil {
-			out, err := exec.Command(binPath).CombinedOutput()
+			execPath := binPath
+			if outPath != "" {
+				if b, rerr := os.ReadFile(binPath); rerr == nil {
+					if werr := os.WriteFile(outPath, b, 0o755); werr != nil {
+						fmt.Fprintln(os.Stderr, "error:", werr)
+						os.Exit(1)
+					}
+				}
+				execPath = outPath
+			}
+			if compileOnly {
+				fmt.Fprintln(os.Stderr, "qkc: 已构建 "+execPath)
+				return
+			}
+			out, err := exec.Command(execPath).CombinedOutput()
 			fmt.Print(string(out))
 			if err != nil {
 				os.Exit(1)
@@ -211,7 +252,14 @@ func main() {
 		}
 	}
 
-	if !run {
+	if !run && !compileOnly {
+		if outPath != "" {
+			if err := os.WriteFile(outPath, []byte(ir), 0o644); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			return
+		}
 		fmt.Print(ir)
 		return
 	}
@@ -266,9 +314,38 @@ func main() {
 		fmt.Fprintln(os.Stderr, "clang:", lastOut)
 		os.Exit(1)
 	}
-	out, err := exec.Command(binPath).CombinedOutput()
+	execPath := binPath
+	if outPath != "" {
+		if b, rerr := os.ReadFile(binPath); rerr == nil {
+			if werr := os.WriteFile(outPath, b, 0o755); werr != nil {
+				fmt.Fprintln(os.Stderr, "error:", werr)
+				os.Exit(1)
+			}
+			execPath = outPath
+		}
+	}
+	if compileOnly {
+		fmt.Fprintln(os.Stderr, "qkc: 已构建 "+execPath)
+		return
+	}
+	out, err := exec.Command(execPath).CombinedOutput()
 	fmt.Print(string(out))
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+// qkcUsage 打印命令行用法。
+func qkcUsage() {
+	fmt.Fprintln(os.Stderr, `usage: qkc [options] <file.qk>
+
+  （默认）            输出 LLVM IR 到 stdout
+  --emit-ir           同上（显式）
+  -run                编译为原生二进制并执行
+  -c                  只编译为原生二进制（不执行）
+  -o <path>           输出路径：配合 -c/-run 为二进制，否则为 IR 文件
+  --version, -V       打印版本与引擎代次
+  -h, --help          本帮助
+
+环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 "-O3 -flto=thin"）`)
 }

@@ -1,0 +1,24 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      - name: 构建与测试（解释器）
+        run: |
+          go build ./...
+          go test ./... -count=1
+      - name: 构建与测试（编译器 qkc）
+        working-directory: compiler
+        run: |
+          go build -o /tmp/qkc .
+          go test ./... -count=1
+      - name: 双路径对比（解释器 vs qkc）
+        run: |
+          go build -o /tmp/quark main.go
+          cd compiler && ./testdata/compare.sh
