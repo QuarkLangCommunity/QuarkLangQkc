@@ -51,6 +51,10 @@ jobs:
             ls "$out/$t"-0.0.0-ci-linux-amd64 >/dev/null || { echo "缺少产物: $t"; exit 1; }
           done
           ls -la "$out"
+      - name: 库级基准冒烟（编译 + 跑一次，防基准腐化）
+        run: go test ./internal/lang/ ./cmd/qkcheck ./cmd/qkdoc ./cmd/qklsp -run XXX -bench . -benchtime 1x -count=1
+      - name: 工具链基准冒烟
+        run: ./scripts/bench-tools.sh 3
       - name: 变更日志生成冒烟
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
       - uses: actions/upload-artifact@v4

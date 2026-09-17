@@ -1,0 +1,1744 @@
+/* QuarkLang 通用样式库：style —— QSS 值解析 + 级联求值 + 盒模型 + 动画（纯 qk、零依赖、零 FFI）
+ *
+ * 定位：样式/动画是与 GUI 后端无关的通用能力，本库不依赖任何渲染实现、不引用任何 native 符号、
+ *       不读写文件、不使用模块级全局；全部状态放在实例（HashTable / Theme / Animator）内。
+ *
+ * 组成：
+ *   space qss    —— 纯计算：长度 1..4 值、颜色（#rgb/#rrggbb/#aarrggbb/rgb()/rgba()/具名）、渐变、
+ *                   transform、缓动（含 cubic-bezier 二分）、transition/animation 简写拆解、
+ *                   关键帧与选择器块 JSON 文本解析、插值
+ *   space style  —— 级联求值（默认层 < 全局层 < 祖先层 < 自身 < 选择器块 < 状态后缀 < 动画覆盖）、
+ *                   盒模型 contentRect/borderRect、状态位、选择器特异性、主题层写入
+ *   type Theme   —— 实例化主题对象（全局层；由调用方持有并 apply 到节点，替代旧的进程级 JSON 文件方案）
+ *   type Animator—— 关键帧 + transition 补间（状态全部在实例内）
+ *
+ * 节点契约：interface StyleNode（getStyle/setStyle/getX/getY/getW/getH）。
+ * 结构化满足即可传入：任何实现这 6 个方法的 struct 都能直接用于 space style。
+ * 注意：QuarkLang 的接口→接口赋值按名字严格判定，若调用方持有的是另一个接口类型（如 cleg 的 StyleNode），
+ *       经 interface{} 中转即可（见 README「节点桥接」）。
+ *
+ * 规范：STYLE-SPEC.md（本库与 cleg 共用同一份契约）。
+ */
+program library;
+
+// ---------- 值类型（渐变 / 变换 / 矩形） ----------
+type struct {
+    int kind;      // 0=无 1=linear 2=radial
+    int angle;
+    int c1;
+    int p1;
+    int c2;
+    int p2;
+    int cx;
+    int cy;
+    int r;
+} StyleGradient;
+
+type struct {
+    int hasT;
+    int dx;
+    int dy;
+    int hasS;
+    int sxn;
+    int sxd;
+    int syn;
+    int syd;
+    int hasR;
+    int rot;
+} StyleTransform;
+
+type struct {
+    int x;
+    int y;
+    int w;
+    int h;
+} Rect;
+
+// ---------- 节点契约（结构化满足；无 FFI、无渲染职责） ----------
+type interface {
+    fn getStyle(Self self) HashTable<String, String>;
+    fn setStyle(Self self, String jsonText) void;
+    fn getX(Self self) int;
+    fn getY(Self self) int;
+    fn getW(Self self) int;
+    fn getH(Self self) int;
+} StyleNode;
+
+// ---------- Theme：实例化主题对象（全局层；由调用方持有，替代旧的进程级 JSON 文件方案） ----------
+type struct {
+    HashTable<String, String> vars;   // 全局键 → 值
+    int rev;                          // 版本号：apply 时用于幂等刷新
+} Theme;
+
+space {
+
+    fn st(HashTable<String, String> style, String key, String fallback) String {
+        if (style.contains(key)) { return style.get(key); }
+        if (key == "background-color" && style.contains("bg")) { return style.get("bg"); }
+        if (key == "font-size" && style.contains("size")) { return style.get("size"); }
+        if (key == "font-family" && style.contains("font")) { return style.get("font"); }
+        return fallback;
+    }
+    fn num(HashTable<String, String> style, String key, int fb) int {
+        if (style.contains(key)) { return qss::len(style.get(key), fb); }
+        if (key == "font-size" && style.contains("size")) { return qss::len(style.get("size"), fb); }
+        return fb;
+    }
+    fn cr(HashTable<String, String> style, String key, int idx, int fb) int {
+        String v = qss::st(style, key, "");
+        if (v == "") { return fb; }
+        List<String> parts = v.split(",");
+        if (parts.size() > idx) { return parts[idx].toInt(); }
+        return fb;
+    }
+
+    // ---------- v2：数值 / 长度（1..4 值简写：上右下左） ----------
+    fn isDigit(String c) bool { return "0123456789".indexOf(c) >= 0; }
+    fn digitVal(String c) int { int v = "0123456789".indexOf(c); if (v < 0) { return 0; } return v; }
+    // 手写十进制浮点解析（避免 String.toFloat 的静态类型缺陷，纯 qk 无 FFI）
+    fn fnum(String s, float fb) float {
+        String t = s.trim();
+        if (t == "") { return fb; }
+        int i = 0;
+        float sign = 1.0;
+        if (t.charAt(0) == "-") { sign = -1.0; i = 1; }
+        else if (t.charAt(0) == "+") { i = 1; }
+        float intPart = 0.0;
+        int digits = 0;
+        while (i < t.size() && qss::isDigit(t.charAt(i))) {
+            intPart = intPart * 10.0 + qss::digitVal(t.charAt(i));
+            i = i + 1;
+            digits = digits + 1;
+        }
+        float frac = 0.0;
+        float scale = 1.0;
+        if (i < t.size() && t.charAt(i) == ".") {
+            i = i + 1;
+            while (i < t.size() && qss::isDigit(t.charAt(i))) {
+                frac = frac * 10.0 + qss::digitVal(t.charAt(i));
+                scale = scale * 10.0;
+                i = i + 1;
+                digits = digits + 1;
+            }
+        }
+        if (digits == 0) { return fb; }
+        return sign * (intPart + frac / scale);
+    }
+    fn fint(float f) int {
+        String s = f.toString();
+        int dot = s.indexOf(".");
+        String ip = s;
+        if (dot >= 0) { ip = s.substring(0, dot); }
+        if (ip == "" || ip == "-" || ip == "+") { return 0; }
+        return ip.toInt();
+    }
+    fn frac(float f) float { return f - qss::fint(f); }
+    fn len(String v, int fb) int {
+        String s = v.trim();
+        if (s == "") { return fb; }
+        String acc = "";
+        int i = 0;
+        while (i < s.size()) {
+            String c = s.charAt(i);
+            if ("0123456789+-.".indexOf(c) >= 0) { acc = acc + c; i = i + 1; } else { break; }
+        }
+        if (acc == "" || acc == "-" || acc == "+" || acc == ".") { return fb; }
+        return qss::fint(qss::fnum(acc, 0.0));
+    }
+    fn stripUnit(String v) String {
+        String s = v.trim().toLower();
+        if (s.endsWith("px")) { return s.substring(0, s.size() - 2).trim(); }
+        if (s.endsWith("ms")) { return s.substring(0, s.size() - 2).trim(); }
+        if (s.endsWith("deg")) { return s.substring(0, s.size() - 3).trim(); }
+        if (s.endsWith("pt")) { return s.substring(0, s.size() - 2).trim(); }
+        if (s.endsWith("%")) { return s.substring(0, s.size() - 1).trim(); }
+        if (s.endsWith("s")) { return s.substring(0, s.size() - 1).trim(); }
+        return s.trim();
+    }
+    fn box4(String v) List<int> {
+        List<String> parts = qss::splitAny(v);
+        List<int> out = List::new();
+        int a = 0;
+        int b = 0;
+        int c = 0;
+        if (parts.size() == 0) { out.append(0); out.append(0); out.append(0); out.append(0); return out; }
+        if (parts.size() == 1) { a = qss::len(parts[0], 0); out.append(a); out.append(a); out.append(a); out.append(a); return out; }
+        if (parts.size() == 2) { a = qss::len(parts[0], 0); b = qss::len(parts[1], 0); out.append(a); out.append(b); out.append(a); out.append(b); return out; }
+        if (parts.size() == 3) { a = qss::len(parts[0], 0); b = qss::len(parts[1], 0); c = qss::len(parts[2], 0); out.append(a); out.append(b); out.append(c); out.append(b); return out; }
+        out.append(qss::len(parts[0], 0)); out.append(qss::len(parts[1], 0)); out.append(qss::len(parts[2], 0)); out.append(qss::len(parts[3], 0));
+        return out;
+    }
+    fn splitAny(String v) List<String> {
+        String s = v.trim();
+        List<String> out = List::new();
+        if (s == "") { return out; }
+        if (s.indexOf(",") >= 0) {
+            List<String> raw = s.split(",");
+            int i = 0;
+            while (i < raw.size()) { String t = raw[i].trim(); if (t != "") { out.append(t); } i = i + 1; }
+            return out;
+        }
+        List<String> raw2 = s.split(" ");
+        int j = 0;
+        while (j < raw2.size()) { String t2 = raw2[j].trim(); if (t2 != "") { out.append(t2); } j = j + 1; }
+        return out;
+    }
+    // 时间：200ms / 0.3s / 200 → 毫秒
+    fn time(String v) int {
+        String s = v.trim().toLower();
+        if (s == "") { return 0; }
+        if (s.endsWith("ms")) { return qss::fint(qss::fnum(s.substring(0, s.size() - 2), 0.0)); }
+        if (s.endsWith("s")) { return qss::fint(qss::fnum(s.substring(0, s.size() - 1), 0.0) * 1000.0); }
+        return qss::fint(qss::fnum(s, 0.0));
+    }
+    // 字号：px / pt（96dpi 折算）
+    fn fontSize(String v) int {
+        String s = v.trim().toLower();
+        if (s.endsWith("pt")) { return qss::fint(qss::fnum(s.substring(0, s.size() - 2), 9.0) * 4.0 / 3.0 + 0.5); }
+        return qss::len(s, 9);
+    }
+    // 行高：长度 → px；无单位倍数（<5 或含小数点）→ size × 倍数
+    fn lineHeightPx(String v, int size) int {
+        String s = v.trim().toLower();
+        if (s == "" || s == "normal") { return qss::fint(size * 1.4 + 0.5); }
+        if (s.endsWith("px")) { return qss::len(s, size); }
+        if (s.endsWith("%")) { return qss::fint(size * qss::fnum(s.substring(0, s.size() - 1), 100.0) / 100.0 + 0.5); }
+        if (s.indexOf(".") >= 0) { return qss::fint(size * qss::fnum(s, 1.4) + 0.5); }
+        return qss::len(s, qss::fint(size * 1.4 + 0.5));
+    }
+
+    // ---------- v2：颜色 ----------
+    fn clamp255(int v) int {
+        int x = v;
+        if (x < 0) { x = 0; }
+        if (x > 255) { x = 255; }
+        return x;
+    }
+    // int32 环绕下等价于 (a<<24)|(r<<16)|(g<<8)|b；qk 无位运算符，用乘加实现
+    fn mkColor(int r, int g, int b, int a) int {
+        return qss::clamp255(a) * 16777216 + qss::clamp255(r) * 65536 + qss::clamp255(g) * 256 + qss::clamp255(b);
+    }
+    fn mod256(int v) int {
+        int m = v % 256;
+        if (m < 0) { m = m + 256; }
+        return m;
+    }
+    fn cB(int c) int { return qss::mod256(c); }
+    fn cG(int c) int { int t = (c - qss::mod256(c)) / 256; return qss::mod256(t); }
+    fn cR(int c) int { int t = (c - qss::mod256(c)) / 256; int t2 = (t - qss::mod256(t)) / 256; return qss::mod256(t2); }
+    fn cA(int c) int { int t = (c - qss::mod256(c)) / 256; int t2 = (t - qss::mod256(t)) / 256; int t3 = (t2 - qss::mod256(t2)) / 256; return qss::mod256(t3); }
+    fn argbStr(int c) String {
+        return qss::cR(c).toString() + "," + qss::cG(c).toString() + "," + qss::cB(c).toString();
+    }
+    fn argbStrA(int c) String {
+        if (qss::cA(c) >= 255) { return qss::argbStr(c); }
+        return qss::argbStr(c) + "," + qss::cA(c).toString();
+    }
+    fn alphaOf(String v) int {
+        String s = v.trim();
+        if (s == "") { return 255; }
+        if (s == "0") { return 0; }
+        if (s == "1") { return 255; }
+        if (s.indexOf(".") >= 0) { return qss::fint(qss::fnum(s, 1.0) * 255.0 + 0.5); }
+        int i = qss::len(s, 255);
+        if (i < 0) { return 0; }
+        if (i > 255) { return 255; }
+        return i;
+    }
+    fn hex1(String c) int {
+        String h = "0123456789abcdef";
+        int v = h.indexOf(c.toLower());
+        if (v < 0) { return 0; }
+        return v;
+    }
+    fn hexColor(String s) int {
+        String h = s.substring(1).trim();
+        if (h.size() == 3) {
+            return qss::mkColor(qss::hex1(h.charAt(0)) * 17, qss::hex1(h.charAt(1)) * 17, qss::hex1(h.charAt(2)) * 17, 255);
+        }
+        if (h.size() == 4) {
+            return qss::mkColor(qss::hex1(h.charAt(1)) * 17, qss::hex1(h.charAt(2)) * 17, qss::hex1(h.charAt(3)) * 17, qss::hex1(h.charAt(0)) * 17);
+        }
+        if (h.size() == 6) {
+            return qss::mkColor(qss::hex1(h.charAt(0)) * 16 + qss::hex1(h.charAt(1)), qss::hex1(h.charAt(2)) * 16 + qss::hex1(h.charAt(3)), qss::hex1(h.charAt(4)) * 16 + qss::hex1(h.charAt(5)), 255);
+        }
+        if (h.size() == 8) {
+            return qss::mkColor(qss::hex1(h.charAt(2)) * 16 + qss::hex1(h.charAt(3)), qss::hex1(h.charAt(4)) * 16 + qss::hex1(h.charAt(5)), qss::hex1(h.charAt(6)) * 16 + qss::hex1(h.charAt(7)), qss::hex1(h.charAt(0)) * 16 + qss::hex1(h.charAt(1)));
+        }
+        return qss::mkColor(0, 0, 0, 255);
+    }
+    fn fnColor(String s) int {
+        int op = s.indexOf("(");
+        int cp = s.indexOf(")");
+        if (op < 0 || cp <= op) { return qss::mkColor(0, 0, 0, 255); }
+        List<String> p = s.substring(op + 1, cp).split(",");
+        if (p.size() < 3) { return qss::mkColor(0, 0, 0, 255); }
+        int a = 255;
+        if (p.size() >= 4) { a = qss::alphaOf(p[3]); }
+        return qss::mkColor(qss::len(p[0], 0), qss::len(p[1], 0), qss::len(p[2], 0), a);
+    }
+    fn named(String s) int {
+        if (s == "transparent") { return qss::mkColor(0, 0, 0, 0); }
+        if (s == "black") { return qss::mkColor(0, 0, 0, 255); }
+        if (s == "white") { return qss::mkColor(255, 255, 255, 255); }
+        if (s == "red") { return qss::mkColor(255, 0, 0, 255); }
+        if (s == "green") { return qss::mkColor(0, 128, 0, 255); }
+        if (s == "lime") { return qss::mkColor(0, 255, 0, 255); }
+        if (s == "blue") { return qss::mkColor(0, 0, 255, 255); }
+        if (s == "yellow") { return qss::mkColor(255, 255, 0, 255); }
+        if (s == "orange") { return qss::mkColor(255, 165, 0, 255); }
+        if (s == "gray" || s == "grey") { return qss::mkColor(128, 128, 128, 255); }
+        if (s == "darkgray" || s == "darkgrey") { return qss::mkColor(64, 64, 64, 255); }
+        if (s == "lightgray" || s == "lightgrey") { return qss::mkColor(211, 211, 211, 255); }
+        if (s == "silver") { return qss::mkColor(192, 192, 192, 255); }
+        if (s == "cyan" || s == "aqua") { return qss::mkColor(0, 255, 255, 255); }
+        if (s == "magenta" || s == "fuchsia") { return qss::mkColor(255, 0, 255, 255); }
+        if (s == "purple") { return qss::mkColor(128, 0, 128, 255); }
+        if (s == "pink") { return qss::mkColor(255, 192, 203, 255); }
+        if (s == "brown") { return qss::mkColor(165, 42, 42, 255); }
+        if (s == "navy") { return qss::mkColor(0, 0, 128, 255); }
+        if (s == "teal") { return qss::mkColor(0, 128, 128, 255); }
+        if (s == "olive") { return qss::mkColor(128, 128, 0, 255); }
+        if (s == "maroon") { return qss::mkColor(128, 0, 0, 255); }
+        if (s == "gold") { return qss::mkColor(255, 215, 0, 255); }
+        if (s == "skyblue") { return qss::mkColor(135, 206, 235, 255); }
+        if (s == "steelblue") { return qss::mkColor(70, 130, 180, 255); }
+        if (s == "tomato") { return qss::mkColor(255, 99, 71, 255); }
+        if (s == "crimson") { return qss::mkColor(220, 20, 60, 255); }
+        if (s == "indigo") { return qss::mkColor(75, 0, 130, 255); }
+        if (s == "violet") { return qss::mkColor(238, 130, 238, 255); }
+        if (s == "beige") { return qss::mkColor(245, 245, 220, 255); }
+        if (s == "ivory") { return qss::mkColor(255, 255, 240, 255); }
+        if (s == "khaki") { return qss::mkColor(240, 230, 140, 255); }
+        if (s == "salmon") { return qss::mkColor(250, 128, 114, 255); }
+        if (s == "coral") { return qss::mkColor(255, 127, 80, 255); }
+        if (s == "turquoise") { return qss::mkColor(64, 224, 208, 255); }
+        if (s == "plum") { return qss::mkColor(221, 160, 221, 255); }
+        if (s == "orchid") { return qss::mkColor(218, 112, 214, 255); }
+        return qss::mkColor(0, 0, 0, 255);
+    }
+    fn color(String v) int {
+        String s = v.trim();
+        if (s == "") { return 0; }
+        if (s.startsWith("#")) { return qss::hexColor(s); }
+        String low = s.toLower();
+        if (low.startsWith("rgb(") || low.startsWith("rgba(")) { return qss::fnColor(low); }
+        if (s.indexOf(",") >= 0) {
+            List<String> p = s.split(",");
+            if (p.size() >= 3) {
+                int a = 255;
+                if (p.size() >= 4) { a = qss::alphaOf(p[3]); }
+                return qss::mkColor(qss::len(p[0], 0), qss::len(p[1], 0), qss::len(p[2], 0), a);
+            }
+        }
+        return qss::named(low);
+    }
+    fn isColorStr(String v) bool {
+        String s = v.trim();
+        if (s == "") { return false; }
+        if (s.startsWith("#")) { return true; }
+        String low = s.toLower();
+        if (low.startsWith("rgb(") || low.startsWith("rgba(")) { return true; }
+        if (s.indexOf(",") >= 0) {
+            List<String> p = s.split(",");
+            if (p.size() < 3 || p.size() > 4) { return false; }
+            int i = 0;
+            while (i < p.size()) { if (!qss::isNum(p[i])) { return false; } i = i + 1; }
+            return true;
+        }
+        return qss::named(low) != 0 || low == "black" || low == "transparent";
+    }
+    fn isNum(String v) bool {
+        String s = qss::stripUnit(v);
+        if (s == "") { return false; }
+        int i = 0;
+        while (i < s.size()) {
+            String c = s.charAt(i);
+            if ("0123456789+-.".indexOf(c) < 0) { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+    fn mixColor(int c1, int c2, float p) int {
+        float f = p / 100.0;
+        int r = qss::fint(qss::cR(c1) + (qss::cR(c2) - qss::cR(c1)) * f + 0.5);
+        int g = qss::fint(qss::cG(c1) + (qss::cG(c2) - qss::cG(c1)) * f + 0.5);
+        int b = qss::fint(qss::cB(c1) + (qss::cB(c2) - qss::cB(c1)) * f + 0.5);
+        int a = qss::fint(qss::cA(c1) + (qss::cA(c2) - qss::cA(c1)) * f + 0.5);
+        return qss::mkColor(r, g, b, a);
+    }
+    // 与背景按 alpha 混合（旧 native 无 alpha 通道时的近似）
+    fn overColor(int fg, int bg, int alpha) int {
+        if (alpha >= 255) { return fg; }
+        if (alpha <= 0) { return bg; }
+        return qss::mixColor(bg, fg, alpha * 100.0 / 255.0);
+    }
+    // 简单色名映射（供 named 未覆盖时探测）
+    fn looksNamed(String v) bool {
+        String s = v.trim().toLower();
+        int i = 0;
+        while (i < s.size()) {
+            String c = s.charAt(i);
+            if (c.toLower() == c.toUpper()) { return false; }
+            i = i + 1;
+        }
+        return s != "";
+    }
+    // ---------- v2：渐变 ----------
+    fn gradAngle(String v) int {
+        String s = v.trim().toLower();
+        if (s == "") { return 180; }
+        if (s == "to right") { return 90; }
+        if (s == "to left") { return 270; }
+        if (s == "to top") { return 0; }
+        if (s == "to bottom") { return 180; }
+        return qss::len(s, 180);
+    }
+    fn pct(String v, int fb) int {
+        String s = v.trim();
+        if (s == "") { return fb; }
+        return qss::len(s, fb);
+    }
+    fn gradient(String v) StyleGradient {
+        StyleGradient g;
+        g.kind = 0; g.angle = 180; g.c1 = 0; g.p1 = 0; g.c2 = 0; g.p2 = 100;
+        g.cx = 50; g.cy = 50; g.r = 50;
+        String s = v.trim();
+        String low = s.toLower();
+        if (low.startsWith("linear(")) {
+            List<String> ps = qss::splitTop(qss::parenArg(s, 7));
+            if (ps.size() >= 3) {
+                g.kind = 1;
+                g.angle = qss::gradAngle(ps[0]);
+                g.c1 = qss::color(ps[1]);
+                if (ps.size() >= 5) { g.p1 = qss::pct(ps[2], 0); g.c2 = qss::color(ps[3]); g.p2 = qss::pct(ps[4], 100); }
+                else { g.c2 = qss::color(ps[2]); }
+            }
+        } else if (low.startsWith("radial(")) {
+            List<String> ps2 = qss::splitTop(qss::parenArg(s, 7));
+            if (ps2.size() >= 5) {
+                g.kind = 2;
+                g.cx = qss::len(ps2[0], 50); g.cy = qss::len(ps2[1], 50); g.r = qss::len(ps2[2], 50);
+                g.c1 = qss::color(ps2[3]); g.c2 = qss::color(ps2[4]);
+            }
+        }
+        return g;
+    }
+    fn hasGradient(StyleGradient g) bool { return g.kind != 0; }
+    // §9.1：dir 0/1/2/3 = 左→右/上→下/右→左/下→上；其它值按角度
+    fn gradDir(int angle) int {
+        if (angle == 0) { return 0; }
+        if (angle == 90) { return 1; }
+        if (angle == 180) { return 2; }
+        if (angle == 270) { return 3; }
+        return angle;
+    }
+
+    // ---------- v2：transform ----------
+    fn parenArg(String s, int startIdx) String {
+        int i = startIdx;
+        String out = "";
+        while (i < s.size()) {
+            String c = s.charAt(i);
+            if (c == ")") { return out; }
+            out = out + c;
+            i = i + 1;
+        }
+        return out;
+    }
+    fn scaleVal(String v) int {
+        String s = qss::stripUnit(v);
+        float f = qss::fnum(s, 1.0);
+        return qss::fint(f * 1000.0 + 0.5);
+    }
+    fn scaleStr(int num, int den) String {
+        int d = den;
+        if (d <= 0) { d = 1000; }
+        float f = num * 1.0 / d;
+        return f.toString();
+    }
+    fn transform(String v) StyleTransform {
+        StyleTransform t;
+        t.hasT = 0; t.dx = 0; t.dy = 0;
+        t.hasS = 0; t.sxn = 1000; t.sxd = 1000; t.syn = 1000; t.syd = 1000;
+        t.hasR = 0; t.rot = 0;
+        String s = v.trim();
+        if (s == "" || s == "none") { return t; }
+        int p = s.indexOf("translate(");
+        if (p >= 0) {
+            List<String> ps = qss::splitTop(qss::parenArg(s, p + 10));
+            if (ps.size() >= 1) {
+                t.hasT = 1;
+                t.dx = qss::len(ps[0], 0);
+                if (ps.size() >= 2) { t.dy = qss::len(ps[1], 0); }
+            }
+        }
+        p = s.indexOf("scale(");
+        if (p >= 0) {
+            List<String> ps2 = qss::splitTop(qss::parenArg(s, p + 6));
+            if (ps2.size() >= 1) {
+                t.hasS = 1;
+                t.sxn = qss::scaleVal(ps2[0]);
+                t.sxd = 1000;
+                if (ps2.size() >= 2) { t.syn = qss::scaleVal(ps2[1]); t.syd = 1000; } else { t.syn = t.sxn; t.syd = t.sxd; }
+            }
+        }
+        p = s.indexOf("rotate(");
+        if (p >= 0) {
+            t.hasR = 1;
+            t.rot = qss::len(qss::parenArg(s, p + 7), 0);
+        }
+        return t;
+    }
+    fn hasTransform(StyleTransform t) bool { return t.hasT != 0 || t.hasS != 0 || t.hasR != 0; }
+    fn transformStr(int hasT, int dx, int dy, int hasS, int sxn, int sxd, int syn, int syd, int hasR, int rot) String {
+        String out = "";
+        if (hasT != 0) { out = "translate(" + dx.toString() + "," + dy.toString() + ")"; }
+        if (hasS != 0) {
+            if (out != "") { out = out + " "; }
+            out = out + "scale(" + qss::scaleStr(sxn, sxd) + "," + qss::scaleStr(syn, syd) + ")";
+        }
+        if (hasR != 0) {
+            if (out != "") { out = out + " "; }
+            out = out + "rotate(" + rot.toString() + ")";
+        }
+        return out;
+    }
+
+    // ---------- v2：缓动 ----------
+    fn bez(float a, float b, float u) float {
+        float mu = 1.0 - u;
+        return 3.0 * mu * mu * u * a + 3.0 * mu * u * u * b + u * u * u;
+    }
+    fn bezier(float x1, float y1, float x2, float y2, float x) float {
+        if (x <= 0.0) { return 0.0; }
+        if (x >= 1.0) { return 1.0; }
+        float lo = 0.0;
+        float hi = 1.0;
+        float u = x;
+        int i = 0;
+        while (i < 30) {
+            float cx = qss::bez(x1, x2, u);
+            if (cx < x) { lo = u; } else { hi = u; }
+            u = (lo + hi) / 2.0;
+            i = i + 1;
+        }
+        return qss::bez(y1, y2, u);
+    }
+    fn ease(String name, float t) float {
+        float p = t;
+        if (p < 0.0) { p = 0.0; }
+        if (p > 1.0) { p = 1.0; }
+        String n = name.trim().toLower();
+        if (n == "" || n == "linear") { return p; }
+        if (n == "ease") { return qss::bezier(0.25, 0.1, 0.25, 1.0, p); }
+        if (n == "ease-in") { return qss::bezier(0.42, 0.0, 1.0, 1.0, p); }
+        if (n == "ease-out") { return qss::bezier(0.0, 0.0, 0.58, 1.0, p); }
+        if (n == "ease-in-out") { return qss::bezier(0.42, 0.0, 0.58, 1.0, p); }
+        if (n.startsWith("cubic-qss::bezier(")) {
+            List<String> ps = qss::splitTop(qss::parenArg(n, 13));
+            if (ps.size() >= 4) { return qss::bezier(qss::fnum(ps[0], 0.0), qss::fnum(ps[1], 0.0), qss::fnum(ps[2], 1.0), qss::fnum(ps[3], 1.0), p); }
+            return p;
+        }
+        if (n.startsWith("steps(")) {
+            List<String> ps2 = qss::splitTop(qss::parenArg(n, 6));
+            if (ps2.size() >= 1) {
+                float cnt = qss::fnum(ps2[0], 1.0);
+                if (cnt < 1.0) { return p; }
+                int fl = qss::fint(p * cnt);
+                float step = fl / cnt;
+                if (ps2.size() >= 2 && ps2[1].trim() == "start") {
+                    step = (fl + 1) / cnt;
+                    if (step > 1.0) { step = 1.0; }
+                }
+                return step;
+            }
+            return p;
+        }
+        return p;
+    }
+
+    // ---------- v2：简写拆解 ----------
+    fn splitTop(String v) List<String> {
+        List<String> out = List::new();
+        String cur = "";
+        int depth = 0;
+        int i = 0;
+        while (i < v.size()) {
+            String c = v.charAt(i);
+            if (c == "(") { depth = depth + 1; cur = cur + c; }
+            else if (c == ")") { if (depth > 0) { depth = depth - 1; } cur = cur + c; }
+            else if (c == "," && depth == 0) { out.append(cur.trim()); cur = ""; }
+            else { cur = cur + c; }
+            i = i + 1;
+        }
+        if (cur.trim() != "") { out.append(cur.trim()); }
+        return out;
+    }
+    fn tokens(String v) List<String> {
+        List<String> out = List::new();
+        List<String> raw = v.trim().split(" ");
+        int i = 0;
+        while (i < raw.size()) { String t = raw[i].trim(); if (t != "") { out.append(t); } i = i + 1; }
+        return out;
+    }
+    fn isTiming(String t) bool {
+        String s = t.trim().toLower();
+        if (s == "linear" || s == "ease" || s == "ease-in" || s == "ease-out" || s == "ease-in-out") { return true; }
+        return s.startsWith("cubic-qss::bezier(") || s.startsWith("steps(");
+    }
+    fn isTimeTok(String t) bool {
+        String s = t.trim().toLower();
+        return s.endsWith("ms") || s.endsWith("s");
+    }
+    fn isDirTok(String t) bool { String s = t.trim().toLower(); return s == "normal" || s == "reverse" || s == "alternate"; }
+    fn isFillTok(String t) bool { String s = t.trim().toLower(); return s == "none" || s == "forwards" || s == "backwards" || s == "both"; }
+    fn transOne(String part) String {
+        List<String> ts = qss::tokens(part);
+        String prop = "";
+        String timing = "ease";
+        int dur = 0;
+        int delay = 0;
+        int timeSeen = 0;
+        int i = 0;
+        while (i < ts.size()) {
+            String t = ts[i];
+            if (qss::isTiming(t)) { timing = t.toLower(); }
+            else if (qss::isTimeTok(t)) {
+                if (timeSeen == 0) { dur = qss::time(t); timeSeen = 1; } else { delay = qss::time(t); }
+            }
+            else if (prop == "") { prop = t.toLower(); }
+            i = i + 1;
+        }
+        if (prop == "") { prop = "all"; }
+        return prop + "|" + dur.toString() + "|" + timing + "|" + delay.toString();
+    }
+    fn transitions(String v) List<String> {
+        List<String> out = List::new();
+        List<String> parts = qss::splitTop(v);
+        int i = 0;
+        while (i < parts.size()) { out.append(qss::transOne(parts[i])); i = i + 1; }
+        return out;
+    }
+    fn animationParts(String v) String {
+        List<String> ts = qss::tokens(v);
+        String name = "";
+        String timing = "ease";
+        String count = "1";
+        String dir = "normal";
+        String fill = "none";
+        int dur = 0;
+        int delay = 0;
+        int timeSeen = 0;
+        int i = 0;
+        while (i < ts.size()) {
+            String t = ts[i];
+            String low = t.toLower();
+            if (qss::isTiming(low)) { timing = low; }
+            else if (qss::isTimeTok(low)) { if (timeSeen == 0) { dur = qss::time(low); timeSeen = 1; } else { delay = qss::time(low); } }
+            else if (qss::isDirTok(low)) { dir = low; }
+            else if (qss::isFillTok(low)) { fill = low; }
+            else if (low == "infinite") { count = "infinite"; }
+            else if (qss::isNum(low)) { count = low; }
+            else if (name == "") { name = t; }
+            i = i + 1;
+        }
+        return name + "|" + dur.toString() + "|" + timing + "|" + delay.toString() + "|" + count + "|" + dir + "|" + fill;
+    }
+
+    // ---------- v2：JSON 文本小工具（选择器块 / 关键帧；规避嵌套 HashTable 静态类型限制） ----------
+    fn matchBrace(String s, int open) int {
+        int depth = 0;
+        int i = open;
+        while (i < s.size()) {
+            String c = s.charAt(i);
+            if (c == "{") { depth = depth + 1; }
+            else if (c == "}") { depth = depth - 1; if (depth == 0) { return i; } }
+            i = i + 1;
+        }
+        return s.size() - 1;
+    }
+    fn extractBlock(String json, String key) String {
+        String needle = "\"" + key + "\"";
+        int p = json.indexOf(needle);
+        if (p < 0) { return ""; }
+        int i = p + needle.size();
+        while (i < json.size()) {
+            if (json.charAt(i) == "{") { int e = qss::matchBrace(json, i); return json.substring(i + 1, e); }
+            i = i + 1;
+        }
+        return "";
+    }
+    fn jsonPairs(String body) List<String> {
+        List<String> out = List::new();
+        int i = 0;
+        int n = body.size();
+        while (i < n) {
+            if (body.charAt(i) == "\"") {
+                int j = i + 1;
+                String k = "";
+                while (j < n && body.charAt(j) != "\"") { k = k + body.charAt(j); j = j + 1; }
+                int c = j + 1;
+                while (c < n && (body.charAt(c) == " " || body.charAt(c) == ":" || body.charAt(c) == "\t")) { c = c + 1; }
+                if (c < n && body.charAt(c) == "\"") {
+                    int e = c + 1;
+                    String v = "";
+                    while (e < n && body.charAt(e) != "\"") { v = v + body.charAt(e); e = e + 1; }
+                    out.append(k + "=" + v);
+                    i = e + 1;
+                } else {
+                    int e2 = c;
+                    while (e2 < n && body.charAt(e2) != "," && body.charAt(e2) != "}") { e2 = e2 + 1; }
+                    out.append(k + "=" + body.substring(c, e2).trim());
+                    i = e2 + 1;
+                }
+            } else { i = i + 1; }
+        }
+        return out;
+    }
+    fn pairKey(String p) String { int i = p.indexOf("="); if (i < 0) { return p; } return p.substring(0, i); }
+    fn pairVal(String p) String { int i = p.indexOf("="); if (i < 0) { return ""; } return p.substring(i + 1); }
+    fn isFrameTime(String k) bool {
+        String s = qss::stripUnit(k);
+        if (s == "") { return false; }
+        int i = 0;
+        while (i < s.size()) { String c = s.charAt(i); if ("0123456789.".indexOf(c) < 0) { return false; } i = i + 1; }
+        return true;
+    }
+    fn frames(String json) List<String> {
+        List<String> out = List::new();
+        int i = 0;
+        int n = json.size();
+        while (i < n) {
+            if (json.charAt(i) == "\"") {
+                int j = i + 1;
+                String key = "";
+                while (j < n && json.charAt(j) != "\"") { key = key + json.charAt(j); j = j + 1; }
+                int k = j + 1;
+                while (k < n && (json.charAt(k) == " " || json.charAt(k) == ":" || json.charAt(k) == "\t")) { k = k + 1; }
+                if (k < n && json.charAt(k) == "{" && qss::isFrameTime(key)) {
+                    int e = qss::matchBrace(json, k);
+                    out.append(key + "|" + qss::flatPairs(json.substring(k + 1, e)));
+                    i = e + 1;
+                } else { i = j + 1; }
+            } else { i = i + 1; }
+        }
+        return out;
+    }
+    fn flatPairs(String body) String {
+        List<String> ps = qss::jsonPairs(body);
+        String out = "";
+        int i = 0;
+        while (i < ps.size()) {
+            if (out != "") { out = out + ";"; }
+            out = out + ps[i];
+            i = i + 1;
+        }
+        return out;
+    }
+    fn frameTime(String f) float { int i = f.indexOf("|"); if (i < 0) { return 0.0; } return qss::fnum(f.substring(0, i), 0.0); }
+    fn frameProps(String f) String { int i = f.indexOf("|"); if (i < 0) { return ""; } return f.substring(i + 1); }
+    fn propGet(String props, String key) String {
+        String needle = key + "=";
+        List<String> ps = props.split(";");
+        int i = 0;
+        while (i < ps.size()) { if (ps[i].startsWith(needle)) { return ps[i].substring(needle.size()); } i = i + 1; }
+        return "";
+    }
+    fn propKeys(String p0, String p1) List<String> {
+        List<String> out = List::new();
+        List<String> a = p0.split(";");
+        int i = 0;
+        while (i < a.size()) { String k = qss::pairKey(a[i]); if (k != "" && !qss::inList(out, k)) { out.append(k); } i = i + 1; }
+        List<String> b = p1.split(";");
+        int j = 0;
+        while (j < b.size()) { String k2 = qss::pairKey(b[j]); if (k2 != "" && !qss::inList(out, k2)) { out.append(k2); } j = j + 1; }
+        return out;
+    }
+    fn inList(List<String> l, String v) bool {
+        int i = 0;
+        while (i < l.size()) { if (l[i] == v) { return true; } i = i + 1; }
+        return false;
+    }
+    fn inCsv(String csv, String v) bool {
+        List<String> ps = csv.split(",");
+        int i = 0;
+        while (i < ps.size()) { if (ps[i] == v) { return true; } i = i + 1; }
+        return false;
+    }
+
+    // ---------- v2：可插值属性（长度 / 颜色 / 数值 / transform） ----------
+    fn unitSuffix(String v) String {
+        String s = v.trim().toLower();
+        if (s.endsWith("px")) { return "px"; }
+        if (s.endsWith("ms")) { return "ms"; }
+        if (s.endsWith("deg")) { return "deg"; }
+        if (s.endsWith("pt")) { return "pt"; }
+        if (s.endsWith("%")) { return "%"; }
+        if (s.endsWith("s")) { return "s"; }
+        return "";
+    }
+    fn roundHalf(float v) int {
+        if (v < 0.0) { return qss::fint(v - 0.5); }
+        return qss::fint(v + 0.5);
+    }
+    fn interpColor(String a, String b, float p) String {
+        int ca = qss::color(a);
+        int cb = qss::color(b);
+        return qss::argbStrA(qss::mkColor(
+            qss::fint(qss::cR(ca) + (qss::cR(cb) - qss::cR(ca)) * p + 0.5),
+            qss::fint(qss::cG(ca) + (qss::cG(cb) - qss::cG(ca)) * p + 0.5),
+            qss::fint(qss::cB(ca) + (qss::cB(cb) - qss::cB(ca)) * p + 0.5),
+            qss::fint(qss::cA(ca) + (qss::cA(cb) - qss::cA(ca)) * p + 0.5)));
+    }
+    fn isFloatProp(String key) bool {
+        String k = key.toLower();
+        if (k == "opacity" || k == "line-height" || k == "flex" || k == "z-index" || k == "stretch") { return true; }
+        return false;
+    }
+    fn interpNum(String key, String a, String b, float p) String {
+        String unit = qss::unitSuffix(b);
+        if (unit == "") { unit = qss::unitSuffix(a); }
+        float va = qss::fnum(qss::stripUnit(a), 0.0);
+        float vb = qss::fnum(qss::stripUnit(b), 0.0);
+        float v = va + (vb - va) * p;
+        if (qss::isFloatProp(key) || a.indexOf(".") >= 0 || b.indexOf(".") >= 0) { return qss::fmtFloat(v) + unit; }
+        return qss::roundHalf(v).toString() + unit;
+    }
+    // 定点格式化（4 位小数），避免缓动浮点噪声进入 style 字符串
+    fn fmtFloat(float v) String {
+        float r = v * 10000.0;
+        int ri = qss::roundHalf(r);
+        float f = 0.0 + ri;
+        f = f / 10000.0;
+        return f.toString();
+    }
+    fn interpTransform(String a, String b, float p) String {
+        StyleTransform ta = qss::transform(a);
+        StyleTransform tb = qss::transform(b);
+        int hasT = 0;
+        if (ta.hasT != 0 || tb.hasT != 0) { hasT = 1; }
+        int hasS = 0;
+        if (ta.hasS != 0 || tb.hasS != 0) { hasS = 1; }
+        int hasR = 0;
+        if (ta.hasR != 0 || tb.hasR != 0) { hasR = 1; }
+        return qss::transformStr(hasT,
+            qss::roundHalf(ta.dx + (tb.dx - ta.dx) * p), qss::roundHalf(ta.dy + (tb.dy - ta.dy) * p),
+            hasS,
+            qss::roundHalf(ta.sxn + (tb.sxn - ta.sxn) * p), 1000,
+            qss::roundHalf(ta.syn + (tb.syn - ta.syn) * p), 1000,
+            hasR, qss::roundHalf(ta.rot + (tb.rot - ta.rot) * p));
+    }
+    fn interpValue(String key, String a, String b, float p) String {
+        String k = key.toLower();
+        if (k == "transform") { return qss::interpTransform(a, b, p); }
+        if (k.indexOf("color") >= 0 || k == "background" || k == "bg") {
+            if (qss::isColorStr(a) && qss::isColorStr(b)) { return qss::interpColor(a, b, p); }
+        }
+        if (qss::isNum(a) && qss::isNum(b)) { return qss::interpNum(key, a, b, p); }
+        if (p >= 1.0) { return b; }
+        return a;
+    }
+    fn sameValue(String key, String a, String b) bool {
+        if (a == b) { return true; }
+        String k = key.toLower();
+        if (k == "transform") {
+            StyleTransform ta = qss::transform(a);
+            StyleTransform tb = qss::transform(b);
+            return ta.hasT == tb.hasT && ta.dx == tb.dx && ta.dy == tb.dy && ta.hasS == tb.hasS && ta.sxn == tb.sxn && ta.syn == tb.syn && ta.hasR == tb.hasR && ta.rot == tb.rot;
+        }
+        if (k.indexOf("color") >= 0 || k == "background" || k == "bg") {
+            if (qss::isColorStr(a) && qss::isColorStr(b)) { return qss::color(a) == qss::color(b); }
+        }
+        if (qss::isNum(a) && qss::isNum(b)) { return qss::fnum(qss::stripUnit(a), 0.0) == qss::fnum(qss::stripUnit(b), 0.0); }
+        return false;
+    }
+} qss;
+
+space {
+
+    // ===== 状态位（style 表内 "__state:<name>"；无模块级全局） =====
+    fn setState(StyleNode node, String name, bool on) void {
+        if (on) { node.getStyle()["__state:" + name] = "1"; }
+        else { node.getStyle().remove("__state:" + name); }
+    }
+    fn hasState(StyleNode node, String name) bool {
+        HashTable<String, String> style = node.getStyle();
+        if (!style.contains("__state:" + name)) { return false; }
+        String v = style.get("__state:" + name);
+        return v != "0" && v != "false";
+    }
+    fn stateHas(String state, String one) bool {
+        if (state == "" || one == "") { return false; }
+        return qss::inList(state.split(":"), one);
+    }
+    fn sortList(List<String> l) List<String> {
+        int i = 1;
+        while (i < l.size()) {
+            String v = l[i];
+            int j = i - 1;
+            while (j >= 0 && l[j] > v) { l[j + 1] = l[j]; j = j - 1; }
+            l[j + 1] = v;
+            i = i + 1;
+        }
+        List<String> out = List::new();
+        int k = 0;
+        while (k < l.size()) {
+            if (k == 0 || l[k] != l[k - 1]) { out.append(l[k]); }
+            k = k + 1;
+        }
+        return out;
+    }
+    fn joinList(List<String> l, String sep) String {
+        String out = "";
+        int i = 0;
+        while (i < l.size()) {
+            if (i > 0) { out = out + sep; }
+            out = out + l[i];
+            i = i + 1;
+        }
+        return out;
+    }
+    // 节点状态串（排序去重；enabled/disabled 由 enabled 键派生）
+    fn stateOf(StyleNode node) String {
+        HashTable<String, String> style = node.getStyle();
+        List<String> names = List::new();
+        List<String> ks = style.keys();
+        int i = 0;
+        while (i < ks.size()) {
+            String k = ks[i];
+            if (k.startsWith("__state:")) {
+                String v = style.get(k);
+                if (v != "0" && v != "false") { names.append(k.substring(8)); }
+            }
+            i = i + 1;
+        }
+        bool enabled = true;
+        if (style.contains("enabled")) {
+            String ev = style.get("enabled");
+            if (ev == "false" || ev == "0") { enabled = false; }
+        }
+        if (enabled) {
+            if (!qss::inList(names, "enabled")) { names.append("enabled"); }
+        } else {
+            if (!qss::inList(names, "disabled")) { names.append("disabled"); }
+        }
+        return style::joinList(style::sortList(names), ":");
+    }
+
+    // ===== 键归一化（多状态后缀排序） / 旧键别名 =====
+    fn aliasOf(String key) String {
+        if (key == "background-color") { return "bg"; }
+        if (key == "font-size") { return "size"; }
+        if (key == "font-family") { return "font"; }
+        return "";
+    }
+    fn normalizeKey(String k) String {
+        int c = k.indexOf(":");
+        if (c < 0) { return k; }
+        if (k.indexOf("::") >= 0) { return k; }
+        String base = k.substring(0, c);
+        List<String> sts = k.substring(c + 1).split(":");
+        if (sts.size() < 2) { return k; }
+        return base + ":" + style::joinList(style::sortList(sts), ":");
+    }
+    // 状态后缀组合：多状态最具体 → 最宽泛（顺序无关，双状态补反向）
+    fn stateKey(HashTable<String, String> style, String key, String state) String {
+        if (state == "") { return ""; }
+        List<String> states = style::sortList(state.split(":"));
+        int n = states.size();
+        int mask = n * 2 - 1;
+        while (mask > 0) {
+            List<String> sub = List::new();
+            int i = 0;
+            while (i < n) {
+                if (style::bitOf(mask, i)) { sub.append(states[i]); }
+                i = i + 1;
+            }
+            String k = key + ":" + style::joinList(sub, ":");
+            if (style.contains(k)) { return k; }
+            if (sub.size() == 2) {
+                String k2 = key + ":" + sub[1] + ":" + sub[0];
+                if (style.contains(k2)) { return k2; }
+            }
+            mask = mask - 1;
+        }
+        return "";
+    }
+    fn bitOf(int mask, int idx) bool {
+        int m = mask;
+        int i = 0;
+        while (i < idx) { m = (m - (m % 2)) / 2; i = i + 1; }
+        return m % 2 == 1;
+    }
+
+    // ===== 选择器块（CSS2 特异性：ID 100 > 类型/伪态 10/1 > 通用 0；后出现优先） =====
+    fn isSelectorKey(String k) bool {
+        String s = k.trim();
+        if (s == "") { return false; }
+        String c = s.charAt(0);
+        if (c == "*" || c == "#") { return true; }
+        return c.toUpper() == c && c.toLower() != c;
+    }
+    fn hasPseudo(String sel) bool {
+        String s = sel;
+        int sp = s.indexOf("::");
+        if (sp >= 0) { s = s.substring(0, sp); }
+        return s.indexOf(":") >= 0;
+    }
+    fn specificity(String sel) int {
+        String s = sel;
+        int sp = s.indexOf("::");
+        if (sp >= 0) { s = s.substring(0, sp); }
+        int score = 0;
+        int hp = s.indexOf("#");
+        String typ = s;
+        if (hp >= 0) { score = score + 100; typ = s.substring(0, hp); }
+        int cp = typ.indexOf(":");
+        String pseudo = "";
+        if (cp >= 0) { pseudo = typ.substring(cp + 1); typ = typ.substring(0, cp); }
+        if (typ != "" && typ != "*") { score = score + 1; }
+        List<String> ps = pseudo.split(":");
+        int i = 0;
+        while (i < ps.size()) { if (ps[i].trim() != "") { score = score + 10; } i = i + 1; }
+        return score;
+    }
+    fn selMatches(StyleNode node, String sel, String state, String sub) bool {
+        HashTable<String, String> style = node.getStyle();
+        String s = sel.trim();
+        int sp = s.indexOf("::");
+        String selSub = "";
+        if (sp >= 0) { selSub = s.substring(sp + 2); s = s.substring(0, sp); }
+        if (selSub != sub) { return false; }
+        int cp = s.indexOf(":");
+        String states = "";
+        if (cp >= 0) { states = s.substring(cp + 1); s = s.substring(0, cp); }
+        int hp = s.indexOf("#");
+        String typ = s;
+        String id = "";
+        if (hp >= 0) { typ = s.substring(0, hp); id = s.substring(hp + 1); }
+        if (typ != "" && typ != "*") {
+            String nt = "";
+            if (style.contains("__type")) { nt = style.get("__type"); }
+            if (nt != typ) { return false; }
+        }
+        if (id != "") {
+            String nid = "";
+            if (style.contains("object-name")) { nid = style.get("object-name"); }
+            if (nid != id) { return false; }
+        }
+        if (states != "") {
+            List<String> need = states.split(":");
+            int i = 0;
+            while (i < need.size()) {
+                String one = need[i].trim();
+                if (one != "" && !style::stateHas(state, one)) { return false; }
+                i = i + 1;
+            }
+        }
+        return true;
+    }
+    fn selLookup(StyleNode node, String key, String state, bool pseudoOnly, String sub) String {
+        HashTable<String, String> style = node.getStyle();
+        List<String> ks = style.keys();
+        int bestScore = -1;
+        int bestSeq = -1;
+        String bestVal = "";
+        int i = 0;
+        while (i < ks.size()) {
+            String k = ks[i];
+            if (k.startsWith("__sel~")) {
+                List<String> p = k.split("~");
+                if (p.size() == 4) {
+                    String sel = p[2];
+                    String kk = p[3];
+                    if (kk == key && style::hasPseudo(sel) == pseudoOnly && style::selMatches(node, sel, state, sub)) {
+                        int sc = style::specificity(sel);
+                        int sq = p[1].toInt();
+                        if (sc > bestScore || (sc == bestScore && sq > bestSeq)) {
+                            bestScore = sc;
+                            bestSeq = sq;
+                            bestVal = style.get(k);
+                        }
+                    }
+                }
+            }
+            i = i + 1;
+        }
+        return bestVal;
+    }
+    fn selStore(StyleNode node, String sel, String block) void {
+        HashTable<String, String> style = node.getStyle();
+        int seq = 0;
+        if (style.contains("__selseq")) { seq = style.get("__selseq").toInt(); }
+        seq = seq + 1;
+        style["__selseq"] = seq.toString();
+        List<String> pairs = qss::jsonPairs(block);
+        int i = 0;
+        while (i < pairs.size()) {
+            String k = qss::pairKey(pairs[i]);
+            String v = qss::pairVal(pairs[i]);
+            if (k != "") { style["__sel~" + seq.toString() + "~" + sel + "~" + k] = v; }
+            i = i + 1;
+        }
+    }
+    // setStyle 升级：顶层选择器键（* / Type / Type#id / Type:hover / Type::chunk）按 CSS2 特异性合并
+    fn setStyle(StyleNode node, String jsonText) void {
+        String t = jsonText.trim();
+        if (t == "") { return; }
+        List<String> pairs = qss::jsonPairs(t);
+        int i = 0;
+        while (i < pairs.size()) {
+            String k = qss::pairKey(pairs[i]);
+            String v = qss::pairVal(pairs[i]);
+            if (style::isSelectorKey(k)) {
+                style::selStore(node, k, qss::extractBlock(t, k));
+            } else if (k == "font" && v.indexOf(" ") >= 0 && (v.indexOf("px") >= 0 || v.indexOf("pt") >= 0)) {
+                style::applyFontShorthand(node, v);
+            } else {
+                node.getStyle()[style::normalizeKey(k)] = v;
+            }
+            i = i + 1;
+        }
+    }
+    // ===== 全局 / 祖先层（qk 无模块级全局：全局层由调用方持有的 Theme 写入 "__g~"） =====
+    // 低级入口：直接写入节点全局层（逐键写入；选择器块不在此展开）
+    fn globalTo(StyleNode node, String jsonText) void {
+        String t = jsonText.trim();
+        if (t == "") { return; }
+        List<String> pairs = qss::jsonPairs(t);
+        int i = 0;
+        while (i < pairs.size()) {
+            String k = qss::pairKey(pairs[i]);
+            if (k != "") { node.getStyle()["__g~" + k] = qss::pairVal(pairs[i]); }
+            i = i + 1;
+        }
+    }
+    fn clearGlobal(StyleNode node) void {
+        HashTable<String, String> style = node.getStyle();
+        List<String> ks = style.keys();
+        int i = 0;
+        while (i < ks.size()) {
+            if (ks[i].startsWith("__g~") || ks[i] == "__grev") { style.remove(ks[i]); }
+            i = i + 1;
+        }
+    }
+
+    fn inherit(StyleNode child, StyleNode parent) void {
+        HashTable<String, String> cs = child.getStyle();
+        HashTable<String, String> ps = parent.getStyle();
+        String pst = style::stateOf(parent);
+        List<String> ks = ps.keys();
+        int i = 0;
+        while (i < ks.size()) {
+            String k = ks[i];
+            if (!k.startsWith("__")) {
+                String v = style::get(parent, k, pst);
+                if (v != "") { cs["__a~" + k] = v; }
+            }
+            i = i + 1;
+        }
+        String pb = style::get(parent, "background-color", pst);
+        if (pb != "") { cs["__a~backdrop"] = pb; }
+    }
+
+    // ===== §0 级联求值 =====
+    fn legacyAlias(HashTable<String, String> style, String key, String state) String {
+        String a = style::aliasOf(key);
+        if (a == "") { return ""; }
+        String sk = style::stateKey(style, a, state);
+        if (sk != "") { return style.get(sk); }
+        if (style.contains(a)) { return style.get(a); }
+        return "";
+    }
+    fn get(StyleNode node, String key, String state) String {
+        HashTable<String, String> style = node.getStyle();
+        String ak = "__anim~" + key;
+        if (style.contains(ak)) { return style.get(ak); }
+        String sk = style::stateKey(style, key, state);
+        if (sk != "") { return style.get(sk); }
+        String sv = style::selLookup(node, key, state, true, "");
+        if (sv != "") { return sv; }
+        if (style.contains(key)) { return style.get(key); }
+        String la = style::legacyAlias(style, key, state);
+        if (la != "") { return la; }
+        String sv2 = style::selLookup(node, key, state, false, "");
+        if (sv2 != "") { return sv2; }
+        String ank = "__a~" + key;
+        if (style.contains(ank)) { return style.get(ank); }
+        String gk = "__g~" + key;
+        if (style.contains(gk)) { return style.get(gk); }
+        String ag = "__a~" + style::aliasOf(key);
+        if (style::aliasOf(key) != "" && style.contains(ag)) { return style.get(ag); }
+        String gg = "__g~" + style::aliasOf(key);
+        if (style::aliasOf(key) != "" && style.contains(gg)) { return style.get(gg); }
+        String dk = "__def~" + key;
+        if (style.contains(dk)) { return style.get(dk); }
+        String da = style::aliasOf(key);
+        if (da != "" && style.contains("__def~" + da)) { return style.get("__def~" + da); }
+        return "";
+    }
+    fn getBase(StyleNode node, String key, String state) String {
+        HashTable<String, String> style = node.getStyle();
+        String sk = style::stateKey(style, key, state);
+        if (sk != "") { return style.get(sk); }
+        String sv = style::selLookup(node, key, state, true, "");
+        if (sv != "") { return sv; }
+        if (style.contains(key)) { return style.get(key); }
+        String la = style::legacyAlias(style, key, state);
+        if (la != "") { return la; }
+        String sv2 = style::selLookup(node, key, state, false, "");
+        if (sv2 != "") { return sv2; }
+        String ank = "__a~" + key;
+        if (style.contains(ank)) { return style.get(ank); }
+        String gk = "__g~" + key;
+        if (style.contains(gk)) { return style.get(gk); }
+        String dk = "__def~" + key;
+        if (style.contains(dk)) { return style.get(dk); }
+        String da = style::aliasOf(key);
+        if (da != "" && style.contains("__def~" + da)) { return style.get("__def~" + da); }
+        return "";
+    }
+    fn getD(StyleNode node, String key, String state, String fb) String {
+        String v = style::get(node, key, state);
+        if (v == "") { return fb; }
+        return v;
+    }
+    fn getI(StyleNode node, String key, String state, int fb) int {
+        String v = style::get(node, key, state);
+        if (v == "") { return fb; }
+        return qss::len(v, fb);
+    }
+    fn getF(StyleNode node, String key, String state, float fb) float {
+        String v = style::get(node, key, state);
+        if (v == "") { return fb; }
+        return qss::fnum(qss::stripUnit(v), fb);
+    }
+    // 子件（::chunk/::groove/::handle/::indicator/::section）求值
+    fn getSub(StyleNode node, String key, String sub, String state) String {
+        HashTable<String, String> style = node.getStyle();
+        String full = key + "::" + sub;
+        String ak = "__anim~" + full;
+        if (style.contains(ak)) { return style.get(ak); }
+        String sk = style::stateKey(style, full, state);
+        if (sk != "") { return style.get(sk); }
+        String sv = style::selLookup(node, key, state, true, sub);
+        if (sv != "") { return sv; }
+        if (style.contains(full)) { return style.get(full); }
+        String sv2 = style::selLookup(node, key, state, false, sub);
+        if (sv2 != "") { return sv2; }
+        return style::get(node, key, state);
+    }
+    fn subColor(StyleNode node, String key, String sub, String state, int dr, int dg, int db, int da) int {
+        String v = style::getSub(node, key, sub, state);
+        if (v == "") { return qss::mkColor(dr, dg, db, da); }
+        return qss::color(v);
+    }
+    fn opacity255(String v) int {
+        String s = v.trim();
+        if (s == "") { return 255; }
+        if (s.endsWith("%")) { return qss::clamp255(qss::fint(qss::fnum(s.substring(0, s.size() - 1), 100.0) * 255.0 / 100.0 + 0.5)); }
+        float f = qss::fnum(s, 1.0);
+        if (f <= 1.0) { return qss::clamp255(qss::fint(f * 255.0 + 0.5)); }
+        return qss::clamp255(qss::fint(f + 0.5));
+    }
+
+    // ===== §1 盒模型 =====
+    fn boxSizingContent(StyleNode node, String st) bool {
+        return style::getD(node, "box-sizing", st, "border") == "content";
+    }
+    fn borderRect(StyleNode node) Rect {
+        String st = style::stateOf(node);
+        int x = node.getX();
+        int y = node.getY();
+        int w = node.getW();
+        int h = node.getH();
+        List<int> m = qss::box4(style::getD(node, "margin", st, "0"));
+        int bx = x + m[3];
+        int by = y + m[0];
+        int bw = w - m[1] - m[3];
+        int bh = h - m[0] - m[2];
+        if (style::boxSizingContent(node, st)) {
+            List<int> pa = qss::box4(style::getD(node, "padding", st, "0"));
+            List<int> bo = qss::box4(style::getD(node, "border-width", st, "0"));
+            bw = bw + pa[1] + pa[3] + bo[1] + bo[3];
+            bh = bh + pa[0] + pa[2] + bo[0] + bo[2];
+        }
+        Rect r;
+        r.x = bx;
+        r.y = by;
+        r.w = bw;
+        r.h = bh;
+        return r;
+    }
+    fn contentRect(StyleNode node) Rect {
+        Rect b = style::borderRect(node);
+        String st = style::stateOf(node);
+        List<int> bo = qss::box4(style::getD(node, "border-width", st, "0"));
+        List<int> pa = qss::box4(style::getD(node, "padding", st, "0"));
+        Rect r;
+        r.x = b.x + bo[3] + pa[3];
+        r.y = b.y + bo[0] + pa[0];
+        r.w = b.w - bo[1] - bo[3] - pa[1] - pa[3];
+        r.h = b.h - bo[0] - bo[2] - pa[0] - pa[2];
+        if (r.w < 0) { r.w = 0; }
+        if (r.h < 0) { r.h = 0; }
+        return r;
+    }
+
+    // ===== §5 可见性 / overflow / transform（§9.1：绝对设置、无 rotate；成对 begin/end） =====
+    fn visible(StyleNode node) bool {
+        String st = style::stateOf(node);
+        String v = style::getD(node, "visible", st, "true");
+        return v != "false" && v != "0";
+    }
+    fn isClipped(StyleNode node, String st) bool {
+        String o = style::getD(node, "overflow", st, "visible");
+        if (o == "hidden" || o == "clip") { return true; }
+        String c = style::getD(node, "clip", st, "");
+        return c == "hidden" || c == "true";
+    }
+    // §4 font 简写：bold italic 12px "Family, Fallback" → font-weight/font-style/font-size/font-family
+    fn applyFontShorthand(StyleNode node, String v) void {
+        String s = v.trim();
+        List<String> ts = qss::tokens(s);
+        bool isShort = false;
+        int i = 0;
+        while (i < ts.size()) {
+            String t = ts[i].toLower();
+            if (t == "bold" || t == "italic" || t.endsWith("px") || t.endsWith("pt")) { isShort = true; }
+            i = i + 1;
+        }
+        if (!isShort) { node.getStyle()["font-family"] = s; return; }
+        String family = "";
+        i = 0;
+        while (i < ts.size()) {
+            String t2 = ts[i];
+            String low = t2.toLower();
+            if (low == "bold" || low == "bolder" || low == "lighter" || low == "italic" || low == "oblique" || low == "normal") {
+                if (low == "italic" || low == "oblique") { node.getStyle()["font-style"] = low; }
+                else if (low != "normal") { node.getStyle()["font-weight"] = low; }
+            } else if (low.endsWith("px") || low.endsWith("pt")) {
+                node.getStyle()["font-size"] = qss::fontSize(low).toString();
+            } else if (qss::isNum(low) && qss::len(low, -1) >= 0) {
+                node.getStyle()["font-size"] = qss::len(low, 12).toString();
+            } else {
+                if (family != "") { family = family + " "; }
+                family = family + t2;
+            }
+            i = i + 1;
+        }
+        if (family != "") { node.getStyle()["font-family"] = family; }
+    }
+
+    // ===== §2 背景 / §3 边框阴影 =====
+    // 边框样式：border-style 优先，其次四边 border-*-style（§9 单值 style → 取第一条非空）
+    fn borderStyle(StyleNode node, String st) int {
+        String s = style::getD(node, "border-style", st, "");
+        if (s == "") { s = style::getD(node, "border-top-style", st, ""); }
+        if (s == "") { s = style::getD(node, "border-right-style", st, ""); }
+        if (s == "") { s = style::getD(node, "border-bottom-style", st, ""); }
+        if (s == "") { s = style::getD(node, "border-left-style", st, ""); }
+        if (s == "dashed") { return 1; }
+        if (s == "dotted") { return 2; }
+        return 0;
+    }
+    // 圆角：border-radius / "a,b" 取第一值；否则退到四角键（§9 单值 radius）
+    fn radiusOf(StyleNode node, String st) int {
+        String r = style::getD(node, "border-radius", st, "");
+        if (r != "") { return qss::len(qss::splitAny(r)[0], 0); }
+        String tl = style::getD(node, "border-top-left-radius", st, "");
+        if (tl == "") { tl = style::getD(node, "border-top-right-radius", st, ""); }
+        if (tl == "") { tl = style::getD(node, "border-bottom-right-radius", st, ""); }
+        if (tl == "") { tl = style::getD(node, "border-bottom-left-radius", st, ""); }
+        if (tl == "") { return 0; }
+        return qss::len(qss::splitAny(tl)[0], 0);
+    }
+    fn borderColor(StyleNode node, String side, String st, int dr, int dg, int db) int {
+        String v = style::getD(node, "border-" + side + "-color", st, "");
+        if (v == "") { v = style::getD(node, "border-color", st, ""); }
+        if (v == "") { return qss::mkColor(dr, dg, db, 255); }
+        return qss::color(v);
+    }
+    fn isKeyword(String t) bool {
+        String s = t.trim().toLower();
+        if (s == "inset") { return true; }
+        if (s == "none") { return true; }
+        if (s == "solid" || s == "dashed" || s == "dotted") { return true; }
+        return false;
+    }
+    // 便捷求值入口：先套用主题（rev 未变时内部直接返回）再走 §0 级联
+    fn getThemed(Theme t, StyleNode node, String key, String state) String {
+        t.apply(node);
+        return style::get(node, key, state);
+    }
+} style;
+
+
+// ---------- Theme 实现：set/get/apply（状态在实例内，无文件、无模块级全局） ----------
+impl {
+    fn new() Theme {
+        Theme t;
+        t.vars = HashTable::new();
+        t.rev = 1;
+        return t;
+    }
+    // 一次性便利入口：JSON 文本 → 主题（不依赖文件）
+    fn fromJson(String jsonText) Theme {
+        Theme t = Theme::new();
+        t.setJson(jsonText);
+        return t;
+    }
+    fn set(Theme self, String key, String value) void {
+        self.vars[key] = value;
+        self.rev = self.rev + 1;
+    }
+    fn setAll(Theme self, HashTable<String, String> kv) void {
+        List<String> ks = kv.keys();
+        int i = 0;
+        while (i < ks.size()) { self.vars[ks[i]] = kv.get(ks[i]); i = i + 1; }
+        self.rev = self.rev + 1;
+    }
+    fn setJson(Theme self, String jsonText) void {
+        String t = jsonText.trim();
+        if (t == "") { return; }
+        List<String> pairs = qss::jsonPairs(t);
+        int i = 0;
+        while (i < pairs.size()) {
+            String k = qss::pairKey(pairs[i]);
+            if (k != "") { self.vars[k] = qss::pairVal(pairs[i]); }
+            i = i + 1;
+        }
+        self.rev = self.rev + 1;
+    }
+    fn get(Theme self, String key) String {
+        if (self.vars.contains(key)) { return self.vars.get(key); }
+        return "";
+    }
+    fn has(Theme self, String key) bool { return self.vars.contains(key); }
+    // 旧键别名（bg/size/font）读取
+    fn aliased(Theme self, String key) String {
+        String a = style::aliasOf(key);
+        if (a != "" && self.vars.contains(a)) { return self.vars.get(a); }
+        return "";
+    }
+    fn remove(Theme self, String key) void { self.vars.remove(key); self.rev = self.rev + 1; }
+    fn clear(Theme self) void { self.vars = HashTable::new(); self.rev = self.rev + 1; }
+    fn size(Theme self) int { return self.vars.size(); }
+    fn keys(Theme self) List<String> { return self.vars.keys(); }
+    fn revision(Theme self) int { return self.rev; }
+    // §0 全局层：写入节点 "__g~" 层；rev 未变则跳过（幂等，可每帧调用）
+    fn apply(Theme self, StyleNode node) void {
+        HashTable<String, String> st = node.getStyle();
+        if (st.contains("__grev") && st.get("__grev") == self.rev.toString()) { return; }
+        style::clearGlobal(node);
+        List<String> ks = self.vars.keys();
+        int i = 0;
+        while (i < ks.size()) { st["__g~" + ks[i]] = self.vars.get(ks[i]); i = i + 1; }
+        st["__grev"] = self.rev.toString();
+    }
+    // 桥接入口：调用方持有的是接口类型值（如 StyleNode）时经 interface{} 传入
+    fn applyAny(Theme self, interface{} anyNode) void {
+        StyleNode node = anyNode;
+        self.apply(node);
+    }
+    fn appliedTo(Theme self, StyleNode node) bool {
+        HashTable<String, String> st = node.getStyle();
+        return st.contains("__grev") && st.get("__grev") == self.rev.toString();
+    }
+} Theme;
+
+// ---------- Animator：关键帧动画 + transition 补间（§7；全部状态放实例内，无模块级全局） ----------
+type struct {
+    HashTable<String, String> defs;
+    HashTable<String, String> st;
+    int seq;
+} Animator;
+
+impl {
+    fn new() Animator {
+        Animator a;
+        a.defs = HashTable::new();
+        a.st = HashTable::new();
+        a.seq = 0;
+        return a;
+    }
+    // 注册关键帧：{"0":{"opacity":"1","transform":"scale(1)"},"0.5":{...},"1":{...}}
+    fn define(Animator self, String name, String json) void { self.defs[name] = json; }
+    fn hasDef(Animator self, String name) bool { return self.defs.contains(name); }
+    fn idOf(Animator self, StyleNode node) String {
+        HashTable<String, String> style = node.getStyle();
+        if (style.contains("__anim-id")) { return style.get("__anim-id"); }
+        self.seq = self.seq + 1;
+        String id = self.seq.toString();
+        style["__anim-id"] = id;
+        return id;
+    }
+    fn shortField(String short, int idx) String {
+        List<String> ps = short.split("|");
+        if (idx >= 0 && idx < ps.size()) { return ps[idx]; }
+        return "";
+    }
+    fn animName(Animator self, StyleNode node, String st) String {
+        String n = style::getD(node, "animation-name", st, "");
+        if (n != "") { return n; }
+        String s = style::getD(node, "animation", st, "");
+        if (s == "") { return ""; }
+        return Animator::shortField(qss::animationParts(s), 0);
+    }
+    fn animStr(Animator self, StyleNode node, String st, String key, String short, int idx, String fb) String {
+        String v = style::getD(node, key, st, "");
+        if (v != "") { return v; }
+        if (short != "") {
+            String f = Animator::shortField(short, idx);
+            if (f != "") { return f; }
+        }
+        return fb;
+    }
+    fn animInt(Animator self, StyleNode node, String st, String key, String short, int idx, int fb) int {
+        String v = style::getD(node, key, st, "");
+        if (v != "") { return qss::time(v); }
+        if (short != "") {
+            String f = Animator::shortField(short, idx);
+            if (f != "") { return qss::time(f); }
+        }
+        return fb;
+    }
+    fn clearOverrides(Animator self, StyleNode node, String mapKey, String skipCsv) void {
+        if (!self.st.contains(mapKey)) { return; }
+        HashTable<String, String> style = node.getStyle();
+        List<String> old = self.st.get(mapKey).split(",");
+        int i = 0;
+        while (i < old.size()) {
+            String p = old[i];
+            if (p != "" && !qss::inCsv(skipCsv, p)) { style.remove("__anim~" + p); }
+            i = i + 1;
+        }
+    }
+    // 每帧推进：nodes 上按 style 的 animation-* / transition-* 求值并写动画覆盖层
+    fn tick(Animator self, List<StyleNode> nodes, int dtMs) void {
+        int i = 0;
+        while (i < nodes.size()) { self.tickNode(nodes[i], dtMs); i = i + 1; }
+    }
+    fn tickNode(Animator self, StyleNode node, int dtMs) void {
+        HashTable<String, String> style = node.getStyle();
+        String st = style::stateOf(node);
+        String id = self.idOf(node);
+        String anKey = "an:" + id;
+        self.clearOverrides(node, anKey, "");
+        String covered = "";
+        String an = self.animName(node, st);
+        if (an != "" && self.defs.contains(an)) {
+            String short = "";
+            String sv = style::getD(node, "animation", st, "");
+            if (sv != "") {
+                String parts = qss::animationParts(sv);
+                if (Animator::shortField(parts, 0) == an) { short = parts; }
+            }
+            int dur = self.animInt(node, st, "animation-duration", short, 1, 0);
+            if (dur > 0) {
+                int delay = self.animInt(node, st, "animation-delay", short, 3, 0);
+                String timing = self.animStr(node, st, "animation-timing-function", short, 2, "ease");
+                String count = self.animStr(node, st, "animation-iteration-count", short, 4, "1");
+                String dir = self.animStr(node, st, "animation-direction", short, 5, "normal");
+                String fill = self.animStr(node, st, "animation-fill-mode", short, 6, "none");
+                String play = style::getD(node, "animation-play-state", st, "running");
+                String ek = "a:" + id + ":" + an;
+                int el = 0;
+                if (self.st.contains(ek)) { el = self.st.get(ek).toInt(); }
+                if (play != "paused") { el = el + dtMs; }
+                self.st[ek] = el.toString();
+                float prog = self.progress(el, dur, delay, count, dir);
+                float ft = -1.0;
+                if (prog > 1.5) {
+                    if (fill == "forwards" || fill == "both") { ft = 1.0; }
+                } else if (prog < -0.5) {
+                    if (fill == "backwards" || fill == "both") { ft = 0.0; }
+                } else {
+                    ft = prog;
+                }
+                if (ft >= 0.0) { covered = self.applyFrames(node, an, ft, timing); }
+            }
+        }
+        self.st[anKey] = covered;
+        self.applyTransitions(node, id, dtMs, covered, st);
+    }
+    // 进度：-1 = 尚未开始，2 = 已结束，其余 0..1（§7 direction / iteration-count）
+    fn progress(Animator self, int el, int dur, int delay, String count, String dir) float {
+        // 注意：int 表达式赋给 float 变量在运行时仍是 int（除法会截断），必须先提升为 float
+        float active = 0.0 + el - delay;
+        if (active < 0.0) { return -1.0; }
+        float iters = active / dur;
+        if (count != "infinite") {
+            float maxIters = qss::fnum(count, 1.0);
+            if (iters >= maxIters) { return 2.0; }
+        }
+        int idx = qss::fint(iters);
+        float frac = iters - idx;
+        if (dir == "reverse") { return 1.0 - frac; }
+        if (dir == "alternate") {
+            if (idx % 2 == 1) { return 1.0 - frac; }
+        }
+        return frac;
+    }
+    fn applyFrames(Animator self, StyleNode node, String an, float t, String timing) String {
+        String json = self.defs.get(an);
+        List<String> frames = qss::frames(json);
+        if (frames.size() == 0) { return ""; }
+        String f0 = frames[0];
+        String f1 = frames[0];
+        int i = 0;
+        while (i < frames.size()) {
+            if (qss::frameTime(frames[i]) <= t) { f0 = frames[i]; }
+            i = i + 1;
+        }
+        i = frames.size() - 1;
+        while (i >= 0) {
+            if (qss::frameTime(frames[i]) >= t) { f1 = frames[i]; }
+            i = i - 1;
+        }
+        float t0 = qss::frameTime(f0);
+        float t1 = qss::frameTime(f1);
+        float local = 0.0;
+        if (t1 > t0) { local = (t - t0) / (t1 - t0); }
+        float e = qss::ease(timing, local);
+        String props0 = qss::frameProps(f0);
+        String props1 = qss::frameProps(f1);
+        List<String> keys = qss::propKeys(props0, props1);
+        HashTable<String, String> style = node.getStyle();
+        String covered = "";
+        int k = 0;
+        while (k < keys.size()) {
+            String key = keys[k];
+            String a = qss::propGet(props0, key);
+            String b = qss::propGet(props1, key);
+            if (a == "" && b != "") { a = b; }
+            if (b == "" && a != "") { b = a; }
+            if (a != "") {
+                style["__anim~" + key] = qss::interpValue(key, a, b, e);
+                if (covered == "") { covered = key; } else { covered = covered + "," + key; }
+            }
+            k = k + 1;
+        }
+        return covered;
+    }
+    fn allProps() List<String> {
+        List<String> l = List::new();
+        l.append("opacity");
+        l.append("background-color");
+        l.append("color");
+        l.append("border-color");
+        l.append("transform");
+        l.append("width");
+        l.append("height");
+        l.append("left");
+        l.append("top");
+        l.append("margin");
+        l.append("padding");
+        l.append("border-radius");
+        l.append("font-size");
+        l.append("letter-spacing");
+        return l;
+    }
+    fn transitionsOf(Animator self, StyleNode node, String st) List<String> {
+        String s = style::getD(node, "transition", st, "");
+        if (s != "") { return qss::transitions(s); }
+        String prop = style::getD(node, "transition-property", st, "");
+        List<String> out = List::new();
+        if (prop == "") { return out; }
+        String durS = style::getD(node, "transition-duration", st, "0ms");
+        String tim = style::getD(node, "transition-timing-function", st, "ease");
+        String delS = style::getD(node, "transition-delay", st, "0ms");
+        List<String> props = prop.split(",");
+        int i = 0;
+        while (i < props.size()) {
+            String p = props[i].trim();
+            if (p == "all") {
+                List<String> all = Animator::allProps();
+                int j = 0;
+                while (j < all.size()) {
+                    out.append(all[j] + "|" + qss::time(durS).toString() + "|" + tim + "|" + qss::time(delS).toString());
+                    j = j + 1;
+                }
+            } else if (p != "") {
+                out.append(p + "|" + qss::time(durS).toString() + "|" + tim + "|" + qss::time(delS).toString());
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+    // 属性变化时补间（transition）：tick 内比对基准值，变化则从当前值插值到新值
+    fn applyTransitions(Animator self, StyleNode node, String id, int dtMs, String animCovered, String st) void {
+        HashTable<String, String> style = node.getStyle();
+        String trKey = "tr:" + id;
+        List<String> parts = self.transitionsOf(node, st);
+        // 第一遍：检测目标变化（此时上一帧覆盖值仍在 style 中，用作补间起点）
+        int i = 0;
+        while (i < parts.size()) {
+            List<String> f = parts[i].split("|");
+            if (f.size() >= 4) {
+                String prop = f[0];
+                String base = style::getBase(node, prop, st);
+                if (base != "") {
+                    String tk = "t:" + id + ":" + prop;
+                    if (!self.st.contains(tk + ":to")) {
+                        self.st[tk + ":to"] = base;
+                    } else {
+                        String to = self.st.get(tk + ":to");
+                        if (!qss::sameValue(prop, to, base)) {
+                            // 起点：无在飞补间时 = 上一目标值；有在飞时 = 当前插值（覆盖层）
+                            String curVal = to;
+                            if (style.contains("__anim~" + prop)) { curVal = style::get(node, prop, st); }
+                            self.st[tk + ":from"] = curVal;
+                            self.st[tk + ":to"] = base;
+                            self.st[tk + ":el"] = "0";
+                            self.st[tk + ":dur"] = f[1];
+                            self.st[tk + ":tim"] = f[2];
+                            self.st[tk + ":del"] = f[3];
+                        }
+                    }
+                }
+            }
+            i = i + 1;
+        }
+        // 清理上一帧 transition 覆盖（不动动画覆盖）
+        self.clearOverrides(node, trKey, animCovered);
+        // 第二遍：推进并写覆盖层
+        String covered = "";
+        i = 0;
+        while (i < parts.size()) {
+            List<String> f2 = parts[i].split("|");
+            if (f2.size() >= 4) {
+                String prop2 = f2[0];
+                String tk2 = "t:" + id + ":" + prop2;
+                if (self.st.contains(tk2 + ":from") && !qss::inCsv(animCovered, prop2)) {
+                    int el = self.st.get(tk2 + ":el").toInt() + dtMs;
+                    int dur2 = self.st.get(tk2 + ":dur").toInt();
+                    int del2 = self.st.get(tk2 + ":del").toInt();
+                    String tim2 = self.st.get(tk2 + ":tim");
+                    String from = self.st.get(tk2 + ":from");
+                    String to2 = self.st.get(tk2 + ":to");
+                    float p = 1.0;
+                    if (dur2 > 0) {
+                        p = 0.0 + el - del2;
+                        p = p / dur2;
+                    }
+                    if (p < 0.0) { p = 0.0; }
+                    if (p > 1.0) { p = 1.0; }
+                    float e = qss::ease(tim2, p);
+                    String v = qss::interpValue(prop2, from, to2, e);
+                    self.st[tk2 + ":el"] = el.toString();
+                    if (p >= 1.0) {
+                        style.remove("__anim~" + prop2);
+                        self.st.remove(tk2 + ":from");
+                    } else {
+                        style["__anim~" + prop2] = v;
+                        if (covered == "") { covered = prop2; } else { covered = covered + "," + prop2; }
+                    }
+                }
+            }
+            i = i + 1;
+        }
+        self.st[trKey] = covered;
+    }
+} Animator;

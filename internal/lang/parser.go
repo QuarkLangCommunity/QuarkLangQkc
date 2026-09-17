@@ -159,6 +159,8 @@ func compileSlow(src string) (*Program, error) {
 	if err := Typecheck(prog); err != nil {
 		return nil, err
 	}
+	// 编译期解析变量槽位（解释器免线性扫名；编译器路径忽略该字段）
+	resolveSlots(prog)
 	// 编译期解析函数调用索引（eval 免 map 查找）
 	prog.FnList = make([]*FuncDecl, 0, len(prog.Funcs))
 	prog.FnIndex = map[string]int{}

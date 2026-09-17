@@ -38,7 +38,8 @@ type scope struct {
 	vars       map[string]Value
 	slots      []Value // 参数槽位（前 len(paramNames) 个为参数，线性访问免哈希）
 	paramNames []string
-	nParams    int // 参数个数：paramNames 中前 nParams 个是参数（declare 不覆盖），其后为局部变量
+	nParams    int                  // 参数个数：paramNames 中前 nParams 个是参数（declare 不覆盖），其后为局部变量
+	refCache   map[string]*refValue // refIdent 句柄缓存：句柄无状态（只记 作用域+名字）→ 可复用
 	outer      *scope
 }
 
@@ -55,6 +56,20 @@ func (s *scope) setParams(names []string, args []Value) {
 }
 
 // paramIndex 线性查找参数槽位索引（-1 表示非参数）。
+// refHandle 返回指向本作用域中 name 的引用句柄（按名字内部化，避免每次调用分配）。
+// refIdent 句柄是无状态的（load/store 都按 作用域+名字 现查），因此可安全复用。
+func (s *scope) refHandle(name string) *refValue {
+	if r, ok := s.refCache[name]; ok {
+		return r
+	}
+	r := &refValue{kind: refIdent, sc: s, name: name}
+	if s.refCache == nil {
+		s.refCache = map[string]*refValue{}
+	}
+	s.refCache[name] = r
+	return r
+}
+
 func (s *scope) paramIndex(name string) int {
 	for i, n := range s.paramNames {
 		if n == name {
@@ -868,6 +883,17 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 		}
 		switch t := s.Target.(type) {
 		case *Ident:
+			if t.Slot > 0 {
+				if i := int(t.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == t.Name {
+					if cur := sc.slots[i]; cur.IsRef() { // 引用传递：写穿到目标（与 scope.set 一致）
+						if cur.Ref().store(v) {
+							return nil
+						}
+					}
+					sc.slots[i] = v
+					return nil
+				}
+			}
 			return sc.set(t.Name, v, t.Pos)
 		case *IndexExpr:
 			obj, err := in.evalExpr(t.X, sc, ctx)
@@ -994,6 +1020,12 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		}
 		if x.Name == "taskm" {
 			return TaskmV(globalTaskm), nil
+		}
+		// 槽位快路径：编译期已解析且运行时名字校验通过 → 直接下标（免线性扫名）
+		if x.Slot > 0 {
+			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+				return sc.slots[i].deref(), nil
+			}
 		}
 		v, err := sc.get(x.Name, x.Pos)
 		if err == nil {
@@ -1289,6 +1321,8 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		if !ok {
 			return NilV(), &RunError{Msg: "TypeError: a signature can only wrap a direct function call", Pos: c.Pos, Ctx: ctx}
 		}
+		mark := len(ctx.argArena)
+		defer func() { ctx.argArena = ctx.argArena[:mark] }()
 		argVals, err := in.evalArgs(c.Args, sc, ctx)
 		if err != nil {
 			return NilV(), err
@@ -1334,21 +1368,32 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		if err != nil {
 			return NilV(), err
 		}
+		mark := len(ctx.argArena)
 		args, err := in.evalArgs(c.Args, sc, ctx)
 		if err != nil {
 			return NilV(), err
 		}
-		return in.callMethod(obj, m.Name, args, ctx, m.Pos)
+		res, err := in.callMethod(obj, m.Name, args, ctx, m.Pos)
+		ctx.argArena = ctx.argArena[:mark]
+		return res, err
 	}
 
 	id, ok := c.Fn.(*Ident)
 	if !ok {
 		return NilV(), &RunError{Msg: "TypeError: this expression is not callable", Pos: c.Pos, Ctx: ctx}
 	}
+	mark := len(ctx.argArena)
 	argVals, err := in.evalArgs(c.Args, sc, ctx)
 	if err != nil {
 		return NilV(), err
 	}
+	res, err := in.dispatchPlainCall(c, id, argVals, sc, ctx)
+	ctx.argArena = ctx.argArena[:mark] // 归还实参复用区（值已绑定进被调方槽位）
+	return res, err
+}
+
+// dispatchPlainCall 处理 f(args) 的四种解析：编译期索引 / 重载 / 函数引用变量 / 内建。
+func (in *interp) dispatchPlainCall(c *CallExpr, id *Ident, argVals []Value, sc *scope, ctx *execCtx) (Value, error) {
 	// FnIdx 编译期已解析：无重载时直取 fnList（免 map 哈希热路径）
 	if c.FnIdx >= 0 && c.FnIdx < len(in.fnList) && len(in.overloads[id.Name]) == 0 {
 		return in.callFunc(in.fnList[c.FnIdx], argVals, id.Pos, ctx.depth)
@@ -1434,16 +1479,20 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 
 // evalArgs 求值实参列表：左值实参（变量 / struct 字段 / List 下标）返回引用值，
 // 其余按值返回——形参一律按引用绑定（copyd 形参除外，见 callFunc）。
+// evalArgs 求值实参列表。结果切片来自 ctx.argArena（避免每次调用分配）：
+// 调用点需在**调用结束后**执行 `ctx.argArena = ctx.argArena[:mark]` 归还（mark 在调用前取 len）。
+// 嵌套求值天然 LIFO：内层在自己的 mark 处截断，不会覆盖外层已填好的实参。
 func (in *interp) evalArgs(args []Expr, sc *scope, ctx *execCtx) ([]Value, error) {
-	vals := make([]Value, 0, len(args))
+	start := len(ctx.argArena)
 	for _, a := range args {
 		v, err := in.evalArg(a, sc, ctx)
 		if err != nil {
+			ctx.argArena = ctx.argArena[:start]
 			return nil, err
 		}
-		vals = append(vals, v)
+		ctx.argArena = append(ctx.argArena, v)
 	}
-	return vals, nil
+	return ctx.argArena[start:], nil
 }
 
 // evalArg 求值单个实参：能构成左值单元的返回引用值（写回调用方），否则按值。
@@ -1451,8 +1500,13 @@ func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
 	switch x := a.(type) {
 	case *Ident:
 		// 已声明变量 → 引用单元（未声明的名字可能是函数引用，回退按值）
+		if x.Slot > 0 { // 槽位已解析：宿主作用域就是当前作用域，免 findScope 链式扫描
+			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+				return RefV(sc.refHandle(x.Name)), nil
+			}
+		}
 		if owner := sc.findScope(x.Name); owner != nil {
-			return RefV(&refValue{kind: refIdent, sc: owner, name: x.Name}), nil
+			return RefV(owner.refHandle(x.Name)), nil
 		}
 	case *MemberExpr:
 		obj, err := in.evalExpr(x.X, sc, ctx)
@@ -2192,6 +2246,8 @@ func setOutput(s *IOStream, v Value) error {
 }
 
 func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, error) {
+	mark := len(ctx.argArena)
+	defer func() { ctx.argArena = ctx.argArena[:mark] }()
 	args, err := in.evalArgs(x.Args, sc, ctx)
 	if err != nil {
 		return NilV(), err
@@ -2930,6 +2986,9 @@ func (in *interp) newThread() int {
 
 // runOnThread 把函数并入线程 pid 执行（taskm.merge）。
 func (in *interp) runOnThread(t *Task, fn *Func, args []Value, pos Pos) error {
+	// 实参切片可能来自调用方的复用区（argArena），而本函数把执行交给 goroutine 异步进行
+	// → 必须复制一份，否则调用方归还复用区后参数会被覆盖。
+	args = append([]Value(nil), args...)
 	in.taskMu.Lock()
 	if t.Busy {
 		in.taskMu.Unlock()

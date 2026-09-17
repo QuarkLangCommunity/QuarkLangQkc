@@ -19,8 +19,20 @@ import (
 //
 //	name(args) / name[args] / name{args}
 func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
+	// 快路径：全文没有 `#` 开头的 token（宏/预处理指令），即无宏可切 →
+	// 直接返回原切片（零拷贝、零分配）。绝大多数源文件走这条路。
+	hasSharp := false
+	for i := range toks {
+		if toks[i].Kind == TSharp {
+			hasSharp = true
+			break
+		}
+	}
+	if !hasSharp {
+		return nil, toks, nil
+	}
 	var macros []*MacroDef
-	var rest []Token
+	rest := make([]Token, 0, len(toks))
 	i := 0
 	for i < len(toks) {
 		t := toks[i]

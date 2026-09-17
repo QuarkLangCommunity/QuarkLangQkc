@@ -181,10 +181,17 @@ func checkFile(path string, opts checkOptions, stderr io.Writer) ([]finding, int
 	}
 	out = append(out, lintFindings(path, lang.Lint(prog, lang.LintOptions{Params: opts.params}))...)
 
-	// 2) 类型检查：合并 import 后编译，再用源码映射把位置还原到真实文件
+	// 2) 类型检查
+	//
+	// 无 import（绝大多数文件）：直接对**已解析的同一份 AST** 做类型检查——
+	// 位置天然就是文件坐标，且省掉一次完整 lex+parse（实测占单文件检查 ~30%）。
+	// 有 import：必须文本合并后编译（库符号来自合并源），再用 SrcMap 把位置还原。
 	if opts.typecheck {
-		_, sm, cerr := lang.CompileWithImportPaths(src, path, opts.libDirs)
-		if cerr != nil {
+		if len(prog.Imports) == 0 {
+			if terr := lang.Typecheck(prog); terr != nil {
+				out = append(out, compileFinding(path, terr))
+			}
+		} else if _, sm, cerr := lang.CompileWithImportPaths(src, path, opts.libDirs); cerr != nil {
 			out = append(out, mappedCompileFinding(path, sm, cerr))
 		}
 	}

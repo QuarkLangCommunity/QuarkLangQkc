@@ -132,6 +132,18 @@ type lexer struct {
 	comments        []Comment
 }
 
+// singleCharText 返回单字符 token 的文本：预建表，避免每个标点都分配一个 1 字节字符串
+// （实测每文件数千个标点 token，是词法层最大的分配来源之一）。
+var singleCharTable = func() [256]string {
+	var t [256]string
+	for i := 0; i < 256; i++ {
+		t[i] = string(rune(i))
+	}
+	return t
+}()
+
+func singleCharText(c byte) string { return singleCharTable[c] }
+
 // Comment 是源码注释（qkdoc / qklsp 等工具用；常规编译流程丢弃注释）。
 type Comment struct {
 	Text    string // 原文（含 `//` 或 `/* */` 定界符）
@@ -159,7 +171,8 @@ func LexWithComments(src string) ([]Token, []Comment, error) {
 
 func lex(src string, collectComments bool) ([]Token, []Comment, error) {
 	lx := &lexer{src: src, line: 1, col: 1, collectComments: collectComments}
-	var toks []Token
+	// 预分配 token 容量：实测每 token 约 3–4 字节源码，避免 append 反复扩容复制
+	toks := make([]Token, 0, len(src)/3+8)
 	for {
 		tok, err := lx.next()
 		if err != nil {
@@ -269,7 +282,7 @@ func (lx *lexer) next() (Token, error) {
 
 	one := func(k TokenKind) (Token, error) {
 		lx.advance()
-		return Token{Kind: k, Text: string(c), Line: line, Col: col}, nil
+		return Token{Kind: k, Text: singleCharText(c), Line: line, Col: col}, nil
 	}
 	switch c {
 	case '#':

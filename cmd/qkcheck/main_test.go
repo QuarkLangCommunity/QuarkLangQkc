@@ -173,8 +173,9 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 			switch fi.Name() {
 			case ".git", "dist", "dist-ci":
 				return filepath.SkipDir
-			case "lintbench":
-				// 基准集（刻意植入缺陷）由 TestLintBenchmark 以自身清单门禁
+			case "lintbench", "bench":
+				// 基准集/性能夹具：lintbench 由 TestLintBenchmark 以自身清单门禁；
+				// bench/tools 是性能基准的输入文件（含第三方库副本），不参与语料复核。
 				return filepath.SkipDir
 			}
 			return nil

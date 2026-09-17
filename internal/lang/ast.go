@@ -232,6 +232,9 @@ type NullLit struct{ Pos Pos }
 type Ident struct {
 	Name string
 	Pos  Pos
+	// Slot 是编译期解析出的作用域槽位（0 = 未解析）。
+	// 由 slots.go 在「下标可证明稳定」处写入，运行时还会校验名字后才使用（安全兜底）。
+	Slot int32
 }
 type ListLit struct {
 	Items []Expr

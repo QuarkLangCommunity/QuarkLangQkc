@@ -27,6 +27,11 @@ type Document struct {
 	parseErr   error
 	parseErrLn int
 	parseErrCl int
+
+	syms        []symbol // 符号表缓存（文本变化时失效；补全/跳转/悬停共用）
+	symsValid   bool
+	globalCands []symbol // 补全候选的「与光标行无关」部分（关键字 + 内置 + 全局符号）
+	globalValid bool
 }
 
 func newDocument(uri, text string) *Document {
@@ -40,8 +45,10 @@ func (d *Document) setText(text string) {
 	d.analyze()
 }
 
-// analyze 重新解析并构建文档模型 + 符号表。
+// analyze 重新解析并构建文档模型（符号表按需惰性重建）。
 func (d *Document) analyze() {
+	d.syms, d.symsValid = nil, false
+	d.globalCands, d.globalValid = nil, false
 	d.Lines = strings.Split(d.Text, "\n")
 	d.prog, d.comments, d.parseErr = nil, nil, nil
 	d.doc = nil
@@ -189,8 +196,17 @@ type symbol struct {
 	Scope [2]int // 局部符号的作用范围（函数起止行，1 基；非局部为 0）
 }
 
-// symbols 汇总文档中的全部符号（全局 + 局部）。
+// symbols 汇总文档中的全部符号（全局 + 局部）；结果按文档版本缓存。
 func (d *Document) symbols() []symbol {
+	if d.symsValid {
+		return d.syms
+	}
+	out := d.buildSymbols()
+	d.syms, d.symsValid = out, true
+	return out
+}
+
+func (d *Document) buildSymbols() []symbol {
 	var out []symbol
 	if d.doc != nil {
 		for _, it := range d.doc.All() {
@@ -340,34 +356,57 @@ func (d *Document) wordAt(line, col int) string {
 }
 
 // completionCandidates 汇总补全候选（关键字 + 类型 + 符号）。
+// 「与光标行无关」的部分（关键字/内置/全局符号）按文档版本缓存；
+// 每次只额外挑选该行可见的局部符号 → 逐键补全近乎零分配。
 func (d *Document) completionCandidates(line int) []symbol {
-	var out []symbol
-	seen := map[string]bool{}
-	push := func(s symbol) {
-		if s.Name == "" || seen[s.Name] {
-			return
+	if !d.globalValid {
+		seen := map[string]bool{}
+		var globals []symbol
+		push := func(s symbol) {
+			if s.Name == "" || seen[s.Name] {
+				return
+			}
+			seen[s.Name] = true
+			globals = append(globals, s)
 		}
-		seen[s.Name] = true
-		out = append(out, s)
+		for _, kw := range keywords {
+			push(symbol{Name: kw, Kind: "keyword"})
+		}
+		for _, s := range d.symbols() {
+			if !s.Local {
+				push(s)
+			}
+		}
+		for _, b := range builtins {
+			push(symbol{Name: b, Kind: "builtin"})
+		}
+		sort.SliceStable(globals, func(i, j int) bool {
+			if globals[i].Kind != globals[j].Kind {
+				return kindRank(globals[i].Kind) < kindRank(globals[j].Kind)
+			}
+			return globals[i].Name < globals[j].Name
+		})
+		d.globalCands, d.globalValid = globals, true
 	}
-	for _, kw := range keywords {
-		push(symbol{Name: kw, Kind: "keyword"})
+	out := make([]symbol, 0, len(d.globalCands)+8)
+	out = append(out, d.globalCands...)
+	seenGlobal := func(name string) bool {
+		for i := range d.globalCands {
+			if d.globalCands[i].Name == name {
+				return true
+			}
+		}
+		return false
 	}
 	for _, s := range d.symbols() {
-		if s.Local && (line < s.Scope[0] || line > s.Scope[1] || s.Line > line) {
+		if !s.Local || line < s.Scope[0] || line > s.Scope[1] || s.Line > line {
 			continue
 		}
-		push(s)
-	}
-	for _, b := range builtins {
-		push(symbol{Name: b, Kind: "builtin"})
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Kind != out[j].Kind {
-			return kindRank(out[i].Kind) < kindRank(out[j].Kind)
+		if seenGlobal(s.Name) {
+			continue
 		}
-		return out[i].Name < out[j].Name
-	})
+		out = append(out, s)
+	}
 	return out
 }
 

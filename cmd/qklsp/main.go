@@ -374,7 +374,25 @@ func (d *Document) diagnostics(libDirs []string) map[string][]lspDiagnostic {
 			Range: d.lineRange(line), Severity: 2, Code: diag.Code, Source: "qkcheck", Message: diag.Msg,
 		})
 	}
-	// 类型检查（含 import 合并）：错误位置经 SrcMap 映射回真实文件
+	// 类型检查
+	// 无 import（常见）：直接对已解析的同一份 AST 检查，省掉一次完整 lex+parse；
+	// 有 import：必须合并后编译（库符号来自合并源），错误位置经 SrcMap 映射回真实文件。
+	if d.prog != nil && len(d.prog.Imports) == 0 {
+		if terr := lang.Typecheck(d.prog); terr != nil {
+			line, _ := errLineCol(terr)
+			if line < 1 {
+				line = 1
+			}
+			out[d.Path] = append(out[d.Path], lspDiagnostic{
+				Range: d.lineRange(line), Severity: 1, Source: "qkc",
+				Message: strings.TrimSpace(lineSuffix.ReplaceAllString(terr.Error(), "")),
+			})
+		}
+		if len(out) == 0 {
+			out[d.Path] = []lspDiagnostic{}
+		}
+		return out
+	}
 	if _, sm, err := lang.CompileWithImportPaths(d.Text, d.Path, libDirs); err != nil {
 		line, col := errLineCol(err)
 		file, fline := d.Path, line

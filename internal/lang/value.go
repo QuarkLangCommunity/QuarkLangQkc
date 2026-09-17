@@ -186,10 +186,16 @@ func (r *refValue) store(v Value) bool {
 
 // deref 解引用引用链：引用值对语言层完全透明（所有读路径统一解引用）。
 // 引用链由调用实参构造（f(x) 内再 g(x) 直接复用同一引用单元，链长 ≤ 1）。
+// deref 解引用（引用传递的统一读路径）。热路径：绝大多数值不是引用，
+// 这里保持「极小、可内联」的哨兵判断，真正的解引用循环放到 derefSlow。
 func (v Value) deref() Value {
 	if v.tag != byte(vRef) {
 		return v
 	}
+	return v.derefSlow()
+}
+
+func (v Value) derefSlow() Value {
 	for n := 0; v.tag == byte(vRef); n++ {
 		if n > 1<<20 { // 环守卫（构造上不可达，防御兜底）
 			return NilV()
@@ -637,6 +643,10 @@ type execCtx struct {
 	sc       scope    // 函数执行作用域（复用，免每次调用堆分配）
 	depth    int      // 调用深度（栈溢出防护，按 ctx 传播，线程安全）
 	link     *execCtx // 空闲链（无锁 LIFO 栈）
+
+	// argArena 是实参切片的复用区（本 ctx 独占 → 无跨 goroutine 共享）。
+	// evalArgs 在其尾部追加，调用完成后由调用点截断归还；容量随调用保留复用。
+	argArena []Value
 }
 
 // newCtx 接管调用参数切片所有权（evalArgs 每次新建，免复制）。
@@ -658,6 +668,7 @@ func (in *interp) newCtx(fn *Func, args []Value, pos Pos) *execCtx {
 		ctx = &execCtx{Log: NewList()}
 	}
 	ctx.link = nil
+	ctx.argArena = ctx.argArena[:0]
 	ctx.Fn = fn
 	ctx.Args = args
 	ctx.pos = pos

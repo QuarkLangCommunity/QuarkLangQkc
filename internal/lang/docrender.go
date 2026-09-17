@@ -68,18 +68,24 @@ func kindLabel(kind string) string {
 // Markdown 渲染为 Markdown 文档。
 func (d *Doc) Markdown(opts DocOptions) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", d.title(opts))
+	b.Grow(markdownSizeHint(d))
+	b.WriteString("# ")
+	b.WriteString(d.title(opts))
+	b.WriteString("\n\n")
 	if d.FileDoc != "" {
 		b.WriteString(d.FileDoc)
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(&b, "> 形态：`program %s;`", d.Kind)
+	b.WriteString("> 形态：`program ")
+	b.WriteString(d.Kind)
+	b.WriteString(";`")
 	if len(d.Imports) > 0 {
 		var q []string
 		for _, im := range d.Imports {
 			q = append(q, "`"+im+"`")
 		}
-		fmt.Fprintf(&b, "　·　导入：%s", strings.Join(q, ", "))
+		b.WriteString("　·　导入：")
+		b.WriteString(strings.Join(q, ", "))
 	}
 	b.WriteString("\n\n")
 
@@ -96,8 +102,15 @@ func (d *Doc) Markdown(opts DocOptions) string {
 	}
 	b.WriteString("## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n")
 	for _, it := range rows {
-		fmt.Fprintf(&b, "| %s | `%s` | %s | %s |\n",
-			kindLabel(it.Kind), it.Name, cell(it.Signature), cell(Summary(it.Doc)))
+		b.WriteString("| ")
+		b.WriteString(kindLabel(it.Kind))
+		b.WriteString(" | `")
+		b.WriteString(it.Name)
+		b.WriteString("` | ")
+		b.WriteString(cell(it.Signature))
+		b.WriteString(" | ")
+		b.WriteString(cell(Summary(it.Doc)))
+		b.WriteString(" |\n")
 	}
 	b.WriteString("\n")
 
@@ -124,9 +137,15 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		if len(vis) == 0 {
 			continue
 		}
-		fmt.Fprintf(&b, "## %s\n\n", sec.title)
+		b.WriteString("## ")
+		b.WriteString(sec.title)
+		b.WriteString("\n\n")
 		for _, it := range vis {
-			fmt.Fprintf(&b, "### %s\n\n```qk\n%s\n```\n\n", it.Name, it.Signature)
+			b.WriteString("### ")
+			b.WriteString(it.Name)
+			b.WriteString("\n\n```qk\n")
+			b.WriteString(it.Signature)
+			b.WriteString("\n```\n\n")
 			if it.Doc != "" {
 				b.WriteString(it.Doc)
 				b.WriteString("\n")
@@ -142,10 +161,19 @@ func (d *Doc) Markdown(opts DocOptions) string {
 }
 
 func writeFieldsMD(b *strings.Builder, it *DocItem) {
+	writeRow := func(a, c, d string) {
+		b.WriteString("| `")
+		b.WriteString(a)
+		b.WriteString("` | ")
+		b.WriteString(c)
+		b.WriteString(" | ")
+		b.WriteString(d)
+		b.WriteString(" |\n")
+	}
 	if it.Kind == DocStruct {
 		b.WriteString("| 字段 | 类型 | 说明 |\n|---|---|---|\n")
 		for _, f := range it.Fields {
-			fmt.Fprintf(b, "| `%s` | `%s` | %s |\n", f.Name, f.Type, cell(Summary(f.Doc)))
+			writeRow(f.Name, "`"+f.Type+"`", cell(Summary(f.Doc)))
 		}
 		return
 	}
@@ -155,8 +183,15 @@ func writeFieldsMD(b *strings.Builder, it *DocItem) {
 		if sig == "" {
 			sig = f.Name // expand interface X; 之类
 		}
-		fmt.Fprintf(b, "| `%s` | %s | %s |\n", name, cell(sig), cell(Summary(f.Doc)))
+		writeRow(name, cell(sig), cell(Summary(f.Doc)))
 	}
+}
+
+// markdownSizeHint 预估输出规模（每条目约 200 字节 + 文件注释），用于一次性预分配。
+func markdownSizeHint(d *Doc) int {
+	n := len(d.All())
+	size := 256 + n*220 + len(d.FileDoc)
+	return size
 }
 
 // cell 让文本可安全放进 Markdown 表格。

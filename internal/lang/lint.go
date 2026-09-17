@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -440,8 +441,8 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		return false, false
 	case *AssignStmt:
 		// QK108：自赋值 x = x（含 p.x / l[i] 的结构等价形式）
-		if k := exprKey(t.Target); k != "" && k == exprKey(t.X) {
-			l.warn(t.Pos, CodeSelfAssign, "自赋值：%s 赋值给自身（无效果）", k)
+		if sameExpr(t.Target, t.X) {
+			l.warn(t.Pos, CodeSelfAssign, "自赋值：%s 赋值给自身（无效果）", exprText(t.Target))
 		}
 		// 先求右值与目标子表达式：`x = x + 1` 里的读取会清除「未读赋值」记录，
 		// 否则会把自己读自己的场景误判成死存储（QK113 误报源）。
@@ -566,14 +567,13 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 				l.warn(t.Pos, CodeDivZero, "常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）", t.Op)
 			}
 		}
-		// QK114：自身比较 x == x / x != x
-		if t.Op == "==" || t.Op == "!=" {
-			if k := exprKey(t.L); k != "" && k == exprKey(t.R) {
-				if t.Op == "==" {
-					l.warn(t.Pos, CodeSelfCompare, "自身比较：%s == %s 恒为真", k, k)
-				} else {
-					l.warn(t.Pos, CodeSelfCompare, "自身比较：%s != %s 恒为假", k, k)
-				}
+		// QK114：自身比较 x == x / x != x（只对可寻址形态：标识符/成员/下标）
+		if (t.Op == "==" || t.Op == "!=") && isRefLike(t.L) && sameExpr(t.L, t.R) {
+			name := exprText(t.L)
+			if t.Op == "==" {
+				l.warn(t.Pos, CodeSelfCompare, "自身比较：%s == %s 恒为真", name, name)
+			} else {
+				l.warn(t.Pos, CodeSelfCompare, "自身比较：%s != %s 恒为假", name, name)
 			}
 		}
 	case *UnOp:
@@ -741,34 +741,77 @@ func declTypeOf(l *linter, name string) string {
 	return ""
 }
 
-// exprKey 给出「简单左值/操作数」的结构键（标识符、成员、下标、字面量）；
-// 复杂表达式（调用等）返回 ""——宁可漏报也不误报。
-func exprKey(e Expr) string {
+// sameExpr 结构等价比较：只认简单形态（标识符 / 成员 / 下标 / 字面量），
+// 其余（调用、运算等）一律视为不相等 → 不报，宁漏不误。
+// 全部走指针/值比较，零分配（旧实现用 fmt.Sprintf 造键，是 lint 阶段的主要分配来源）。
+func sameExpr(a, b Expr) bool {
+	switch x := a.(type) {
+	case *Ident:
+		y, ok := b.(*Ident)
+		return ok && x.Name == y.Name
+	case *MemberExpr:
+		y, ok := b.(*MemberExpr)
+		return ok && x.Name == y.Name && sameExpr(x.X, y.X)
+	case *IndexExpr:
+		y, ok := b.(*IndexExpr)
+		return ok && sameExpr(x.X, y.X) && sameExpr(x.Idx, y.Idx)
+	case *IntLit:
+		y, ok := b.(*IntLit)
+		return ok && x.V == y.V
+	case *FloatLit:
+		y, ok := b.(*FloatLit)
+		return ok && x.V == y.V
+	case *StrLit:
+		y, ok := b.(*StrLit)
+		return ok && x.V == y.V
+	case *BoolLit:
+		y, ok := b.(*BoolLit)
+		return ok && x.V == y.V
+	case *NullLit:
+		_, ok := b.(*NullLit)
+		return ok
+	}
+	return false
+}
+
+// isRefLike 是否可寻址形态（自赋值/自身比较只对这些形态报告）。
+func isRefLike(e Expr) bool {
+	switch e.(type) {
+	case *Ident, *MemberExpr, *IndexExpr:
+		return true
+	}
+	return false
+}
+
+// exprText 生成诊断里展示的表达式文本（仅在实际报错时调用 → 慢路径无所谓分配）。
+func exprText(e Expr) string {
+	var b strings.Builder
+	writeExprText(&b, e)
+	return b.String()
+}
+
+func writeExprText(b *strings.Builder, e Expr) {
 	switch t := e.(type) {
 	case *Ident:
-		return t.Name
+		b.WriteString(t.Name)
 	case *MemberExpr:
-		if k := exprKey(t.X); k != "" {
-			return k + "." + t.Name
-		}
+		writeExprText(b, t.X)
+		b.WriteByte('.')
+		b.WriteString(t.Name)
 	case *IndexExpr:
-		if k := exprKey(t.X); k != "" {
-			if i, ok := t.Idx.(*IntLit); ok {
-				return fmt.Sprintf("%s[%d]", k, i.V)
-			}
-		}
+		writeExprText(b, t.X)
+		b.WriteByte('[')
+		writeExprText(b, t.Idx)
+		b.WriteByte(']')
 	case *IntLit:
-		return fmt.Sprintf("int(%d)", t.V)
+		b.WriteString(strconv.FormatInt(t.V, 10))
 	case *StrLit:
-		return fmt.Sprintf("str(%q)", t.V)
+		b.WriteString(strconv.Quote(t.V))
 	case *BoolLit:
-		return fmt.Sprintf("bool(%v)", t.V)
-	case *NullLit:
-		return "null"
-	case *FloatLit:
-		return fmt.Sprintf("float(%v)", t.V)
+		b.WriteString(strconv.FormatBool(t.V))
+	default:
+		b.WriteString("表达式")
 	}
-	return ""
 }
 
 // checkConstCond 常量条件：if (true/false)、while (false)。
@@ -791,10 +834,10 @@ func (l *linter) checkConstCond(cond Expr, pos Pos, kw string) {
 // branch 进入嵌套块/分支前清除未读赋值记录：
 // 分支内可能有读取，保守清空 → 宁漏报不误报（QK113）。
 func (l *linter) branch(b *Block) {
-	if b == nil {
-		return
+	if b == nil || len(l.pending) == 0 {
+		return // 已经是空表：无需清（常见情形，省 clear 开销）
 	}
-	l.pending = map[string]Pos{}
+	clear(l.pending) // 复用同一张表，避免每个分支新建 map
 }
 
 // hasBreak 判断块内是否存在 break（不进入嵌套循环：嵌套循环里的 break 不外逃）。
