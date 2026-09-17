@@ -83,3 +83,4 @@
 | P5 | `qkcheck [-json] [-params] [-L dir] files...` 静态检查：未使用变量/形参、不可达代码、遮蔽、缺返回、接口未实现、void 值误用（码 QK101–QK107） |
 | P6 | `qkdoc [-o file] [-html] [-all] files...` API 文档：声明上方 `/* */`/`//` 注释 + `pub` 导出 → Markdown/HTML |
 | P7 | `qkrepl [-e code] [-q]` 交互式求值：多行块续行、跨输入持久环境（变量/函数/类型）、`:help/:load/:quit` |
+| P8 | `qklsp [-L dir]` 语言服务器（stdio LSP）：诊断/跳转定义/补全/悬停/文档符号；编辑器接入见 `editors/`（VS Code 扩展 + tree-sitter 语法） |

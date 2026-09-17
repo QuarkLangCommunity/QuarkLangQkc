@@ -1,0 +1,65 @@
+==================
+宏
+==================
+
+#macro add (a, b) {
+    #when (run) {
+        #return a + b
+    }
+}
+
+fn main(IOStream io) void {
+    io.println(add(10, 32));
+}
+
+---
+
+(source_file
+  (macro_definition
+    (identifier)
+    (identifier)
+    (identifier)
+    (macro_block
+      (identifier)
+      (identifier)
+      (macro_block
+        (identifier)
+        (identifier)
+        (identifier))))
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (type
+          (type_base
+            (builtin_type)))
+        (identifier)))
+    (type
+      (type_base
+        (builtin_type)))
+    (block
+      (expression_statement
+        (expression
+          (primary
+            (call_expression
+              (expression
+                (primary
+                  (member_expression
+                    (expression
+                      (primary
+                        (identifier)))
+                    (identifier))))
+              (argument_list
+                (expression
+                  (primary
+                    (call_expression
+                      (expression
+                        (primary
+                          (identifier)))
+                      (argument_list
+                        (expression
+                          (primary
+                            (number)))
+                        (expression
+                          (primary
+                            (number)))))))))))))))

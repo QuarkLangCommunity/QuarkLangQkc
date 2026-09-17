@@ -1,0 +1,302 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "QuarkLang",
+  "scopeName": "source.quarklang",
+  "fileTypes": [
+    ".qk",
+    ".kq"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#macros"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#signcalls"
+    },
+    {
+      "include": "#calls"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.quarklang",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.quarklang",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "macros": {
+      "patterns": [
+        {
+          "name": "meta.macro.quarklang",
+          "match": "(#)(macro)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.directive.quarklang"
+            },
+            "2": {
+              "name": "keyword.control.directive.quarklang"
+            },
+            "3": {
+              "name": "entity.name.function.macro.quarklang"
+            }
+          }
+        },
+        {
+          "name": "keyword.control.directive.quarklang",
+          "match": "#[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.quarklang",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.quarklang",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.other.raw.quarklang",
+          "begin": "`",
+          "end": "`"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.quarklang",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.quarklang",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.quarklang",
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(<[^>]*>)?\\s*(\\()",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.quarklang"
+            },
+            "2": {
+              "name": "entity.name.function.quarklang"
+            },
+            "3": {
+              "name": "storage.type.generic.quarklang"
+            },
+            "4": {
+              "name": "punctuation.section.parameters.begin.quarklang"
+            }
+          }
+        },
+        {
+          "name": "meta.struct.quarklang",
+          "match": "\\b(type)\\s+(struct)\\s*(<[^>]*>)?",
+          "captures": {
+            "1": {
+              "name": "storage.type.quarklang"
+            },
+            "2": {
+              "name": "storage.type.struct.quarklang"
+            },
+            "3": {
+              "name": "storage.type.generic.quarklang"
+            }
+          }
+        },
+        {
+          "name": "meta.interface.quarklang",
+          "match": "\\b(type)\\s+(interface)\\s*(<[^>]*>)?",
+          "captures": {
+            "1": {
+              "name": "storage.type.quarklang"
+            },
+            "2": {
+              "name": "storage.type.interface.quarklang"
+            },
+            "3": {
+              "name": "storage.type.generic.quarklang"
+            }
+          }
+        },
+        {
+          "name": "meta.impl.quarklang",
+          "match": "\\b(impl|space)\\s*(<[^>]*>)?\\s*\\{",
+          "captures": {
+            "1": {
+              "name": "storage.type.impl.quarklang"
+            },
+            "2": {
+              "name": "storage.type.generic.quarklang"
+            }
+          }
+        },
+        {
+          "name": "meta.library.quarklang",
+          "match": "\\b(library)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.library.quarklang"
+            },
+            "2": {
+              "name": "entity.name.namespace.quarklang"
+            }
+          }
+        },
+        {
+          "name": "meta.type-alias.quarklang",
+          "match": "\\b(type)\\b",
+          "captures": {
+            "1": {
+              "name": "storage.type.quarklang"
+            }
+          }
+        },
+        {
+          "name": "variable.parameter.quarklang",
+          "match": "\\b(const|copyd)\\b",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.quarklang"
+            }
+          }
+        },
+        {
+          "name": "meta.directive.quarklang",
+          "match": "\\b(program|import|pub|expand|dynamic)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.directive.quarklang"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.quarklang",
+          "match": "\\b(if|else|while|for|break|return|log|delete|try|catch|new)\\b"
+        },
+        {
+          "name": "constant.language.quarklang",
+          "match": "\\b(true|false|null)\\b"
+        },
+        {
+          "name": "variable.language.self.quarklang",
+          "match": "\\b(self|Self)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.builtin.quarklang",
+          "match": "\\b(int|long|char|float|bool|String|void|List|HashTable|IOStream|thread|memorize|memory|pointer|interface|function)\\b"
+        },
+        {
+          "name": "entity.name.type.quarklang",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "signcalls": {
+      "patterns": [
+        {
+          "name": "meta.sign-call.quarklang",
+          "match": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.sign.quarklang"
+            },
+            "2": {
+              "name": "variable.other.sign.quarklang"
+            }
+          }
+        }
+      ]
+    },
+    "calls": {
+      "patterns": [
+        {
+          "name": "entity.name.function.call.quarklang",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(::)",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.quarklang"
+            },
+            "2": {
+              "name": "keyword.operator.quarklang"
+            }
+          }
+        },
+        {
+          "name": "entity.name.function.call.quarklang",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.quarklang"
+            },
+            "2": {
+              "name": "punctuation.section.parameters.begin.quarklang"
+            }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.quarklang",
+          "match": "(==|!=|<=|>=|&&|\\|\\||<<|>>|::|\\+|-|\\*|/|%|=|!|<|>|&|\\|)"
+        },
+        {
+          "name": "punctuation.section.quarklang",
+          "match": "[{}()\\[\\]]"
+        },
+        {
+          "name": "punctuation.separator.quarklang",
+          "match": "[,;:.]"
+        }
+      ]
+    }
+  }
+}

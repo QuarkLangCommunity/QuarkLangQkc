@@ -1,0 +1,22 @@
+==================
+最小程序
+==================
+
+fn main(IOStream io) void {
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        type: (type
+          (type_base
+            (builtin_type)))
+        name: (identifier)))
+    return_type: (type
+      (type_base
+        (builtin_type)))
+    body: (block)))

@@ -1,0 +1,176 @@
+==================
+顶层声明
+==================
+
+/* 文件头 */
+program library;
+import "helper";
+pub fn double(int n) int {
+    return n * 2;
+}
+type struct {
+    int x;
+    int y;
+} Point;
+type interface {
+    fn sum(Self self) int;
+} Summable;
+impl {
+    fn sum(Point self) int {
+        return self.x + self.y;
+    }
+} Point;
+space {
+    fn max(int a, int b) int {
+        return a;
+    }
+} math;
+library gl {
+    fn ClearColor(float r, float g, float b, float a) void;
+}
+type int Number;
+
+---
+
+(source_file
+  (block_comment)
+  (program_declaration
+    (identifier))
+  (import_declaration
+    (string))
+  (pub_declaration
+    (function_declaration
+      (identifier)
+      (parameter_list
+        (parameter
+          (type
+            (type_base
+              (builtin_type)))
+          (identifier)))
+      (type
+        (type_base
+          (builtin_type)))
+      (block
+        (return_statement
+          (expression
+            (binary_expression
+              (expression
+                (primary
+                  (identifier)))
+              (expression
+                (primary
+                  (number)))))))))
+  (type_alias
+    (type
+      (anonymous_struct_type
+        (member_declaration
+          (type
+            (type_base
+              (builtin_type)))
+          (identifier))
+        (member_declaration
+          (type
+            (type_base
+              (builtin_type)))
+          (identifier))))
+    (identifier))
+  (type_alias
+    (type
+      (anonymous_interface_type
+        (method_signature
+          (identifier)
+          (parameter
+            (type
+              (type_base
+                (builtin_type)))
+            (identifier))
+          (type
+            (type_base
+              (builtin_type))))))
+    (identifier))
+  (impl_declaration
+    (function_declaration
+      (identifier)
+      (parameter_list
+        (parameter
+          (type
+            (type_base
+              (identifier)))
+          (identifier)))
+      (type
+        (type_base
+          (builtin_type)))
+      (block
+        (return_statement
+          (expression
+            (binary_expression
+              (expression
+                (primary
+                  (member_expression
+                    (expression
+                      (primary
+                        (identifier)))
+                    (identifier))))
+              (expression
+                (primary
+                  (member_expression
+                    (expression
+                      (primary
+                        (identifier)))
+                    (identifier)))))))))
+    (identifier))
+  (space_declaration
+    (function_declaration
+      (identifier)
+      (parameter_list
+        (parameter
+          (type
+            (type_base
+              (builtin_type)))
+          (identifier))
+        (parameter
+          (type
+            (type_base
+              (builtin_type)))
+          (identifier)))
+      (type
+        (type_base
+          (builtin_type)))
+      (block
+        (return_statement
+          (expression
+            (primary
+              (identifier))))))
+    (identifier))
+  (library_declaration
+    (identifier)
+    (library_method
+      (identifier)
+      (parameter
+        (type
+          (type_base
+            (builtin_type)))
+        (identifier))
+      (parameter
+        (type
+          (type_base
+            (builtin_type)))
+        (identifier))
+      (parameter
+        (type
+          (type_base
+            (builtin_type)))
+        (identifier))
+      (parameter
+        (type
+          (type_base
+            (builtin_type)))
+        (identifier))
+      (type
+        (type_base
+          (builtin_type)))))
+  (type_alias
+    (type
+      (type_base
+        (builtin_type)))
+    (identifier)))

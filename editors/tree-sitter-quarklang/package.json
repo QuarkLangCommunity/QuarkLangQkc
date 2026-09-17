@@ -1,0 +1,19 @@
+{
+  "name": "tree-sitter-quarklang",
+  "version": "0.1.0",
+  "description": "QuarkLang grammar for tree-sitter",
+  "main": "bindings/node",
+  "keywords": ["tree-sitter", "quarklang", "parser"],
+  "license": "MIT",
+  "tree-sitter": [
+    {
+      "scope": "source.quarklang",
+      "file-types": ["qk", "kq"],
+      "highlights": "queries/highlights.scm",
+      "locals": "queries/locals.scm"
+    }
+  ],
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.0"
+  }
+}

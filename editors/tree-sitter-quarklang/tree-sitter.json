@@ -1,0 +1,37 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "quarklang",
+      "camelcase": "QuarkLang",
+      "title": "QuarkLang",
+      "scope": "source.quarklang",
+      "file-types": [
+        "qk",
+        "kq"
+      ],
+      "injection-regex": "^quarklang$",
+      "class-name": "TreeSitterQuarklang",
+      "highlights": "queries/highlights.scm",
+      "locals": "queries/locals.scm",
+      "path": "."
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "QuarkLang grammar for tree-sitter（正典语法见仓库 SYNTAX.md）",
+    "authors": [
+      {
+        "name": "QuarkLang Community"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/QuarkLangCommunity/QuarkLangQkc"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "node": true
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "name": "quarklang",
+  "displayName": "QuarkLang",
+  "description": "QuarkLang 语言支持：语法高亮、诊断、跳转、补全（内置 qklsp 语言服务器，零 npm 依赖）",
+  "version": "0.1.0",
+  "publisher": "QuarkLangCommunity",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages", "Linters"],
+  "keywords": ["quarklang", "qk", "lsp", "tree-sitter"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/QuarkLangCommunity/QuarkLangQkc"
+  },
+  "main": "./src/extension.js",
+  "activationEvents": ["onLanguage:quarklang"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "quarklang",
+        "aliases": ["QuarkLang", "quarklang", "qk"],
+        "extensions": [".qk", ".kq"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "quarklang",
+        "scopeName": "source.quarklang",
+        "path": "./syntaxes/quarklang.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "quarklang",
+        "path": "./snippets/quarklang.json"
+      }
+    ],
+    "configuration": {
+      "title": "QuarkLang",
+      "properties": {
+        "quarklang.serverPath": {
+          "type": "string",
+          "default": "qklsp",
+          "description": "qklsp 可执行文件路径（默认从 PATH 查找；也可指向编译产物，如 ./cmd/qklsp/qklsp）"
+        },
+        "quarklang.libDirs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "额外的 import 搜索目录（传给 qklsp -L，可多个）"
+        },
+        "quarklang.trace.server": {
+          "type": "boolean",
+          "default": false,
+          "description": "把 qklsp 的收发报文打到输出通道（排查用）"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  }
+}

@@ -112,6 +112,27 @@ qk> fib(20)
   与 `quark file.qk` 共用注册路径（`registerProgram`），因此语义一致。
 - 实测：`fib(20)` → 6765；`:load examples/struct.qk` 后 `Point p = .{a:20, b:22}; p.sum()` → 42。
 
+### 编辑器支持：qklsp + VS Code / tree-sitter（`cmd/qklsp`、`editors/`）
+
+```sh
+go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
+./qklsp -L ../QuarkLangLibs-Style    # 额外 import 搜索目录
+```
+
+| 能力 | 说明 |
+|---|---|
+| 诊断 | 解析/类型错误（`qkc`）+ 静态检查（`qkcheck` 的 QK101–QK107），跨 import 文件也定位正确 |
+| 跳转定义 | 函数/结构体/接口/空间/字段/局部变量（UTF-16 列换算，中文源码下同样准确） |
+| 补全 | 关键字 + 内置类型/方法 + 当前文件的函数/类型/空间/局部变量 |
+| 悬停 / 大纲 | 签名 + 文档注释；`documentSymbol` 列出全部顶层符号 |
+
+编辑器产物：`editors/vscode`（VS Code 扩展：TextMate 语法高亮 + 片段 + 零依赖 LSP 客户端）、
+`editors/tree-sitter-quarklang`（tree-sitter 语法：Neovim/Helix/Emacs 可直接用）。
+
+**实测**：`editors/tree-sitter-quarklang` 对主仓 + 6 个库仓共 **60 个 `.qk/.kq` 文件解析 0 错误**
+（含 `style.qk` 1567 行、`cleg.qk`），`tree-sitter test` 5/5 通过；
+`editors/vscode/test/protocol.test.js` 用 Node 直连 `qklsp` 八项全过（初始化/诊断/跳转/补全/悬停/改动静默/退出）。
+
 **跨系统**：qkc 产出与平台无关的 LLVM IR，目标平台 `clang`/`llc` 生成原生二进制；`.qlib` 库（gob）跨系统；线程运行时（`qthreads.c` 内嵌）POSIX/Windows 双载体。
 
 **优化旗标**：默认 `-O3`（便携）；`QUARK_CFLAGS="-O3 -march=native"` 本机极限（产物仅当前 CPU）；PGO 可用 `-fprofile-generate/-fprofile-use`（fib35 -29%）。
@@ -147,7 +168,8 @@ qk> fib(20)
 
 - `main.go` + `internal/lang/` —— 解释器（lexer/parser/typecheck/eval/runtime/宏）
 - `compiler/` —— LLVM 编译器（`qkc` + `internal/cgen` IR 发射器 + 内嵌线程运行时）
-- `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查、`qkdoc` API 文档、`qkrepl` 交互求值
+- `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查、`qkdoc` API 文档、`qkrepl` 交互求值、`qklsp` 语言服务器
+- `editors/` —— 编辑器支持：VS Code 扩展（`vscode/`）+ tree-sitter 语法（`tree-sitter-quarklang/`）
 - `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）
 - `examples/` —— 示例
 
