@@ -25,6 +25,9 @@ LDFLAGS="-s -w -X main.version=${VERSION}"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
+# 归一为绝对路径：编译器子模块用 (cd compiler && go build -o ...) 构建，
+# 相对路径会被解释成 repo/tmp/... 之类的错误位置（绝对路径 + ../ 拼接的坑）。
+OUT="$(cd "$OUT" && pwd)"
 
 echo "→ 版本 ${VERSION}；目标：${TARGETS}"
 for target in $TARGETS; do
@@ -43,7 +46,7 @@ for target in $TARGETS; do
     name="${entry%%:*}"
     pkg="${entry##*:}"
     out="$OUT/${name}-${VERSION}-${GOOS}-${GOARCH}${ext}"
-    (cd compiler && CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "../$out" "$pkg")
+    (cd compiler && CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$out" "$pkg")
     printf '  ✓ %s\n' "$(basename "$out")"
   done
 done

@@ -42,12 +42,19 @@ jobs:
           fi
       - name: 编辑器：VS Code 扩展的 LSP 客户端联调
         run: QKLSP=/tmp/qklsp node editors/vscode/test/protocol.test.js
-      - name: 发布产物冒烟（仅本平台，验证脚本可用）
-        run: QUARK_TARGETS="linux/amd64" ./scripts/build-release.sh 0.0.0-ci dist-ci
+      - name: 发布产物冒烟（仅本平台，验证脚本可用；用绝对路径输出以覆盖路径归一）
+        run: |
+          out="${RUNNER_TEMP:-/tmp}/quarklang-dist-ci"
+          rm -rf "$out"
+          QUARK_TARGETS="linux/amd64" ./scripts/build-release.sh 0.0.0-ci "$out"
+          for t in quark qkc qkcheck qkdoc qkrepl qklsp; do
+            ls "$out/$t"-0.0.0-ci-linux-amd64 >/dev/null || { echo "缺少产物: $t"; exit 1; }
+          done
+          ls -la "$out"
       - name: 变更日志生成冒烟
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
       - uses: actions/upload-artifact@v4
         with:
           name: quarklang-ci-linux-amd64
-          path: dist-ci/*
+          path: ${{ runner.temp }}/quarklang-dist-ci/*
           retention-days: 7
