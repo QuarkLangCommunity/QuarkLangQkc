@@ -5,6 +5,7 @@ package main
 import (
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"unicode/utf16"
@@ -80,15 +81,34 @@ func uriToPath(uri string) string {
 	if decoded, err := url.PathUnescape(p); err == nil {
 		p = decoded
 	}
-	return filepath.FromSlash(p)
+	return filepath.FromSlash(pathFromURISlash(p))
 }
 
+// pathFromURISlash 去掉 Windows 盘符前的引导斜杠（/C:/x → C:/x），其余平台原样返回。
+// 单独抽出便于在任何平台做单元测试（跨系统一致性）。
+func pathFromURISlash(p string) string {
+	if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' &&
+		((p[1] >= 'a' && p[1] <= 'z') || (p[1] >= 'A' && p[1] <= 'Z')) && p[2] == ':' {
+		return p[1:]
+	}
+	return p
+}
+
+// pathToURI 把本地路径转成 file:// URI（LSP 要求三段斜杠：file:///C:/x、file:///home/x）。
 func pathToURI(path string) string {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = path
 	}
-	return "file://" + filepath.ToSlash(abs)
+	return "file://" + uriSlashPath(filepath.ToSlash(abs))
+}
+
+// uriSlashPath 保证斜杠路径以 / 开头（Windows 盘符 C:/x → /C:/x），拼上 file:// 后为 file:///C:/x。
+func uriSlashPath(p string) string {
+	if strings.HasPrefix(p, "/") {
+		return p
+	}
+	return "/" + p
 }
 
 // ---------- 位置换算（LSP 0 基 / UTF-16 列 ↔ 语言 1 基 / 字节列） ----------

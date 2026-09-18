@@ -75,11 +75,33 @@ go build -o qkcheck ./cmd/qkcheck
 | QK114 | 自身比较 | `x == x`（恒真）/ `x != x`（恒假） |
 | QK115 | 未被调用的函数 | 仅 `program main`（有 `main` 且无 `pub`）：整文件从未出现的函数即死代码；库文件不报 |
 
-**误报率 / 漏报率（可复现基准，29 用例）**
+**误报率 / 漏报率（静态基准 + 随机化统计取 P99）**
 
 ```sh
-go test ./internal/lang/ -run TestLintBenchmark -v   # 基准集：testdata/lintbench（29 用例）
+# ① 人工标注基准（29 用例：15 缺陷 + 14 干净，含刻意不报的反例）
+go test ./internal/lang/ -run TestLintBenchmark -v
+
+# ② 随机化统计：每轮 4 个真值已知用例，多轮取 P50/P90/P99/max（默认 2000 轮）
+go test ./internal/lang/ -run TestLintStatsP99 -v
+LINT_ROUNDS=20000 LINT_SEED=7 go test ./internal/lang/ -run TestLintStatsP99 -v   # 深挖尾部
+
+# ③ 真实语料扰动不变性（CRLF / 行尾注释 / 头部插行 / 行尾空白）
+go test ./internal/lang/ -run 'TestLintCorpusPerturbation|TestLintCRLF' -v
 ```
+
+单轮基准是确定性的（跑一万次结果一样），**P99 必须靠输入随机化才有分布**：统计测试每轮用不同种子
+生成「干净骨架 + 注入 15 种缺陷之一」的用例，真值 = (诊断码, 行号)，位置也算考核项。
+
+| 指标（每轮） | seed=1 | seed=7 | seed=20260918 |
+|---|---|---|---|
+| 误报 FP：P50 / P90 / P99 / max | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| 漏报 FN：P50 / P90 / P99 / max | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| 误报率 P99 / 漏报率 P99 | 0.0% / 0.0% | 0.0% / 0.0% | 0.0% / 0.0% |
+
+合计 **3 种子 × 2000 轮 × 4 用例 = 24,000 个随机用例（12,000 次缺陷注入）**，P99 与最差值全为 0。
+这套度量本身就是探测器：本轮抓出了 **QK115 判定过宽**（`program main;` 文件里带 `pub` 时被整文件跳过
+→ 漏报），以及基准自身的两处缺陷（装饰用辅助函数在 main 程序里本就是死代码、插入行数手算错位）——
+都被「真值必须精确匹配」逼出来并修掉。
 
 | 指标 | 加强前 | 加强后 |
 |---|---|---|
@@ -179,6 +201,26 @@ git tag v0.3.0 && git push origin v0.3.0   # 触发 release 工作流：三平�
 **优化旗标**：默认 `-O3`（便携）；`QUARK_CFLAGS="-O3 -march=native"` 本机极限（产物仅当前 CPU）；PGO 可用 `-fprofile-generate/-fprofile-use`（fib35 -29%）。
 
 **缓存**：增量编译缓存默认 `/tmp/quarklang-cache`（`QUARK_CACHE` 覆盖）；`QUARK_CFLAGS` 参与缓存键。
+
+## 跨系统（Linux / macOS / Windows）
+
+```
+.github/workflows/ci.yml
+├── test（矩阵：ubuntu-latest / macos-latest / windows-latest）
+│     go build ./... + go test ./...   # 解释器、工具链、编辑器产物校验
+│     + qkcheck 多轮 P99 统计门禁（LINT_ROUNDS=2000）
+│     + 语料扰动不变性（CRLF / 注释 / 行号平移）
+└── linux-extras（依赖 clang / bash / node 的部分）
+      双路径对比 · tree-sitter · VS Code LSP 联调 · 发布与基准冒烟
+```
+
+- **同一套 Go 测试三平台跑**：无 shell 依赖、无固定路径（临时目录用 `testing.TempDir`）。
+- **换行符一致**：CRLF 与 LF 的 token 行列号完全相同（`TestLintCRLF`）；36 个真实语料文件在 CRLF 下
+  诊断集合逐条不变（`TestLintCorpusPerturbation`）。
+- **路径一致**：`qklsp` 按 LSP 规范生成 `file://` URI（Windows 盘符 `C:/x` → `file:///C:/x`，反解去掉
+  引导斜杠），已有单元测试。
+- **交叉编译**：三平台 × 双架构用 `CGO_ENABLED=0` 直接产出（`scripts/build-release.sh`）；
+  release 工作流在各平台原生构建（cgo 开启 → FFI 可用）。
 
 ## 工具链性能（实测，可复现）
 

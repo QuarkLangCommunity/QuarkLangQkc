@@ -1100,11 +1100,12 @@ func (l *linter) checkImports(prog *Program) {
 // checkUnusedFuncs 未被调用的函数：
 // 只对 program main 报（库文件里的函数就是对外 API），且只在整文件都没出现过该名字时报。
 func (l *linter) checkUnusedFuncs(prog *Program) {
-	// 只对「有 main 且没有任何 pub 符号」的程序报：
-	//   - program library; → 库，函数是 API；
-	//   - 有 pub（即使漏写 program library;，如 compiler/testdata/mathlib.qk）→ 同样是库；
-	//   - 没有 main → 片段文件，判断依据不足。
-	if prog.Kind == "library" || len(prog.Pub) > 0 || !hasMainFunc(prog) {
+	// 只对「有 main 的程序」报（死代码判定只在可执行程序里成立）：
+	//   - program library; → 库，函数是 API，不报；
+	//   - 没有 main 的文件（如 compiler/testdata/mathlib.qk 这种漏写 program library; 的库）→ 依据不足，不报；
+	//   - program main; 即使出现 pub（pub 在 main 程序里不生效）仍按可执行程序判定 → 报。
+	// 判定口径由统计基准（lintstat_test.go）与语料快照共同钉住。
+	if prog.Kind == "library" || !hasMainFunc(prog) {
 		return
 	}
 	for _, f := range prog.Funcs {
