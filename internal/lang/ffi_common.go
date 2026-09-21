@@ -14,7 +14,6 @@ type libObj struct {
 }
 
 // libHandle 是运行时加载的系统库句柄（跨系统：dlopen/LoadLibrary）。
-// libHandle 是运行时加载的系统库句柄（跨系统：dlopen/LoadLibrary）。
 type libHandle struct {
 	h   unsafe.Pointer
 	mu  sync.Mutex

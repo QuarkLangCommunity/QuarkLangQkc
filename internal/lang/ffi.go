@@ -5,7 +5,6 @@ package lang
 /*
 #cgo linux LDFLAGS: -ldl -lffi
 #cgo darwin LDFLAGS: -ldl -lffi
-#cgo windows LDFLAGS: -lffi
 #include <stdlib.h>
 #include <stdint.h>
 void* qk_dlopen(const char* n);

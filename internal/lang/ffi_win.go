@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && cgo
 
 package lang
 
@@ -11,7 +11,6 @@ import "C"
 import (
 	"errors"
 	"strings"
-	"sync"
 	"unsafe"
 )
 
@@ -26,12 +25,6 @@ const (
 	ffiBool = 5
 	ffiLong = 6
 )
-
-type libHandle struct {
-	h   unsafe.Pointer
-	mu  sync.Mutex
-	err string
-}
 
 func dlopenLib(name string) (*libHandle, error) {
 	cands := []string{name}

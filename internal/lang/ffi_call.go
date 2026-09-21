@@ -1,4 +1,4 @@
-//go:build (linux || darwin) && cgo
+//go:build cgo
 
 package lang
 
@@ -29,6 +29,9 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 	if err != nil {
 		return NilV(), &RunError{Msg: err.Error(), Pos: pos, Ctx: ctx}
 	}
+	// 本文件只做「值 ↔ C 参数」的通用打包（C.CString/C.GoString 均为可移植 cgo），
+	// 具体 ABI 调用由各平台的 ffiCall 提供（POSIX: libffi；Windows: 自研 wrapper）。
+	//
 	// 参数打包：int/bool/float→数值通道；String→char*（调用后释放）
 	types := make([]int, 0, len(fn.Params))
 	nums := make([]float64, 0, len(fn.Params))

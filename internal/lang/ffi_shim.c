@@ -13,7 +13,11 @@
 #define QK_EXPORT
 #endif
 
-#include <ffi.h>
+#if defined(__APPLE__)
+#include <ffi/ffi.h>   /* macOS：头文件在 SDK 的 usr/include/ffi/ 下 */
+#else
+#include <ffi.h>       /* Linux：libffi-dev 装在 /usr/include/ffi.h */
+#endif
 
 /* 跨系统库加载：POSIX=dlopen/dlsym（Linux/macOS），Windows=LoadLibrary/GetProcAddress */
 QK_EXPORT void* qk_dlopen(const char* n) {
