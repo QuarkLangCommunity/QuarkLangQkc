@@ -6825,6 +6825,1033 @@ static void* qk_w_ptr_4444(void* f, double a1, double a2, double a3, double a4, 
     return ((void*(*)(void*, void*, void*, void*))f)(p1, p2, p3, p4);
 }
 
+
+/* ---- i64（long/64 位整数）返回族：补全 dispatch 表（此前缺失，导致任何返回 long 的
+   C 函数在 Windows 上必然报 “ffi call failed”） ---- */
+static int64_t qk_w_i64_0(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)())f)();
+}
+static int64_t qk_w_i64_1(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t))f)((int32_t)a1);
+}
+static int64_t qk_w_i64_2(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float))f)((float)a1);
+}
+static int64_t qk_w_i64_3(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double))f)(a1);
+}
+static int64_t qk_w_i64_4(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*))f)(p1);
+}
+static int64_t qk_w_i64_11(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t))f)((int32_t)a1, (int32_t)a2);
+}
+static int64_t qk_w_i64_12(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float))f)((int32_t)a1, (float)a2);
+}
+static int64_t qk_w_i64_13(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double))f)((int32_t)a1, a2);
+}
+static int64_t qk_w_i64_14(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*))f)((int32_t)a1, p2);
+}
+static int64_t qk_w_i64_21(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t))f)((float)a1, (int32_t)a2);
+}
+static int64_t qk_w_i64_22(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float))f)((float)a1, (float)a2);
+}
+static int64_t qk_w_i64_23(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double))f)((float)a1, a2);
+}
+static int64_t qk_w_i64_24(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*))f)((float)a1, p2);
+}
+static int64_t qk_w_i64_31(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t))f)(a1, (int32_t)a2);
+}
+static int64_t qk_w_i64_32(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float))f)(a1, (float)a2);
+}
+static int64_t qk_w_i64_33(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double))f)(a1, a2);
+}
+static int64_t qk_w_i64_34(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*))f)(a1, p2);
+}
+static int64_t qk_w_i64_41(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t))f)(p1, (int32_t)a2);
+}
+static int64_t qk_w_i64_42(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float))f)(p1, (float)a2);
+}
+static int64_t qk_w_i64_43(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double))f)(p1, a2);
+}
+static int64_t qk_w_i64_44(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*))f)(p1, p2);
+}
+static int64_t qk_w_i64_111(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, int32_t))f)((int32_t)a1, (int32_t)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_112(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, float))f)((int32_t)a1, (int32_t)a2, (float)a3);
+}
+static int64_t qk_w_i64_113(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, double))f)((int32_t)a1, (int32_t)a2, a3);
+}
+static int64_t qk_w_i64_114(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, void*))f)((int32_t)a1, (int32_t)a2, p3);
+}
+static int64_t qk_w_i64_121(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, int32_t))f)((int32_t)a1, (float)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_122(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, float))f)((int32_t)a1, (float)a2, (float)a3);
+}
+static int64_t qk_w_i64_123(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, double))f)((int32_t)a1, (float)a2, a3);
+}
+static int64_t qk_w_i64_124(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, void*))f)((int32_t)a1, (float)a2, p3);
+}
+static int64_t qk_w_i64_131(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, int32_t))f)((int32_t)a1, a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_132(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, float))f)((int32_t)a1, a2, (float)a3);
+}
+static int64_t qk_w_i64_133(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, double))f)((int32_t)a1, a2, a3);
+}
+static int64_t qk_w_i64_134(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, void*))f)((int32_t)a1, a2, p3);
+}
+static int64_t qk_w_i64_141(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, int32_t))f)((int32_t)a1, p2, (int32_t)a3);
+}
+static int64_t qk_w_i64_142(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, float))f)((int32_t)a1, p2, (float)a3);
+}
+static int64_t qk_w_i64_143(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, double))f)((int32_t)a1, p2, a3);
+}
+static int64_t qk_w_i64_144(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, void*))f)((int32_t)a1, p2, p3);
+}
+static int64_t qk_w_i64_211(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, int32_t))f)((float)a1, (int32_t)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_212(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, float))f)((float)a1, (int32_t)a2, (float)a3);
+}
+static int64_t qk_w_i64_213(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, double))f)((float)a1, (int32_t)a2, a3);
+}
+static int64_t qk_w_i64_214(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, void*))f)((float)a1, (int32_t)a2, p3);
+}
+static int64_t qk_w_i64_221(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, int32_t))f)((float)a1, (float)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_222(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, float))f)((float)a1, (float)a2, (float)a3);
+}
+static int64_t qk_w_i64_223(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, double))f)((float)a1, (float)a2, a3);
+}
+static int64_t qk_w_i64_224(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, void*))f)((float)a1, (float)a2, p3);
+}
+static int64_t qk_w_i64_231(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, int32_t))f)((float)a1, a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_232(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, float))f)((float)a1, a2, (float)a3);
+}
+static int64_t qk_w_i64_233(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, double))f)((float)a1, a2, a3);
+}
+static int64_t qk_w_i64_234(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, void*))f)((float)a1, a2, p3);
+}
+static int64_t qk_w_i64_241(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, int32_t))f)((float)a1, p2, (int32_t)a3);
+}
+static int64_t qk_w_i64_242(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, float))f)((float)a1, p2, (float)a3);
+}
+static int64_t qk_w_i64_243(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, double))f)((float)a1, p2, a3);
+}
+static int64_t qk_w_i64_244(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, void*))f)((float)a1, p2, p3);
+}
+static int64_t qk_w_i64_311(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, int32_t))f)(a1, (int32_t)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_312(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, float))f)(a1, (int32_t)a2, (float)a3);
+}
+static int64_t qk_w_i64_313(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, double))f)(a1, (int32_t)a2, a3);
+}
+static int64_t qk_w_i64_314(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, void*))f)(a1, (int32_t)a2, p3);
+}
+static int64_t qk_w_i64_321(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, int32_t))f)(a1, (float)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_322(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, float))f)(a1, (float)a2, (float)a3);
+}
+static int64_t qk_w_i64_323(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, double))f)(a1, (float)a2, a3);
+}
+static int64_t qk_w_i64_324(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, void*))f)(a1, (float)a2, p3);
+}
+static int64_t qk_w_i64_331(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, int32_t))f)(a1, a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_332(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, float))f)(a1, a2, (float)a3);
+}
+static int64_t qk_w_i64_333(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, double))f)(a1, a2, a3);
+}
+static int64_t qk_w_i64_334(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, void*))f)(a1, a2, p3);
+}
+static int64_t qk_w_i64_341(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, int32_t))f)(a1, p2, (int32_t)a3);
+}
+static int64_t qk_w_i64_342(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, float))f)(a1, p2, (float)a3);
+}
+static int64_t qk_w_i64_343(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, double))f)(a1, p2, a3);
+}
+static int64_t qk_w_i64_344(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, void*))f)(a1, p2, p3);
+}
+static int64_t qk_w_i64_411(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, int32_t))f)(p1, (int32_t)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_412(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, float))f)(p1, (int32_t)a2, (float)a3);
+}
+static int64_t qk_w_i64_413(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, double))f)(p1, (int32_t)a2, a3);
+}
+static int64_t qk_w_i64_414(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, void*))f)(p1, (int32_t)a2, p3);
+}
+static int64_t qk_w_i64_421(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, int32_t))f)(p1, (float)a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_422(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, float))f)(p1, (float)a2, (float)a3);
+}
+static int64_t qk_w_i64_423(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, double))f)(p1, (float)a2, a3);
+}
+static int64_t qk_w_i64_424(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, void*))f)(p1, (float)a2, p3);
+}
+static int64_t qk_w_i64_431(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, int32_t))f)(p1, a2, (int32_t)a3);
+}
+static int64_t qk_w_i64_432(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, float))f)(p1, a2, (float)a3);
+}
+static int64_t qk_w_i64_433(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, double))f)(p1, a2, a3);
+}
+static int64_t qk_w_i64_434(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, void*))f)(p1, a2, p3);
+}
+static int64_t qk_w_i64_441(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, int32_t))f)(p1, p2, (int32_t)a3);
+}
+static int64_t qk_w_i64_442(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, float))f)(p1, p2, (float)a3);
+}
+static int64_t qk_w_i64_443(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, double))f)(p1, p2, a3);
+}
+static int64_t qk_w_i64_444(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, void*))f)(p1, p2, p3);
+}
+static int64_t qk_w_i64_1111(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, int32_t, int32_t))f)((int32_t)a1, (int32_t)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1112(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, int32_t, float))f)((int32_t)a1, (int32_t)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_1113(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, int32_t, double))f)((int32_t)a1, (int32_t)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_1114(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, int32_t, void*))f)((int32_t)a1, (int32_t)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_1121(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, float, int32_t))f)((int32_t)a1, (int32_t)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1122(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, float, float))f)((int32_t)a1, (int32_t)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_1123(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, float, double))f)((int32_t)a1, (int32_t)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_1124(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, float, void*))f)((int32_t)a1, (int32_t)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_1131(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, double, int32_t))f)((int32_t)a1, (int32_t)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1132(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, double, float))f)((int32_t)a1, (int32_t)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_1133(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, double, double))f)((int32_t)a1, (int32_t)a2, a3, a4);
+}
+static int64_t qk_w_i64_1134(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, double, void*))f)((int32_t)a1, (int32_t)a2, a3, p4);
+}
+static int64_t qk_w_i64_1141(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, void*, int32_t))f)((int32_t)a1, (int32_t)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1142(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, void*, float))f)((int32_t)a1, (int32_t)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_1143(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, void*, double))f)((int32_t)a1, (int32_t)a2, p3, a4);
+}
+static int64_t qk_w_i64_1144(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, int32_t, void*, void*))f)((int32_t)a1, (int32_t)a2, p3, p4);
+}
+static int64_t qk_w_i64_1211(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, int32_t, int32_t))f)((int32_t)a1, (float)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1212(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, int32_t, float))f)((int32_t)a1, (float)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_1213(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, int32_t, double))f)((int32_t)a1, (float)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_1214(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, int32_t, void*))f)((int32_t)a1, (float)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_1221(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, float, int32_t))f)((int32_t)a1, (float)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1222(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, float, float))f)((int32_t)a1, (float)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_1223(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, float, double))f)((int32_t)a1, (float)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_1224(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, float, void*))f)((int32_t)a1, (float)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_1231(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, double, int32_t))f)((int32_t)a1, (float)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1232(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, double, float))f)((int32_t)a1, (float)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_1233(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, double, double))f)((int32_t)a1, (float)a2, a3, a4);
+}
+static int64_t qk_w_i64_1234(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, double, void*))f)((int32_t)a1, (float)a2, a3, p4);
+}
+static int64_t qk_w_i64_1241(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, void*, int32_t))f)((int32_t)a1, (float)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1242(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, void*, float))f)((int32_t)a1, (float)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_1243(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, void*, double))f)((int32_t)a1, (float)a2, p3, a4);
+}
+static int64_t qk_w_i64_1244(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, float, void*, void*))f)((int32_t)a1, (float)a2, p3, p4);
+}
+static int64_t qk_w_i64_1311(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, int32_t, int32_t))f)((int32_t)a1, a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1312(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, int32_t, float))f)((int32_t)a1, a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_1313(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, int32_t, double))f)((int32_t)a1, a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_1314(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, int32_t, void*))f)((int32_t)a1, a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_1321(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, float, int32_t))f)((int32_t)a1, a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1322(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, float, float))f)((int32_t)a1, a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_1323(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, float, double))f)((int32_t)a1, a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_1324(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, float, void*))f)((int32_t)a1, a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_1331(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, double, int32_t))f)((int32_t)a1, a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1332(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, double, float))f)((int32_t)a1, a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_1333(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, double, double))f)((int32_t)a1, a2, a3, a4);
+}
+static int64_t qk_w_i64_1334(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, double, void*))f)((int32_t)a1, a2, a3, p4);
+}
+static int64_t qk_w_i64_1341(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, void*, int32_t))f)((int32_t)a1, a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1342(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, void*, float))f)((int32_t)a1, a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_1343(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, void*, double))f)((int32_t)a1, a2, p3, a4);
+}
+static int64_t qk_w_i64_1344(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, double, void*, void*))f)((int32_t)a1, a2, p3, p4);
+}
+static int64_t qk_w_i64_1411(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, int32_t, int32_t))f)((int32_t)a1, p2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1412(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, int32_t, float))f)((int32_t)a1, p2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_1413(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, int32_t, double))f)((int32_t)a1, p2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_1414(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, int32_t, void*))f)((int32_t)a1, p2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_1421(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, float, int32_t))f)((int32_t)a1, p2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1422(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, float, float))f)((int32_t)a1, p2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_1423(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, float, double))f)((int32_t)a1, p2, (float)a3, a4);
+}
+static int64_t qk_w_i64_1424(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, float, void*))f)((int32_t)a1, p2, (float)a3, p4);
+}
+static int64_t qk_w_i64_1431(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, double, int32_t))f)((int32_t)a1, p2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1432(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, double, float))f)((int32_t)a1, p2, a3, (float)a4);
+}
+static int64_t qk_w_i64_1433(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, double, double))f)((int32_t)a1, p2, a3, a4);
+}
+static int64_t qk_w_i64_1434(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, double, void*))f)((int32_t)a1, p2, a3, p4);
+}
+static int64_t qk_w_i64_1441(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, void*, int32_t))f)((int32_t)a1, p2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_1442(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, void*, float))f)((int32_t)a1, p2, p3, (float)a4);
+}
+static int64_t qk_w_i64_1443(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, void*, double))f)((int32_t)a1, p2, p3, a4);
+}
+static int64_t qk_w_i64_1444(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(int32_t, void*, void*, void*))f)((int32_t)a1, p2, p3, p4);
+}
+static int64_t qk_w_i64_2111(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, int32_t, int32_t))f)((float)a1, (int32_t)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2112(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, int32_t, float))f)((float)a1, (int32_t)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_2113(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, int32_t, double))f)((float)a1, (int32_t)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_2114(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, int32_t, void*))f)((float)a1, (int32_t)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_2121(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, float, int32_t))f)((float)a1, (int32_t)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2122(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, float, float))f)((float)a1, (int32_t)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_2123(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, float, double))f)((float)a1, (int32_t)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_2124(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, float, void*))f)((float)a1, (int32_t)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_2131(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, double, int32_t))f)((float)a1, (int32_t)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2132(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, double, float))f)((float)a1, (int32_t)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_2133(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, double, double))f)((float)a1, (int32_t)a2, a3, a4);
+}
+static int64_t qk_w_i64_2134(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, double, void*))f)((float)a1, (int32_t)a2, a3, p4);
+}
+static int64_t qk_w_i64_2141(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, void*, int32_t))f)((float)a1, (int32_t)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2142(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, void*, float))f)((float)a1, (int32_t)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_2143(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, void*, double))f)((float)a1, (int32_t)a2, p3, a4);
+}
+static int64_t qk_w_i64_2144(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, int32_t, void*, void*))f)((float)a1, (int32_t)a2, p3, p4);
+}
+static int64_t qk_w_i64_2211(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, int32_t, int32_t))f)((float)a1, (float)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2212(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, int32_t, float))f)((float)a1, (float)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_2213(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, int32_t, double))f)((float)a1, (float)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_2214(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, int32_t, void*))f)((float)a1, (float)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_2221(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, float, int32_t))f)((float)a1, (float)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2222(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, float, float))f)((float)a1, (float)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_2223(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, float, double))f)((float)a1, (float)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_2224(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, float, void*))f)((float)a1, (float)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_2231(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, double, int32_t))f)((float)a1, (float)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2232(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, double, float))f)((float)a1, (float)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_2233(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, double, double))f)((float)a1, (float)a2, a3, a4);
+}
+static int64_t qk_w_i64_2234(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, double, void*))f)((float)a1, (float)a2, a3, p4);
+}
+static int64_t qk_w_i64_2241(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, void*, int32_t))f)((float)a1, (float)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2242(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, void*, float))f)((float)a1, (float)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_2243(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, void*, double))f)((float)a1, (float)a2, p3, a4);
+}
+static int64_t qk_w_i64_2244(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, float, void*, void*))f)((float)a1, (float)a2, p3, p4);
+}
+static int64_t qk_w_i64_2311(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, int32_t, int32_t))f)((float)a1, a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2312(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, int32_t, float))f)((float)a1, a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_2313(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, int32_t, double))f)((float)a1, a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_2314(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, int32_t, void*))f)((float)a1, a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_2321(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, float, int32_t))f)((float)a1, a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2322(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, float, float))f)((float)a1, a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_2323(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, float, double))f)((float)a1, a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_2324(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, float, void*))f)((float)a1, a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_2331(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, double, int32_t))f)((float)a1, a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2332(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, double, float))f)((float)a1, a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_2333(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, double, double))f)((float)a1, a2, a3, a4);
+}
+static int64_t qk_w_i64_2334(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, double, void*))f)((float)a1, a2, a3, p4);
+}
+static int64_t qk_w_i64_2341(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, void*, int32_t))f)((float)a1, a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2342(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, void*, float))f)((float)a1, a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_2343(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, void*, double))f)((float)a1, a2, p3, a4);
+}
+static int64_t qk_w_i64_2344(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, double, void*, void*))f)((float)a1, a2, p3, p4);
+}
+static int64_t qk_w_i64_2411(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, int32_t, int32_t))f)((float)a1, p2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2412(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, int32_t, float))f)((float)a1, p2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_2413(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, int32_t, double))f)((float)a1, p2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_2414(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, int32_t, void*))f)((float)a1, p2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_2421(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, float, int32_t))f)((float)a1, p2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2422(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, float, float))f)((float)a1, p2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_2423(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, float, double))f)((float)a1, p2, (float)a3, a4);
+}
+static int64_t qk_w_i64_2424(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, float, void*))f)((float)a1, p2, (float)a3, p4);
+}
+static int64_t qk_w_i64_2431(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, double, int32_t))f)((float)a1, p2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2432(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, double, float))f)((float)a1, p2, a3, (float)a4);
+}
+static int64_t qk_w_i64_2433(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, double, double))f)((float)a1, p2, a3, a4);
+}
+static int64_t qk_w_i64_2434(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, double, void*))f)((float)a1, p2, a3, p4);
+}
+static int64_t qk_w_i64_2441(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, void*, int32_t))f)((float)a1, p2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_2442(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, void*, float))f)((float)a1, p2, p3, (float)a4);
+}
+static int64_t qk_w_i64_2443(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, void*, double))f)((float)a1, p2, p3, a4);
+}
+static int64_t qk_w_i64_2444(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(float, void*, void*, void*))f)((float)a1, p2, p3, p4);
+}
+static int64_t qk_w_i64_3111(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, int32_t, int32_t))f)(a1, (int32_t)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3112(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, int32_t, float))f)(a1, (int32_t)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_3113(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, int32_t, double))f)(a1, (int32_t)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_3114(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, int32_t, void*))f)(a1, (int32_t)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_3121(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, float, int32_t))f)(a1, (int32_t)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3122(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, float, float))f)(a1, (int32_t)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_3123(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, float, double))f)(a1, (int32_t)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_3124(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, float, void*))f)(a1, (int32_t)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_3131(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, double, int32_t))f)(a1, (int32_t)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3132(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, double, float))f)(a1, (int32_t)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_3133(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, double, double))f)(a1, (int32_t)a2, a3, a4);
+}
+static int64_t qk_w_i64_3134(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, double, void*))f)(a1, (int32_t)a2, a3, p4);
+}
+static int64_t qk_w_i64_3141(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, void*, int32_t))f)(a1, (int32_t)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3142(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, void*, float))f)(a1, (int32_t)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_3143(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, void*, double))f)(a1, (int32_t)a2, p3, a4);
+}
+static int64_t qk_w_i64_3144(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, int32_t, void*, void*))f)(a1, (int32_t)a2, p3, p4);
+}
+static int64_t qk_w_i64_3211(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, int32_t, int32_t))f)(a1, (float)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3212(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, int32_t, float))f)(a1, (float)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_3213(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, int32_t, double))f)(a1, (float)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_3214(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, int32_t, void*))f)(a1, (float)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_3221(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, float, int32_t))f)(a1, (float)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3222(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, float, float))f)(a1, (float)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_3223(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, float, double))f)(a1, (float)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_3224(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, float, void*))f)(a1, (float)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_3231(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, double, int32_t))f)(a1, (float)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3232(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, double, float))f)(a1, (float)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_3233(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, double, double))f)(a1, (float)a2, a3, a4);
+}
+static int64_t qk_w_i64_3234(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, double, void*))f)(a1, (float)a2, a3, p4);
+}
+static int64_t qk_w_i64_3241(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, void*, int32_t))f)(a1, (float)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3242(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, void*, float))f)(a1, (float)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_3243(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, void*, double))f)(a1, (float)a2, p3, a4);
+}
+static int64_t qk_w_i64_3244(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, float, void*, void*))f)(a1, (float)a2, p3, p4);
+}
+static int64_t qk_w_i64_3311(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, int32_t, int32_t))f)(a1, a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3312(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, int32_t, float))f)(a1, a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_3313(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, int32_t, double))f)(a1, a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_3314(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, int32_t, void*))f)(a1, a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_3321(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, float, int32_t))f)(a1, a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3322(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, float, float))f)(a1, a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_3323(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, float, double))f)(a1, a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_3324(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, float, void*))f)(a1, a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_3331(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, double, int32_t))f)(a1, a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3332(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, double, float))f)(a1, a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_3333(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, double, double))f)(a1, a2, a3, a4);
+}
+static int64_t qk_w_i64_3334(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, double, void*))f)(a1, a2, a3, p4);
+}
+static int64_t qk_w_i64_3341(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, void*, int32_t))f)(a1, a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3342(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, void*, float))f)(a1, a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_3343(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, void*, double))f)(a1, a2, p3, a4);
+}
+static int64_t qk_w_i64_3344(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, double, void*, void*))f)(a1, a2, p3, p4);
+}
+static int64_t qk_w_i64_3411(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, int32_t, int32_t))f)(a1, p2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3412(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, int32_t, float))f)(a1, p2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_3413(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, int32_t, double))f)(a1, p2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_3414(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, int32_t, void*))f)(a1, p2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_3421(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, float, int32_t))f)(a1, p2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3422(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, float, float))f)(a1, p2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_3423(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, float, double))f)(a1, p2, (float)a3, a4);
+}
+static int64_t qk_w_i64_3424(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, float, void*))f)(a1, p2, (float)a3, p4);
+}
+static int64_t qk_w_i64_3431(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, double, int32_t))f)(a1, p2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3432(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, double, float))f)(a1, p2, a3, (float)a4);
+}
+static int64_t qk_w_i64_3433(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, double, double))f)(a1, p2, a3, a4);
+}
+static int64_t qk_w_i64_3434(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, double, void*))f)(a1, p2, a3, p4);
+}
+static int64_t qk_w_i64_3441(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, void*, int32_t))f)(a1, p2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_3442(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, void*, float))f)(a1, p2, p3, (float)a4);
+}
+static int64_t qk_w_i64_3443(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, void*, double))f)(a1, p2, p3, a4);
+}
+static int64_t qk_w_i64_3444(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(double, void*, void*, void*))f)(a1, p2, p3, p4);
+}
+static int64_t qk_w_i64_4111(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, int32_t, int32_t))f)(p1, (int32_t)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4112(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, int32_t, float))f)(p1, (int32_t)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_4113(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, int32_t, double))f)(p1, (int32_t)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_4114(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, int32_t, void*))f)(p1, (int32_t)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_4121(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, float, int32_t))f)(p1, (int32_t)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4122(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, float, float))f)(p1, (int32_t)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_4123(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, float, double))f)(p1, (int32_t)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_4124(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, float, void*))f)(p1, (int32_t)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_4131(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, double, int32_t))f)(p1, (int32_t)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4132(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, double, float))f)(p1, (int32_t)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_4133(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, double, double))f)(p1, (int32_t)a2, a3, a4);
+}
+static int64_t qk_w_i64_4134(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, double, void*))f)(p1, (int32_t)a2, a3, p4);
+}
+static int64_t qk_w_i64_4141(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, void*, int32_t))f)(p1, (int32_t)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4142(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, void*, float))f)(p1, (int32_t)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_4143(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, void*, double))f)(p1, (int32_t)a2, p3, a4);
+}
+static int64_t qk_w_i64_4144(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, int32_t, void*, void*))f)(p1, (int32_t)a2, p3, p4);
+}
+static int64_t qk_w_i64_4211(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, int32_t, int32_t))f)(p1, (float)a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4212(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, int32_t, float))f)(p1, (float)a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_4213(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, int32_t, double))f)(p1, (float)a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_4214(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, int32_t, void*))f)(p1, (float)a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_4221(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, float, int32_t))f)(p1, (float)a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4222(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, float, float))f)(p1, (float)a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_4223(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, float, double))f)(p1, (float)a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_4224(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, float, void*))f)(p1, (float)a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_4231(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, double, int32_t))f)(p1, (float)a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4232(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, double, float))f)(p1, (float)a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_4233(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, double, double))f)(p1, (float)a2, a3, a4);
+}
+static int64_t qk_w_i64_4234(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, double, void*))f)(p1, (float)a2, a3, p4);
+}
+static int64_t qk_w_i64_4241(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, void*, int32_t))f)(p1, (float)a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4242(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, void*, float))f)(p1, (float)a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_4243(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, void*, double))f)(p1, (float)a2, p3, a4);
+}
+static int64_t qk_w_i64_4244(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, float, void*, void*))f)(p1, (float)a2, p3, p4);
+}
+static int64_t qk_w_i64_4311(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, int32_t, int32_t))f)(p1, a2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4312(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, int32_t, float))f)(p1, a2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_4313(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, int32_t, double))f)(p1, a2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_4314(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, int32_t, void*))f)(p1, a2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_4321(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, float, int32_t))f)(p1, a2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4322(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, float, float))f)(p1, a2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_4323(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, float, double))f)(p1, a2, (float)a3, a4);
+}
+static int64_t qk_w_i64_4324(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, float, void*))f)(p1, a2, (float)a3, p4);
+}
+static int64_t qk_w_i64_4331(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, double, int32_t))f)(p1, a2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4332(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, double, float))f)(p1, a2, a3, (float)a4);
+}
+static int64_t qk_w_i64_4333(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, double, double))f)(p1, a2, a3, a4);
+}
+static int64_t qk_w_i64_4334(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, double, void*))f)(p1, a2, a3, p4);
+}
+static int64_t qk_w_i64_4341(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, void*, int32_t))f)(p1, a2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4342(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, void*, float))f)(p1, a2, p3, (float)a4);
+}
+static int64_t qk_w_i64_4343(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, void*, double))f)(p1, a2, p3, a4);
+}
+static int64_t qk_w_i64_4344(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, double, void*, void*))f)(p1, a2, p3, p4);
+}
+static int64_t qk_w_i64_4411(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, int32_t, int32_t))f)(p1, p2, (int32_t)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4412(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, int32_t, float))f)(p1, p2, (int32_t)a3, (float)a4);
+}
+static int64_t qk_w_i64_4413(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, int32_t, double))f)(p1, p2, (int32_t)a3, a4);
+}
+static int64_t qk_w_i64_4414(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, int32_t, void*))f)(p1, p2, (int32_t)a3, p4);
+}
+static int64_t qk_w_i64_4421(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, float, int32_t))f)(p1, p2, (float)a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4422(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, float, float))f)(p1, p2, (float)a3, (float)a4);
+}
+static int64_t qk_w_i64_4423(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, float, double))f)(p1, p2, (float)a3, a4);
+}
+static int64_t qk_w_i64_4424(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, float, void*))f)(p1, p2, (float)a3, p4);
+}
+static int64_t qk_w_i64_4431(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, double, int32_t))f)(p1, p2, a3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4432(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, double, float))f)(p1, p2, a3, (float)a4);
+}
+static int64_t qk_w_i64_4433(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, double, double))f)(p1, p2, a3, a4);
+}
+static int64_t qk_w_i64_4434(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, double, void*))f)(p1, p2, a3, p4);
+}
+static int64_t qk_w_i64_4441(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, void*, int32_t))f)(p1, p2, p3, (int32_t)a4);
+}
+static int64_t qk_w_i64_4442(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, void*, float))f)(p1, p2, p3, (float)a4);
+}
+static int64_t qk_w_i64_4443(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, void*, double))f)(p1, p2, p3, a4);
+}
+static int64_t qk_w_i64_4444(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
+    return ((int64_t(*)(void*, void*, void*, void*))f)(p1, p2, p3, p4);
+}
+
 int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs, int n,
            int rettype, int64_t* ret_i, double* ret_f, void* ret_slot) {
     if (!fn) return -1;
@@ -6833,7 +7860,7 @@ int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs, int n,
     if (n >= 2) { a2 = nums[1]; p2 = ptrs[1]; }
     if (n >= 3) { a3 = nums[2]; p3 = ptrs[2]; }
     if (n >= 4) { a4 = nums[3]; p4 = ptrs[3]; }
-    int code = rettype * 100000;
+    int64_t code = (int64_t)rettype * 100000; /* 64 位：4 参数时 code 可达 4e9，int 会溢出 */
     int i;
     for (i = 0; i < n; i++) code = code*10 + types[i];
     switch (code) {
@@ -8542,6 +9569,351 @@ int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs, int n,
         case 4000004442: *(void**)ret_slot = qk_w_ptr_4442(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
         case 4000004443: *(void**)ret_slot = qk_w_ptr_4443(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
         case 4000004444: *(void**)ret_slot = qk_w_ptr_4444(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000: *ret_i = qk_w_i64_0(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001: *ret_i = qk_w_i64_1(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002: *ret_i = qk_w_i64_2(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003: *ret_i = qk_w_i64_3(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004: *ret_i = qk_w_i64_4(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000011: *ret_i = qk_w_i64_11(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000012: *ret_i = qk_w_i64_12(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000013: *ret_i = qk_w_i64_13(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000014: *ret_i = qk_w_i64_14(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000021: *ret_i = qk_w_i64_21(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000022: *ret_i = qk_w_i64_22(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000023: *ret_i = qk_w_i64_23(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000024: *ret_i = qk_w_i64_24(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000031: *ret_i = qk_w_i64_31(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000032: *ret_i = qk_w_i64_32(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000033: *ret_i = qk_w_i64_33(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000034: *ret_i = qk_w_i64_34(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000041: *ret_i = qk_w_i64_41(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000042: *ret_i = qk_w_i64_42(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000043: *ret_i = qk_w_i64_43(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 60000044: *ret_i = qk_w_i64_44(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000111: *ret_i = qk_w_i64_111(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000112: *ret_i = qk_w_i64_112(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000113: *ret_i = qk_w_i64_113(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000114: *ret_i = qk_w_i64_114(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000121: *ret_i = qk_w_i64_121(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000122: *ret_i = qk_w_i64_122(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000123: *ret_i = qk_w_i64_123(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000124: *ret_i = qk_w_i64_124(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000131: *ret_i = qk_w_i64_131(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000132: *ret_i = qk_w_i64_132(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000133: *ret_i = qk_w_i64_133(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000134: *ret_i = qk_w_i64_134(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000141: *ret_i = qk_w_i64_141(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000142: *ret_i = qk_w_i64_142(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000143: *ret_i = qk_w_i64_143(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000144: *ret_i = qk_w_i64_144(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000211: *ret_i = qk_w_i64_211(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000212: *ret_i = qk_w_i64_212(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000213: *ret_i = qk_w_i64_213(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000214: *ret_i = qk_w_i64_214(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000221: *ret_i = qk_w_i64_221(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000222: *ret_i = qk_w_i64_222(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000223: *ret_i = qk_w_i64_223(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000224: *ret_i = qk_w_i64_224(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000231: *ret_i = qk_w_i64_231(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000232: *ret_i = qk_w_i64_232(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000233: *ret_i = qk_w_i64_233(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000234: *ret_i = qk_w_i64_234(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000241: *ret_i = qk_w_i64_241(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000242: *ret_i = qk_w_i64_242(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000243: *ret_i = qk_w_i64_243(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000244: *ret_i = qk_w_i64_244(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000311: *ret_i = qk_w_i64_311(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000312: *ret_i = qk_w_i64_312(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000313: *ret_i = qk_w_i64_313(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000314: *ret_i = qk_w_i64_314(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000321: *ret_i = qk_w_i64_321(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000322: *ret_i = qk_w_i64_322(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000323: *ret_i = qk_w_i64_323(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000324: *ret_i = qk_w_i64_324(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000331: *ret_i = qk_w_i64_331(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000332: *ret_i = qk_w_i64_332(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000333: *ret_i = qk_w_i64_333(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000334: *ret_i = qk_w_i64_334(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000341: *ret_i = qk_w_i64_341(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000342: *ret_i = qk_w_i64_342(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000343: *ret_i = qk_w_i64_343(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000344: *ret_i = qk_w_i64_344(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000411: *ret_i = qk_w_i64_411(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000412: *ret_i = qk_w_i64_412(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000413: *ret_i = qk_w_i64_413(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000414: *ret_i = qk_w_i64_414(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000421: *ret_i = qk_w_i64_421(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000422: *ret_i = qk_w_i64_422(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000423: *ret_i = qk_w_i64_423(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000424: *ret_i = qk_w_i64_424(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000431: *ret_i = qk_w_i64_431(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000432: *ret_i = qk_w_i64_432(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000433: *ret_i = qk_w_i64_433(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000434: *ret_i = qk_w_i64_434(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000441: *ret_i = qk_w_i64_441(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000442: *ret_i = qk_w_i64_442(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000443: *ret_i = qk_w_i64_443(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 600000444: *ret_i = qk_w_i64_444(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001111: *ret_i = qk_w_i64_1111(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001112: *ret_i = qk_w_i64_1112(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001113: *ret_i = qk_w_i64_1113(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001114: *ret_i = qk_w_i64_1114(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001121: *ret_i = qk_w_i64_1121(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001122: *ret_i = qk_w_i64_1122(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001123: *ret_i = qk_w_i64_1123(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001124: *ret_i = qk_w_i64_1124(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001131: *ret_i = qk_w_i64_1131(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001132: *ret_i = qk_w_i64_1132(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001133: *ret_i = qk_w_i64_1133(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001134: *ret_i = qk_w_i64_1134(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001141: *ret_i = qk_w_i64_1141(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001142: *ret_i = qk_w_i64_1142(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001143: *ret_i = qk_w_i64_1143(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001144: *ret_i = qk_w_i64_1144(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001211: *ret_i = qk_w_i64_1211(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001212: *ret_i = qk_w_i64_1212(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001213: *ret_i = qk_w_i64_1213(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001214: *ret_i = qk_w_i64_1214(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001221: *ret_i = qk_w_i64_1221(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001222: *ret_i = qk_w_i64_1222(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001223: *ret_i = qk_w_i64_1223(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001224: *ret_i = qk_w_i64_1224(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001231: *ret_i = qk_w_i64_1231(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001232: *ret_i = qk_w_i64_1232(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001233: *ret_i = qk_w_i64_1233(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001234: *ret_i = qk_w_i64_1234(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001241: *ret_i = qk_w_i64_1241(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001242: *ret_i = qk_w_i64_1242(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001243: *ret_i = qk_w_i64_1243(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001244: *ret_i = qk_w_i64_1244(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001311: *ret_i = qk_w_i64_1311(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001312: *ret_i = qk_w_i64_1312(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001313: *ret_i = qk_w_i64_1313(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001314: *ret_i = qk_w_i64_1314(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001321: *ret_i = qk_w_i64_1321(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001322: *ret_i = qk_w_i64_1322(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001323: *ret_i = qk_w_i64_1323(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001324: *ret_i = qk_w_i64_1324(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001331: *ret_i = qk_w_i64_1331(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001332: *ret_i = qk_w_i64_1332(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001333: *ret_i = qk_w_i64_1333(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001334: *ret_i = qk_w_i64_1334(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001341: *ret_i = qk_w_i64_1341(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001342: *ret_i = qk_w_i64_1342(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001343: *ret_i = qk_w_i64_1343(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001344: *ret_i = qk_w_i64_1344(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001411: *ret_i = qk_w_i64_1411(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001412: *ret_i = qk_w_i64_1412(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001413: *ret_i = qk_w_i64_1413(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001414: *ret_i = qk_w_i64_1414(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001421: *ret_i = qk_w_i64_1421(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001422: *ret_i = qk_w_i64_1422(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001423: *ret_i = qk_w_i64_1423(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001424: *ret_i = qk_w_i64_1424(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001431: *ret_i = qk_w_i64_1431(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001432: *ret_i = qk_w_i64_1432(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001433: *ret_i = qk_w_i64_1433(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001434: *ret_i = qk_w_i64_1434(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001441: *ret_i = qk_w_i64_1441(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001442: *ret_i = qk_w_i64_1442(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001443: *ret_i = qk_w_i64_1443(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000001444: *ret_i = qk_w_i64_1444(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002111: *ret_i = qk_w_i64_2111(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002112: *ret_i = qk_w_i64_2112(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002113: *ret_i = qk_w_i64_2113(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002114: *ret_i = qk_w_i64_2114(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002121: *ret_i = qk_w_i64_2121(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002122: *ret_i = qk_w_i64_2122(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002123: *ret_i = qk_w_i64_2123(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002124: *ret_i = qk_w_i64_2124(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002131: *ret_i = qk_w_i64_2131(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002132: *ret_i = qk_w_i64_2132(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002133: *ret_i = qk_w_i64_2133(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002134: *ret_i = qk_w_i64_2134(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002141: *ret_i = qk_w_i64_2141(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002142: *ret_i = qk_w_i64_2142(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002143: *ret_i = qk_w_i64_2143(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002144: *ret_i = qk_w_i64_2144(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002211: *ret_i = qk_w_i64_2211(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002212: *ret_i = qk_w_i64_2212(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002213: *ret_i = qk_w_i64_2213(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002214: *ret_i = qk_w_i64_2214(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002221: *ret_i = qk_w_i64_2221(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002222: *ret_i = qk_w_i64_2222(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002223: *ret_i = qk_w_i64_2223(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002224: *ret_i = qk_w_i64_2224(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002231: *ret_i = qk_w_i64_2231(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002232: *ret_i = qk_w_i64_2232(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002233: *ret_i = qk_w_i64_2233(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002234: *ret_i = qk_w_i64_2234(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002241: *ret_i = qk_w_i64_2241(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002242: *ret_i = qk_w_i64_2242(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002243: *ret_i = qk_w_i64_2243(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002244: *ret_i = qk_w_i64_2244(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002311: *ret_i = qk_w_i64_2311(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002312: *ret_i = qk_w_i64_2312(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002313: *ret_i = qk_w_i64_2313(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002314: *ret_i = qk_w_i64_2314(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002321: *ret_i = qk_w_i64_2321(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002322: *ret_i = qk_w_i64_2322(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002323: *ret_i = qk_w_i64_2323(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002324: *ret_i = qk_w_i64_2324(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002331: *ret_i = qk_w_i64_2331(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002332: *ret_i = qk_w_i64_2332(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002333: *ret_i = qk_w_i64_2333(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002334: *ret_i = qk_w_i64_2334(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002341: *ret_i = qk_w_i64_2341(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002342: *ret_i = qk_w_i64_2342(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002343: *ret_i = qk_w_i64_2343(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002344: *ret_i = qk_w_i64_2344(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002411: *ret_i = qk_w_i64_2411(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002412: *ret_i = qk_w_i64_2412(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002413: *ret_i = qk_w_i64_2413(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002414: *ret_i = qk_w_i64_2414(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002421: *ret_i = qk_w_i64_2421(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002422: *ret_i = qk_w_i64_2422(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002423: *ret_i = qk_w_i64_2423(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002424: *ret_i = qk_w_i64_2424(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002431: *ret_i = qk_w_i64_2431(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002432: *ret_i = qk_w_i64_2432(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002433: *ret_i = qk_w_i64_2433(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002434: *ret_i = qk_w_i64_2434(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002441: *ret_i = qk_w_i64_2441(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002442: *ret_i = qk_w_i64_2442(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002443: *ret_i = qk_w_i64_2443(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000002444: *ret_i = qk_w_i64_2444(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003111: *ret_i = qk_w_i64_3111(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003112: *ret_i = qk_w_i64_3112(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003113: *ret_i = qk_w_i64_3113(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003114: *ret_i = qk_w_i64_3114(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003121: *ret_i = qk_w_i64_3121(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003122: *ret_i = qk_w_i64_3122(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003123: *ret_i = qk_w_i64_3123(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003124: *ret_i = qk_w_i64_3124(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003131: *ret_i = qk_w_i64_3131(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003132: *ret_i = qk_w_i64_3132(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003133: *ret_i = qk_w_i64_3133(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003134: *ret_i = qk_w_i64_3134(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003141: *ret_i = qk_w_i64_3141(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003142: *ret_i = qk_w_i64_3142(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003143: *ret_i = qk_w_i64_3143(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003144: *ret_i = qk_w_i64_3144(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003211: *ret_i = qk_w_i64_3211(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003212: *ret_i = qk_w_i64_3212(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003213: *ret_i = qk_w_i64_3213(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003214: *ret_i = qk_w_i64_3214(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003221: *ret_i = qk_w_i64_3221(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003222: *ret_i = qk_w_i64_3222(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003223: *ret_i = qk_w_i64_3223(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003224: *ret_i = qk_w_i64_3224(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003231: *ret_i = qk_w_i64_3231(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003232: *ret_i = qk_w_i64_3232(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003233: *ret_i = qk_w_i64_3233(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003234: *ret_i = qk_w_i64_3234(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003241: *ret_i = qk_w_i64_3241(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003242: *ret_i = qk_w_i64_3242(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003243: *ret_i = qk_w_i64_3243(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003244: *ret_i = qk_w_i64_3244(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003311: *ret_i = qk_w_i64_3311(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003312: *ret_i = qk_w_i64_3312(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003313: *ret_i = qk_w_i64_3313(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003314: *ret_i = qk_w_i64_3314(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003321: *ret_i = qk_w_i64_3321(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003322: *ret_i = qk_w_i64_3322(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003323: *ret_i = qk_w_i64_3323(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003324: *ret_i = qk_w_i64_3324(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003331: *ret_i = qk_w_i64_3331(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003332: *ret_i = qk_w_i64_3332(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003333: *ret_i = qk_w_i64_3333(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003334: *ret_i = qk_w_i64_3334(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003341: *ret_i = qk_w_i64_3341(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003342: *ret_i = qk_w_i64_3342(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003343: *ret_i = qk_w_i64_3343(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003344: *ret_i = qk_w_i64_3344(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003411: *ret_i = qk_w_i64_3411(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003412: *ret_i = qk_w_i64_3412(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003413: *ret_i = qk_w_i64_3413(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003414: *ret_i = qk_w_i64_3414(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003421: *ret_i = qk_w_i64_3421(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003422: *ret_i = qk_w_i64_3422(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003423: *ret_i = qk_w_i64_3423(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003424: *ret_i = qk_w_i64_3424(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003431: *ret_i = qk_w_i64_3431(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003432: *ret_i = qk_w_i64_3432(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003433: *ret_i = qk_w_i64_3433(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003434: *ret_i = qk_w_i64_3434(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003441: *ret_i = qk_w_i64_3441(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003442: *ret_i = qk_w_i64_3442(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003443: *ret_i = qk_w_i64_3443(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000003444: *ret_i = qk_w_i64_3444(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004111: *ret_i = qk_w_i64_4111(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004112: *ret_i = qk_w_i64_4112(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004113: *ret_i = qk_w_i64_4113(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004114: *ret_i = qk_w_i64_4114(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004121: *ret_i = qk_w_i64_4121(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004122: *ret_i = qk_w_i64_4122(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004123: *ret_i = qk_w_i64_4123(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004124: *ret_i = qk_w_i64_4124(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004131: *ret_i = qk_w_i64_4131(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004132: *ret_i = qk_w_i64_4132(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004133: *ret_i = qk_w_i64_4133(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004134: *ret_i = qk_w_i64_4134(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004141: *ret_i = qk_w_i64_4141(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004142: *ret_i = qk_w_i64_4142(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004143: *ret_i = qk_w_i64_4143(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004144: *ret_i = qk_w_i64_4144(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004211: *ret_i = qk_w_i64_4211(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004212: *ret_i = qk_w_i64_4212(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004213: *ret_i = qk_w_i64_4213(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004214: *ret_i = qk_w_i64_4214(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004221: *ret_i = qk_w_i64_4221(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004222: *ret_i = qk_w_i64_4222(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004223: *ret_i = qk_w_i64_4223(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004224: *ret_i = qk_w_i64_4224(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004231: *ret_i = qk_w_i64_4231(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004232: *ret_i = qk_w_i64_4232(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004233: *ret_i = qk_w_i64_4233(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004234: *ret_i = qk_w_i64_4234(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004241: *ret_i = qk_w_i64_4241(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004242: *ret_i = qk_w_i64_4242(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004243: *ret_i = qk_w_i64_4243(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004244: *ret_i = qk_w_i64_4244(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004311: *ret_i = qk_w_i64_4311(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004312: *ret_i = qk_w_i64_4312(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004313: *ret_i = qk_w_i64_4313(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004314: *ret_i = qk_w_i64_4314(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004321: *ret_i = qk_w_i64_4321(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004322: *ret_i = qk_w_i64_4322(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004323: *ret_i = qk_w_i64_4323(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004324: *ret_i = qk_w_i64_4324(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004331: *ret_i = qk_w_i64_4331(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004332: *ret_i = qk_w_i64_4332(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004333: *ret_i = qk_w_i64_4333(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004334: *ret_i = qk_w_i64_4334(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004341: *ret_i = qk_w_i64_4341(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004342: *ret_i = qk_w_i64_4342(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004343: *ret_i = qk_w_i64_4343(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004344: *ret_i = qk_w_i64_4344(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004411: *ret_i = qk_w_i64_4411(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004412: *ret_i = qk_w_i64_4412(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004413: *ret_i = qk_w_i64_4413(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004414: *ret_i = qk_w_i64_4414(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004421: *ret_i = qk_w_i64_4421(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004422: *ret_i = qk_w_i64_4422(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004423: *ret_i = qk_w_i64_4423(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004424: *ret_i = qk_w_i64_4424(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004431: *ret_i = qk_w_i64_4431(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004432: *ret_i = qk_w_i64_4432(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004433: *ret_i = qk_w_i64_4433(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004434: *ret_i = qk_w_i64_4434(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004441: *ret_i = qk_w_i64_4441(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004442: *ret_i = qk_w_i64_4442(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004443: *ret_i = qk_w_i64_4443(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 6000004444: *ret_i = qk_w_i64_4444(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 100000: *ret_i = qk_w_i32_0(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 200000: *ret_f = (double)qk_w_f32_0(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 300000: *ret_f = qk_w_f64_0(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
+        case 400000: *(void**)ret_slot = qk_w_ptr_0(fn, a1, a2, a3, a4, p1, p2, p3, p4); return 0;
     }
     return -2;
 }
