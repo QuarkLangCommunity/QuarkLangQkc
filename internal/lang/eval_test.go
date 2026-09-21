@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -521,11 +522,14 @@ fn main(IOStream io) {
 
 func TestIORedirect(t *testing.T) {
 	dir := t.TempDir()
-	path := dir + "/out.txt"
+	path := filepath.Join(dir, "out.txt")
+	// 显式 close：Windows 上进程仍持有句柄时 TempDir 清理会失败（跨系统差异）
 	src := fmt.Sprintf(`fn main(IOStream io) {
-    io.setOut(FileOutputStream("%s"));
+    OutputStream f = FileOutputStream("%s");
+    io.setOut(f);
     io.println("redirected");
-}`, path)
+    f.close();
+}`, filepath.ToSlash(path))
 	prog, err := Compile(src)
 	if err != nil {
 		t.Fatal(err)

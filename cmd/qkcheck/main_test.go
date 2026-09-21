@@ -232,6 +232,8 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 		if err != nil {
 			rel = f.File
 		}
+		// 快照表用 / 书写：Windows 上 filepath.Rel 返回 \，统一后再比对（跨系统一致）
+		rel = filepath.ToSlash(rel)
 		gotWarnings[rel+":"+itoa(f.Line)+":"+itoa(f.Col)+" "+f.Code] = true
 	}
 	for k := range gotWarnings {

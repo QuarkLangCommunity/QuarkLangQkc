@@ -379,7 +379,8 @@ func TestLSPUnknownDocument(t *testing.T) {
 func TestLSPDiagnosticsMapImports(t *testing.T) {
 	dir := t.TempDir()
 	libPath := filepath.Join(dir, "lib.qk")
-	uri := "file://" + filepath.ToSlash(filepath.Join(dir, "app.qk"))
+	// 用生产代码的 pathToURI：Windows 盘符需要 file:///C:/...（三斜杠），测试自造 URI 曾按 POSIX 写死
+	uri := pathToURI(filepath.Join(dir, "app.qk"))
 	src := "import \"lib\";\n\nfn main(IOStream io) {\n    io.println(lib());\n}\n"
 	if err := writeFile(libPath, "program library;\npub fn lib() int {\n    return missingVar;\n}\n"); err != nil {
 		t.Fatal(err)
