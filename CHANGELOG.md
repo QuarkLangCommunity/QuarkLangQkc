@@ -2,6 +2,96 @@
 
 > 由 `scripts/changelog.sh --all` 从 git 历史生成（分组：新功能 / 修复 / 性能 / 重构与清理 / 文档 / 构建与工具链 / 其它）。
 
+## v2.0.0 - 2026-09-21
+
+### 新功能
+
+- qkcheck 加强：新增 QK108–QK115（7 项检查 + 1 项）并建立误报/漏报基准（`8775272`）
+- qklsp + 编辑器支持：LSP（诊断/跳转/补全/悬停/大纲）+ VS Code 扩展 + tree-sitter 语法（`89d315c`）
+- qkdoc + qkrepl 首发：API 文档生成 与 交互式求值（`86af00b`）
+- qkcheck 首发：静态检查（未使用/不可达/遮蔽/缺返回/接口近失配/void 误用）（`8c8139a`）
+- 语言正典化收尾：类型在前/type/impl/space 唯一形态 + 接口按实现严格 + 多项修复（`b52fa9c`）
+- qkc 剥离 cleg：渲染/qkstyle/auto/tick 全部移出（qkc 零 cleg 专属代码）；保留通用能力 qkfile/qksignal_emit + 新增 HashTable.keys()（`bc9ee9f`）
+- 事件接口族对齐：emit 短名→on 方法名自动映射（clicked→onClicked）+ 可选实现（Partial）（`63b3a78`）
+- README：官方项目区新增 cleg GUI 框架（`cc027bc`）
+- Operation 协议接口族 + 运算符重载 + 多 impl + 空自我实现 + dynamic（`a12b0d0`）
+- README：官方项目区新增 GL / Vulkan 图形库（library FFI 声明集）（`2607273`）
+- actions 重试语义：qkexec/qkexecv/qkhttp_get/post 支持可选 retries（默认 1 次重试）（`3d3c1db`）
+
+### 修复
+
+- 测试：槽位预解析语义回归（13 个作用域边界用例 + 槽位名字校验）（`41efa7e`）
+- 修复发布脚本：输出目录为绝对路径时 qkc 产物被写错位置（`a4d310f`）
+- 发布产物：三平台二进制 + 版本注入 + 变更日志自动化 + 修 macOS/Windows 构建（`1b4fd15`）
+- 仓库卫生：ffi_win.inc 标记 linguist-generated（修正 GitHub 语言条误判 C++ 57%）+ 停止跟踪构建产物 compiler/qkc（`c863ef6`）
+- 修复循环内重复声明丢失赋值（用户 HTML 剥段 bug 根因）（`a2e1f35`）
+- program 声明位置放宽：前后均可（用户确认无先后关系）；删过时测试 + 新回归（`415f9c2`）
+
+### 性能
+
+- 工具链性能优化：qkcheck −80% · qkdoc −60% · qkfmt −29% · 解释器 −31~42% · LSP 补全 −94%（`28c8f75`）
+- String 内置文本处理方法集 + 极限优化（`ca39112`）
+
+### 重构与清理
+
+- 仓库卫生：忽略 go test 生成的 *.test 二进制（`7383a9f`）
+- 清理：移除临时实验基准文件（BenchmarkPhaseTypecheck）（`d74c002`）
+
+### 文档
+
+- qkdoc 补宏文档（#macro 在解析前被切出 AST，需显式收录）（`5a948bf`）
+- README：官方项目 actions 库说明升级为两级结构（`415b3b0`）
+- README：官方项目区同步 actions 库（改名）（`8a5b0a4`）
+
+### 构建与工具链
+
+- qkc CLI 完善（-c/-o/--emit-ir/--version/-h）+ CI 工作流（构建/测试/双路径对比）（`af47f02`）
+- 递归 import 合并（库文件内的 import 也加载，visited 防环）——cleg→json 传递依赖可用（`812d99e`）
+- darwin 无 cgo 构建通过（Mach-O）+ libHandle/libObj 共享文件整理（`d67d0d4`）
+- 全跨系统：Windows 交叉构建通过（FFI 自研 ABI wrapper + GDI 屏显）+ macOS 帧输出构建 + 平台 tags 化（`035d486`）
+
+### 其它
+
+- qkcheck 误报/漏报统计（多轮取 P99）+ 跨系统门禁（`4a8eaf1`）
+- 记录「何时托管给 C 库」的实测判据 + 前端成本拆分基准（`1d25b45`）
+- qkc 第 3 轮：HashTable + List<String>（String.split）+ 指针（T&/new）lowering（compare.sh 全一致）（`5979a7c`）
+- qkc：接收者按类型 + interface{}(tAny) lowering（22/22 双路径逐字节一致）（`4900998`）
+- 接口签名的接收者也按类型识别（isRecvParam），与 impl 侧/运行期统一（`a884036`）
+- 接收者识别改为**按类型**（Self 或该 impl 类型基名），不再按形参名 self（`12cc4cd`）
+- qkc：参数全按引用（含 copyd 深拷贝）+ 签名调用 memorize + 匿名类型 + merge 0..4 实参（20/20 双路径一致）（`795fdaa`）
+- 编译器：函数重载 + String/List 内建方法 + FFI 链接名映射与 long/pointer（13/13 双路径逐字节一致）（`8f5d0e5`）
+- 参数全按引用传递（copyd 才传时拷贝）+ 匿名 struct/interface 可作类型标注（`303362c`）
+- qkc lowering 阶段 C+D：泛型单态化 + 接口 vtable 分发 + library FFI + taskm（与解释器逐字节对齐）（`331b4c8`）
+- qkc lowering 阶段 A+B：语言基础 + struct/impl/space/运算符重载（与解释器逐字节对齐）（`168aa94`）
+- style 表口 QSS 归一（qkstyle_* 旧键回退 bg/size/font）+ 自动重绘模型（qkcleg_auto/tick）（`2c294d6`）
+- FreeType 精细渲染：灰度 alpha 混合抗锯齿（默认 on，blendPixel 边缘混合/255 直写快路径）+ hint 模式接口（default/none/light）+ CJK rune 路径统一（`cabc3d0`）
+- CJK：字体回退链按字符集选择（Noto Sans CJK/WenQuanYi/Source Han…）+ rune 级光栅（中文实测完整渲染）（`6681f88`）
+- org 迁移：URL 全量 QuarkLangCommunity（`fdc90cf`）
+- 主仓更名 QuarkLangQkc（语言 + qkc 编译器）；微服务分工：quark/qkd/qkm 独立仓库（`83ccef5`）
+- qkc 工具集：quark 调试模式（--bp file:line,... 断点 + c/n/p var/q 交互）（`4114591`）
+- raw string 对齐 Go：多行 + 内嵌 \\r 丢弃（`e1ab77b`）
+- 字符串纯文本语义：未知转义保留字面（"C:\Windows\Fonts" 原样）；双引号字面 + 反引号含换行（`1551e2d`）
+- break：ForStmt 也计入 loopDepth（循环外 break 报错含 for）（`edde563`）
+- break 语句：while/for 循环体内跳出（哨兵 + 捕获）+ 循环外编译报错（`02613d9`）
+- 组件事件接口族：ClegClickable/ClegCheckable/ClegEditable/ClegValueable/ClegSelectable/ClegItemable/ClegCellable/ClegCloseable/ClegActionable（内置 dynamic 协议）（`dcf252a`）
+- expand interface X; 语句语义：块内语句 + dynamic 前缀 + 组合递归收集 + 聚合 conformance（多 impl 满足）（`9298234`）
+- Qt 对齐第一波：qkstyle 原语读取 + 圆角 + 列表选中态 + 布局/信号（`2075a7d`）
+- QSS 风格 style 层：qkcleg_roundrect（圆角矩形原语）+ 字体链文本 + cleg qss 空间（`4c1257f`）
+- 字体回退链（style["font"]）：FreeType 光栅 + 链探测 + 5x7 兜底（跨系统）（`c4927aa`）
+- setStyle(string) = 解析 JSON 字符串本体；@styleConfigure(file) = 读文件内容字符串投递给 setStyle（`4c7900a`）
+- 重载 fallback：单函数参数类型错误还原 cannot assign 报错（行级落盘）（`304df99`）
+- 重载无匹配报错兼容（单函数保留 cannot assign/count 文案）（`9cfe8a3`）
+- 四件套：setStyle(file)/反引号字符串/@styleConfigure 签名/file 类型/函数重载（`18fd104`）
+- cleg 跨系统屏幕宿主：X11 实测通过 + GDI 分支 + 帧输出回退（`69c8d20`）
+- cleg 全面框架（Qt 组件全集 Cleg 化）+ 语言支撑：else if / 标量 toString / 接口动态派发（`bc98064`）
+- cleg GUI 框架 v1 + 接口动态派发 + Operation/多 impl 基建（`764c56f`）
+- 系统库 FFI（library 声明）：跨系统 dlopen/LoadLibrary + libffi 调用（`9d59426`）
+- json.loads 键规整：反序列化的 HashTable 键走 hashKey（与 put/get 一致，loads 后 get("name") 可查）（`656ee0f`）
+- json 官方库：qkjson_dumps/qkjson_loads 原语（encoding/json，键还原原生值）+ any 可赋具体类型（`831def9`）
+- String 内置文本处理方法集（UTF-8 安全）（`c305785`）
+- actions 库网络层原语：qkhttp_get / qkhttp_post（10s 超时、8MiB 响应上限、非2xx 报错）+ typecheck 白名单与参数校验（`63a5ee8`）
+- 清除历史残留保留字：in / out 不再是关键字（`4162660`）
+
 ## v1.0.0
 
 ### 新功能
