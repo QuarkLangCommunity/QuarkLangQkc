@@ -152,6 +152,11 @@ jobs:
         run: |
           cd /tmp/qklib-ci
           "$QKC" --emit-ir --target-os windows -L ci.qklib app.qk > win.ll
-          grep -q 'i32 40' win.ll || { echo "windows 变体未生效"; exit 1; }
           "$QKC" --emit-ir --target-os darwin -L ci.qklib app.qk > mac.ll
-          grep -q 'i32 38' mac.ll || { echo "darwin 变体未生效"; exit 1; }
+          # IR 里常量是 add 的第二个操作数（形如 `%2 = add i32 %1, 40`），不要按字面量匹配
+          if ! grep -qE 'add i32 %[0-9]+, 40$' win.ll; then
+            echo "windows 变体未生效"; sed -n '/merged library IR/,/^}/p' win.ll | head -20; exit 1
+          fi
+          if ! grep -qE 'add i32 %[0-9]+, 38$' mac.ll; then
+            echo "darwin 变体未生效"; sed -n '/merged library IR/,/^}/p' mac.ll | head -20; exit 1
+          fi
