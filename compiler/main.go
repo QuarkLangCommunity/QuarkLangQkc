@@ -447,7 +447,11 @@ parsed:
 	if cflags == "" {
 		cflags = "-O3 -flto=thin"
 	}
-	binKey := hash + "|" + ppTag + "|" + cflags
+	// 缓存文件名必须**跨系统合法**：Windows 名称不能含 `|` 与空格
+	// （CI 实测：clang LNK1104 cannot open file '…|windows-x86_64|-O3 -flto=thin.bin'）
+	rawKey := hash + "|" + ppTag + "|" + cflags + libFP
+	ksum := sha256.Sum256([]byte(rawKey))
+	binKey := hash[:12] + "-" + ppTag + "-" + hex.EncodeToString(ksum[:8])
 	binPath := filepath.Join(cacheDir(), binKey+".bin")
 	if _, err := os.Stat(binPath); err != nil {
 		tmp, terr := os.CreateTemp("", "quark-*.ll")

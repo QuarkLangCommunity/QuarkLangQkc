@@ -74,7 +74,15 @@ static pthread_t qpool[QPOOL_N]; static int qpool_started = 0;
 
 static void qlock(void) {
     while (__atomic_exchange_n(&qlk, 1, __ATOMIC_ACQUIRE)) {
+        /* 跨系统：暂停指令按架构分派（arm64 没有 __builtin_ia32_pause，
+           CI 在 macOS(Apple Silicon) 上实测报 unknown builtin） */
+#if defined(__x86_64__) || defined(__i386__)
         __builtin_ia32_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+        __asm__ __volatile__("yield");
+#else
+        /* 其它架构：不强求 */
+#endif
     }
 }
 static void qunlock(void) {
