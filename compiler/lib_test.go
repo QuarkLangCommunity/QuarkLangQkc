@@ -33,11 +33,11 @@ func TestNormalizeExportedABI(t *testing.T) {
 	}
 	out, sigs := normalizeExportedABI(sampleLibIR, []QKExport{{Name: "vfc_room_cap"}})
 	// 导出函数：参数应为**值**
-	if !strings.Contains(out, "define i32 @vfc_room_cap(i32 %p0.val)") {
+	if !strings.Contains(out, "define i32 @vfc_room_cap(i32 %p0_val)") {
 		t.Fatalf("导出函数参数未转值：\n%s", firstLines(out, 6))
 	}
 	// 入口处应有 alloca + store，保证函数体原有 %p0 用法仍然有效
-	if !strings.Contains(out, "%p0 = alloca i32") || !strings.Contains(out, "store i32 %p0.val, i32* %p0") {
+	if !strings.Contains(out, "%p0 = alloca i32") || !strings.Contains(out, "store i32 %p0_val, i32* %p0") {
 		t.Fatalf("缺少入口桥接（alloca/store）：\n%s", firstLines(out, 10))
 	}
 	// 函数体未被破坏
@@ -55,39 +55,45 @@ func TestNormalizeExportedABI(t *testing.T) {
 
 func TestQKLibRoundTrip(t *testing.T) {
 	man := QKLibManifest{Name: "vfc-ext", Version: "0.1.0",
-		Exports: []QKExport{{Name: "vfc_room_cap", Sig: "(i32)", QLSig: "fn vfc_room_cap(int base) int"}},
-		SOName:  "libvfc_ext.so", Platform: "linux"}
-	obj := []byte{1, 2, 3, 4, 5}
+		Exports: []QKExport{{Name: "vfc_room_cap", Sig: "(i32)", QLSig: "fn vfc_room_cap(int base) int"}}}
+	variants := map[string]string{
+		"linux-x86_64":   `define i32 @vfc_room_cap(i32 %v) { ret i32 %v }`,
+		"windows-x86_64": `define i32 @vfc_room_cap(i32 %v) { ret i32 99 }`,
+	}
 	path := t.TempDir() + "/x.qklib"
-	if err := writeQKLib(path, man, obj); err != nil {
+	if err := writeQKLib(path, man, variants); err != nil {
 		t.Fatal(err)
 	}
-	got, payload, err := readQKLib(path)
+	got, vs, err := readQKLib(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "vfc-ext" || got.Version != "0.1.0" || !got.Obfuscated == false {
+	if got.Name != "vfc-ext" || got.Version != "0.1.0" || got.Payload != "ir" {
 		t.Fatalf("清单往返异常：%+v", got)
 	}
 	if len(got.Exports) != 1 || got.Exports[0].QLSig == "" {
 		t.Fatalf("导出签名丢失：%+v", got.Exports)
 	}
-	if string(payload) != string(obj) {
-		t.Fatal("对象内容不一致")
+	if len(got.Targets) != 2 || len(vs) != 2 {
+		t.Fatalf("变体数量异常：%v / %d", got.Targets, len(vs))
 	}
-	// 篡改对象 → 校验必须失败
-	bad := append([]byte{}, payload...)
-	bad[0] ^= 0xFF
-	badPath := t.TempDir() + "/bad.qklib"
-	if err := writeQKLib(badPath, got, bad); err != nil {
-		t.Fatal(err)
+	name, ir, exact := pickVariant(vs, "windows-x86_64")
+	if !exact || name != "windows-x86_64" || !strings.Contains(ir, "99") {
+		t.Fatalf("变体选择异常：%s exact=%v", name, exact)
 	}
-	// 重新打包会刷新 sha256，故要手工构造篡改：读出原文件后改一个字节
+	name2, _, exact2 := pickVariant(vs, "windows-arm64")
+	if exact2 || name2 == "" {
+		t.Fatalf("回退逻辑异常：%s exact=%v", name2, exact2)
+	}
+	// 篡改变体 → sha256 校验必须失败
 	raw, _ := readFileBytes(path)
-	raw[len(raw)-1] ^= 0xFF
-	writeFileBytes(badPath, raw)
-	if _, _, err := readQKLib(badPath); err == nil {
-		t.Fatal("对象被篡改应校验失败")
+	raw[len(raw)-3] ^= 0xFF
+	badPath := t.TempDir() + "/bad.qklib"
+	if werr := writeFileBytes(badPath, raw); werr != nil {
+		t.Fatal(werr)
+	}
+	if _, _, rerr := readQKLib(badPath); rerr == nil {
+		t.Fatal("变体被篡改应校验失败")
 	}
 }
 

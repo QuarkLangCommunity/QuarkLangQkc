@@ -1,101 +1,75 @@
 package main
 
-// lib.go —— **编译出库（--emit-lib）** 与 **混淆（--obfuscate）**、**引用库（-L）**
+// lib.go —— 库制品（.qklib）：**可移植 IR 多平台变体**，编译期合并，不使用 .so / dlopen
 //
-// 设计目标（用户需求）：
-//   ① 库制品可直接被引用，**不泄漏核心代码**（只发二进制对象 + 导出清单，不发源码）；
-//   ② 混淆：内部符号改名、去调试/去标识、路径清理（提升逆向成本）；
-//   ③ 库可以带版本与 ABI 指纹，引用时校验，避免"二进制不匹配"的隐性故障。
+// 设计（用户要求：不依赖 .so，用预处理命令跨系统）：
+//   ① 语言本体与库分离：这里只做"库制品"的打包/读取/合并，不含任何游戏知识；
+//   ② 库以**可移植 LLVM IR**分发，按目标平台保存**多个变体**（内容由预处理器 #if os()/arch() 决定）；
+//   ③ 使用方 `qkc -L lib.qklib`：按自身目标平台挑变体，**把 IR 合并进自己的模块**，
+//      一次编译出原生二进制 —— 无共享库、无 rpath、无平台二进制依赖，天然跨系统；
+//   ④ 混淆：内部符号改名、去源码路径与目标行；导出名保留（供引用），制品里没有源码。
 //
-// .qklib 容器布局（大端）：
-//   "QKLB" | ver(1) | manifestLen(uint32) | manifest(JSON) | object(ELF .o)
-//   manifest: {name, version, abi, obfuscated, exports:[{name, sig}], sha256_obj, built_at, qkc}
-//
-// 引用方式：qkc -c -L path/to/lib.qklib prog.qk -o prog
-//   → 解包对象文件到临时目录，作为 clang 的额外输入参与链接（导出名保持不变，故可跨混淆链接）。
+// 容器：`QKLB` + JSON{manifest, variants{ "<os>-<arch>": "<IR 文本>" }}
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
 )
 
 const qklibMagic = "QKLB"
-const qklibVersion = 1
 
-// qlSigRe 从源码里抓导出函数的 QL 签名（库作者自己的源码，编译期可见）
-var qlSigRe = regexp.MustCompile(`(?m)^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]*>)?)?`)
-
-// qlSigs 解析源码里所有顶层函数的 QL 签名
-func qlSigs(src string) map[string]QKExport {
-	out := map[string]QKExport{}
-	for _, m := range qlSigRe.FindAllStringSubmatch(src, -1) {
-		name, params, ret := m[1], strings.TrimSpace(m[2]), strings.TrimSpace(m[3])
-		if ret == "" {
-			ret = "void"
-		}
-		out[name] = QKExport{Name: name, Params: params, Ret: ret,
-			QLSig: fmt.Sprintf("fn %s(%s) %s", name, params, ret)}
-	}
-	return out
-}
-
-// QKLibManifest 库清单（对外可见的只有这些元数据与导出签名）
-type QKLibManifest struct {
-	Name       string     `json:"name"`
-	Version    string     `json:"version"`
-	ABI        string     `json:"abi"`
-	SOName     string     `json:"soname"`
-	Platform   string     `json:"platform"` // linux / darwin / windows
-	Obfuscated bool       `json:"obfuscated"`
-	Exports    []QKExport `json:"exports"`
-	SHA256Obj  string     `json:"sha256_obj"`
-	BuiltAt    int64      `json:"built_at"`
-	QKC        string     `json:"qkc"`
-}
-
-// QKExport 一个导出符号：IR 签名 + **QL 级签名**（供引用方自动生成声明）
+// QKExport 一个导出符号：IR 签名 + QL 级签名（供引用方生成声明）
 type QKExport struct {
 	Name   string `json:"name"`
-	Sig    string `json:"sig"`    // IR 级（诊断用）
-	QLSig  string `json:"ql_sig"` // 形如 "fn vfc_room_cap(int base) int"
-	Params string `json:"params"` // 形如 "int base"
-	Ret    string `json:"ret"`    // 形如 "int"（空=void）
+	Sig    string `json:"sig"`
+	QLSig  string `json:"ql_sig"`
+	Params string `json:"params"`
+	Ret    string `json:"ret"`
+}
+
+// QKLibManifest 库清单（对外只暴露元数据与导出签名，不含源码）
+type QKLibManifest struct {
+	Name       string            `json:"name"`
+	Version    string            `json:"version"`
+	ABI        string            `json:"abi"`
+	Payload    string            `json:"payload"`
+	Targets    []string          `json:"targets"`
+	Obfuscated bool              `json:"obfuscated"`
+	Exports    []QKExport        `json:"exports"`
+	SHA256     map[string]string `json:"sha256"`
+	BuiltAt    int64             `json:"built_at"`
+	QKC        string            `json:"qkc"`
 }
 
 var (
-	reDefine   = regexp.MustCompile(`(?m)^define\s+([^@]*?)@([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)`)
-	reDeclare  = regexp.MustCompile(`(?m)^declare\s+([^@]*?)@([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)`)
-	reSymRef   = regexp.MustCompile(`@([A-Za-z_][A-Za-z0-9_.]*)`)
-	reSourceLn = regexp.MustCompile(`(?m)^source_filename\s*=.*$`)
-	reDbgRef   = regexp.MustCompile(`!llvm\.dbg[^\n]*\n?`)
-	reDbgTail  = regexp.MustCompile(`(?m)^!\d+\s*=.*$`)
-	reStrConst = regexp.MustCompile(`(?m)^(@[A-Za-z0-9_.]+)\s*=\s*(private|internal)?\s*(unnamed_addr\s*)?constant\s*\[(\d+)\s*x\s*i8\]\s*c"((?:[^"\\]|\\.)*)"`)
+	reDefine  = regexp.MustCompile(`(?m)^define\s+([^@]*?)@([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)`)
+	reSymRef  = regexp.MustCompile(`@(\.?[A-Za-z_][A-Za-z0-9_.]*)`) // 允许 .str1 这类私有全局
+	reSrcLine = regexp.MustCompile(`(?m)^source_filename\s*=.*$`)
+	reTarget  = regexp.MustCompile(`(?m)^target\s+(datalayout|triple)\s*=.*$`)
+	reDbgTail = regexp.MustCompile(`(?m)^![0-9]+\s*=.*$`)
 )
 
-// isRuntimeSym 运行时/内建符号：混淆时**绝不改名**（否则链接不上运行时）
+// isRuntimeSym 运行时/内建符号：混淆时**绝不动**
 func isRuntimeSym(name string) bool {
-	for _, p := range []string{"llvm.", "qk_", "__", "main", "printf", "malloc", "free", "memcpy",
+	for _, p := range []string{"llvm.", "qk_", "ql_", "__", "main", "printf", "malloc", "free", "memcpy",
 		"memmove", "memset", "strlen", "pthread_", "exit", "abort", "puts", "putchar", "calloc",
-		"realloc", "fwrite", "fputs", "stdout", "stderr", "fopen", "fclose", "fflush"} {
-		if strings.HasPrefix(name, p) || name == p {
+		"realloc", "fwrite", "fputs", "stdout", "stderr", "fopen", "fclose", "fflush", "snprintf"} {
+		if name == p || strings.HasPrefix(name, p) {
 			return true
 		}
 	}
 	return false
 }
 
-// collectExports 从 IR 里解析导出（顶层 define，排除 main 与内部 _ 前缀）
+// collectExports 从 IR 解析导出（顶层 define，排除 main 与内部 `_` 前缀）
 func collectExports(ir string) []QKExport {
 	var out []QKExport
 	seen := map[string]bool{}
@@ -105,7 +79,6 @@ func collectExports(ir string) []QKExport {
 			continue
 		}
 		seen[name] = true
-		// 参数只保留类型列表（不泄漏参数名/局部信息）
 		var types []string
 		for _, p := range strings.Split(params, ",") {
 			p = strings.TrimSpace(p)
@@ -123,54 +96,30 @@ func collectExports(ir string) []QKExport {
 	return out
 }
 
-// obfuscateIR 混淆 IR：
-//
-//	· 内部符号（非运行时、非导出、非 main）改名为 @o_<hash>
-//	· 删除 source_filename 与调试元数据（不泄漏源码路径/变量名）
-//	· 字符串常量按需保留（v1 只改名与清理；加密留待 v2，见文档）
-func obfuscateIR(ir string, exports []QKExport) string {
-	keep := map[string]bool{}
-	for _, e := range exports {
-		keep[e.Name] = true
+var qlSigRe = regexp.MustCompile(`(?m)^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]*>)?)?`)
+
+// qlSigs 从源码抓函数的 QL 签名
+func qlSigs(src string) map[string]QKExport {
+	out := map[string]QKExport{}
+	for _, m := range qlSigRe.FindAllStringSubmatch(src, -1) {
+		name, params, ret := m[1], strings.TrimSpace(m[2]), strings.TrimSpace(m[3])
+		if ret == "" {
+			ret = "void"
+		}
+		out[name] = QKExport{Name: name, Params: params, Ret: ret,
+			QLSig: fmt.Sprintf("fn %s(%s) %s", name, params, ret)}
 	}
-	keep["main"] = true
-	rename := map[string]string{}
-	ir = reSymRef.ReplaceAllStringFunc(ir, func(m string) string {
-		name := m[1:]
-		if keep[name] || isRuntimeSym(name) {
-			return m
-		}
-		if nn, ok := rename[name]; ok {
-			return "@" + nn
-		}
-		sum := sha256.Sum256([]byte(name + "|qk-obf"))
-		nn := "o_" + hex.EncodeToString(sum[:])[:12]
-		rename[name] = nn
-		return "@" + nn
-	})
-	ir = reSourceLn.ReplaceAllString(ir, "source_filename = \"<obfuscated>\"")
-	ir = reDbgRef.ReplaceAllString(ir, "")
-	ir = reDbgTail.ReplaceAllStringFunc(ir, func(s string) string {
-		if strings.Contains(s, "llvm.dbg") || strings.Contains(s, "DILocation") ||
-			strings.Contains(s, "DISubprogram") || strings.Contains(s, "DIExpression") ||
-			strings.Contains(s, "DIFile") || strings.Contains(s, "DICompileUnit") {
-			return ""
-		}
-		return s
-	})
-	return ir
+	return out
 }
+
+// reParamPtr 匹配"指针形参"（例如 ` i32* noundef %p0`）
+var reParamPtr = regexp.MustCompile(`^\s*([A-Za-z0-9_\.]+\*)\s+((?:noundef|nonnull|nocapture|readonly|signext|zeroext|align \d+)\s+)*%([A-Za-z0-9_\.]+)\s*$`)
 
 // normalizeExportedABI —— **导出面 ABI 规范化**（跨系统的值类型边界）
 //
-// 问题：库模式发射的导出函数，参数按**指针**传递（%p0 是 i32*），而调用方按**值**传递
-// （`call i32 @f(i32 21)`）→ 运行时解引用 0x15 直接段错误（gdb 实测）。
-//
-// 做法：只改**导出函数**：把指针形参改成值形参，并在入口处 alloca+store 复原出同名指针，
-// 使函数体（原本就通过 %p0 读写）**无需任何改动**。返回值本就是按值，无需处理。
-// 这样库与程序的调用约定一致，且不依赖各平台/各编译单元的逃逸分析差异。
-var reParamPtr = regexp.MustCompile(`^\s*([A-Za-z0-9_\.]+\*)\s+((?:noundef|nonnull|nocapture|readonly|signext|zeroext|align \d+)\s+)*%([A-Za-z0-9_\.]+)\s*$`)
-
+// 语言内部用"按指针传参"，但跨模块调用必须与调用方一致（调用方按值传）。
+// 这里只改**导出函数**：指针形参 → 值形参，并在入口处 alloca+store 复原同名指针，
+// 使函数体原有用法完全不变；返回本就按值，无需处理。
 func normalizeExportedABI(ir string, exports []QKExport) (string, map[string]string) {
 	keep := map[string]bool{}
 	for _, e := range exports {
@@ -179,43 +128,36 @@ func normalizeExportedABI(ir string, exports []QKExport) (string, map[string]str
 	lines := strings.Split(ir, "\n")
 	out := make([]string, 0, len(lines)+16)
 	sigs := map[string]string{}
+	defRe := regexp.MustCompile(`^define\s+([^@]+)@([A-Za-z_][A-Za-z0-9_\.]*)\s*\((.*)\)(.*)$`)
 	i := 0
 	for i < len(lines) {
-		ln := lines[i]
-		// 找到导出函数定义起始
-		m := regexp.MustCompile(`^define\s+([^@]+)@([A-Za-z_][A-Za-z0-9_\.]*)\s*\((.*)\)(.*)$`).FindStringSubmatch(ln)
+		m := defRe.FindStringSubmatch(lines[i])
 		if m == nil || !keep[m[2]] {
-			out = append(out, ln)
+			out = append(out, lines[i])
 			i++
 			continue
 		}
 		ret, name, params, tail := m[1], m[2], m[3], m[4]
-		parts := strings.Split(params, ",")
 		type conv struct{ slot, typ, val string }
 		var convs []conv
-		var newParts []string
-		var types []string
-		for _, p := range parts {
+		var newParts, types []string
+		for _, p := range strings.Split(params, ",") {
 			pm := reParamPtr.FindStringSubmatch(p)
 			if pm == nil {
-				newParts = append(newParts, p)
-				types = append(types, strings.TrimSpace(strings.TrimSuffix(p, "%"+lastIdent(p))))
+				newParts = append(newParts, strings.TrimSpace(p))
+				types = append(types, strings.TrimSpace(p))
 				continue
 			}
-			ptrType, id := pm[1], pm[3] // 例如 i32* 与 p0
+			ptrType, id := pm[1], pm[3]
 			valType := strings.TrimSuffix(ptrType, "*")
-			val := id + ".val"
-			newParts = append(newParts, " "+valType+" %"+val)
+			val := id + "_val" // 注意：LLVM 参数名**不能带点**（%p0.val 会被误解析）
+			newParts = append(newParts, valType+" %"+val)
 			types = append(types, valType)
 			convs = append(convs, conv{slot: id, typ: valType, val: val})
-		}
-		for k := range newParts {
-			newParts[k] = strings.TrimSpace(newParts[k])
 		}
 		out = append(out, "define "+ret+"@"+name+"("+strings.Join(newParts, ", ")+")"+tail)
 		sigs[name] = "(" + strings.Join(types, ", ") + ")"
 		i++
-		// 复制函数体，并在首个标签行之后插入 alloca/store
 		inserted := false
 		for i < len(lines) {
 			body := lines[i]
@@ -236,155 +178,118 @@ func normalizeExportedABI(ir string, exports []QKExport) (string, map[string]str
 	return strings.Join(out, "\n"), sigs
 }
 
-// lastIdent 取 "%x" 里的 x（无则返回空串）
-func lastIdent(s string) string {
-	s = strings.TrimSpace(s)
-	if idx := strings.LastIndex(s, "%"); idx >= 0 {
-		return strings.TrimSpace(s[idx+1:])
-	}
-	return ""
-}
-
-// writeQKLib 打包库制品：manifest + 对象文件
-func writeQKLib(out string, man QKLibManifest, obj []byte) error {
-	sum := sha256.Sum256(obj)
-	man.SHA256Obj = hex.EncodeToString(sum[:])
-	if man.ABI == "" {
-		man.ABI = "qk-c-abi-1"
-	}
-	if man.QKC == "" {
-		man.QKC = version
-	}
-	if man.BuiltAt == 0 {
-		man.BuiltAt = time.Now().Unix()
-	}
-	mb, err := json.Marshal(man)
-	if err != nil {
-		return err
-	}
-	var buf []byte
-	buf = append(buf, []byte(qklibMagic)...)
-	buf = append(buf, byte(qklibVersion))
-	var lb [4]byte
-	binary.BigEndian.PutUint32(lb[:], uint32(len(mb)))
-	buf = append(buf, lb[:]...)
-	buf = append(buf, mb...)
-	buf = append(buf, obj...)
-	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil && filepath.Dir(out) != "." {
-		return err
-	}
-	return os.WriteFile(out, buf, 0o644)
-}
-
-// readQKLib 读取库制品（供引用时校验）
-func readQKLib(path string) (QKLibManifest, []byte, error) {
-	var man QKLibManifest
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return man, nil, err
-	}
-	if len(b) < 6 || string(b[:4]) != qklibMagic {
-		return man, nil, fmt.Errorf("不是 .qklib 制品（magic 不匹配）：%s", path)
-	}
-	n := binary.BigEndian.Uint32(b[5:9])
-	if len(b) < 9+int(n) {
-		return man, nil, fmt.Errorf("库制品损坏（manifest 越界）：%s", path)
-	}
-	if err := json.Unmarshal(b[9:9+int(n)], &man); err != nil {
-		return man, nil, fmt.Errorf("库清单解析失败：%w", err)
-	}
-	obj := b[9+int(n):]
-	if man.SHA256Obj != "" {
-		sum := sha256.Sum256(obj)
-		if hex.EncodeToString(sum[:]) != man.SHA256Obj {
-			return man, nil, fmt.Errorf("库制品校验失败（对象文件被改动）：%s", path)
-		}
-	}
-	return man, obj, nil
-}
-
-// emitLibFromIR 由 IR 生成库制品：clang -c 出对象 → 可选混淆 → 打包 .qklib
-func emitLibFromIR(ir, src, out, name, ver string, obfuscate bool, cflags []string) error {
-	exports := collectExports(ir)
-	sigs := qlSigs(src)
-	for i := range exports {
-		if q, ok := sigs[exports[i].Name]; ok {
-			exports[i].QLSig, exports[i].Params, exports[i].Ret = q.QLSig, q.Params, q.Ret
-		}
-	}
-	// 导出面 ABI 规范化（值类型边界）：必须在混淆之前做（改名后难以定位参数）
-	ir, normSigs := normalizeExportedABI(ir, exports)
-	for i := range exports {
-		if sig, ok := normSigs[exports[i].Name]; ok {
-			exports[i].Sig = sig
-		}
-	}
-	if obfuscate {
-		ir = obfuscateIR(ir, exports)
-	}
-	dir, err := os.MkdirTemp("", "qklib-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(dir)
-	irFile := filepath.Join(dir, "lib.ll")
-	objFile := filepath.Join(dir, "lib.o")
-	if err := os.WriteFile(irFile, []byte(ir), 0o644); err != nil {
-		return err
-	}
-	// 跨系统：按目标平台给出库文件名（不依赖 dlopen，链接器直接解析）
-	base := sanitizeName(name)
-	soname := "lib" + base + ".so"
-	switch {
-	case runtime.GOOS == "darwin":
-		soname = "lib" + base + ".dylib"
-	case runtime.GOOS == "windows":
-		soname = base + ".dll"
-	}
-	// 版本脚本：**只导出清单里的符号**（内部符号一律 local），比 strip 更精确可靠
-	var vs strings.Builder
-	vs.WriteString("{\n  global:\n")
-	if len(exports) == 0 {
-		vs.WriteString("    __qk_no_exports;\n")
-	}
+// obfuscateIR 混淆 IR：内部符号改名 + 去源码路径/目标行
+func obfuscateIR(ir string, exports []QKExport) string {
+	keep := map[string]bool{"main": true}
 	for _, e := range exports {
-		fmt.Fprintf(&vs, "    %s;\n", e.Name)
+		keep[e.Name] = true
 	}
-	vs.WriteString("  local: *;\n};\n")
-	vsFile := filepath.Join(dir, "exports.map")
-	if err := os.WriteFile(vsFile, []byte(vs.String()), 0o644); err != nil {
-		return err
-	}
-	// 注意：库**不打进 C 运行时**（运行时符号留给使用方程序提供），避免重复定义
-	args := []string{"-shared", "-fPIC", irFile, "-o", objFile,
-		"-Wl,-soname," + soname, "-Wl,--version-script=" + vsFile,
-		"-Wno-override-module", "-fno-ident", "-pthread"}
-	args = append(args, cflags...)
-	if out2, err := runCmd("clang", args...); err != nil {
-		return fmt.Errorf("clang -shared 失败：%v\n%s", err, out2)
-	}
-	// 库不得导出 main：否则动态链接时会**顶替宿主程序的 main**（实测段错误）
-	if out2, err := runCmd("objcopy", "--localize-symbol=main", objFile); err != nil {
-		fmt.Fprintln(os.Stderr, "提示：objcopy 不可用，未本地化 main：", strings.TrimSpace(out2))
-	}
-	if obfuscate {
-		// 只剥调试信息：**不可用 --strip-unneeded**（会把共享库的导出符号一起剥掉，实测链接失败）。
-		// 内部符号本就由版本脚本 local:* 隐藏，这才是可靠的"不泄漏"手段。
-		if _, err := runCmd("strip", "--strip-debug", objFile); err != nil {
-			fmt.Fprintln(os.Stderr, "提示：strip 不可用，未剥离调试信息（不影响使用）")
+	rename := map[string]string{}
+	ir = reSymRef.ReplaceAllStringFunc(ir, func(m string) string {
+		name := m[1:]
+		if keep[name] || isRuntimeSym(name) {
+			return m
 		}
-	}
-	obj, err := os.ReadFile(objFile)
-	if err != nil {
-		return err
-	}
-	man := QKLibManifest{Name: name, Version: ver, Obfuscated: obfuscate, Exports: exports,
-		SOName: soname, Platform: runtime.GOOS}
-	return writeQKLib(out, man, obj)
+		if nn, ok := rename[name]; ok {
+			return "@" + nn
+		}
+		sum := sha256.Sum256([]byte(name + "|qk-obf"))
+		nn := "o_" + hex.EncodeToString(sum[:])[:12]
+		rename[name] = nn
+		return "@" + nn
+	})
+	ir = reSrcLine.ReplaceAllString(ir, `source_filename = "<lib>"`)
+	ir = reTarget.ReplaceAllString(ir, "")
+	ir = reDbgTail.ReplaceAllStringFunc(ir, func(l string) string {
+		if strings.Contains(l, "llvm.dbg") || strings.Contains(l, "DI") {
+			return ""
+		}
+		return l
+	})
+	return ir
 }
 
-// DeclBlockFor 由库清单生成 QL 声明块：library <name> { fn ...; }
-// 引用方据此"直接引用库"，**看不到任何实现代码**。
+// stripModuleHeader 合并前清掉库 IR 的模块级头部（目标由使用方模块决定）
+func stripModuleHeader(ir string) string {
+	ir = reSrcLine.ReplaceAllString(ir, "")
+	ir = reTarget.ReplaceAllString(ir, "")
+	return strings.TrimSpace(ir)
+}
+
+// mergeLibIR 把库 IR 合并进使用方 IR。
+//
+// LLVM 模块级对象（命名类型 %T、declare 声明、attributes #N、元数据 !N）在两个模块里会冲突，
+// 因此这里做**去重与清理**，只并入库自己的 define（函数实现）：
+//
+//	· 消费方已定义的同名类型 → 丢弃库里的重复定义
+//	· 消费方已声明/定义的同名符号 → 丢弃库里的 declare
+//	· 丢弃库的 attributes/metadata 行与 define 上的 #N 引用（避免组号错位）
+func mergeLibIR(consumerIR, libIR string) string {
+	// 收集消费方已有的类型与符号
+	typeRe := regexp.MustCompile(`(?m)^%([A-Za-z0-9_.]+)\s*=\s*type\b`)
+	symRe := regexp.MustCompile(`(?m)^(?:declare|define)[^@]*@([A-Za-z_][A-Za-z0-9_.]*)\s*\(`)
+	haveType := map[string]bool{}
+	for _, m := range typeRe.FindAllStringSubmatch(consumerIR, -1) {
+		haveType[m[1]] = true
+	}
+	haveSym := map[string]bool{}
+	for _, m := range symRe.FindAllStringSubmatch(consumerIR, -1) {
+		haveSym[m[1]] = true
+	}
+
+	// 库将要**定义**的符号：使用方里的同名 declare 必须删掉
+	// （clang 22 起，"declare 后 define 同名函数"会被判为 invalid redefinition，最小复现已验证）
+	libDefs := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^define[^@]*@([A-Za-z_][A-Za-z0-9_.]*)\s*\(`).FindAllStringSubmatch(libIR, -1) {
+		libDefs[m[1]] = true
+	}
+	var consumerKept []string
+	for _, ln := range strings.Split(consumerIR, "\n") {
+		t := strings.TrimSpace(ln)
+		if strings.HasPrefix(t, "declare ") {
+			if m := regexp.MustCompile(`@(\.?[A-Za-z_][A-Za-z0-9_.]*)\s*\(`).FindStringSubmatch(t); m != nil && libDefs[m[1]] {
+				continue
+			}
+		}
+		consumerKept = append(consumerKept, ln)
+	}
+	consumerIR = strings.Join(consumerKept, "\n")
+
+	keep := []string{}
+	for _, ln := range strings.Split(stripModuleHeader(libIR), "\n") {
+		t := strings.TrimSpace(ln)
+		if t == "" {
+			continue
+		}
+		if m := regexp.MustCompile(`^%([A-Za-z0-9_.]+)\s*=\s*type\b`).FindStringSubmatch(t); m != nil {
+			if haveType[m[1]] {
+				continue // 重复类型：丢弃
+			}
+			haveType[m[1]] = true
+			keep = append(keep, ln)
+			continue
+		}
+		if strings.HasPrefix(t, "declare ") {
+			if m := regexp.MustCompile(`@([A-Za-z_][A-Za-z0-9_.]*)\s*\(`).FindStringSubmatch(t); m != nil && haveSym[m[1]] {
+				continue // 已有同名声明/定义：丢弃
+			}
+			keep = append(keep, ln)
+			continue
+		}
+		if strings.HasPrefix(t, "attributes ") || strings.HasPrefix(t, "!") {
+			continue // 属性组/元数据：丢弃（避免组号错位）
+		}
+		// define 行去掉尾部属性组引用 #N
+		if strings.HasPrefix(t, "define ") {
+			ln = regexp.MustCompile(`\s+#\d+`).ReplaceAllString(ln, "")
+		}
+		keep = append(keep, ln)
+	}
+	return strings.TrimRight(consumerIR, "\n") + "\n\n; ===== merged library IR =====\n" +
+		strings.Join(keep, "\n") + "\n"
+}
+
+// DeclBlockFor 由清单生成 QL 声明块：library <name> { fn ...; }
 func DeclBlockFor(man QKLibManifest) (string, string) {
 	libName := sanitizeName(man.Name)
 	var b strings.Builder
@@ -400,41 +305,95 @@ func DeclBlockFor(man QKLibManifest) (string, string) {
 	return libName, b.String()
 }
 
-// installLibs 把 -L 指定的库制品里的共享库安装到 outDir（运行时优先加载 ./lib<名>.so）。
-// 调用方无需链接参数：语言运行时按库名 dlopen。
-func installLibs(paths []string, outDir string) ([]string, error) {
-	if len(paths) == 0 {
-		return nil, nil
+// writeQKLib 打包：清单 + 多平台 IR 变体
+func writeQKLib(out string, man QKLibManifest, variants map[string]string) error {
+	man.SHA256 = map[string]string{}
+	targets := make([]string, 0, len(variants))
+	for t, ir := range variants {
+		sum := sha256.Sum256([]byte(ir))
+		man.SHA256[t] = hex.EncodeToString(sum[:])
+		targets = append(targets, t)
 	}
-	if outDir == "" {
-		outDir = "."
+	sort.Strings(targets)
+	man.Targets = targets
+	if man.ABI == "" {
+		man.ABI = "qk-ir-1"
 	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, err
+	man.Payload = "ir"
+	if man.QKC == "" {
+		man.QKC = version
 	}
-	var installed []string
-	for _, p := range paths {
-		man, payload, err := readQKLib(p)
-		if err != nil {
-			return installed, err
-		}
-		soname := man.SOName
-		if soname == "" {
-			soname = "lib" + sanitizeName(man.Name) + ".so"
-		}
-		dst := filepath.Join(outDir, soname)
-		if err := os.WriteFile(dst, payload, 0o755); err != nil {
-			return installed, err
-		}
-		note := ""
-		if man.Obfuscated {
-			note = "，已混淆"
-		}
-		fmt.Fprintf(os.Stderr, "qkc: 引用库 %s v%s（导出 %d 个符号%s）→ %s\n",
-			man.Name, man.Version, len(man.Exports), note, dst)
-		installed = append(installed, dst)
+	if man.BuiltAt == 0 {
+		man.BuiltAt = time.Now().Unix()
 	}
-	return installed, nil
+	body := struct {
+		Manifest QKLibManifest     `json:"manifest"`
+		Variants map[string]string `json:"variants"`
+	}{man, variants}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	if dir := filepath.Dir(out); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(out, append([]byte(qklibMagic), b...), 0o644)
+}
+
+// readQKLib 读取并校验库制品
+func readQKLib(path string) (QKLibManifest, map[string]string, error) {
+	var man QKLibManifest
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return man, nil, err
+	}
+	if len(b) < 4 || string(b[:4]) != qklibMagic {
+		return man, nil, fmt.Errorf("不是 .qklib 制品（magic 不匹配）：%s", path)
+	}
+	var body struct {
+		Manifest QKLibManifest     `json:"manifest"`
+		Variants map[string]string `json:"variants"`
+	}
+	if err := json.Unmarshal(b[4:], &body); err != nil {
+		return man, nil, fmt.Errorf("库制品解析失败：%w", err)
+	}
+	for t, ir := range body.Variants {
+		if want, ok := body.Manifest.SHA256[t]; ok {
+			sum := sha256.Sum256([]byte(ir))
+			if hex.EncodeToString(sum[:]) != want {
+				return body.Manifest, nil, fmt.Errorf("变体 %s 校验失败（内容被改动）", t)
+			}
+		}
+	}
+	return body.Manifest, body.Variants, nil
+}
+
+// pickVariant 按目标平台挑变体（target 形如 linux-x86_64）
+func pickVariant(variants map[string]string, target string) (string, string, bool) {
+	if ir, ok := variants[target]; ok {
+		return target, ir, true
+	}
+	if ir, ok := variants["any"]; ok {
+		return "any", ir, true
+	}
+	keys := make([]string, 0, len(variants))
+	for k := range variants {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) == 0 {
+		return "", "", false
+	}
+	if osName, _, ok := strings.Cut(target, "-"); ok {
+		for _, k := range keys {
+			if strings.HasPrefix(k, osName+"-") {
+				return k, variants[k], false
+			}
+		}
+	}
+	return keys[0], variants[keys[0]], false
 }
 
 func sanitizeName(s string) string {
@@ -442,15 +401,9 @@ func sanitizeName(s string) string {
 		return "lib"
 	}
 	return strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
 			return r
 		}
 		return '_'
 	}, s)
-}
-
-// runCmd 运行外部命令并返回合并输出（失败时返回 error）
-func runCmd(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
-	return string(out), err
 }
