@@ -218,7 +218,7 @@ type lowerer struct {
 
 	fns      map[string]*lang.FuncDecl // 非泛型、非 main 的普通函数（唯一名字）
 	fnOrder  []string
-	fnRet    map[string]string         // IR 函数名 → 返回类型
+	fnRet    map[string]string           // IR 函数名 → 返回类型
 	ovl      map[string][]*lang.FuncDecl // 重载函数：lang 名 → 候选声明
 	fnIR     map[*lang.FuncDecl]string   // 声明 → IR 名（重载按参数类型修饰）
 	fnList   []fnItem                    // 待 lower 的普通函数（声明 + IR 名）
@@ -394,7 +394,7 @@ func (l *lowerer) collect() error {
 			l.fnList = append(l.fnList, fnItem{decl: f, ir: ir})
 		}
 	}
-	if mainFn == nil {
+	if mainFn == nil && !libMode {
 		return l.errAt("未找到 main 函数（正典入口：fn main(IOStream io) { ... }）")
 	}
 
@@ -430,11 +430,13 @@ func (l *lowerer) collect() error {
 			l.out.funcs = append(l.out.funcs, fd)
 		}
 	}
-	stmts, err := l.lowerMain(mainFn)
-	if err != nil {
-		return err
+	if mainFn != nil { // 库模式无 main：跳过入口 lowering
+		stmts, err := l.lowerMain(mainFn)
+		if err != nil {
+			return err
+		}
+		l.out.mainStmts = stmts
 	}
-	l.out.mainStmts = stmts
 	return nil
 }
 

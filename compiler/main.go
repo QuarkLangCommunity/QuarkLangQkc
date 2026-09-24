@@ -154,6 +154,11 @@ func main() {
 	run := false
 	compileOnly := false
 	outPath := ""
+	emitLib := false
+	obfuscate := false
+	libName := ""
+	libVer := ""
+	var libPaths []string
 	for len(args) > 0 {
 		a := args[0]
 		switch a {
@@ -163,6 +168,33 @@ func main() {
 		case "-c":
 			compileOnly = true
 			args = args[1:]
+		case "--emit-lib":
+			emitLib = true
+			args = args[1:]
+		case "--obfuscate":
+			obfuscate = true
+			args = args[1:]
+		case "-L", "--use-lib":
+			if len(args) < 2 {
+				qkcUsage()
+				os.Exit(2)
+			}
+			libPaths = append(libPaths, args[1])
+			args = args[2:]
+		case "--lib-name":
+			if len(args) < 2 {
+				qkcUsage()
+				os.Exit(2)
+			}
+			libName = args[1]
+			args = args[2:]
+		case "--lib-version":
+			if len(args) < 2 {
+				qkcUsage()
+				os.Exit(2)
+			}
+			libVer = args[1]
+			args = args[2:]
 		case "--emit-ir":
 			args = args[1:] // 默认行为，显式写法
 		case "--version", "-V":
@@ -192,7 +224,11 @@ parsed:
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
-	irPath := filepath.Join(cacheDir(), hash+".ll")
+	irSuffix := ".ll"
+	if emitLib {
+		irSuffix = "-lib.ll" // 库模式单独缓存：模式变化必须重编译
+	}
+	irPath := filepath.Join(cacheDir(), hash+irSuffix)
 	// 编译旗标：默认 -O3 跨系统便携（IR 与平台无关，目标平台 clang 生成原生二进制）；
 	// 本机极限可 QUARK_CFLAGS="-O3 -march=native"（产物仅当前 CPU 可运行）。
 	cflags := os.Getenv("QUARK_CFLAGS")
@@ -200,12 +236,31 @@ parsed:
 		// 默认 -O3 + thinLTO（跨翻译单元可见，fib35 实测 -4%）；LTO 不可用时降级纯 -O3
 		cflags = "-O3 -flto=thin"
 	}
-	binKey := hash + "|" + cflags
+	libFP := ""
+	for _, lp := range libPaths {
+		if man, obj, err := readQKLib(lp); err == nil {
+			sum := sha256.Sum256(obj)
+			libFP += "|" + man.Name + ":" + man.Version + ":" + hex.EncodeToString(sum[:8])
+		} else {
+			libFP += "|bad:" + lp
+		}
+	}
+	binKey := hash + "|" + cflags + libFP
 	binPath := filepath.Join(cacheDir(), binKey+".bin")
 
 	// -run：二进制缓存命中 → 直接执行（跳过全编译 + clang）
 	if run || compileOnly {
 		if _, err := os.Stat(binPath); err == nil {
+			if len(libPaths) > 0 { // 缓存命中：库文件仍需装到输出目录
+				od := filepath.Dir(outPath)
+				if outPath == "" {
+					od = "."
+				}
+				if _, ierr := installLibs(libPaths, od); ierr != nil {
+					fmt.Fprintln(os.Stderr, "error:", ierr)
+					os.Exit(1)
+				}
+			}
 			execPath := binPath
 			if outPath != "" {
 				if b, rerr := os.ReadFile(binPath); rerr == nil {
@@ -240,6 +295,24 @@ parsed:
 			os.Exit(1)
 		}
 		// 宏展开（工程化：与解释器共用 token 级宏系统，compile 模式）
+		if emitLib {
+			cgen.SetLibMode(true) // 库模式：豁免 main 入口要求
+		}
+		if len(libPaths) > 0 {
+			// 引用库：把清单里的导出签名注入为 `library` 声明（零实现泄漏）
+			var decls []string
+			var provided []string
+			for _, lp := range libPaths {
+				if man, _, err := readQKLib(lp); err == nil {
+					nm, blk := DeclBlockFor(man)
+					decls = append(decls, blk)
+					provided = append(provided, nm)
+				}
+			}
+			cgen.SetObjectProvidedLibs(provided)
+			cgen.SetForceRuntimeHelpers(true) // 宿主程序提供运行时辅助函数（供库的外部引用） // 这些库由对象文件提供
+			src = []byte(strings.Join(decls, "\n") + string(src))
+		}
 		expanded, err := expandMacros(string(src), "compile")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
@@ -253,6 +326,30 @@ parsed:
 		if err := os.WriteFile(irPath, []byte(ir), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, "warn: 无法写 IR 缓存:", err)
 		}
+	}
+
+	if emitLib {
+		out := outPath
+		if out == "" {
+			out = strings.TrimSuffix(filepath.Base(args[0]), ".qk") + ".qklib"
+		}
+		if libName == "" {
+			libName = strings.TrimSuffix(filepath.Base(out), ".qklib")
+		}
+		if libVer == "" {
+			libVer = "0.1.0"
+		}
+		libSrc, _ := os.ReadFile(args[0])
+		if err := emitLibFromIR(ir, string(libSrc), out, libName, libVer, obfuscate, strings.Fields(cflags)); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		lb := ""
+		if obfuscate {
+			lb = "（已混淆）"
+		}
+		fmt.Fprintf(os.Stderr, "qkc: 已生成库制品 %s%s\n", out, lb)
+		return
 	}
 
 	if !run && !compileOnly {
@@ -279,6 +376,16 @@ parsed:
 		os.Exit(1)
 	}
 	tmp.Close()
+	// 用户引用的 .qklib 库制品：把共享库装到输出目录（运行时 dlopen，无需链接参数）
+	outDir := filepath.Dir(outPath)
+	if outPath == "" {
+		outDir = "."
+	}
+	installedLibs, ierr := installLibs(libPaths, outDir)
+	if ierr != nil {
+		fmt.Fprintln(os.Stderr, "error:", ierr)
+		os.Exit(1)
+	}
 	// library FFI：IR 里的 "; qkc-link: <库名> => <候选参数>" 标记 → 逐组尝试链接参数
 	libs := parseLinkLibs(ir)
 	combos := linkCombos(libs)
@@ -291,7 +398,15 @@ parsed:
 	ok := false
 	for _, cf := range attempts {
 		for _, lf := range combos {
-			args := []string{tmp.Name(), runtimeSrc(), "-o", binPath, "-Wno-override-module"}
+			args := []string{tmp.Name(), runtimeSrc(), "-o", binPath, "-Wno-override-module",
+				"-Wl,-rpath,$ORIGIN"} // 同目录下的库（如 libvfc_ext.so）可被找到
+			// 引用的库：链接期解析符号（同时已装到输出目录，运行时也能找到）
+			for _, lf := range installedLibs {
+				args = append(args, lf)
+			}
+			if len(installedLibs) > 0 {
+				args = append(args, "-rdynamic", "-Wl,--export-dynamic") // 库可反向解析宿主里的运行时符号
+			}
 			// POSIX 载体：线程运行时需 -pthread（Windows 分支用 CreateThread 版运行时不加）
 			if runtime.GOOS != "windows" {
 				args = append(args, "-pthread")
@@ -328,6 +443,16 @@ parsed:
 		}
 	}
 	if compileOnly {
+		// 新鲜构建后也要拷到 -o 指定路径（此前只在缓存命中时拷贝）
+		if outPath != "" && execPath != outPath {
+			if b, rerr := os.ReadFile(execPath); rerr == nil {
+				if werr := os.WriteFile(outPath, b, 0o755); werr != nil {
+					fmt.Fprintln(os.Stderr, "error:", werr)
+					os.Exit(1)
+				}
+				execPath = outPath
+			}
+		}
 		fmt.Fprintln(os.Stderr, "qkc: 已构建 "+execPath)
 		return
 	}
@@ -346,7 +471,12 @@ func qkcUsage() {
   --emit-ir           同上（显式）
   -run                编译为原生二进制并执行
   -c                  只编译为原生二进制（不执行）
-  -o <path>           输出路径：配合 -c/-run 为二进制，否则为 IR 文件
+  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件
+  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）
+  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）
+  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）
+  --lib-name <name>   库名（默认取输出文件名）
+  --lib-version <ver> 库版本（默认 0.1.0）
   --version, -V       打印版本与引擎代次
   -h, --help          本帮助
 

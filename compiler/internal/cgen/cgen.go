@@ -503,6 +503,10 @@ var builtinDecls = map[string]bool{
 // qkc 逐组尝试，全部失败时给出「库名 + 尝试过的参数」诊断（不透传 clang 原文了事）。
 func linkCandidates(lib string) []string {
 	name := strings.TrimSpace(lib)
+	// 由 -L 的对象文件提供的库：不生成 -l 参数（符号由对象直接提供）
+	if isObjectProvidedLib(name) {
+		return nil
+	}
 	// 路径 / 带扩展名：按文件链接
 	if strings.ContainsAny(name, "/.") {
 		return []string{name}
@@ -917,6 +921,11 @@ func (e *emitter) emitProgram(lp *lowered) string {
 			continue
 		}
 		libs[ed.lib] = true
+		// 由 qkc -L 提供的库（.so 已在输出目录，运行时 dlopen）：
+		// **不生成 qkc-link 标记**，避免链接期去找不存在的系统库。
+		if isObjectProvidedLib(ed.lib) {
+			continue
+		}
 		// 格式：; qkc-link: <库名> => <候选参数> => <候选参数>
 		link.WriteString("; qkc-link: " + ed.lib)
 		for _, cand := range linkCandidates(ed.lib) {
@@ -969,20 +978,40 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	if !e.term {
 		e.emitInstr("ret i32 0")
 	}
-	e.bodies.WriteString("define i32 @main()" + fnAttrs("main", e.fnMeta) + " {\n" + e.body.String() + "}\n")
+	// 库模式：**不发射 main**（库有 main 会在动态链接时顶替宿主入口，且破坏符号解析）
+	if !libMode {
+		e.bodies.WriteString("define i32 @main()" + fnAttrs("main", e.fnMeta) + " {\n" + e.body.String() + "}\n")
+	}
 
 	helpers := ""
-	if e.needIntToStr {
-		helpers += intToStrHelper
-	}
-	if e.needFloatToStr {
-		helpers += floatToStrHelper
-	}
-	if e.needPtrToStr {
-		helpers += ptrToStrHelper
-	}
-	if e.needPanic {
-		helpers += panicHelper
+	if libMode {
+		// 库模式（**链接期动态链接**，不依赖 dlopen、跨系统一致）：
+		// 运行时辅助函数**只声明不定义**，由宿主程序提供 —— 依赖方向为「程序(含运行时) ← 库」。
+		if e.needIntToStr {
+			helpers += "declare i8* @ql_int_to_str(i32)\n"
+		}
+		if e.needFloatToStr {
+			helpers += "declare i8* @ql_float_to_str(double)\n"
+		}
+		if e.needPtrToStr {
+			helpers += "declare i8* @ql_ptr_to_str(i8*)\n"
+		}
+		if e.needPanic {
+			helpers += "declare void @ql_panic(i8*, i32)\n"
+		}
+	} else {
+		if e.needIntToStr || forceHelpers {
+			helpers += intToStrHelper
+		}
+		if e.needFloatToStr || forceHelpers {
+			helpers += floatToStrHelper
+		}
+		if e.needPtrToStr || forceHelpers {
+			helpers += ptrToStrHelper
+		}
+		if e.needPanic || forceHelpers {
+			helpers += panicHelper
+		}
 	}
 	// runner 的形参类型可能按需发射 struct 定义，必须在读 e.types 之前生成
 	runners := e.emitRunners(lp.runners)
