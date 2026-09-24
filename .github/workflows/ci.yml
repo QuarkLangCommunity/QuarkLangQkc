@@ -142,7 +142,14 @@ jobs:
           "$QKC" -c -L ci.qklib -o app app.qk
           OUT=$(./app 2>/dev/null || ./app.exe)
           echo "输出：$OUT"
-          echo "$OUT" | head -1 | grep -q '^58$' || { echo "linux 分支断言失败（期望 58）"; exit 1; }
+          # 平台分支：linux 21+37=58 / macOS 21+38=59 / windows 21+40=61
+          case "$RUNNER_OS" in
+            Linux)   WANT=58 ;;
+            macOS)   WANT=59 ;;
+            Windows) WANT=61 ;;
+          esac
+          FIRST=$(echo "$OUT" | head -1)
+          [ "$FIRST" = "$WANT" ] || { echo "平台分支断言失败：期望 $WANT 得到 $FIRST"; exit 1; }
           echo "$OUT" | sed -n 2p | grep -q '^350$' || { echo "权重函数断言失败（期望 350）"; exit 1; }
           # 产物不得依赖共享库
           if command -v readelf >/dev/null 2>&1; then
