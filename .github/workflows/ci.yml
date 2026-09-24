@@ -83,3 +83,75 @@ jobs:
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
+
+  # 库制品 / 预处理器：在三平台**真跑**（出库 → 引用 → 运行），验证跨系统不依赖 .so
+  libraries:
+    name: 库与预处理器（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - name: 确认 clang 可用（Windows 上把它加进 PATH）
+        run: |
+          if ! command -v clang >/dev/null 2>&1; then
+            echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
+          fi
+          clang --version | head -2
+      - name: 构建 qkc
+        working-directory: compiler
+        run: |
+          go build -o qkc .
+          if [ -f qkc.exe ]; then echo "QKC=$PWD/qkc.exe" >> "$GITHUB_ENV"; else echo "QKC=$PWD/qkc" >> "$GITHUB_ENV"; fi
+      - name: 出库（多平台变体 + 混淆）
+        run: |
+          mkdir -p /tmp/qklib-ci && cd /tmp/qklib-ci
+          cat > ext.qk <<'QK'
+          fn ci_cap(int base) int {
+          #if os("windows")
+              return base + 40;
+          #elif os("darwin")
+              return base + 38;
+          #else
+              return base + 37;
+          #endif
+          }
+          fn ci_weight(int k, int a) int { return k * 100 + a * 25; }
+          QK
+          "$QKC" --emit-lib --obfuscate --lib-name citest --lib-version 0.1.0 \
+                 --lib-targets linux-x86_64,windows-x86_64,darwin-arm64,darwin-x86_64 \
+                 -o ci.qklib ext.qk
+          test -s ci.qklib
+      - name: 引用库并运行（断言平台分支正确）
+        run: |
+          cd /tmp/qklib-ci
+          cat > app.qk <<'QK'
+          fn main(IOStream io) {
+              io.println(citest.ci_cap(21));
+              io.println(citest.ci_weight(3, 2));
+          }
+          QK
+          "$QKC" -c -L ci.qklib -o app app.qk
+          OUT=$(./app 2>/dev/null || ./app.exe)
+          echo "输出：$OUT"
+          echo "$OUT" | head -1 | grep -q '^58$' || { echo "linux 分支断言失败（期望 58）"; exit 1; }
+          echo "$OUT" | sed -n 2p | grep -q '^350$' || { echo "权重函数断言失败（期望 350）"; exit 1; }
+          # 产物不得依赖共享库
+          if command -v readelf >/dev/null 2>&1; then
+            ! readelf -d app 2>/dev/null | grep -qi 'NEEDED.*citest' || { echo "不应依赖共享库"; exit 1; }
+          fi
+      - name: 交叉预处理（--target-os 选择变体）
+        run: |
+          cd /tmp/qklib-ci
+          "$QKC" --emit-ir --target-os windows -L ci.qklib app.qk > win.ll
+          grep -q 'i32 40' win.ll || { echo "windows 变体未生效"; exit 1; }
+          "$QKC" --emit-ir --target-os darwin -L ci.qklib app.qk > mac.ll
+          grep -q 'i32 38' mac.ll || { echo "darwin 变体未生效"; exit 1; }
