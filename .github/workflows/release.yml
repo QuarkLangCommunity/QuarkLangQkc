@@ -10,8 +10,15 @@ on:
         description: '版本号（如 2.0.0；留空则用 VERSION 文件）'
         required: false
 
+# 最小权限：工作流级只读；**只有 release 作业**额外拿 contents: write（创建 Release / 传资产）。
+# 构建作业（三平台）不写仓库，因此不需要写权限。
 permissions:
-  contents: write
+  contents: read
+
+# 发布不并发、不取消：两次 tag 同时来时排队，避免把进行中的发布打断
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -108,6 +115,9 @@ jobs:
     name: 发布（GitHub Release + 变更日志）
     needs: build
     runs-on: ubuntu-latest
+    # 唯一需要写权限的作业：创建 Release、上传资产（其余作业只有 contents: read）
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:

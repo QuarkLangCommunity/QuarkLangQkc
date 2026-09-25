@@ -1,6 +1,16 @@
 name: ci
 on: [push, pull_request]
 
+# 最小权限：CI 只读仓库内容（本文件所有作业都只做 checkout / 构建 / 测试 / 跑基准）。
+# 显式声明而不是依赖仓库默认值，便于审计与防止默认值被改宽。
+permissions:
+  contents: read
+
+# 同一 ref 的新推送取消旧运行（省 runner；发布流程另有自己的 concurrency，见 release.yml）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # 跨系统门禁：Linux / macOS / Windows 跑同一套 Go 测试（含 qkcheck 误报漏报的多轮 P99 统计）
   test:
