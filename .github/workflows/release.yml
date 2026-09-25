@@ -29,11 +29,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
         with:
           fetch-depth: 0   # 变更日志需要完整历史与 tag
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
         with:
           go-version: '1.26'
 
@@ -104,7 +104,7 @@ jobs:
           chmod +x out/qkcheck-*${ext} || true
           "$(ls out/qkcheck-*${ext} | head -1)" examples/ || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4（SHA 固定；dependabot 周更）
         with:
           name: quarklang-${{ steps.ver.outputs.version }}-${{ runner.os }}
           path: out/*
@@ -115,11 +115,13 @@ jobs:
     name: 发布（GitHub Release + 变更日志）
     needs: build
     runs-on: ubuntu-latest
+    # 人工闸门：发布前必须由 environment "release" 的必需审阅人批准（admin 旁路已关闭）
+    environment: release
     # 唯一需要写权限的作业：创建 Release、上传资产（其余作业只有 contents: read）
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
         with:
           fetch-depth: 0
 
@@ -135,7 +137,7 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4（SHA 固定；dependabot 周更）
         with:
           path: artifacts
 

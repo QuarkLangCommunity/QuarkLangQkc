@@ -21,8 +21,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
         with:
           go-version: '1.26'
       - name: 构建与测试（解释器 + 工具链 + 编辑器产物校验）
@@ -46,11 +46,11 @@ jobs:
     name: Linux 专项（双路径 / 编辑器 / 发布）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
         with:
           go-version: '1.26'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4（SHA 固定；dependabot 周更）
         with:
           node-version: '20'
       - name: 双路径对比（解释器 vs qkc）
@@ -89,7 +89,7 @@ jobs:
           ls -la "$out"
       - name: 变更日志生成冒烟
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4（SHA 固定；dependabot 周更）
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
@@ -106,8 +106,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
         with:
           go-version: '1.26'
       - name: 确认 clang 可用（Windows 上把它加进 PATH）
