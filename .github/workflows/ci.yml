@@ -115,7 +115,7 @@ jobs:
         run: |
           mkdir -p /tmp/qklib-ci && cd /tmp/qklib-ci
           cat > ext.qk <<'QK'
-          fn ci_cap(int base) int {
+          fn scale_cap(int base) int {
           #if os("windows")
               return base + 40;
           #elif os("darwin")
@@ -124,9 +124,9 @@ jobs:
               return base + 37;
           #endif
           }
-          fn ci_weight(int k, int a) int { return k * 100 + a * 25; }
+          fn weight_of(int k, int a) int { return k * 100 + a * 25; }
           QK
-          "$QKC" --emit-lib --obfuscate --lib-name citest --lib-version 0.1.0 \
+          "$QKC" --emit-lib --obfuscate --lib-name libtest --lib-version 0.1.0 \
                  --lib-targets linux-x86_64,windows-x86_64,darwin-arm64,darwin-x86_64 \
                  -o ci.qklib ext.qk
           test -s ci.qklib
@@ -135,8 +135,8 @@ jobs:
           cd /tmp/qklib-ci
           cat > app.qk <<'QK'
           fn main(IOStream io) {
-              io.println(citest.ci_cap(21));
-              io.println(citest.ci_weight(3, 2));
+              io.println(libtest.scale_cap(21));
+              io.println(libtest.weight_of(3, 2));
           }
           QK
           "$QKC" -c -L ci.qklib -o app app.qk
@@ -153,7 +153,7 @@ jobs:
           echo "$OUT" | sed -n 2p | grep -q '^350$' || { echo "权重函数断言失败（期望 350）"; exit 1; }
           # 产物不得依赖共享库
           if command -v readelf >/dev/null 2>&1; then
-            ! readelf -d app 2>/dev/null | grep -qi 'NEEDED.*citest' || { echo "不应依赖共享库"; exit 1; }
+            ! readelf -d app 2>/dev/null | grep -qi 'NEEDED.*libtest' || { echo "不应依赖共享库"; exit 1; }
           fi
       - name: 交叉预处理（--target-os 选择变体）
         run: |
