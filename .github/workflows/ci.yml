@@ -89,7 +89,7 @@ jobs:
           ls -la "$out"
       - name: 变更日志生成冒烟
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4（SHA 固定；dependabot 周更）
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
