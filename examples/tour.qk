@@ -1,0 +1,39 @@
+program main;
+
+/* 语言巡礼：类型在前；struct/impl/接口、泛型、try/catch、List、宏 —— 可直接运行。 */
+
+type struct { int x; int y; } Point;
+
+impl {
+    fn new(int x, int y) Point {
+        Point p = .{x: x, y: y};   // 结构体字面量（字段名: 值）
+        return p;
+    }
+    fn sum(Point self) int {
+        return self.x + self.y;
+    }
+} Point;
+
+fn<T> twice(T v) T {
+    return v;
+}
+
+fn main(IOStream io) {
+    Point p = Point::new(3, 4);
+    io.println("point sum =", p.sum());
+
+    List<int> l = [1, 2, 3];
+    int total = 0;
+    for (int v : l) {
+        total = total + v;
+    }
+    io.println("list total =", total);
+
+    try {
+        io.println(1 / 0);
+    } catch (void e) {
+        // 编译器路径暂不支持在 catch 体内读取 e；两路径都只做"已捕获"提示
+        io.println("caught: division by zero");
+    }
+    io.println("twice =", twice(21));
+}

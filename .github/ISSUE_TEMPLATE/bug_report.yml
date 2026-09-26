@@ -1,0 +1,61 @@
+name: 🐞 Bug 报告
+description: 行为不符合预期（崩溃、错误结果、报错文案不清、工具链异常）
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！**最小可复现**是本模板里最重要的部分：能跑的最小代码 + 完整命令 + 实际输出。
+        安全问题请勿在此公开，改用仓库 Security → Report a vulnerability。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 期望行为 vs 实际行为
+      placeholder: |
+        期望：输出 42
+        实际：报错 TypeError: …
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 最小复现代码
+      description: 能直接跑的 .qk 片段（越短越好）
+      render: qk
+    validations:
+      required: true
+  - type: textarea
+    id: cmd
+    attributes:
+      label: 复现命令与完整输出
+      description: 包含 -version 输出（`quark --version` 或 `qkc --version`）
+      render: console
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      placeholder: 例如 quark 2.1.0（或 git commit 短哈希）
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options: [Linux, macOS, Windows, 其它/不确定]
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: 走的哪条路径
+      options: ["解释器 quark", "编译器 qkc（-run 或产二进制）", "两条都复现", "不确定"]
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其它信息（可选）
+      description: 日志、`qkcheck` 输出、`QUARK_CACHE`/`QUARK_CFLAGS` 等环境变量
