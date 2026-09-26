@@ -90,7 +90,7 @@ Optional `rustc`/`gcc` are only needed for the cross-language benchmark suite.
 Tool messages and generated documentation are **bilingual (Chinese / English)**:
 
 ```sh
-QK_LANG=en qkcheck examples/          # environment variable (also honours LC_ALL / LANG)
+QK_LANG=en qkcheck examples/          # environment variable (explicit; nothing else is consulted)
 qkcheck --lang en examples/           # per-invocation flag (also: --lang zh)
 qkc --lang en hello.qk                # all CLIs accept --lang: quark/qkc/qkcheck/qkdoc/qkrepl/qklsp
 ```

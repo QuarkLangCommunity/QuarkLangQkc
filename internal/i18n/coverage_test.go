@@ -26,14 +26,16 @@ func wiredTemplates(t *testing.T) map[string][]string {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
-		if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/internal/i18n/") {
+		slash := filepath.ToSlash(path)
+		if strings.HasSuffix(path, "_test.go") || strings.Contains(slash, "/internal/i18n/") {
 			return nil
 		}
 		data, rerr := os.ReadFile(path)
 		if rerr != nil {
 			return nil
 		}
-		src := string(data)
+		// Windows 检出可能是 CRLF：归一化，否则多行模板的键与表不匹配
+		src := strings.ReplaceAll(string(data), "\r\n", "\n")
 		rel, _ := filepath.Rel(root, path)
 		add := func(lit string) {
 			if lit != "" && cjkRe.MatchString(lit) {

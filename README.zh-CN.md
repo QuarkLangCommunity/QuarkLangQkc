@@ -82,7 +82,7 @@ cd compiler && go build -o qkc .
 工具输出与生成文档现在**双语（中文 / 英文）**：
 
 ```sh
-QK_LANG=en qkcheck examples/          # 环境变量（同时识别 LC_ALL / LANG）
+QK_LANG=en qkcheck examples/          # 环境变量（只认 QK_LANG，行为可预测）
 qkcheck --lang en examples/           # 单次调用的开关（也可 --lang zh）
 qkc --lang en hello.qk                # quark/qkc/qkcheck/qkdoc/qkrepl/qklsp 均支持 --lang
 ```

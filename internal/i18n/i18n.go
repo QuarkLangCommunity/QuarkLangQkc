@@ -22,19 +22,13 @@ const (
 
 var locale = detect()
 
-// detect 决定初始语言：QK_LANG 优先，其次 LC_ALL / LANG 的语言前缀，最后回落中文（项目母语）。
+// detect 决定初始语言：**只看 QK_LANG**，默认中文。
+// 刻意不读 LC_ALL/LANG：CI（macOS/Windows runner）常设英文 locale，若据此切换会让
+// 「默认中文」的承诺在开发者机器与 CI 之间漂移，也会让断言中文输出的测试无故失败。
+// 需要英文请显式设置 QK_LANG=en 或使用 --lang en。
 func detect() string {
-	for _, k := range []string{"QK_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
-		v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
-		if v == "" {
-			continue
-		}
-		if strings.HasPrefix(v, "en") {
-			return EN
-		}
-		if strings.HasPrefix(v, "zh") {
-			return ZH
-		}
+	if strings.ToLower(strings.TrimSpace(os.Getenv("QK_LANG"))) == EN {
+		return EN
 	}
 	return ZH
 }
