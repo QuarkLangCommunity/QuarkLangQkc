@@ -296,17 +296,17 @@ go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
 <summary>发布产物与版本管理（如何自己出一版）</summary>
 
 ```sh
-./scripts/build-release.sh 2.0.0     # 3 平台 × 2 架构 × 6 工具 → dist/（版本注入 + sha256 清单）
-./scripts/changelog.sh 2.0.0         # 自上个 tag 以来，按类型分组的变更日志
+./scripts/build-release.sh 2.1.0     # 3 平台 × 2 架构 × 6 工具 → dist/（版本注入 + sha256 清单）
+./scripts/changelog.sh 2.1.0         # 自上个 tag 以来，按类型分组的变更日志
 ./scripts/changelog.sh --all > CHANGELOG.md
-git tag v2.0.0 && git push origin v2.0.0   # 触发 release 工作流：三平台原生构建 → GitHub Release
+git tag v2.1.0 && git push origin v2.1.0   # 触发 release 工作流：三平台原生构建 → GitHub Release
 ```
 
 - **版本注入**：`VERSION` 文件是唯一版本源；构建时 `-ldflags "-X main.version=…"` 注入，`quark/qkc/qkcheck/qkdoc/qkrepl/qklsp --version` 均打印。
 - **产物**：`dist/<工具>-<版本>-<os>-<arch>[.exe]` + `MANIFEST-<版本>.txt`（sha256、字节数）；本地脚本用 `CGO_ENABLED=0` 交叉编译（便携、无系统依赖），
   release 工作流在各平台**原生构建且开启 cgo**（FFI 可用：`library`/dlopen 等）。
 - **实测**：36 个二进制（6 工具 × 3 平台 × 2 架构）全部产出，格式正确（ELF / Mach-O / PE32+），
-  注入后 `--version` 输出 `2.0.0`（`qkc 2.0.0 (engine 13)`）。
+  注入后 `--version` 输出 `2.1.0`（`qkc 2.1.0 (engine 13)`）。
 
 **跨系统**：qkc 产出与平台无关的 LLVM IR，目标平台 `clang`/`llc` 生成原生二进制；`.qlib` 库（gob）跨系统；线程运行时（`qthreads.c` 内嵌）POSIX/Windows 双载体。
 

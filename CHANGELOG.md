@@ -2,6 +2,34 @@
 
 > 由 `scripts/changelog.sh --all` 从 git 历史生成（分组：新功能 / 修复 / 性能 / 重构与清理 / 文档 / 构建与工具链 / 其它）。
 
+## v2.1.0 - 2026-09-26
+
+### 修复
+
+- ci: assert per-platform branch value (58/59/61) instead of a fixed 58（`6d81294`）
+- ci: fix cross-target assertion (match add operand, not a literal substring)（`a1c66f8`）
+- fix(cross-platform): Windows-safe binary cache filenames (no '|'/spaces) + arch-dispatched pause in thread runtime (arm64 build on macOS)（`9b4bc7f`）
+
+### 重构与清理
+
+- 门面工程：README 第一屏重构 + Demo GIF + 徽章 + 新手友好文件（`4d33c20`）
+
+### 文档
+
+- docs/ci: generic examples only (remove third-party project naming)（`1c3e264`）
+
+### 构建与工具链
+
+- CI/CD 加固（策略层，用户已逐项确认）：SHA 固定 + 发布人工闸门 + dependabot（`ec87a49`）
+- CI/CD 权限最小化：工作流级只读，仅 release 作业持有 contents: write（`ab2106a`）
+
+### 其它
+
+- 规范：重申声明形态红线——不存在 let/var/const 关键字式声明（`564aa41`）
+- ci: cross-platform library job (emit-lib -> -L merge -> run) on ubuntu/macos/windows（`cd35bca`）
+- qkc: portable IR library variants (preprocessor-driven, no .so); -L merges IR at compile time; preprocessor directives (#if os/arch/defined/include)（`8c8d974`）
+- qkc: --emit-lib/--obfuscate/-L library artifacts (manifest+shared lib), export ABI normalization, lib mode without main（`41328f8`）
+
 ## v2.0.0 - 2026-09-21
 
 ### 新功能
