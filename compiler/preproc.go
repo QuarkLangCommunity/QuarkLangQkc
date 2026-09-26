@@ -20,9 +20,11 @@ package main
 // 目标平台默认取宿主，可用 --target-os / --target-arch 指定（交叉预处理）。
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"regexp"
 	"runtime"
 	"strings"
@@ -56,7 +58,7 @@ var (
 // Process 预处理源码（返回展开后的源码）
 func (p *preprocCtx) Process(src, filename string) (string, error) {
 	if p.depth > 16 {
-		return "", fmt.Errorf("预处理 #include 层数过深（>16）：%s", filename)
+		return "", errors.New(i18n.T("预处理 #include 层数过深（>16）：%s", filename))
 	}
 	lines := strings.Split(src, "\n")
 	var out []string
@@ -83,7 +85,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 				active = top.active
 			} else { // elif
 				if len(stack) == 0 {
-					return "", fmt.Errorf("%s:%d: #elif 没有对应的 #if", filename, i+1)
+					return "", errors.New(i18n.T("%s:%d: #elif 没有对应的 #if", filename, i+1))
 				}
 				top := &stack[len(stack)-1]
 				top.active = top.parentActive && !top.taken && cond
@@ -96,7 +98,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 			switch m[1] {
 			case "else":
 				if len(stack) == 0 {
-					return "", fmt.Errorf("%s:%d: #else 没有对应的 #if", filename, i+1)
+					return "", errors.New(i18n.T("%s:%d: #else 没有对应的 #if", filename, i+1))
 				}
 				top := &stack[len(stack)-1]
 				top.active = top.parentActive && !top.taken
@@ -105,7 +107,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 				continue
 			case "endif":
 				if len(stack) == 0 {
-					return "", fmt.Errorf("%s:%d: #endif 没有对应的 #if", filename, i+1)
+					return "", errors.New(i18n.T("%s:%d: #endif 没有对应的 #if", filename, i+1))
 				}
 				f := stack[len(stack)-1]
 				stack = stack[:len(stack)-1]
@@ -155,7 +157,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 			}
 			b, err := os.ReadFile(inc)
 			if err != nil {
-				return "", fmt.Errorf("%s:%d: #include 失败：%v", filename, i+1, err)
+				return "", errors.New(i18n.T("%s:%d: #include 失败：%v", filename, i+1, err))
 			}
 			p.depth++
 			sub, err := p.Process(string(b), inc)
@@ -171,7 +173,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 		}
 	}
 	if len(stack) != 0 {
-		return "", fmt.Errorf("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack))
+		return "", errors.New(i18n.T("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack)))
 	}
 	return strings.Join(out, "\n"), nil
 }
@@ -241,7 +243,7 @@ func (p *preprocCtx) evalUnary(e string) (bool, error) {
 	if reDefineNm.MatchString(e) {
 		return p.defines[e], nil
 	}
-	return false, fmt.Errorf("无法识别的条件表达式：%q", e)
+	return false, errors.New(i18n.T("无法识别的条件表达式：%q", e))
 }
 
 // splitTop 按顶层运算符切分（忽略括号内的）

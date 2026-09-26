@@ -85,6 +85,23 @@ Optional `rustc`/`gcc` are only needed for the cross-language benchmark suite.
 
 </details>
 
+## Language / 语言
+
+Tool messages and generated documentation are **bilingual (Chinese / English)**:
+
+```sh
+QK_LANG=en qkcheck examples/          # environment variable (explicit; nothing else is consulted)
+qkcheck --lang en examples/           # per-invocation flag (also: --lang zh)
+qkc --lang en hello.qk                # all CLIs accept --lang: quark/qkc/qkcheck/qkdoc/qkrepl/qklsp
+```
+
+- **Default is Chinese** (`zh`) to keep existing behaviour; `QK_LANG=en` (or `--lang en`) switches to English.
+- Untranslated messages **fall back to Chinese rather than disappearing** — information is never dropped.
+- Coverage is enforced in CI: `TestTableCoversWiredTemplates` fails if a wired Chinese message has no English entry,
+  and `TestEnglishModeRendersEnglish` renders real type/parse/lint failures in English and rejects any leftover Chinese.
+- New messages: add the Chinese template to your call site via `i18n.T(...)`, then register the English in
+  `internal/i18n/table.go` (the test lists exactly what is missing).
+
 ## Contents
 
 [Quick start](#-quick-start) · [Language tour](#language-tour) · [Toolchain](#toolchain) · [Highlights](#highlights) ·

@@ -9,9 +9,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"quarklang/internal/i18n"
 	"regexp"
 	"strings"
 
@@ -47,18 +49,23 @@ func parseArgs(args []string) ([]string, error) {
 		switch args[i] {
 		case "-L":
 			if i+1 >= len(args) {
-				return nil, fmt.Errorf("-L 需要一个目录参数")
+				return nil, errors.New(i18n.T("-L 需要一个目录参数"))
 			}
 			i++
 			libDirs = append(libDirs, args[i])
+		case "--lang", "-lang":
+			if i+1 < len(args) {
+				i++
+				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+			}
 		case "--version", "-V":
 			fmt.Println("qklsp", version)
 			os.Exit(0)
 		case "-h", "--help":
-			fmt.Println("usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）")
+			fmt.Println(i18n.T("usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）"))
 			os.Exit(0)
 		default:
-			return nil, fmt.Errorf("未知参数 %s", args[i])
+			return nil, errors.New(i18n.T("未知参数 %s", args[i]))
 		}
 	}
 	return libDirs, nil
@@ -184,7 +191,7 @@ func (s *server) docAt(msg rpcMessage) (*Document, lspPosition, error) {
 	}
 	d, ok := s.docs[p.TextDocument.URI]
 	if !ok {
-		return nil, p.Position, fmt.Errorf("未打开的文档 %s", p.TextDocument.URI)
+		return nil, p.Position, errors.New(i18n.T("未打开的文档 %s", p.TextDocument.URI))
 	}
 	return d, p.Position, nil
 }

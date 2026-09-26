@@ -54,6 +54,8 @@ go run ./scripts/... 2>/dev/null || true         # 发布/基准脚本改动时�
 - Go 侧：`gofmt` 干净、注释用中文说明「为什么」而不是「是什么」；零第三方依赖（新增依赖需在 PR 里说明理由）。
 - 性能相关改动请附**前后实测**（`scripts/bench-tools.sh` 或 `go test -bench`），并说明是否先 profile。
 - 报错文案面向使用者：说清「哪里错了 + 应该怎么写」，尽量给正典写法示例。
+- **文案双语**：新增面向用户的中文文案请用 `i18n.T(...)` 包住，并在 `internal/i18n/table.go` 登记英文；
+  未登记时 `go test ./internal/i18n/` 会失败并列出缺失条目。
 
 ## 行为准则
 

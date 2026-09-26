@@ -3,6 +3,7 @@ package lang
 import (
 	"crypto/sha256"
 	"fmt"
+	"quarklang/internal/i18n"
 	"reflect"
 	"sort"
 	"strings"
@@ -200,7 +201,7 @@ func (p *parser) advance() Token {
 func (p *parser) curIs(k TokenKind) bool { return p.cur().Kind == k }
 
 func (p *parser) errf(tok Token, format string, args ...interface{}) error {
-	return &ParseError{Msg: fmt.Sprintf(format, args...), Line: tok.Line, Col: tok.Col}
+	return &ParseError{Msg: i18n.T(format, args...), Line: tok.Line, Col: tok.Col}
 }
 
 func (p *parser) expect(k TokenKind, what string) (Token, error) {
