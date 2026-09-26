@@ -1,60 +1,68 @@
-# 贡献者行为准则（Contributor Covenant v2.1）
+# Contributor Covenant Code of Conduct
 
-> 本项目采用 [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)。
-> 下面是其要点与执行方式；完整条款以官方英文原文为准（本文件末尾附出处）。
+**English** · [简体中文](CODE_OF_CONDUCT.zh-CN.md)
 
-## 我们的承诺
+> This project adopts the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+> Below is an adaptation of its essential terms; the canonical English text at the link above prevails.
 
-作为成员、贡献者与维护者，我们承诺让每个人都能在**无骚扰**的环境中参与本项目，
-无论年龄、体型、可见或不可见的残障、族裔、性别特征、性别认同与表达、经验水平、
-教育程度、社会经济状况、国籍、外貌、种族、宗教或性取向。
+## Our Pledge
 
-## 我们的标准
+We as members, contributors and maintainers pledge to make participation in our community a **harassment-free
+experience for everyone**, regardless of age, body size, visible or invisible disability, ethnicity, sex
+characteristics, gender identity and expression, level of experience, education, socio-economic status,
+nationality, personal appearance, race, religion, or sexual identity and orientation.
 
-**有助于营造积极环境的行为**
+## Our Standards
 
-- 对他人展现同理心与善意；
-- 尊重不同的意见、观点与经验；
-- 给出并礼貌接受建设性反馈；
-- 承担责任、向受影响的他人致歉，并从经验中学习；
-- 关注对整个社区最有利的事情，而不只是个人得失。
+**Examples of behavior that contributes to a positive environment**
 
-**不可接受的行为**
+- Demonstrating empathy and kindness toward other people;
+- Being respectful of differing opinions, viewpoints and experiences;
+- Giving and gracefully accepting constructive feedback;
+- Accepting responsibility, apologizing to those affected by our mistakes, and learning from the experience;
+- Focusing on what is best for the overall community, not just for ourselves.
 
-- 性化语言或图像、任何形式的性关注或挑逗；
-- 挑衅、侮辱/贬损性评论、人身或政治攻击；
-- 公开或私下的骚扰；
-- 未经明确许可发布他人的隐私信息（如真实住址、邮箱）；
-- 其它在专业场合可合理认定为不当的行为。
+**Examples of unacceptable behavior**
 
-## 执行责任
+- Sexualized language or imagery, and sexual attention or advances of any kind;
+- Trolling, insulting or derogatory comments, and personal or political attacks;
+- Public or private harassment;
+- Publishing others' private information, such as a physical or email address, without their explicit permission;
+- Other conduct which could reasonably be considered inappropriate in a professional setting.
 
-维护者负责解释与执行本准则，并会对其认为不当、威胁、冒犯或有害的行为采取**恰当且公平**的纠正措施，
-包括删除、编辑或拒绝评论、提交、代码、Issue 及其它贡献。
+## Enforcement Responsibilities
 
-## 适用范围
+Maintainers are responsible for clarifying and enforcing our standards and will take **appropriate and fair**
+corrective action in response to any behavior they deem inappropriate, threatening, offensive or harmful,
+including removing, editing or rejecting comments, commits, code, issues and other contributions.
 
-本准则适用于**所有项目空间**，也适用于个人在公开场合**代表本项目**时（例如使用官方邮箱、
-在官方社交媒体账号发言、作为指定代表参加线上/线下活动）。
+## Scope
 
-## 举报与执行
+This Code of Conduct applies within **all project spaces**, and also when an individual is officially
+representing the project in public spaces (for example, using an official email address, posting via an
+official social media account, or acting as an appointed representative at an online or offline event).
 
-如遇滥用、骚扰或其它不可接受行为，请通过以下方式举报：
+## Reporting and Enforcement
 
-- **私密渠道**：GitHub 的 [私密安全/行为报告](https://github.com/QuarkLangCommunity/QuarkLangQkc/security/advisories/new)
-  或直接联系维护者 [@Enoch-199811](https://github.com/Enoch-199811)；
-- 所有投诉都会**及时且公平**地审阅与调查；维护者有义务尊重举报者的隐私与安全。
+Instances of abusive, harassing or otherwise unacceptable behavior may be reported through:
 
-**执行梯度**（视情节轻重）：
+- **Private channels**: GitHub's
+  [private report](https://github.com/QuarkLangCommunity/QuarkLangQkc/security/advisories/new) or by contacting
+  the maintainer [@Enoch-199811](https://github.com/Enoch-199811) directly;
+- All complaints will be reviewed and investigated **promptly and fairly**; maintainers are obligated to
+  respect the privacy and security of the reporter of any incident.
 
-| 级别 | 处理 |
+**Enforcement guidelines** (scaled by severity):
+
+| Level | Action |
 |---|---|
-| 1. 纠正 | 私下书面警告，说明违规性质与原因，必要时要求公开道歉 |
-| 2. 警告 | 限定时间内的互动限制（不得与相关人互动），违反将导致临时或永久封禁 |
-| 3. 临时封禁 | 在指定期限内禁止任何形式的互动或公开交流 |
-| 4. 永久封禁 | 永久禁止在本项目内进行任何公开互动 |
+| 1. Correction | A private written warning clarifying the nature of the violation and why it was inappropriate; a public apology may be requested |
+| 2. Warning | Time-limited interaction restrictions (no interaction with the people involved); violating these may lead to a temporary or permanent ban |
+| 3. Temporary ban | A specified period with no public or private interaction with the community |
+| 4. Permanent ban | Permanent exclusion from any form of public interaction within the project |
 
-## 出处
+## Attribution
 
-本准则改编自 [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)，
-采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可。
+This Code of Conduct is adapted from the
+[Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/),
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

@@ -1,63 +1,70 @@
-# 贡献指南（CONTRIBUTING）
+# Contributing to QuarkLang
 
-感谢你愿意为 QuarkLang 花时间。本文只讲**怎么做能最快被合入**，其余细节都在代码与文档里。
+**English** · [简体中文](CONTRIBUTING.zh-CN.md)
 
-## 最快的三条路径
+Thanks for spending time on QuarkLang. This document only covers **how to get your change merged fastest**;
+everything else lives in the code and the docs.
 
-| 你想做 | 从哪里开始 |
+## The three lowest-friction paths
+
+| Goal | Start here |
 |---|---|
-| 报 bug / 提需求 | [新建 Issue](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/new/choose)（用模板，附最小复现） |
-| 第一次贡献 | 挑 [`good first issue`](https://github.com/QuarkLangCommunity/QuarkLangQkc/labels/good%20first%20issue)（文档、示例、报错文案、测试用例，都不需要懂编译器内部） |
-| 改代码 | 见下方流程；**main 受保护，必须走 PR 且 CI 全绿** |
+| Report a bug / request a feature | [Open an issue](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/new/choose) (use the template, attach a minimal reproduction) |
+| First contribution | Pick a [`good first issue`](https://github.com/QuarkLangCommunity/QuarkLangQkc/labels/good%20first%20issue) (docs, examples, error messages, tests — no compiler internals needed) |
+| Change code | Follow the flow below; **`main` is protected: PR required, CI must be green** |
 
-## 提 PR 的流程
+## Pull request flow
 
 ```sh
 git clone https://github.com/QuarkLangCommunity/QuarkLangQkc && cd QuarkLangQkc
-git switch -c fix/短描述            # 分支名：fix/… feat/… docs/… ci/…
-# …改代码…
-go test ./... && (cd compiler && go test ./...)      # ① 两层测试
-(cd compiler && ./testdata/compare.sh)               # ② 双路径一致性（期望「全部一致」）
-git commit -m "简短标题（中文，一行说清改了什么）"      # ③ 提交信息：中文、动词开头、必要时补正文
-git push -u origin HEAD && gh pr create --fill       # ④ 开 PR；CI 会跑三平台矩阵
+git switch -c fix/short-description    # branch names: fix/… feat/… docs/… ci/…
+# …make your change…
+go test ./... && (cd compiler && go test ./...)      # ① both test layers
+(cd compiler && ./testdata/compare.sh)               # ② dual-path parity (expects "全部一致")
+git commit -m "Short title (English or Chinese, one line)"   # ③ commit message: imperative, add a body when useful
+git push -u origin HEAD && gh pr create --fill       # ④ open the PR; CI runs the three-platform matrix
 ```
 
-PR 合入条件（自动化，不需要人工点 Approve）：
+Merge requirements (automated — no human approval needed today):
 
-| 门禁 | 说明 |
+| Gate | What it means |
 |---|---|
-| 7 项必需检查 | 三平台 `测试（os）`、`Linux 专项`、三平台 `库与预处理器` |
-| 分支保护 | `main` 禁止直推 / 禁 force-push / 禁删除 |
+| 7 required checks | `测试（os）` on all three platforms, `Linux 专项`, `库与预处理器（os）` on all three |
+| Branch protection | `main` rejects direct pushes, force-pushes and deletions |
 
-## 提交前自检清单（本机即可跑）
+## Pre-push checklist (runs locally)
 
 ```sh
-go test ./...                                    # 解释器 + 工具链（含 qkcheck 误报/漏报统计门禁）
-(cd compiler && go test ./...)                   # 编译器
-(cd compiler && ./testdata/compare.sh)           # 双路径一致性（同一份源码两条后端输出必须一致）
-go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # 静态检查自举
-go run ./scripts/... 2>/dev/null || true         # 发布/基准脚本改动时，跑一次冒烟
+go test ./...                                    # interpreter + toolchain (includes the lint FP/FN gates)
+(cd compiler && go test ./...)                   # compiler
+(cd compiler && ./testdata/compare.sh)           # dual-path parity (both backends must agree)
+go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # dogfood the linter
 ```
 
-新增语言特性时，**必须同时更新**：
+When you add a language feature, **all four of these must be updated together**:
 
-1. `SYNTAX.md`（唯一正典语法清单，逐编号 M/K/E/S/O/T/P）；
-2. 解释器与编译器**两条路径**（共享前端，但后端语义要对齐）；
-3. `compiler/testdata/compare.sh` 的对比用例（保证两条路径一致）；
-4. 涉及静态检查时，`internal/lang/testdata/lintbench/` 的标注用例（误报/漏报门禁会跑它）。
+1. `SYNTAX.md` — the single canonical syntax reference (numbered M/K/E/S/O/T/P entries);
+2. **both backends** (interpreter and compiler — they share the front end, but semantics must match);
+3. `compiler/testdata/compare.sh` — the parity cases;
+4. for static-analysis changes, the labelled cases under `internal/lang/testdata/lintbench/` (the FP/FN gate runs them).
 
-## 代码风格
+## Style
 
-- **语法一律正典形态**：类型在前（`<修饰> <类型> <名字>`）；`impl { … } 名字;`；`space { … } 名字;`；不存在 `let`/`var` 声明。
-- Go 侧：`gofmt` 干净、注释用中文说明「为什么」而不是「是什么」；零第三方依赖（新增依赖需在 PR 里说明理由）。
-- 性能相关改动请附**前后实测**（`scripts/bench-tools.sh` 或 `go test -bench`），并说明是否先 profile。
-- 报错文案面向使用者：说清「哪里错了 + 应该怎么写」，尽量给正典写法示例。
+- **Canonical syntax only**: type first (`<modifier> <type> <name>`); `impl { … } Name;`; `space { … } name;`;
+  there is no `let`/`var`-style declaration.
+- Go code: `gofmt`-clean; comments explain **why**, not what; zero third-party dependencies
+  (a new dependency needs a justification in the PR).
+- Performance changes must ship **before/after measurements** (`scripts/bench-tools.sh` or `go test -bench`),
+  and state whether you profiled first.
+- Error messages are user-facing: state what is wrong **and** how to write it correctly, preferably with a
+  canonical-syntax example.
 
-## 行为准则
+## Code of conduct
 
-参与本项目即表示你同意 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+By participating you agree to the [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
-## 联系方式
+## Contact
 
-- Issues / PR 里 @ [@Enoch-199811](https://github.com/Enoch-199811)（维护者）。
-- 安全问题请**不要**开公开 Issue，直接用 GitHub 的私密报告（Security → Report a vulnerability）。
+- Mention [@Enoch-199811](https://github.com/Enoch-199811) (maintainer) in an issue or PR.
+- For security issues, please **do not** open a public issue — use GitHub's private
+  [Report a vulnerability](https://github.com/QuarkLangCommunity/QuarkLangQkc/security/advisories/new) flow.
