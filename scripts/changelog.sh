@@ -99,9 +99,26 @@ if [ "${1:-}" = "--all" ]; then
 fi
 
 ARG="${1:-$(cat VERSION 2>/dev/null || echo unreleased)}"
-START="${2:-$(git describe --tags --abbrev=0 2>/dev/null || echo '')}"
 DATE="$(date -u '+%Y-%m-%d')"
+
+# 范围推导（发布工作流跑在 tag 提交上，这里最容易踩坑）：
+#   - 显式给了起点（$2）→ 用它，终点 HEAD；
+#   - 否则若 HEAD 正好在某个 tag 上 → 起点取**它的前一个 tag**，终点取该 tag
+#     （直接 `git describe --abbrev=0` 会返回当前 tag，导致 "<tag>..HEAD" 为空 → 发布说明「无提交」）；
+#   - 其余情况 → 起点取最近 tag，终点 HEAD。
+END="HEAD"
+if [ -n "${2:-}" ]; then
+  START="$2"
+else
+  cur="$(git describe --tags --exact-match 2>/dev/null || true)"
+  if [ -n "$cur" ]; then
+    START="$(git describe --tags --abbrev=0 "${cur}^" 2>/dev/null || true)"
+    END="$cur"
+  else
+    START="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  fi
+fi
 
 echo "## ${ARG} - ${DATE}"
 echo
-emit_commits "${START:+${START}..}HEAD"
+emit_commits "${START:+${START}..}${END}"
