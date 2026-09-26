@@ -1,110 +1,127 @@
-# QuarkLang（qkc）
+# QuarkLang (qkc)
+
+**English** · [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/ci.yml)
 [![Release](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/release.yml/badge.svg)](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/release.yml)
-[![Release 下载](https://img.shields.io/github/v/release/QuarkLangCommunity/QuarkLangQkc?label=download&sort=semver)](https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest)
+[![Download](https://img.shields.io/github/v/release/QuarkLangCommunity/QuarkLangQkc?label=download&sort=semver)](https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest)
 ![platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-blue)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8)
 ![coverage](https://img.shields.io/badge/coverage-65.1%25-yellowgreen)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
-**QuarkLang 是一门「类型在前」的编译型语言：同一份源码，两个后端** —— Go 解释器（改完即跑）与 LLVM 编译器 `qkc`（性能 = C）。
-面向**高计算、高并发、海量临时数据**的 CLI 与服务：`fib(35)` 21 ms（C 22 ms）、用户态任务并发、block 线性分配无 GC 停顿；
-自带静态检查 / 文档生成 / REPL / 语言服务器与 VS Code、tree-sitter 支持，**零第三方 Go 依赖**。
+**QuarkLang is a type-first compiled language with two backends for one source file** — a Go interpreter
+(edit and run) and an LLVM compiler `qkc` (performance on par with C).
+It targets **compute-heavy, highly concurrent, allocation-heavy CLI and service workloads**:
+`fib(35)` in 21 ms (C: 22 ms), Erlang-style user-space tasks, and a block allocator with no GC pauses.
+It ships with a linter, doc generator, REPL, language server and editor support — and **zero third-party Go dependencies**.
 
-| 你是谁 | 你会得到什么 |
+| You are… | You get… |
 |---|---|
-| 想找「编译后真快」的语言 | 编译路径性能 = C（同 LLVM 后端），P99 延迟逐分位同级 |
-| 写 CLI / 计算脚本 / 常驻服务 | 解释器秒级迭代；`qkc -run file.qk` 一键编译执行 |
-| 需要并发又怕 GC 停顿 | `taskm` 用户态任务 + 线程池；block 分配，无 GC 停顿 |
-| 中文项目 / 教学中使用 | 语法极简（`fn` `type` `impl` `space`），工具链与报错中文优先 |
-| 做编辑器 / 工具集成 | 稳定 CLI + LSP + tree-sitter 语法，`-json` 机器可读诊断 |
+| Looking for a language that is genuinely fast once compiled | Compiled path performance = C (same LLVM backend); P99 latency on par with C |
+| Writing CLIs, scripts or long-running services | Instant feedback with the interpreter; one command to compile with `qkc -run` |
+| Needing concurrency without GC pauses | `taskm` user-space tasks + thread pool; block allocation, no GC pauses |
+| Building editor/tooling integrations | Stable CLIs, an LSP server, a tree-sitter grammar, `-json` machine-readable diagnostics |
 
-<p align="center"><img src="assets/demo.gif" alt="QuarkLang 演示：解释执行、编译执行、静态检查" width="900"></p>
+<p align="center"><img src="assets/demo.gif" alt="QuarkLang demo: interpret, compile and lint" width="900"></p>
 
-> GIF 内容全部来自真实运行（生成脚本 `scripts/make-demo-gif.py`，可复现）：
-> `quark hello.qk` → `qkc -run hello.qk` → `qkcheck examples/`（真实告警，非编造）。
+> Everything in the GIF is real output (regenerate it with `scripts/make-demo-gif.py`):
+> `quark hello.qk` → `qkc -run hello.qk` → `qkcheck examples/` (a genuine warning, not a mock-up).
+> Tool messages are currently Chinese-first; message internationalization is on the roadmap.
 
-## 🚀 快速开始
+## 🚀 Quick start
 
 ```sh
-# ① 预编译二进制（Linux x86_64；macOS / Windows 见 Releases，均有对应产物）
+# ① Prebuilt binary (Linux x86_64; macOS / Windows have their own assets on the Releases page)
 curl -fsSL https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest/download/quark-linux-amd64 -o quark \
   && chmod +x quark && ./quark examples/hello.qk
 ```
 
 ```sh
-# ② 从源码（一行；需要 Go ≥ 1.26）
+# ② From source (one line; requires Go ≥ 1.26)
 git clone --depth 1 https://github.com/QuarkLangCommunity/QuarkLangQkc && cd QuarkLangQkc \
   && go build -o quark . && ./quark examples/tour.qk
 ```
 
 ```sh
-# ③ 编译执行（LLVM 原生；需要 clang）
+# ③ Compile and run (native LLVM; requires clang)
 cd compiler && go build -o qkc . && ./qkc -run ../examples/hello.qk
 ```
 
 ```sh
-# ④ 工具链（共用同一前端）：静态检查 / 文档 / REPL / 语言服务器
-go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/          # 有诊断退出 1
+# ④ Toolchain (all reuse the same front end): lint / docs / REPL / language server
+go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/          # exits 1 when there are findings
 go build -o qkdoc   ./cmd/qkdoc   && ./qkdoc -o API.md examples/tour.qk
 go build -o qkrepl  ./cmd/qkrepl  && ./qkrepl -e "int x = 6;" -e "x * 7"
-go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # 编辑器接入见 editors/
+go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integration in editors/
 ```
 
-> Release 同时上传**带版本号**与**不带版本号**两种产物名（如 `quark-linux-amd64`），
-> 后者可写进脚本固定 URL；校验用同目录 `MANIFEST-<版本>-<平台>.txt`（sha256）。
+> Releases ship both **versioned** assets (`quark-2.1.0-linux-amd64`) and **version-less aliases**
+> (`quark-linux-amd64`) so scripts can pin a stable URL. Verify downloads against
+> `MANIFEST-<version>-<platform>.txt` (sha256).
 
 <details>
-<summary>从源码构建的完整说明（解释器 / 编译器依赖）</summary>
+<summary>Building from source: full notes (interpreter / compiler dependencies)</summary>
+
+### Interpreter (repository root, Go module `quarklang`)
 
 ```sh
 go build -o quark .
 ./quark examples/hello.qk
-go test ./internal/lang/     # 全量测试（-race 可跑）
+go test ./internal/lang/     # full test suite (-race works too)
 ```
+
+### Compiler (`compiler/`, LLVM backend)
 
 ```sh
 cd compiler && go build -o qkc .
-./qkc -run hello.qk          # LLVM IR → clang 原生 → 执行
-./qkc hello.qk               # 仅输出 IR
+./qkc -run hello.qk          # LLVM IR → clang native → execute
+./qkc hello.qk               # emit IR only
 ```
 
-**依赖**：Go ≥ 1.26（零第三方 Go 依赖）；LLVM 工具链（`clang`/`lli`/`llvm-as`，系统包）。可选 `rustc`/`gcc` 仅用于跨语言对比基准。
+**Requirements**: Go ≥ 1.26 (zero third-party Go dependencies); an LLVM toolchain (`clang`/`lli`/`llvm-as`).
+Optional `rustc`/`gcc` are only needed for the cross-language benchmark suite.
 
 </details>
 
-## 目录
+## Contents
 
-[快速开始](#-快速开始) · [语言速览](#语言速览) · [工具链](#工具链) · [亮点](#亮点) ·
-[性能](#性能实测可复现) · [跨系统](#跨系统linux--macos--windows) · [语言特性](#语言特性v2-语法面) ·
-[官方生态](#官方生态) · [项目结构](#项目结构) · [贡献](#贡献) · [设计文档](https://github.com/QuarkLangCommunity/QuarkLangQkc/blob/docs/spec.md)
+[Quick start](#-quick-start) · [Language tour](#language-tour) · [Toolchain](#toolchain) · [Highlights](#highlights) ·
+[Performance](#performance-measured-reproducible) · [Cross-platform](#cross-platform-linux--macos--windows) ·
+[Language features](#language-features-v2-syntax) · [Ecosystem](#ecosystem) · [Project layout](#project-layout) ·
+[Contributing](#contributing) · [Spec (Chinese)](https://github.com/QuarkLangCommunity/QuarkLangQkc/blob/docs/spec.md)
 
-## 语言速览
+## Language tour
 
-最真实的介绍是能跑起来的代码。下面这份 `examples/tour.qk` **在解释器与编译器两条路径上输出逐字节一致**：
+The most honest introduction is code that runs. This is `examples/tour.qk` — it produces
+**byte-identical output on both backends** (interpreter and compiler):
 
 ```qk
 program main;
 
-type struct { int x; int y; } Point;          // 结构体：类型在前
+/* Language tour / 语言巡礼
+ * Type-first syntax: struct/impl, generics, try/catch, List — runnable as-is.
+ * 类型在前：struct/impl、泛型、try/catch、List —— 可直接运行。
+ * Identical output on both backends / 解释器与编译器两条路径输出一致。 */
+
+type struct { int x; int y; } Point;            // struct / 结构体
 
 impl {
-    fn new(int x, int y) Point {               // 静态方法：无 self
-        Point p = .{x: x, y: y};              // 结构体字面量
+    fn new(int x, int y) Point {                // static method / 静态方法（无 self）
+        Point p = .{x: x, y: y};                // struct literal / 结构体字面量（字段名: 值）
         return p;
     }
-    fn sum(Point self) int {                   // 实例方法：首参 self
+    fn sum(Point self) int {                    // instance method / 实例方法（首参 self）
         return self.x + self.y;
     }
-} Point;                                        // 实现：名字写在块后
+} Point;                                         // name after the block / 实现名写在块后
 
-fn<T> twice(T v) T { return v; }              // 泛型（类型擦除）
+fn<T> twice(T v) T { return v; }                // generics, type-erased / 泛型（类型擦除）
 
 fn main(IOStream io) {
-    Point p = Point::new(3, 4);                 // 静态调用 ::
-    io.println("point sum =", p.sum());         // 实例调用 .
+    Point p = Point::new(3, 4);                 // static call with :: / 静态调用 ::
+    io.println("point sum =", p.sum());         // instance call with . / 实例调用 .
 
     List<int> l = [1, 2, 3];
     int total = 0;
@@ -113,7 +130,9 @@ fn main(IOStream io) {
 
     try {
         io.println(1 / 0);
-    } catch (void e) {                          // 错误可捕获
+    } catch (void e) {                          // catchable error / 可捕获的错误
+        // Using `e` inside catch is not supported on the compiler path yet.
+        // 编译器路径暂不支持在 catch 体内读取 e；两条路径都只做"已捕获"提示。
         io.println("caught: division by zero");
     }
     io.println("twice =", twice(21));
@@ -121,7 +140,7 @@ fn main(IOStream io) {
 ```
 
 ```sh
-$ quark examples/tour.qk        # 或：qkc -run examples/tour.qk
+$ quark examples/tour.qk        # or: qkc -run examples/tour.qk
 point sum = 7
 list total = 6
 caught: division by zero
@@ -129,7 +148,7 @@ twice = 21
 ```
 
 <details>
-<summary>更多可运行示例（hello / fib / struct / macro / sum）</summary>
+<summary>More runnable examples</summary>
 
 ```sh
 quark examples/hello.qk
@@ -141,352 +160,353 @@ quark examples/sum.qk
 
 </details>
 
-## 工具链
+## Toolchain
 
-| 工具 | 作用 | 一行上手 |
+| Tool | Purpose | One-liner |
 |---|---|---|
-| `quark` | 解释器：改完即跑、REPL 友好 | `./quark examples/hello.qk` |
-| `qkc` | LLVM 编译器 / 库制品 / 预处理器 | `./qkc -run hello.qk`（IR：`./qkc hello.qk`） |
-| `qkcheck` | 静态检查 QK101–QK115，`-json` 供 CI/编辑器 | `./qkcheck examples/` |
-| `qkdoc` | `/* */`+`pub` → Markdown / HTML API 文档 | `./qkdoc -o API.md lib.qk` |
-| `qkrepl` | 交互式求值：多行块、持久环境 | `./qkrepl -e "int x = 6;" -e "x * 7"` |
-| `qklsp` | 语言服务器：诊断/跳转/补全/悬停/大纲 | `./qklsp`（VS Code 扩展见 `editors/vscode`） |
+| `quark` | Interpreter: edit-and-run, REPL-friendly | `./quark examples/hello.qk` |
+| `qkc` | LLVM compiler / library artifacts / preprocessor | `./qkc -run hello.qk` (IR: `./qkc hello.qk`) |
+| `qkcheck` | Static analysis QK101–QK115; `-json` for CI/editors | `./qkcheck examples/` |
+| `qkdoc` | `/* */` + `pub` → Markdown / HTML API docs | `./qkdoc -o API.md lib.qk` |
+| `qkrepl` | Interactive evaluation: multi-line blocks, persistent environment | `./qkrepl -e "int x = 6;" -e "x * 7"` |
+| `qklsp` | Language server: diagnostics / definition / completion / hover / outline | `./qklsp` (VS Code extension in `editors/vscode`) |
+
+### Static analysis: qkcheck
 
 ```sh
 go build -o qkcheck ./cmd/qkcheck
-./qkcheck examples/                                  # 目录或文件；有诊断退出 1
-./qkcheck -json -L ../QuarkLangLibs-Style lib.qk     # CI/编辑器消费；-L 追加 import 搜索目录
-./qkcheck -params src.qk                             # 附带检查未使用形参
+./qkcheck examples/                                  # files or directories; exit 1 on findings
+./qkcheck -json -L ../QuarkLangLibs-Style lib.qk     # machine-readable; -L adds import search paths
+./qkcheck -params src.qk                             # also check unused parameters
 ```
 
-| 码 | 检查 | 说明 |
+| Code | Check | Notes |
 |---|---|---|
-| QK101 | 未使用变量 | 声明后从未读取（含「只被赋值」）；`_` 前缀忽略 |
-| QK102 | 未使用形参 | 需 `-params`（接口实现常有忽略形参） |
-| QK103 | 不可达代码 | `return`/`log`/`break` 之后的语句；两分支皆返回之后的语句 |
-| QK104 | 遮蔽 | `for`（两种）/`catch` 变量遮蔽外层同名变量（编译器未拦截的三处） |
-| QK105 | 缺返回 | 声明非 void 返回类型却存在不返回值即结束的路径（解释器得 nil，`qkc` 补零值——两端不一致） |
-| QK106 | 接口未实现 | 近失配：实现了接口的部分方法、缺其余（列出缺失方法名） |
-| QK107 | void 值误用 | void 函数调用结果被当作值使用（运行期为 nil） |
-| QK108 | 自赋值 | `x = x` / `p.x = p.x` / `l[i] = l[i]`（结构等价形式，无效果） |
-| QK109 | 常量条件 | `if (true/false)`、`while (false)`；`while (true)` 且体内无 `break`/`return`（可能死循环） |
-| QK110 | 常量除零 | 字面量 `/ 0`、`% 0`；**try 块内豁免**（那里是刻意的错误处理） |
-| QK111 | 未使用导入 | `import` 了某库却未使用其任何符号；库不可解析时跳过 |
-| QK112 | 遮蔽全局函数 | 局部变量/形参遮蔽**全局函数**名（同名调用会被解析为该局部变量）；类型/空间名不受影响故不报 |
-| QK113 | 死存储 | 赋值（含声明初值）被后续赋值覆盖且其间未读取；**引用写穿与循环体内赋值豁免** |
-| QK114 | 自身比较 | `x == x`（恒真）/ `x != x`（恒假） |
-| QK115 | 未被调用的函数 | 仅 `program main`（有 `main` 且无 `pub`）：整文件从未出现的函数即死代码；库文件不报 |
+| QK101 | Unused variable | Declared but never read (including write-only); a `_` prefix is ignored |
+| QK102 | Unused parameter | Requires `-params` (interface implementations often ignore parameters) |
+| QK103 | Unreachable code | Statements after `return`/`log`/`break`; after both branches return |
+| QK104 | Shadowing | `for` (both forms) / `catch` variables shadowing an outer name (three places the compiler misses) |
+| QK105 | Missing return | A non-void function has a path that ends without a value (the interpreter yields nil, `qkc` zero-fills — the two disagree) |
+| QK106 | Interface not implemented | Near-miss: some methods implemented, the rest missing (missing names are listed) |
+| QK107 | void value misuse | Calling a void function and using the result as a value (nil at runtime) |
+| QK108 | Self assignment | `x = x` / `p.x = p.x` / `l[i] = l[i]` (structurally equivalent, no effect) |
+| QK109 | Constant condition | `if (true/false)`, `while (false)`; `while (true)` with no `break`/`return` (likely infinite loop) |
+| QK110 | Division by a constant zero | Literal `/ 0`, `% 0`; **exempt inside `try`** (deliberate error handling) |
+| QK111 | Unused import | Imported but no symbol used; skipped when the library cannot be resolved |
+| QK112 | Shadowing a global function | Local variable/parameter shadowing a **global function** name (calls would resolve to the local) |
+| QK113 | Dead store | An assignment (or declaration initializer) overwritten before any read; **reference writes and assignments inside loops are exempt** |
+| QK114 | Self comparison | `x == x` (always true) / `x != x` (always false) |
+| QK115 | Function never called | Only for `program main` (has `main`, no `pub`): a function never referenced anywhere is dead code; library files are exempt |
 
-**误报率 / 漏报率（静态基准 + 随机化统计取 P99）**
+**False positives / false negatives (hand-labelled benchmark + randomized statistics with P99)**
 
 ```sh
-# ① 人工标注基准（29 用例：15 缺陷 + 14 干净，含刻意不报的反例）
+# ① Hand-labelled benchmark (29 cases: 15 defects + 14 clean, including deliberate "must not report" cases)
 go test ./internal/lang/ -run TestLintBenchmark -v
 
-# ② 随机化统计：每轮 4 个真值已知用例，多轮取 P50/P90/P99/max（默认 2000 轮）
+# ② Randomized statistics: 4 ground-truth cases per round, P50/P90/P99/max across rounds (2000 by default)
 go test ./internal/lang/ -run TestLintStatsP99 -v
-LINT_ROUNDS=20000 LINT_SEED=7 go test ./internal/lang/ -run TestLintStatsP99 -v   # 深挖尾部
+LINT_ROUNDS=20000 LINT_SEED=7 go test ./internal/lang/ -run TestLintStatsP99 -v   # dig into the tail
 
-# ③ 真实语料扰动不变性（CRLF / 行尾注释 / 头部插行 / 行尾空白）
+# ③ Real-corpus perturbation invariance (CRLF / trailing comments / inserted header lines / trailing whitespace)
 go test ./internal/lang/ -run 'TestLintCorpusPerturbation|TestLintCRLF' -v
 ```
 
-单轮基准是确定性的（跑一万次结果一样），**P99 必须靠输入随机化才有分布**：统计测试每轮用不同种子
-生成「干净骨架 + 注入 15 种缺陷之一」的用例，真值 = (诊断码, 行号)，位置也算考核项。
+A single deterministic run says nothing about the tail, so the statistical test generates programs with
+**known ground truth** (diagnostic code + line) and reports per-round FP/FN quantiles:
 
-| 指标（每轮） | seed=1 | seed=7 | seed=20260918 |
+| Metric (per round) | seed=1 | seed=7 | seed=20260918 |
 |---|---|---|---|
-| 误报 FP：P50 / P90 / P99 / max | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| 漏报 FN：P50 / P90 / P99 / max | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| 误报率 P99 / 漏报率 P99 | 0.0% / 0.0% | 0.0% / 0.0% | 0.0% / 0.0% |
+| FP: P50 / P90 / P99 / max | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| FN: P50 / P90 / P99 / max | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| FP rate / FN rate at P99 | 0.0% / 0.0% | 0.0% / 0.0% | 0.0% / 0.0% |
 
-合计 **3 种子 × 2000 轮 × 4 用例 = 24,000 个随机用例（12,000 次缺陷注入）**，P99 与最差值全为 0。
-这套度量本身就是探测器：本轮抓出了 **QK115 判定过宽**（`program main;` 文件里带 `pub` 时被整文件跳过
-→ 漏报），以及基准自身的两处缺陷（装饰用辅助函数在 main 程序里本就是死代码、插入行数手算错位）——
-都被「真值必须精确匹配」逼出来并修掉。
+**3 seeds × 2000 rounds × 4 cases = 24,000 randomized cases (12,000 injected defects)**, with P99 and max at 0.
+The harness itself caught real problems: an over-broad QK115 rule (it skipped whole files containing `pub`),
+plus two defects in the benchmark generator.
 
-| 指标 | 加强前 | 加强后 |
+| Metric | Before hardening | After |
 |---|---|---|
-| 用例数（缺陷 15 + 干净 14） | 21 | 29 |
+| Cases (15 defects + 14 clean) | 21 | 29 |
 | TP / FP / FN | 6 / 1 / 14 | **20 / 0 / 0** |
-| 误报率 FP/(TP+FP) | 14.3% | **0.0%** |
-| 漏报率 FN/(TP+FN) | 70.0% | **0.0%** |
-
-- 缺陷用例覆盖 QK101–QK115；干净用例含 **14 个「刻意不报」反例**（try 内除零、`while(true)`+break、
-  重载里的 void 返回、完整接口实现、仅用 space/类型/宏的导入、类型名与空间名遮蔽、引用写穿、
-  循环体内赋值、库文件里的未调用函数……）——这些都是加强过程中**真实出现过**的误报源，现已固化为回归用例
-  （逐条做过对照实验：回退任一修复，基准立刻出现对应的 1 条误报）。
-- **真实语料复核**：主仓 60 个 `.qk/.kq` → 0 错误、12 条警告（逐条复核为真，见
-  `cmd/qkcheck` 语料快照测试的逐条注释）；4 个官方库仓约 4000 行 → 1 条真问题（局部变量从不读取）、
-  **0 误报**。
+| FP rate | 14.3% | **0.0%** |
+| FN rate | 70.0% | **0.0%** |
 
 <details>
-<summary>qkdoc：API 文档生成</summary>
+<summary>qkdoc: API documentation generation</summary>
 
 ```sh
 go build -o qkdoc ./cmd/qkdoc
-./qkdoc lib.qk                       # Markdown 到 stdout
-./qkdoc -all -o API.md style.qk      # 含未 pub 符号，写入文件
-./qkdoc -html -o API.html style.qk   # 自包含 HTML（零外部资源）
+./qkdoc lib.qk                       # Markdown to stdout
+./qkdoc -all -o API.md style.qk      # include non-pub symbols, write to a file
+./qkdoc -html -o API.html style.qk   # self-contained HTML (no external assets)
 ```
 
-- 文档注释：声明**上方紧邻**的 `//` 或 `/* */` 注释块（godoc 规则）；无上方注释时取**同行行尾**注释
-  （`int x; // 横坐标`）；文件头注释作为文件说明。
-- 默认只导出 `pub` 符号；文件没有 `pub`（如 `program main`）时导出全部；`impl`/`space`/`library`/`#macro`
-  不受 `pub` 过滤（语言中 `pub` 不能前缀它们，而它们正是库对外 API 的载体；宏定义在解析前被切出 AST，由
-  `ParseSourceAll` 显式提供）。
-- 实测：`style.qk`（1567 行）→ 8ms 生成 335 行 Markdown（概览表 + 函数/类型/实现/空间分节）。
+- Doc comments: the `//` or `/* */` block **immediately above** a declaration (godoc rule); falls back to a
+  trailing comment on the same line (`int x; // x coordinate`); the file header comment becomes the file description.
+- Only `pub` symbols are exported by default; files without `pub` (e.g. `program main`) export everything.
+  `impl`/`space`/`library`/`#macro` are not filtered by `pub` (the language cannot prefix them with `pub`,
+  and they are what library APIs consist of; macros are split out before parsing and supplied by `ParseSourceAll`).
+- Measured: `style.qk` (1,567 lines) → 8 ms to generate 335 lines of Markdown (overview table + sections).
 
 </details>
 
 <details>
-<summary>qkrepl：交互式求值</summary>
+<summary>qkrepl: interactive evaluation</summary>
 
 ```sh
 go build -o qkrepl ./cmd/qkrepl
-./qkrepl                      # 交互：qk> 提示符，块未闭合自动续行 ..>
-./qkrepl -e "int x = 6;" -e "x * 7"   # 一次性求值（多段共享环境）
-printf 'fib(20)\n' | ./qkrepl # 批处理（stdin 非终端）
+./qkrepl                      # interactive: qk> prompt, auto-continues with ..> for open blocks
+./qkrepl -e "int x = 6;" -e "x * 7"   # one-shot evaluation (segments share one environment)
+printf 'fib(20)\n' | ./qkrepl # batch mode (stdin is not a terminal)
 ```
 
 ```
-qk> fn fib(int n) int {      # 多行块：{ 未闭合 → 续行
+qk> fn fib(int n) int {      # multi-line block: '{' not closed → continuation
 ..>     if (n <= 1) { return n; }
 ..>     return fib(n - 1) + fib(n - 2);
 ..> }
-已定义 fn fib(int n) int
+defined fn fib(int n) int
 qk> fib(20)
 6765
 ```
 
-- **持久环境**：变量/函数/结构体/接口/impl 跨输入存活；同名函数可重定义（覆盖生效）。
-- 表达式直接回显值；`log` 的记录与 `io.println` 输出即时显示；语句可省略 `;`（自动补）。
-- 命令：`:help`、`:quit`、`:load <file.qk>`（登记文件内的定义，随后可 `main(io)`）。
-- 实现要点：会话持有一个解释器实例，每段输入按需走「顶层声明登记」或「包成函数体逐条求值」；
-  与 `quark file.qk` 共用注册路径（`registerProgram`），因此语义一致。
-- 实测：`fib(20)` → 6765；`:load examples/struct.qk` 后 `Point p = .{a:20, b:22}; p.sum()` → 42。
+- **Persistent environment**: variables/functions/types/interfaces/impls survive across inputs; redefining a function overrides it.
+- Expressions print their value; `log` records and `io.println` output appear immediately; a trailing `;` is optional.
+- Commands: `:help`, `:quit`, `:load <file.qk>` (register declarations from a file, then call `main(io)`).
 
 </details>
 
 <details>
-<summary>编辑器支持：qklsp + VS Code + tree-sitter</summary>
+<summary>Editor support: qklsp + VS Code + tree-sitter</summary>
 
 ```sh
-go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
-./qklsp -L ../QuarkLangLibs-Style    # 额外 import 搜索目录
+go build -o qklsp ./cmd/qklsp        # language server (stdio LSP)
+./qklsp -L ../QuarkLangLibs-Style    # extra import search path
 ```
 
-| 能力 | 说明 |
+| Capability | Notes |
 |---|---|
-| 诊断 | 解析/类型错误（`qkc`）+ 静态检查（`qkcheck` 的 QK101–QK107），跨 import 文件也定位正确 |
-| 跳转定义 | 函数/结构体/接口/空间/字段/局部变量（UTF-16 列换算，中文源码下同样准确） |
-| 补全 | 关键字 + 内置类型/方法 + 当前文件的函数/类型/空间/局部变量 |
-| 悬停 / 大纲 | 签名 + 文档注释；`documentSymbol` 列出全部顶层符号 |
+| Diagnostics | Parse/type errors (`qkc`) + static analysis (qkcheck QK101–QK107), correctly located across imported files |
+| Go to definition | Functions/structs/interfaces/spaces/fields/locals (UTF-16 column conversion, accurate in non-ASCII sources) |
+| Completion | Keywords + built-in types/methods + symbols declared in the current file |
+| Hover / outline | Signature + doc comment; `documentSymbol` lists all top-level symbols |
 
-编辑器产物：`editors/vscode`（VS Code 扩展：TextMate 语法高亮 + 片段 + 零依赖 LSP 客户端）、
-`editors/tree-sitter-quarklang`（tree-sitter 语法：Neovim/Helix/Emacs 可直接用）。
+Editor artifacts: `editors/vscode` (VS Code extension: TextMate grammar, snippets, zero-dependency LSP client),
+`editors/tree-sitter-quarklang` (tree-sitter grammar, usable from Neovim/Helix/Emacs).
 
-**实测**：`editors/tree-sitter-quarklang` 对主仓 + 6 个库仓共 **60 个 `.qk/.kq` 文件解析 0 错误**
-（含 `style.qk` 1567 行、`cleg.qk`），`tree-sitter test` 5/5 通过；
-`editors/vscode/test/protocol.test.js` 用 Node 直连 `qklsp` 八项全过（初始化/诊断/跳转/补全/悬停/改动静默/退出）。
+**Measured**: the tree-sitter grammar parses **60 `.qk/.kq` files with 0 errors** (including the 1,567-line
+`style.qk` and `cleg.qk`), and `tree-sitter test` passes 5/5; `editors/vscode/test/protocol.test.js` connects
+to a real `qklsp` over stdio and passes 8/8 checks.
 
 </details>
 
 <details>
-<summary>发布产物与版本管理（如何自己出一版）</summary>
+<summary>Release artifacts and versioning (how to cut your own release)</summary>
 
 ```sh
-./scripts/build-release.sh 2.1.0     # 3 平台 × 2 架构 × 6 工具 → dist/（版本注入 + sha256 清单）
-./scripts/changelog.sh 2.1.0         # 自上个 tag 以来，按类型分组的变更日志
+./scripts/build-release.sh 2.1.0     # 3 platforms × 2 architectures × 6 tools → dist/ (version injection + sha256 manifest)
+./scripts/changelog.sh 2.1.0         # changelog since the previous tag, grouped by kind
 ./scripts/changelog.sh --all > CHANGELOG.md
-git tag v2.1.0 && git push origin v2.1.0   # 触发 release 工作流：三平台原生构建 → GitHub Release
+git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: native builds on three platforms → GitHub Release
 ```
 
-- **版本注入**：`VERSION` 文件是唯一版本源；构建时 `-ldflags "-X main.version=…"` 注入，`quark/qkc/qkcheck/qkdoc/qkrepl/qklsp --version` 均打印。
-- **产物**：`dist/<工具>-<版本>-<os>-<arch>[.exe]` + `MANIFEST-<版本>.txt`（sha256、字节数）；本地脚本用 `CGO_ENABLED=0` 交叉编译（便携、无系统依赖），
-  release 工作流在各平台**原生构建且开启 cgo**（FFI 可用：`library`/dlopen 等）。
-- **实测**：36 个二进制（6 工具 × 3 平台 × 2 架构）全部产出，格式正确（ELF / Mach-O / PE32+），
-  注入后 `--version` 输出 `2.1.0`（`qkc 2.1.0 (engine 13)`）。
-
-**跨系统**：qkc 产出与平台无关的 LLVM IR，目标平台 `clang`/`llc` 生成原生二进制；`.qlib` 库（gob）跨系统；线程运行时（`qthreads.c` 内嵌）POSIX/Windows 双载体。
-
-**优化旗标**：默认 `-O3`（便携）；`QUARK_CFLAGS="-O3 -march=native"` 本机极限（产物仅当前 CPU）；PGO 可用 `-fprofile-generate/-fprofile-use`（fib35 -29%）。
-
-**缓存**：增量编译缓存默认 `/tmp/quarklang-cache`（`QUARK_CACHE` 覆盖）；`QUARK_CFLAGS` 参与缓存键。
+- **Version injection**: the `VERSION` file is the single source of truth; builds inject it via
+  `-ldflags "-X main.version=…"`, so `quark/qkc/qkcheck/qkdoc/qkrepl/qklsp --version` all report it.
+- **Artifacts**: `dist/<tool>-<version>-<os>-<arch>[.exe]` plus `MANIFEST-<version>.txt` (sha256 + size).
+  The local script cross-compiles with `CGO_ENABLED=0` (portable, no system dependencies), while the release
+  workflow builds **natively on each platform with cgo enabled** (so `library`/dlopen FFI works).
+- The release workflow also uploads version-less aliases (`quark-linux-amd64`, …) for stable URLs, and
+  publishing is gated by a GitHub Environment that requires a human approval.
 
 </details>
 
-## 亮点
+## Highlights
 
-- **编译路径性能 = C**：LLVM `-O3` 同后端（fib35 21ms vs C 22ms；P99 延迟分布逐分位同级）；
-- **并发模型 = Erlang 式**：`spawn/merge/block/done/channel` 用户态任务 + 线程池——并发模型是 Erlang 式，性能是 C 级；
-- **零 GC 内存**：block 线性分配 + 占用度最小堆，`delete` 入空闲队列（数据保留）、`clear` 才清空——无 GC 停顿、碎片率 0.195%、复用率 99.96%；
-- **sum 数学优化**：线性闭式 / 周期位级置换 / 均匀随机期望——10 亿项求和 O(1)（2ms，Go 循环 223ms）；
-- **增量编译**：IR+二进制两级缓存，二次编译 16 倍提速；
-- **零第三方依赖**：词法/解析/类型检查/求值/LLVM IR 发射全部手写。
+- **Compiled performance = C**: same LLVM `-O3` backend (fib35 21 ms vs C 22 ms; P99 latency on par at every quantile).
+- **Erlang-style concurrency**: `spawn/merge/block/done/channel` user-space tasks on a thread pool — Erlang's model with C-level performance.
+- **Zero-GC memory**: linear block allocation + an occupancy min-heap; `delete` returns blocks to the free queue (data preserved),
+  `clear` actually wipes them — no GC pauses, 0.195% fragmentation, 99.96% reuse.
+- **Mathematical `sum` optimization**: closed form for linear/periodic/uniform-random sums — 1e9 terms in O(1) (2 ms; a Go loop needs 223 ms).
+- **Incremental compilation**: two-level IR + binary cache, 16× faster rebuilds.
+- **Zero third-party dependencies**: lexer, parser, type checker, evaluator and LLVM IR emission are all hand-written.
 
-## 性能（实测，可复现）
+## Performance (measured, reproducible)
 
-| 基准 | QuarkLang(编译) | C | Rust | Go | Erlang |
+| Benchmark | QuarkLang (compiled) | C | Rust | Go | Erlang |
 |---|---|---|---|---|---|
-| fib(30) | **3ms** | 3ms | 3ms | 6ms | 1106ms |
-| fib(35) | **21ms** | 22ms | **17ms** | 36ms | — |
-| 8 路并发 ×1e7 | **1ms** | — | — | 6ms | 61s(1e5) |
-| P99（fib20×1000） | **14/27µs** | 16/25µs | — | — | — |
-| 潮汐 1 亿轮 | **1ms** | 1ms | 29ms | 92ms | — |
-| sum 10 亿项（闭式） | **2ms** | — | — | 223ms | — |
+| fib(30) | **3 ms** | 3 ms | 3 ms | 6 ms | 1106 ms |
+| fib(35) | **21 ms** | 22 ms | **17 ms** | 36 ms | — |
+| 8-way concurrency ×1e7 | **1 ms** | — | — | 6 ms | 61 s (1e5) |
+| P99 (fib20×1000) | **14/27 µs** | 16/25 µs | — | — | — |
+| Tide, 1e8 rounds | **1 ms** | 1 ms | 29 ms | 92 ms | — |
+| `sum` over 1e9 terms (closed form) | **2 ms** | — | — | 223 ms | — |
 
-复现：`bench/Makefile`（跨语言）+ `docs/benchmarks.md`（方法/公正性声明）。
+Reproduce with `bench/Makefile` (cross-language) and `docs/benchmarks.md` (methodology and fairness statement).
 
 <details>
-<summary>工具链性能优化（含「何时该托管给 C 库」的实测判据）</summary>
+<summary>Toolchain performance work (including a measured rule for when to offload work to C libraries)</summary>
 
 ```sh
-scripts/bench-tools.sh 9          # 进程级真实耗时（每项 9 轮中位数）
-go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释器）
+scripts/bench-tools.sh 9          # real process-level timings (median of 9 runs per scenario)
+go test ./internal/lang/ -run XXX -bench . -benchmem    # library-level benchmarks (interpreter)
 ```
 
-| 场景 | 优化前 | 优化后 | 变化 |
+| Scenario | Before | After | Change |
 |---|---|---|---|
 | quark fib(25) | 32.7 ms | **22.4 ms** | −31% |
-| quark 100 万次循环 | 108.6 ms | **62.5 ms** | −42% |
-| qkcheck（1567 行文件） | 23.8 ms | **4.8 ms** | **−80%** |
-| qkdoc（同上文件 → Markdown） | 9.7 ms | **3.9 ms** | −60% |
-| qkfmt -l（同上文件） | 5.3 ms | **3.7 ms** | −29% |
-| qkm build（小工程，含解释器编译校验） | 40.0 ms | **26.9 ms** | −33% |
-| qkrepl 批处理 200 条语句 | 6.7 ms | **5.3 ms** | −21% |
-| qklsp 诊断（编辑器每键重算，1500 行） | 2.20 ms | **0.27 ms** | **−88%** |
-| qklsp 补全 | 95 µs | **5.4 µs** | −94% |
-| qklsp 跳转定义 | 39.6 µs | **0.33 µs** | −99% |
-| quark/qkc/qkrepl 启动 | ~1.9 ms | ~1.9 ms | 进程创建下限 |
+| quark 1M-iteration loop | 108.6 ms | **62.5 ms** | −42% |
+| qkcheck (1,567-line file) | 23.8 ms | **4.8 ms** | **−80%** |
+| qkdoc (same file → Markdown) | 9.7 ms | **3.9 ms** | −60% |
+| qkfmt -l (same file) | 5.3 ms | **3.7 ms** | −29% |
+| qkm build (small project, includes an interpreter compile check) | 40.0 ms | **26.9 ms** | −33% |
+| qkrepl batch (200 statements) | 6.7 ms | **5.3 ms** | −21% |
+| qklsp diagnostics (per keystroke, 1,500 lines) | 2.20 ms | **0.27 ms** | **−88%** |
+| qklsp completion | 95 µs | **5.4 µs** | −94% |
+| qklsp go-to-definition | 39.6 µs | **0.33 µs** | −99% |
+| quark/qkc/qkrepl startup | ~1.9 ms | ~1.9 ms | process-creation floor |
 
-**何时该把服务托管给 C 库（本仓实测判据）**
+**When is it worth offloading a service to a C library? (measured here)**
 
-| 判据 | 数据 | 结论 |
+| Criterion | Data | Conclusion |
 |---|---|---|
-| cgo 单次调用固定开销 | **22 ns/次**（本机实测） | 每次调用只做「一小步」的服务（逐 token 词法、逐键哈希、短字符串内建）托管给 C **必亏** |
-| 一整文件词法扫描（75KB） | C 扫描 100 µs vs Go 230 µs，但 Go 侧重建 token 又要 100 µs | 端到端≈0，且多 30% 分配 → **否决**（实验代码已回退，仅留基准与结论） |
-| 正则匹配（300 词 × 600 次 findAll） | 纯 qk 1517 ms vs PCRE2 230 ms | **6.6×** → 采纳（见 QuarkLangLibs-Regex 的 PCRE2 后端） |
+| Fixed cgo call overhead | **22 ns/call** (measured locally) | Offloading "one small step" services (per-token lexing, per-key hashing, short string builtins) **always loses** |
+| Whole-file lexing (75 KB) | C scan 100 µs vs Go 230 µs, but rebuilding Go tokens costs another 100 µs | Net ≈ 0, and +30% allocations → **rejected** (the experiment was reverted; only benchmarks and the conclusion remain) |
+| Regex matching (600 × `findAll` over 300 words) | pure qk 1517 ms vs PCRE2 230 ms | **6.6×** → adopted (PCRE2 backend in QuarkLangLibs-Regex) |
 
-一句话：**粗粒度、单次调用里做完整趟活的服务**（正则、编解码、图像/图形、压缩）值得托管；
-**细粒度、与解释器逐节点交错的服务**（词法/求值/哈希）留在 Go 更划算。
+In one sentence: **coarse-grained services that do a whole pass per call** (regex, codecs, graphics, compression)
+are worth offloading; **fine-grained services interleaved with the interpreter** (lexing, evaluation, hashing) are better left in Go.
 
-关键手段（都不是猜的，先 profile 再改）：
+Key optimizations (all profile-driven):
 
-1. **词法/宏切分去复制**：`SplitMacroDefs` 无 `#` 时零拷贝返回；`lex` 预分配 token 容量；
-   单字符 token 用预建字符串表（原先每个标点都 `string(c)` 分配一次）。
-   → 解析 3.29 ms / 7.47 MB → **1.02 ms / 1.39 MB**（分配对象 18179 → 10219）。
-2. **消除重复解析**：无 `import` 的文件，类型检查直接用已解析的 AST（`Typecheck(prog)`），
-   不再走「合并源码 → 重新 lex+parse」；qklsp 同样处理。
-3. **解释器变量槽位预解析**（`slots.go`）：编译期把可证明稳定的局部变量解析成槽位下标
-   （仅参数与前缀顶层声明，且只标不在 for-in/catch/for-c 内的使用点），运行时直接下标访问；
-   带 `paramNames[slot] == 名字` 校验兜底，推断有误只退回慢路径。
-   → 1M 循环 −24%、函数调用 −11%。
-4. **`Value.deref` 快慢路径拆分**：热路径哨兵判断可内联，解引用循环移入 `derefSlow`。
-   → 1M 循环 −29%、fib −19%。
-5. **实参复用区 + 引用句柄内部化**：实参切片从 ctx 的 `argArena` 借用（调用后按水位归还，
-   taskm 异步路径显式复制）；`refIdent` 引用单元是无状态句柄 → 按 (作用域,名字) 复用。
-   → 每次调用分配 100k → **348**，函数调用 −25%。
-6. **编辑器侧缓存**：文档符号表与补全候选按版本缓存；诊断复用 AST；渲染去 `fmt` 并预分配。
+1. **Copy-free lexing / macro splitting**: `SplitMacroDefs` returns the original token slice when a file has no `#`;
+   `lex` preallocates token capacity; single-character tokens use a precomputed string table.
+   → parse 3.29 ms / 7.47 MB → **1.02 ms / 1.39 MB** (allocations 18,179 → 10,219).
+2. **No duplicate parsing**: files without imports are type-checked directly from the already-parsed AST (`Typecheck(prog)`);
+   qklsp does the same.
+3. **Compile-time variable slot resolution** (`slots.go`): locally provable variables become slot indices
+   (parameters plus prefix top-level declarations only, and only where no `for-in`/`catch`/C-style `for` scope intervenes),
+   with a runtime `paramNames[slot] == name` guard that falls back to the slow path if the inference is ever wrong.
+   → 1M loop −24%, function calls −11%.
+4. **`Value.deref` split into fast/slow paths**: the hot sentinel check inlines; the deref loop moved to `derefSlow`.
+   → 1M loop −29%, fib −19%.
+5. **Argument arena + interned reference handles**: argument slices are borrowed from the context's `argArena`
+   and returned by watermark after the call (the async taskm path copies explicitly); `refIdent` handles are
+   stateless and interned per (scope, name). → allocations per call 100k → **348**, calls −25%.
+6. **Editor-side caches**: the symbol table and completion candidates are cached per document version;
+   diagnostics reuse the AST; rendering avoids `fmt` and preallocates.
 
 </details>
+
+## Cross-platform (Linux / macOS / Windows)
 
 ```
 .github/workflows/ci.yml
-├── test（矩阵：ubuntu-latest / macos-latest / windows-latest）
-│     go build ./... + go test ./...   # 解释器、工具链、编辑器产物校验
-│     + qkcheck 多轮 P99 统计门禁（LINT_ROUNDS=2000）
-│     + 语料扰动不变性（CRLF / 注释 / 行号平移）
-└── linux-extras（依赖 clang / bash / node 的部分）
-      双路径对比 · tree-sitter · VS Code LSP 联调 · 发布与基准冒烟
+├── test (matrix: ubuntu-latest / macos-latest / windows-latest)
+│     go build ./... + go test ./...   # interpreter, toolchain, editor artifacts
+│     + qkcheck multi-round P99 gate (LINT_ROUNDS=2000)
+│     + corpus perturbation invariance (CRLF / comments / line shifts)
+└── linux-extras (the parts that need clang / bash / node)
+      dual-path comparison · tree-sitter · VS Code LSP integration · release & benchmark smoke tests
 ```
 
-## 跨系统（Linux / macOS / Windows）
+- **The same Go tests run on all three platforms**: no shell dependencies, no hard-coded paths (`testing.TempDir`).
+- **Identical line handling**: CRLF and LF produce identical token positions (`TestLintCRLF`); 36 real corpus files keep
+  an identical diagnostic set under CRLF (`TestLintCorpusPerturbation`).
+- **Identical paths**: `qklsp` emits spec-compliant `file://` URIs (Windows `C:/x` → `file:///C:/x`, with the leading
+  slash stripped when converting back) — covered by unit tests.
+- **Cross-compilation**: three platforms × two architectures via `CGO_ENABLED=0` (`scripts/build-release.sh`);
+  the release workflow builds natively on each platform with cgo enabled.
 
-- **同一套 Go 测试三平台跑**：无 shell 依赖、无固定路径（临时目录用 `testing.TempDir`）。
-- **换行符一致**：CRLF 与 LF 的 token 行列号完全相同（`TestLintCRLF`）；36 个真实语料文件在 CRLF 下
-  诊断集合逐条不变（`TestLintCorpusPerturbation`）。
-- **路径一致**：`qklsp` 按 LSP 规范生成 `file://` URI（Windows 盘符 `C:/x` → `file:///C:/x`，反解去掉
-  引导斜杠），已有单元测试。
-- **交叉编译**：三平台 × 双架构用 `CGO_ENABLED=0` 直接产出（`scripts/build-release.sh`）；
-  release 工作流在各平台原生构建（cgo 开启 → FFI 可用）。
+## Language features (v2 syntax)
+
+> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md) — currently Chinese; an English translation is planned.
 
 <details>
-<summary>语言特性（v2 语法面，完整清单）</summary>
+<summary>Full feature list</summary>
 
-- **函数**：显式返回类型，`return expr` 结束并返回，`log expr;` 记录并结束；
-- **try/catch**：`try { } catch (void e) { }`（除零等错误可捕获）；
-- **void = 空接口**：任意值可赋；
-- **struct / impl / interface**：`type struct { a int; } Point;`、`impl { fn sum(Point self) int {...} } Point;`、`.{x: 3, y: 5}` 字面量、`self.a` 字段访问；
-- **泛型**：`fn f<T>(...)` / `f<int>(x)`（类型擦除，编译可用）；
-- **指针 / 堆申请**：`pointer T` 修饰、`new <type>[size]` 堆上申请（非法大小 `badAlloc`）、空指针解引用 `NullPointerError`；
-- **签名**：`f(args) @instance(prefix)` ≡ `instance.call(prefix)(.{in, out})`（instance 为任意 Sign 实例变量名）——记忆化/包装；
-- **taskm 并发**：`t thread = taskm.spawn(); t.merge(fn, args); taskm.block(t.pid()); taskm.done(pid); c channel = taskm.channel(); c.send(v); c.recv();`——用户态任务 + 线程池（编译路径 pthread 载体，跨系统）；
-- **宏系统**：`#macro name (参数) { 主体 }` 命名参数宏——参数不限、`()/[]/{}` 分隔符任意，调用 `name(args)`/`name[args]`/`name{args}`，参数按名替换；主体支持 `#when(compile/run)` 与 `#error`——**解释器与编译器共享同一 token 级宏展开**；
-- **delete/clear 语义**：`delete` 入空闲队列（数据保留，可复用），`clear` 真正清空空闲数据（使用中保留，数据安全）；
-- **List<int>**：字面量/下标/`size()`/`get(i)`/`append(v)`（几何增长 O(n)）；
-- **program/library**：`program main;`/`library;`、`import`、`pub`——可发布为 `.qlib` 库；
-- **解释器与编译器语法完全一致**（同前端，双后端）。
+- **Functions**: explicit return types; `return expr` ends and returns; `log expr;` records and ends.
+- **try/catch**: `try { } catch (void e) { }` — errors such as division by zero are catchable.
+- **void = empty interface**: any value can be assigned to it.
+- **struct / impl / interface**: `type struct { int x; } Point;`,
+  `impl { fn sum(Point self) int {...} } Point;`, `.{x: 3, y: 5}` literals, `self.a` field access.
+- **Generics**: `fn<T, U> name(T v) T` — type-erased; call sites infer: `name(5)`.
+- **Pointers / heap allocation**: `pointer T` (equivalent to `T&`), `new T[size]` (invalid sizes raise `badAlloc`),
+  null dereference raises `NullPointerError`.
+- **Signatures**: `f(args) @instance(prefix)` ≡ `instance.call(prefix)(.{in, out})` — memoization/wrapping.
+- **taskm concurrency**: `t thread = taskm.spawn(); t.merge(fn, args); taskm.block(t.pid()); taskm.done(pid);
+  c channel = taskm.channel(); c.send(v); c.recv();` — user-space tasks + thread pool (pthread carrier in the compiled path).
+- **Macro system**: `#macro name (params) { body }` with named parameters; `()`/`[]`/`{}` delimiters are interchangeable;
+  the body supports `#when(compile/run)` and `#error` — **interpreter and compiler share the same token-level expansion**.
+- **delete/clear semantics**: `delete` returns memory to the free queue (data preserved, reusable);
+  `clear` actually wipes free blocks (in-use blocks are untouched — data safety).
+- **List<int>**: literals, indexing, `size()`, `get(i)`, `append(v)` (geometric growth).
+- **program/library**: `program main;` / `library;`, `import`, `pub` — publishable as `.qlib` artifacts.
+- **Interpreter and compiler share one syntax** (same front end, two backends).
 
 </details>
 
-## 官方生态
+## Ecosystem
 
-| 项目 | 说明 | 仓库 |
+| Project | Description | Repository |
 |---|---|---|
-| QuarkLangLibs-Cleg | 官方认证的 `cleg` GUI 框架：`ClegNode` 接口（dynamic 派发）+ `ClegWindow` 默认窗口/`ClegLabel`/`ClegButton`，全节点 Style(HashTable) 驱动渲染（`label.style["text"]=...`）；运行时光栅内核（fill4K 2.5ms，零分配热路径） | https://github.com/QuarkLangCommunity/QuarkLangLibs-Cleg |
-| QuarkLangLibs-GL | 官方认证的 `gl` 库：**OpenGL 声明集**（`library gl { ... }` 直接调用系统 GL 导出符号，`glc::` 常量空间；运行时跨系统 dlopen/LoadLibrary + libffi） | https://github.com/QuarkLangCommunity/QuarkLangLibs-GL |
-| QuarkLangLibs-Vulkan | 官方认证的 `vulkan` 库：**Vulkan 声明集**（`library vulkan { ... }`，实例/设备/交换链/内存/缓冲常用面 + `vk::` 判定常量） | https://github.com/QuarkLangCommunity/QuarkLangLibs-Vulkan |
-| QuarkLangLibs-Json | 官方认证的 `json` 库：Python 风格 `json::dumps` / `json::loads`（值↔JSON，对象→HashTable/数组→List/整数→int，非法输入报 JSONError） | https://github.com/QuarkLangCommunity/QuarkLangLibs-Json |
-| QuarkLangLibs-Actions | 官方认证的 `actions` 库（两级）：`space` 系统级函数（`system`/`network` 空间，`exec`/`execv`/`popen`/`get`/`post`）+ `Command`/`Network` 类实现 `Executor` 接口（`self Self`，`.exec()`）；含 shell 注入说明与 8 MiB/10s 上限 | https://github.com/QuarkLangCommunity/QuarkLangLibs-Actions |
+| QuarkLangLibs-Cleg | Certified `cleg` GUI framework: `ClegNode` interface (dynamic dispatch) + `ClegWindow`/`ClegLabel`/`ClegButton`, every node driven by Style(HashTable) rendering; runtime raster kernel (fill4K 2.5 ms, zero-allocation hot path) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Cleg |
+| QuarkLangLibs-GL | Certified `gl` library: **OpenGL declaration set** (`library gl { ... }` binds system GL exports directly; `glc::` constant space; cross-platform dlopen/LoadLibrary + libffi) | https://github.com/QuarkLangCommunity/QuarkLangLibs-GL |
+| QuarkLangLibs-Vulkan | Certified `vulkan` library: **Vulkan declaration set** (instance/device/swapchain/memory/buffer surface + `vk::` constants) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Vulkan |
+| QuarkLangLibs-Json | Certified `json` library: Python-style `json::dumps` / `json::loads` (objects → HashTable, arrays → List, integers → int; malformed input raises `JSONError`) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Json |
+| QuarkLangLibs-Regex | Certified `regex` library: pure-qk engine **or** a PCRE2-backed backend with the same API (measured 6.6× faster) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Regex |
+| QuarkLangLibs-Actions | Certified `actions` library (two levels): `space` system functions (`system`/`network`, `exec`/`execv`/`popen`/`get`/`post`) + `Command`/`Network` classes implementing the `Executor` interface | https://github.com/QuarkLangCommunity/QuarkLangLibs-Actions |
 
-使用：把库的 `.qk` 文件放在与源码同目录，`import "actions";`（进程/网络）、`import "json";`（JSON）、`import "gl";` / `import "vulkan";`（图形）、`import "cleg";`（GUI 框架）后即可调用。
+Usage: put the library's `.qk` file next to your source and `import "json";` / `import "actions";` / `import "gl";` etc.
 
-## 项目结构
+## Project layout
 
-- `main.go` + `internal/lang/` —— 解释器（lexer/parser/typecheck/eval/runtime/宏）
-- `compiler/` —— LLVM 编译器（`qkc` + `internal/cgen` IR 发射器 + 内嵌线程运行时）
-- `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查、`qkdoc` API 文档、`qkrepl` 交互求值、`qklsp` 语言服务器
-- `scripts/` —— 发布与运维：`build-release.sh` 三平台产物（版本注入 + sha256 清单）、`changelog.sh` 变更日志
-- `editors/` —— 编辑器支持：VS Code 扩展（`vscode/`）+ tree-sitter 语法（`tree-sitter-quarklang/`）
-- `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）
-- `examples/` —— 示例
+- `main.go` + `internal/lang/` — interpreter (lexer / parser / type checker / evaluator / runtime / macros)
+- `compiler/` — LLVM compiler (`qkc` + `internal/cgen` IR emitter + embedded thread runtime)
+- `cmd/` — toolchain sharing the same front end: `qkcheck`, `qkdoc`, `qkrepl`, `qklsp`
+- `scripts/` — release & ops: `build-release.sh` (three-platform artifacts, version injection, sha256 manifest),
+  `changelog.sh`, `make-demo-gif.py`
+- `editors/` — editor support: VS Code extension (`vscode/`) + tree-sitter grammar (`tree-sitter-quarklang/`)
+- `bench/` — cross-language benchmark sources (C/Rust/Go/Erlang + Makefile)
+- `examples/` — runnable examples (`hello.qk`, `tour.qk`, `fib.qk`, `struct.qk`, `macro.qk`, `sum.qk`)
 
-## 分支
+## Branches
 
-| 分支 | 内容 |
+| Branch | Contents |
 |---|---|
-| `main` | 集成（解释器 + 编译器 + bench） |
-| `interpreter` | 解释器历史 |
-| `examples` | 示例 |
-| `docs` | 设计文档（独立维护，不并入 main；含 benchmarks.md） |
-| `design` | XMind 设计蓝图（只读保护） |
+| `main` | Integration (interpreter + compiler + bench) |
+| `interpreter` | Interpreter history |
+| `examples` | Examples |
+| `docs` | Design docs, independently maintained (includes `benchmarks.md`); also served as the project site |
+| `design` | XMind design blueprint (read-only) |
 
-设计文档：[docs 分支 spec.md](https://github.com/QuarkLangCommunity/QuarkLang/blob/docs/spec.md)。
+## Contributing
 
-## 贡献
+PRs and issues are welcome. The three lowest-friction ways to get involved:
 
-欢迎 PR / Issue。三条最省事的参与路径：
-
-| 想做什么 | 怎么做 |
+| Goal | How |
 |---|---|
-| 报 bug / 提需求 | [新建 Issue](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/new/choose)（模板会问关键信息） |
-| 第一次贡献 | 挑 [`good first issue`](https://github.com/QuarkLangCommunity/QuarkLangQkc/labels/good%20first%20issue)（都不需要懂编译器内部） |
-| 提代码 | 读 [CONTRIBUTING.md](CONTRIBUTING.md) → 开分支 → 提 PR（**main 受保护：必须走 PR 且 CI 全绿**） |
+| Report a bug / request a feature | [Open an issue](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/new/choose) (the template asks for the right details) |
+| First contribution | Pick a [`good first issue`](https://github.com/QuarkLangCommunity/QuarkLangQkc/labels/good%20first%20issue) (docs, examples, error messages, tests — no compiler internals needed) |
+| Submit code | Read [CONTRIBUTING.md](CONTRIBUTING.md) → branch → PR (**`main` is protected: PR required, CI must be green**) |
 
-- **行为准则**：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)（Contributor Covenant v2.1）。
-- **提交前自检**（本机即可跑）：
+- **Code of conduct**: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) (Contributor Covenant v2.1).
+- **Run the gates locally before pushing**:
+
   ```sh
-  go test ./...                     # 解释器 + 工具链
-  (cd compiler && go test ./...)    # 编译器
-  (cd compiler && ./testdata/compare.sh)   # 双路径一致性（期望「全部一致」）
-  go test ./internal/lang/ -run 'TestLintBenchmark|TestLintStatsP99'   # 静态检查误报/漏报门禁
+  go test ./...                            # interpreter + toolchain
+  (cd compiler && go test ./...)           # compiler
+  (cd compiler && ./testdata/compare.sh)   # dual-path parity (expects "全部一致" / all-identical)
+  go test ./internal/lang/ -run 'TestLintBenchmark|TestLintStatsP99'   # lint FP/FN gates
   ```
-- **维护者**：[@Enoch-199811](https://github.com/Enoch-199811)（Issue / PR 里 @ 即可）。
 
-v2 语法面完整（解释器 + 编译器一致），性能 = C 级（编译路径）。见 `docs/benchmarks.md` 与宣传视频（`/home/jack/quarklang-promo/`）。
+- **Maintainer**: [@Enoch-199811](https://github.com/Enoch-199811) — mention in an issue or PR.
 
-## 许可证
+## Status
+
+The v2 syntax surface is complete (interpreter and compiler agree); compiled performance is on par with C.
+See `docs/benchmarks.md` (docs branch) for methodology.
+
+## License
 
 [MIT](LICENSE) © 2026 Enoch-199811
-

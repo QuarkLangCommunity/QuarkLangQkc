@@ -1,61 +1,62 @@
-name: 🐞 Bug 报告
-description: 行为不符合预期（崩溃、错误结果、报错文案不清、工具链异常）
+name: 🐞 Bug report
+description: Something behaves differently than documented (crash, wrong result, unclear error, tooling issue)
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈！**最小可复现**是本模板里最重要的部分：能跑的最小代码 + 完整命令 + 实际输出。
-        安全问题请勿在此公开，改用仓库 Security → Report a vulnerability。
+        Thanks for the report! **A minimal reproduction** is the most valuable part: the smallest program that
+        fails, the exact command, and the full output.
+        Please do not report security issues here — use Security → Report a vulnerability instead.
   - type: textarea
     id: what-happened
     attributes:
-      label: 发生了什么
-      description: 期望行为 vs 实际行为
+      label: What happened
+      description: Expected behavior vs. actual behavior
       placeholder: |
-        期望：输出 42
-        实际：报错 TypeError: …
+        Expected: prints 42
+        Actual: TypeError: …
     validations:
       required: true
   - type: textarea
     id: repro
     attributes:
-      label: 最小复现代码
-      description: 能直接跑的 .qk 片段（越短越好）
+      label: Minimal reproduction
+      description: A runnable .qk snippet (the shorter the better)
       render: qk
     validations:
       required: true
   - type: textarea
     id: cmd
     attributes:
-      label: 复现命令与完整输出
-      description: 包含 -version 输出（`quark --version` 或 `qkc --version`）
+      label: Command and full output
+      description: Include the version output (`quark --version` or `qkc --version`)
       render: console
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: 版本
-      placeholder: 例如 quark 2.1.0（或 git commit 短哈希）
+      label: Version
+      placeholder: e.g. quark 2.1.0 (or a short commit hash)
     validations:
       required: true
   - type: dropdown
     id: platform
     attributes:
-      label: 平台
-      options: [Linux, macOS, Windows, 其它/不确定]
+      label: Platform
+      options: [Linux, macOS, Windows, Other / not sure]
     validations:
       required: true
   - type: dropdown
     id: path
     attributes:
-      label: 走的哪条路径
-      options: ["解释器 quark", "编译器 qkc（-run 或产二进制）", "两条都复现", "不确定"]
+      label: Which path
+      options: ["Interpreter (quark)", "Compiler (qkc -run or a built binary)", "Both reproduce it", "Not sure"]
     validations:
       required: true
   - type: textarea
     id: extra
     attributes:
-      label: 其它信息（可选）
-      description: 日志、`qkcheck` 输出、`QUARK_CACHE`/`QUARK_CFLAGS` 等环境变量
+      label: Anything else (optional)
+      description: Logs, `qkcheck` output, relevant environment variables (`QUARK_CACHE`, `QUARK_CFLAGS`, …)
