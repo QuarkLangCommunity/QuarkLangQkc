@@ -43,7 +43,7 @@ go run ./scripts/... 2>/dev/null || true         # 发布/基准脚本改动时�
 
 新增语言特性时，**必须同时更新**：
 
-1. `SYNTAX.md`（唯一正典语法清单，逐编号 M/K/E/S/O/T/P）；
+1. `SYNTAX.zh-CN.md`（唯一正典语法清单，逐编号 M/K/E/S/O/T/P；英文版 `SYNTAX.md`）；
 2. 解释器与编译器**两条路径**（共享前端，但后端语义要对齐）；
 3. `compiler/testdata/compare.sh` 的对比用例（保证两条路径一致）；
 4. 涉及静态检查时，`internal/lang/testdata/lintbench/` 的标注用例（误报/漏报门禁会跑它）。

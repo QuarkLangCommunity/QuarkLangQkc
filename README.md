@@ -437,7 +437,7 @@ Key optimizations (all profile-driven):
 
 ## Language features (v2 syntax)
 
-> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md) — currently Chinese; an English translation is planned.
+> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md) (English) — Chinese: [`SYNTAX.zh-CN.md`](SYNTAX.zh-CN.md).
 
 <details>
 <summary>Full feature list</summary>
