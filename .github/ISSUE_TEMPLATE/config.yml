@@ -1,6 +1,6 @@
 blank_issues_enabled: true
 contact_links:
-  - name: 📖 Canonical syntax reference (SYNTAX.md, Chinese)
+  - name: 📖 Canonical syntax reference (SYNTAX.md)
     url: https://github.com/QuarkLangCommunity/QuarkLangQkc/blob/main/SYNTAX.md
     about: Check this first — declarations are always "<modifier> <type> <name>" (type first)
   - name: 📚 Language specification (docs branch, Chinese)

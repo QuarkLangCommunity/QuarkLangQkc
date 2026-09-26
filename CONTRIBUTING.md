@@ -43,7 +43,7 @@ go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # d
 
 When you add a language feature, **all four of these must be updated together**:
 
-1. `SYNTAX.md` — the single canonical syntax reference (numbered M/K/E/S/O/T/P entries);
+1. `SYNTAX.md` — the single canonical syntax reference (English; Chinese: `SYNTAX.zh-CN.md`; numbered M/K/E/S/O/T/P entries);
 2. **both backends** (interpreter and compiler — they share the front end, but semantics must match);
 3. `compiler/testdata/compare.sh` — the parity cases;
 4. for static-analysis changes, the labelled cases under `internal/lang/testdata/lintbench/` (the FP/FN gate runs them).
