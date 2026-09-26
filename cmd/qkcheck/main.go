@@ -7,6 +7,7 @@
 //	-no-typecheck  只做语法 + 静态检查，不做类型检查
 //	-L dir         追加 import 搜索目录（可重复；同目录优先）
 //	-exit0         有诊断也退出 0（只报告，不阻断）
+//	--lang           输出语言 zh|en（默认中文；亦可用 QK_LANG）
 //	--version      打印版本
 //
 // 退出码：0 = 无诊断；1 = 有错误或警告；2 = 用法错误。
@@ -18,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"regexp"
 	"sort"
 	"strconv"
@@ -52,8 +54,8 @@ func main() {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...")
-	fmt.Fprintln(w, "  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·")
-	fmt.Fprintln(w, "                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较")
+	fmt.Fprintln(w, i18n.T("  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·"))
+	fmt.Fprintln(w, i18n.T("                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较"))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -72,11 +74,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 			exit0 = true
 		case "-L":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "qkcheck: -L 需要一个目录参数")
+				fmt.Fprintln(stderr, i18n.T("qkcheck: -L 需要一个目录参数"))
 				return 2
 			}
 			i++
 			libDirs = append(libDirs, args[i])
+		case "--lang", "-lang":
+			if i+1 < len(args) {
+				i++
+				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkcheck", version)
 			return 0
@@ -85,7 +92,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 0
 		default:
 			if strings.HasPrefix(a, "-") && a != "-" {
-				fmt.Fprintf(stderr, "qkcheck: 未知参数 %s\n", a)
+				fmt.Fprintf(stderr, i18n.T("qkcheck: 未知参数 %s\n"), a)
 				usage(stderr)
 				return 2
 			}
@@ -104,7 +111,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if len(files) == 0 {
-		fmt.Fprintln(stderr, "qkcheck: 没有可检查的 .qk 文件")
+		fmt.Fprintln(stderr, i18n.T("qkcheck: 没有可检查的 .qk 文件"))
 		return 2
 	}
 	for _, f := range files {
@@ -150,7 +157,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 					warns++
 				}
 			}
-			fmt.Fprintf(stdout, "qkcheck: %d 个问题（%d 错误 / %d 警告）\n", n, errs, warns)
+			fmt.Fprintf(stdout, i18n.T("qkcheck: %d 个问题（%d 错误 / %d 警告）\n"), n, errs, warns)
 		}
 	}
 	if exit0 || len(all) == 0 {

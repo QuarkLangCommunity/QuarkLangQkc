@@ -58,6 +58,8 @@ When you add a language feature, **all four of these must be updated together**:
   and state whether you profiled first.
 - Error messages are user-facing: state what is wrong **and** how to write it correctly, preferably with a
   canonical-syntax example.
+- **Bilingual messages**: wrap new user-facing Chinese text with `i18n.T(...)` and register the English in
+  `internal/i18n/table.go`; `go test ./internal/i18n/` fails until you do.
 
 ## Code of conduct
 

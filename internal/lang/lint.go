@@ -11,6 +11,7 @@ package lang
 import (
 	"fmt"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"sort"
 	"strconv"
 	"strings"
@@ -177,7 +178,7 @@ type linter struct {
 }
 
 func (l *linter) warn(pos Pos, code, format string, args ...interface{}) {
-	l.diags = append(l.diags, Diag{Pos: pos, Code: code, Sev: "warning", Msg: fmt.Sprintf(format, args...)})
+	l.diags = append(l.diags, Diag{Pos: pos, Code: code, Sev: "warning", Msg: i18n.T(format, args...)})
 }
 
 func (l *linter) push() {
@@ -244,13 +245,13 @@ func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) 
 func lintKindName(kind string) string {
 	switch kind {
 	case "param":
-		return "形参"
+		return i18n.T("形参")
 	case "forvar":
-		return "循环变量"
+		return i18n.T("循环变量")
 	case "catch":
-		return "catch 变量"
+		return i18n.T("catch 变量")
 	default:
-		return "变量"
+		return i18n.T("变量")
 	}
 }
 
@@ -810,7 +811,7 @@ func writeExprText(b *strings.Builder, e Expr) {
 	case *BoolLit:
 		b.WriteString(strconv.FormatBool(t.V))
 	default:
-		b.WriteString("表达式")
+		b.WriteString(i18n.T("表达式"))
 	}
 }
 

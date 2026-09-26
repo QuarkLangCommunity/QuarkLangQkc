@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"quarklang/internal/i18n"
 	"strconv"
 	"strings"
 	"sync"
@@ -429,7 +430,7 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 	}
 
 	if prog.Kind == "library" {
-		return nil, fmt.Errorf("RunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行")
+		return nil, errors.New(i18n.T("RunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行"))
 	}
 	mainFn, ok := in.fns["main"]
 	if !ok {
@@ -914,11 +915,11 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 					return err
 				}
 				if !key.IsInt() {
-					return &RunError{Msg: "TypeError: 列表索引必须是 int", Pos: s.Pos, Ctx: ctx}
+					return &RunError{Msg: i18n.T("TypeError: 列表索引必须是 int"), Pos: s.Pos, Ctx: ctx}
 				}
 				return obj.List().setIndex(int(key.Int()), v)
 			}
-			return &RunError{Msg: fmt.Sprintf("TypeError: 不支持对 %s 索引赋值", obj.TypeName()), Pos: s.Pos, Ctx: ctx}
+			return &RunError{Msg: fmt.Sprintf(i18n.T("TypeError: 不支持对 %s 索引赋值"), obj.TypeName()), Pos: s.Pos, Ctx: ctx}
 		case *MemberExpr:
 			obj, err := in.evalExpr(t.X, sc, ctx)
 			if err != nil {
@@ -1258,7 +1259,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		} else if fv.IsStr() {
 			path = fv.Str()
 		} else {
-			return NilV(), &RunError{Msg: "TypeError: @styleConfigure(file) 需要 file 或 String", Pos: c.Pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("TypeError: @styleConfigure(file) 需要 file 或 String"), Pos: c.Pos, Ctx: ctx}
 		}
 		// @styleConfigure 是给 setStyle 用的：读 file → 文件内容字符串 → 投递给 setStyle(string)
 		if mem, ok := c.Fn.(*MemberExpr); ok && mem.Name == "setStyle" && len(c.Args) >= 1 {
@@ -1597,7 +1598,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsInt() {
-				return NilV(), &RunError{Msg: "TypeError: get(i) 需要 int 下标", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: get(i) 需要 int 下标"), Pos: pos, Ctx: ctx}
 			}
 			gv, gerr := o.Get(int(args[0].Int()))
 			if gerr != nil {
@@ -1806,7 +1807,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), wantArity(name, 1, len(args), pos, ctx)
 			}
 			if !args[0].IsChan() {
-				return NilV(), &RunError{Msg: "TypeError: thread.talk 需要 channel 类实例", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: thread.talk 需要 channel 类实例"), Pos: pos, Ctx: ctx}
 			}
 			return NilV(), nil
 		}
@@ -1859,7 +1860,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: contains 需要 String 参数", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: contains 需要 String 参数"), Pos: pos, Ctx: ctx}
 			}
 			return BoolV(strings.Contains(o, args[0].Str())), nil
 		case "startsWith":
@@ -1867,7 +1868,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: startsWith 需要 String 参数", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: startsWith 需要 String 参数"), Pos: pos, Ctx: ctx}
 			}
 			return BoolV(strings.HasPrefix(o, args[0].Str())), nil
 		case "endsWith":
@@ -1875,7 +1876,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: endsWith 需要 String 参数", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: endsWith 需要 String 参数"), Pos: pos, Ctx: ctx}
 			}
 			return BoolV(strings.HasSuffix(o, args[0].Str())), nil
 		case "indexOf":
@@ -1883,12 +1884,12 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: indexOf 需要 String 参数", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: indexOf 需要 String 参数"), Pos: pos, Ctx: ctx}
 			}
 			return IntV(int64(strings.Index(o, args[0].Str()))), nil // -1 = 不存在
 		case "substring":
 			if len(args) < 1 || len(args) > 2 || !args[0].IsInt() {
-				return NilV(), &RunError{Msg: "TypeError: substring(start, end?) 需要 int 参数", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: substring(start, end?) 需要 int 参数"), Pos: pos, Ctx: ctx}
 			}
 			// 极限优化：不做全量 []rune 转换，前缀解码到字节偏移后再切片（零拷贝）
 			n := int64(utf8.RuneCountInString(o))
@@ -1896,12 +1897,12 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			end := n
 			if len(args) == 2 {
 				if !args[1].IsInt() {
-					return NilV(), &RunError{Msg: "TypeError: substring 的 end 必须是 int", Pos: pos, Ctx: ctx}
+					return NilV(), &RunError{Msg: i18n.T("TypeError: substring 的 end 必须是 int"), Pos: pos, Ctx: ctx}
 				}
 				end = args[1].Int()
 			}
 			if start < 0 || end < start || end > n {
-				return NilV(), &RunError{Msg: fmt.Sprintf("StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]", start, end, n), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]"), start, end, n), Pos: pos, Ctx: ctx}
 			}
 			b0 := 0
 			for k := int64(0); k < start; k++ {
@@ -1919,7 +1920,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: split 需要 String 分隔符", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: split 需要 String 分隔符"), Pos: pos, Ctx: ctx}
 			}
 			parts := strings.Split(o, args[0].Str())
 			lst := NewList()
@@ -1957,7 +1958,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsStr() || !args[1].IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: replace(old, new) 需要 String 参数", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: replace(old, new) 需要 String 参数"), Pos: pos, Ctx: ctx}
 			}
 			return StrV(strings.ReplaceAll(o, args[0].Str(), args[1].Str())), nil
 		case "charAt":
@@ -1965,20 +1966,20 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsInt() {
-				return NilV(), &RunError{Msg: "TypeError: charAt 需要 int 索引", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: charAt 需要 int 索引"), Pos: pos, Ctx: ctx}
 			}
 			// 极限优化：前缀解码到目标 rune，只解码 i 个字符
 			i := args[0].Int()
 			b := 0
 			for k := int64(0); k < i; k++ {
 				if b >= len(o) {
-					return NilV(), &RunError{Msg: fmt.Sprintf("StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)", i, utf8.RuneCountInString(o)), Pos: pos, Ctx: ctx}
+					return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)"), i, utf8.RuneCountInString(o)), Pos: pos, Ctx: ctx}
 				}
 				_, sz := utf8.DecodeRuneInString(o[b:])
 				b += sz
 			}
 			if b >= len(o) {
-				return NilV(), &RunError{Msg: fmt.Sprintf("StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)", i, utf8.RuneCountInString(o)), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)"), i, utf8.RuneCountInString(o)), Pos: pos, Ctx: ctx}
 			}
 			// 对齐到字符边界
 			_, sz := utf8.DecodeRuneInString(o[b:])
@@ -1989,7 +1990,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			}
 			v, err := strconv.ParseInt(strings.TrimSpace(o), 10, 32)
 			if err != nil {
-				return NilV(), &RunError{Msg: fmt.Sprintf("ParseError: %q 不是合法整数", o), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("ParseError: %q 不是合法整数"), o), Pos: pos, Ctx: ctx}
 			}
 			return IntV(v), nil
 		case "toFloat":
@@ -1998,7 +1999,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			}
 			v, err := strconv.ParseFloat(strings.TrimSpace(o), 64)
 			if err != nil {
-				return NilV(), &RunError{Msg: fmt.Sprintf("ParseError: %q 不是合法浮点数", o), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("ParseError: %q 不是合法浮点数"), o), Pos: pos, Ctx: ctx}
 			}
 			return FloatV(v), nil
 		}
@@ -2009,11 +2010,11 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), wantArity("call", 2, len(args), pos, ctx)
 			}
 			if !args[0].IsStruct() {
-				return NilV(), &RunError{Msg: "TypeError: call 第一参数必须是 prefix 记录", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: call 第一参数必须是 prefix 记录"), Pos: pos, Ctx: ctx}
 			}
 			pref := args[0].Struct()
 			if !args[1].IsStruct() {
-				return NilV(), &RunError{Msg: "TypeError: call 第二参数必须是 .{in,out} 记录", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: call 第二参数必须是 .{in,out} 记录"), Pos: pos, Ctx: ctx}
 			}
 			recv := args[1].Struct()
 			return in.memorizeBufferCall(o, pref, recv, pos, ctx)
@@ -2368,7 +2369,7 @@ func overloadErr(defs []*Func, name string, n int) string {
 			return fmt.Sprintf("CompileError: %s expects %d args, got %d", name, len(d.Params), n)
 		}
 	}
-	return fmt.Sprintf("CompileError: 未找到匹配重载 %q（参数类型不匹配）", name)
+	return fmt.Sprintf(i18n.T("CompileError: 未找到匹配重载 %q（参数类型不匹配）"), name)
 }
 
 // selfMethodOf 聚合多 impl 查找实例方法（self 首参）。
@@ -2431,7 +2432,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 		return NilV(), wantArity("sum", 3, len(args), pos, ctx)
 	}
 	if !args[0].IsFunc() {
-		return NilV(), &RunError{Msg: "TypeError: sum 第一个参数必须是函数引用 generate", Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: i18n.T("TypeError: sum 第一个参数必须是函数引用 generate"), Pos: pos, Ctx: ctx}
 	}
 	// 位级置换：均匀随机生成器（rand）每列 1 计数 = n/2（期望）→ 乘加闭式 O(1)
 	// 随机数每位置 1 概率 1/2，交换/置换后每列均匀，Σ = Σ_k (n/2)·2^k = n·2^30
@@ -2449,10 +2450,10 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 		}
 	}
 	if !args[1].IsInt() {
-		return NilV(), &RunError{Msg: "TypeError: sum 的 begin 必须是 int", Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: i18n.T("TypeError: sum 的 begin 必须是 int"), Pos: pos, Ctx: ctx}
 	}
 	if !args[2].IsInt() {
-		return NilV(), &RunError{Msg: "TypeError: sum 的 stop 必须是 int", Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: i18n.T("TypeError: sum 的 stop 必须是 int"), Pos: pos, Ctx: ctx}
 	}
 	begin, stop := args[1].Int(), args[2].Int()
 	step := int64(1)
@@ -2460,7 +2461,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 		if args[3].IsInt() && args[3].Int() != 0 {
 			step = args[3].Int()
 		} else {
-			return NilV(), &RunError{Msg: "TypeError: sum 的 step 必须是非零 int", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("TypeError: sum 的 step 必须是非零 int"), Pos: pos, Ctx: ctx}
 		}
 	}
 	g := func(i int64) (int64, error) {
@@ -2469,7 +2470,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 			return 0, err
 		}
 		if !v.IsInt() {
-			return 0, &RunError{Msg: "TypeError: generate 必须返回 int", Pos: pos, Ctx: ctx}
+			return 0, &RunError{Msg: i18n.T("TypeError: generate 必须返回 int"), Pos: pos, Ctx: ctx}
 		}
 		return v.Int(), nil
 	}
@@ -2637,7 +2638,7 @@ func (in *interp) registerIOBuiltins() {
 				if attempt < retries {
 					continue
 				}
-				return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 无法执行命令：%v", err), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 无法执行命令：%v"), err), Pos: pos, Ctx: ctx}
 			}
 			code = 0
 			break
@@ -2657,7 +2658,7 @@ func (in *interp) registerIOBuiltins() {
 				return NilV(), &RunError{Msg: err.Error(), Pos: pos, Ctx: ctx}
 			}
 			if !it.IsStr() {
-				return NilV(), &RunError{Msg: "TypeError: qkexecv 参数必须是 List<String>", Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: i18n.T("TypeError: qkexecv 参数必须是 List<String>"), Pos: pos, Ctx: ctx}
 			}
 			argv = append(argv, it.Str())
 		}
@@ -2682,7 +2683,7 @@ func (in *interp) registerIOBuiltins() {
 				if attempt < retries {
 					continue
 				}
-				return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 无法启动程序：%v", err), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 无法启动程序：%v"), err), Pos: pos, Ctx: ctx}
 			}
 			code = 0
 			break
@@ -2692,16 +2693,16 @@ func (in *interp) registerIOBuiltins() {
 	// qkpopen(cmd) -> InputStream（捕获 stdout；8MB 上限）
 	in.builtins["qkpopen"] = func(args []Value, pos Pos, ctx *execCtx) (Value, error) {
 		if len(args) != 1 || !args[0].IsStr() {
-			return NilV(), &RunError{Msg: "TypeError: qkpopen(cmd String) 需要一个字符串命令", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("TypeError: qkpopen(cmd String) 需要一个字符串命令"), Pos: pos, Ctx: ctx}
 		}
 		cmd := exec.Command("sh", "-c", args[0].Str())
 		cmd.Stderr = os.Stderr
 		out, err := cmd.Output()
 		if err != nil {
-			return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 命令执行失败：%v", err), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 命令执行失败：%v"), err), Pos: pos, Ctx: ctx}
 		}
 		if len(out) > 8<<20 {
-			return NilV(), &RunError{Msg: "IOError: qkpopen 输出超过 8MB 上限", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("IOError: qkpopen 输出超过 8MB 上限"), Pos: pos, Ctx: ctx}
 		}
 		return InV(&InputStream{R: bytes.NewReader(out)}), nil
 	} // [actions 库原语] 网络层：qkhttp_get(url) -> String（10s 超时，8MiB 响应上限）
@@ -2729,18 +2730,18 @@ func (in *interp) registerIOBuiltins() {
 			time.Sleep(time.Duration(300*(1<<uint(attempt))) * time.Millisecond)
 		}
 		if err != nil && (resp == nil || lastStatus == 0) {
-			return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 请求失败：%v", err), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 请求失败：%v"), err), Pos: pos, Ctx: ctx}
 		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
 		if err != nil {
-			return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 读取响应失败：%v", err), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 读取响应失败：%v"), err), Pos: pos, Ctx: ctx}
 		}
 		if len(body) > 8<<20 {
-			return NilV(), &RunError{Msg: "IOError: 响应超过 8MiB 上限", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("IOError: 响应超过 8MiB 上限"), Pos: pos, Ctx: ctx}
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return NilV(), &RunError{Msg: fmt.Sprintf("HTTPError: 状态码 %d", resp.StatusCode), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("HTTPError: 状态码 %d"), resp.StatusCode), Pos: pos, Ctx: ctx}
 		}
 		return StrV(string(body)), nil
 	}
@@ -2769,15 +2770,15 @@ func (in *interp) registerIOBuiltins() {
 			time.Sleep(time.Duration(300*(1<<uint(attempt))) * time.Millisecond)
 		}
 		if err != nil && (resp == nil || lastStatus == 0) {
-			return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 请求失败：%v", err), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 请求失败：%v"), err), Pos: pos, Ctx: ctx}
 		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
 		if err != nil {
-			return NilV(), &RunError{Msg: fmt.Sprintf("IOError: 读取响应失败：%v", err), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("IOError: 读取响应失败：%v"), err), Pos: pos, Ctx: ctx}
 		}
 		if len(body) > 8<<20 {
-			return NilV(), &RunError{Msg: "IOError: 响应超过 8MiB 上限", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("IOError: 响应超过 8MiB 上限"), Pos: pos, Ctx: ctx}
 		}
 		return StrV(string(body)), nil
 	}
@@ -2785,7 +2786,7 @@ func (in *interp) registerIOBuiltins() {
 	// [json 库原语] json 序列化/反序列化
 	in.builtins["qkjson_dumps"] = func(args []Value, pos Pos, ctx *execCtx) (Value, error) {
 		if len(args) != 1 {
-			return NilV(), &RunError{Msg: "TypeError: qkjson_dumps(v) 需要一个参数", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("TypeError: qkjson_dumps(v) 需要一个参数"), Pos: pos, Ctx: ctx}
 		}
 		obj, err := qkjsonV(args[0])
 		if err != nil {
@@ -3052,14 +3053,14 @@ func lookupFunc(v Value, in *interp) (*Func, error) {
 func (in *interp) memorizeBufferCall(mb *MemorizeBuffer, prefix *StructValue, rec *StructValue, pos Pos, ctx *execCtx) (Value, error) {
 	nv, ok := prefix.Fields["fn"]
 	if !ok {
-		return NilV(), &RunError{Msg: "TypeError: memorize prefix 缺少被包装函数 fn", Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: i18n.T("TypeError: memorize prefix 缺少被包装函数 fn"), Pos: pos, Ctx: ctx}
 	}
 	if !nv.IsFunc() {
-		return NilV(), &RunError{Msg: "TypeError: prefix.fn 不是函数", Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: i18n.T("TypeError: prefix.fn 不是函数"), Pos: pos, Ctx: ctx}
 	}
 	f := nv.Func()
 	if !rec.Fields["in"].IsList() {
-		return NilV(), &RunError{Msg: "TypeError: rec.in 必须是 List", Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: i18n.T("TypeError: rec.in 必须是 List"), Pos: pos, Ctx: ctx}
 	}
 	// 记忆化键：in 参数列表
 	inList := rec.Fields["in"].List()
@@ -3108,7 +3109,7 @@ func binOp(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 		return arith(op, l, r, pos, ctx)
 	case "<<", ">>":
 		if !l.IsInt() || !r.IsInt() {
-			return NilV(), &RunError{Msg: "TypeError: 位移运算需要 int 操作数", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: i18n.T("TypeError: 位移运算需要 int 操作数"), Pos: pos, Ctx: ctx}
 		}
 		li, sh := l.Int(), r.Int()
 		if op == "<<" {

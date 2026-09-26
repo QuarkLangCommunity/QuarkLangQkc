@@ -4,6 +4,7 @@
 //
 //	-e code    求值一段代码后退出（可重复；失败退出 1）
 //	-q         安静模式（不打印横幅与提示符）
+//	--lang       输出语言 zh|en（默认中文；亦可用 QK_LANG）
 //	--version  打印版本
 //
 // 交互模式（stdin 是终端）：`qk> ` 提示符；块未闭合时自动续行（`..> `）。
@@ -20,9 +21,11 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"quarklang/internal/i18n"
 	"strings"
 
 	"quarklang/internal/lang"
@@ -37,7 +40,7 @@ func main() {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: qkrepl [-e code] [-q] [--version]")
-	fmt.Fprintln(w, "  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit")
+	fmt.Fprintln(w, i18n.T("  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit"))
 }
 
 const helpText = `命令：
@@ -57,13 +60,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		switch a {
 		case "-e":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "qkrepl: -e 需要一段代码")
+				fmt.Fprintln(stderr, i18n.T("qkrepl: -e 需要一段代码"))
 				return 2
 			}
 			i++
 			exprs = append(exprs, args[i])
 		case "-q":
 			quiet = true
+		case "--lang", "-lang":
+			if i+1 < len(args) {
+				i++
+				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkrepl", version)
 			return 0
@@ -71,7 +79,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			usage(stdout)
 			return 0
 		default:
-			fmt.Fprintf(stderr, "qkrepl: 未知参数 %s\n", a)
+			fmt.Fprintf(stderr, i18n.T("qkrepl: 未知参数 %s\n"), a)
 			usage(stderr)
 			return 2
 		}
@@ -102,7 +110,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	interactive := isTerminal(stdin)
 	if interactive && !quiet {
-		fmt.Fprintf(stdout, "qkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n", version)
+		fmt.Fprintf(stdout, i18n.T("qkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n"), version)
 	}
 
 	reader := bufio.NewReader(stdin)
@@ -165,13 +173,13 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 	fields := strings.Fields(line)
 	switch fields[0] {
 	case ":help", ":h", ":?":
-		fmt.Fprintln(stdout, helpText)
+		fmt.Fprintln(stdout, i18n.T(helpText))
 		return false, nil
 	case ":quit", ":q", ":exit":
 		return true, nil
 	case ":load":
 		if len(fields) < 2 {
-			return false, fmt.Errorf(":load 需要一个文件参数")
+			return false, errors.New(i18n.T(":load 需要一个文件参数"))
 		}
 		path := fields[1]
 		data, err := os.ReadFile(path)
@@ -185,7 +193,7 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 		}
 		return false, nil
 	}
-	return false, fmt.Errorf("未知命令 %s（:help 查看帮助）", fields[0])
+	return false, errors.New(i18n.T("未知命令 %s（:help 查看帮助）", fields[0]))
 }
 
 // isTerminal 判断输入是否来自终端（无第三方依赖：字符设备判定）。

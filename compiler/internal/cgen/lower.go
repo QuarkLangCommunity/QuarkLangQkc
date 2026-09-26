@@ -45,6 +45,7 @@ package cgen
 
 import (
 	"fmt"
+	"quarklang/internal/i18n"
 	"strings"
 
 	"quarklang/internal/lang"
@@ -296,7 +297,7 @@ func lowerProgram(prog *lang.Program, file, src string) (*lowered, error) {
 
 // errf 构造带位置的诊断。
 func (l *lowerer) errf(pos lang.Pos, format string, args ...interface{}) error {
-	d := &diagError{msg: fmt.Sprintf(format, args...), file: l.file, line: pos.Line, col: pos.Col}
+	d := &diagError{msg: i18n.T(format, args...), file: l.file, line: pos.Line, col: pos.Col}
 	if d.line <= 0 {
 		d.line, d.col = 1, 1
 	}

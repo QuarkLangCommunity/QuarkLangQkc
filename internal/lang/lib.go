@@ -3,9 +3,10 @@ package lang
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"strconv"
 	"strings"
 )
@@ -16,7 +17,7 @@ import (
 // ExportLibrary 把 program library 的 pub 符号导出为 .qlib 二进制库。
 func ExportLibrary(prog *Program, outPath string) error {
 	if prog.Kind != "library" {
-		return fmt.Errorf("ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）", prog.Kind)
+		return errors.New(i18n.T("ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）", prog.Kind))
 	}
 	syms := map[string]string{}
 	for _, fn := range prog.Funcs {
@@ -105,8 +106,8 @@ func LoadImportIn(dirs []string, path string) (string, string, error) {
 		}
 		return sb.String(), p, nil
 	}
-	return "", "", fmt.Errorf("ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）",
-		path, strings.Join(dirs, ", "), path, path)
+	return "", "", errors.New(i18n.T("ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）",
+		path, strings.Join(dirs, ", "), path, path))
 }
 
 // stripProgramDecl 去掉导入源中的 program library;/program main; 声明行（库形态由主程序决定）。

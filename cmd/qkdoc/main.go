@@ -6,6 +6,7 @@
 //	-html      输出自包含 HTML（默认 Markdown）
 //	-all       包含未 pub 的符号（默认只导出 pub；文件无 pub 时导出全部）
 //	-title T   标题（默认取文件名）
+//	--lang       输出语言 zh|en（默认中文；亦可用 QK_LANG）
 //	--version  打印版本
 //
 // 文档来源：声明上方紧邻的 `//` / `/* */` 注释块；没有上方注释时取同行行尾注释。
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"quarklang/internal/i18n"
 	"strings"
 
 	"quarklang/internal/lang"
@@ -30,7 +32,7 @@ func main() {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...")
-	fmt.Fprintln(w, "  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML")
+	fmt.Fprintln(w, i18n.T("  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML"))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -42,14 +44,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		switch a {
 		case "-o":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "qkdoc: -o 需要一个文件参数")
+				fmt.Fprintln(stderr, i18n.T("qkdoc: -o 需要一个文件参数"))
 				return 2
 			}
 			i++
 			outFile = args[i]
 		case "-title":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "qkdoc: -title 需要一个参数")
+				fmt.Fprintln(stderr, i18n.T("qkdoc: -title 需要一个参数"))
 				return 2
 			}
 			i++
@@ -58,6 +60,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 			htmlOut = true
 		case "-all":
 			all = true
+		case "--lang", "-lang":
+			if i+1 < len(args) {
+				i++
+				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkdoc", version)
 			return 0
@@ -66,7 +73,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 0
 		default:
 			if strings.HasPrefix(a, "-") && a != "-" {
-				fmt.Fprintf(stderr, "qkdoc: 未知参数 %s\n", a)
+				fmt.Fprintf(stderr, i18n.T("qkdoc: 未知参数 %s\n"), a)
 				usage(stderr)
 				return 2
 			}
@@ -126,6 +133,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "qkdoc:", err)
 		return 2
 	}
-	fmt.Fprintf(stdout, "qkdoc: 已写入 %s（%d 字节）\n", outFile, len(out))
+	fmt.Fprintf(stdout, i18n.T("qkdoc: 已写入 %s（%d 字节）\n"), outFile, len(out))
 	return 0
 }

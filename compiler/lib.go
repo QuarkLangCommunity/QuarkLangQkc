@@ -15,9 +15,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"regexp"
 	"sort"
 	"strings"
@@ -350,7 +352,7 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 		return man, nil, err
 	}
 	if len(b) < 4 || string(b[:4]) != qklibMagic {
-		return man, nil, fmt.Errorf("不是 .qklib 制品（magic 不匹配）：%s", path)
+		return man, nil, errors.New(i18n.T("不是 .qklib 制品（magic 不匹配）：%s", path))
 	}
 	var body struct {
 		Manifest QKLibManifest     `json:"manifest"`
@@ -363,7 +365,7 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 		if want, ok := body.Manifest.SHA256[t]; ok {
 			sum := sha256.Sum256([]byte(ir))
 			if hex.EncodeToString(sum[:]) != want {
-				return body.Manifest, nil, fmt.Errorf("变体 %s 校验失败（内容被改动）", t)
+				return body.Manifest, nil, errors.New(i18n.T("变体 %s 校验失败（内容被改动）", t))
 			}
 		}
 	}

@@ -7,8 +7,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"quarklang/internal/i18n"
 	"strconv"
 	"strings"
 )
@@ -58,7 +60,7 @@ func (c *rpcConn) read() (rpcMessage, error) {
 			if strings.EqualFold(strings.TrimSpace(k), "Content-Length") {
 				n, cerr := strconv.Atoi(strings.TrimSpace(v))
 				if cerr != nil {
-					return msg, fmt.Errorf("qklsp: 非法 Content-Length %q", v)
+					return msg, errors.New(i18n.T("qklsp: 非法 Content-Length %q", v))
 				}
 				length = n
 			}
@@ -68,7 +70,7 @@ func (c *rpcConn) read() (rpcMessage, error) {
 		}
 	}
 	if length < 0 {
-		return msg, fmt.Errorf("qklsp: 缺少 Content-Length 头")
+		return msg, errors.New(i18n.T("qklsp: 缺少 Content-Length 头"))
 	}
 	body := make([]byte, length)
 	if _, err := io.ReadFull(c.r, body); err != nil {
@@ -105,7 +107,7 @@ func (c *rpcConn) replyErr(id *json.RawMessage, code int, format string, args ..
 	if id == nil {
 		return nil
 	}
-	return c.write(rpcMessage{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: fmt.Sprintf(format, args...)}})
+	return c.write(rpcMessage{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: i18n.T(format, args...)}})
 }
 
 // notify 发送通知（无 id）。

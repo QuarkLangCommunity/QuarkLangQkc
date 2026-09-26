@@ -5,6 +5,7 @@ package lang
 import (
 	"fmt"
 	"html"
+	"quarklang/internal/i18n"
 	"strings"
 )
 
@@ -76,7 +77,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		b.WriteString(d.FileDoc)
 		b.WriteString("\n")
 	}
-	b.WriteString("> 形态：`program ")
+	b.WriteString(i18n.T("> 形态：`program "))
 	b.WriteString(d.Kind)
 	b.WriteString(";`")
 	if len(d.Imports) > 0 {
@@ -84,7 +85,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		for _, im := range d.Imports {
 			q = append(q, "`"+im+"`")
 		}
-		b.WriteString("　·　导入：")
+		b.WriteString(i18n.T("　·　导入："))
 		b.WriteString(strings.Join(q, ", "))
 	}
 	b.WriteString("\n\n")
@@ -97,10 +98,10 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		}
 	}
 	if len(rows) == 0 {
-		b.WriteString("_（没有可导出的符号）_\n")
+		b.WriteString(i18n.T("_（没有可导出的符号）_\n"))
 		return b.String()
 	}
-	b.WriteString("## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n")
+	b.WriteString(i18n.T("## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n"))
 	for _, it := range rows {
 		b.WriteString("| ")
 		b.WriteString(kindLabel(it.Kind))
@@ -171,13 +172,13 @@ func writeFieldsMD(b *strings.Builder, it *DocItem) {
 		b.WriteString(" |\n")
 	}
 	if it.Kind == DocStruct {
-		b.WriteString("| 字段 | 类型 | 说明 |\n|---|---|---|\n")
+		b.WriteString(i18n.T("| 字段 | 类型 | 说明 |\n|---|---|---|\n"))
 		for _, f := range it.Fields {
 			writeRow(f.Name, "`"+f.Type+"`", cell(Summary(f.Doc)))
 		}
 		return
 	}
-	b.WriteString("| 成员 | 签名 | 说明 |\n|---|---|---|\n")
+	b.WriteString(i18n.T("| 成员 | 签名 | 说明 |\n|---|---|---|\n"))
 	for _, f := range it.Fields {
 		name, sig := f.Name, f.Signature
 		if sig == "" {
