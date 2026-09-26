@@ -50,7 +50,7 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
         with:
           go-version: '1.26'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4（SHA 固定；dependabot 周更）
         with:
           node-version: '20'
       - name: 双路径对比（解释器 vs qkc）
