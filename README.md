@@ -1,12 +1,15 @@
 # QuarkLang · docs
 
-语言设计文档分支（**独立维护，不并入 main**）。
+**English** · [简体中文](README.zh-CN.md)
 
-文档：
+The language design documentation branch (**maintained independently, not merged into main**).
 
-- `spec.md`：语言规范（正典语法，随实现同步）
-- `builtins.md`：内建函数/类型速查（源码核对）
-- `v2-定案模型.md`：v2 设计决议存档
-- `benchmarks.md`：基准数据与复现方法
+Documents:
 
-> 语法唯一正典清单见主工作区 `SYNTAX.md`；本分支文档示例一律使用正典语法（类型在前）。
+- `spec.md` — language specification (canonical syntax, kept in sync with the implementation)
+- `builtins.md` — built-in functions/types quick reference (verified against the sources)
+- `v2-decided-model.md` — archive of the v2 design decisions
+- `benchmarks.md` — benchmark data and how to reproduce it
+
+> The single canonical syntax checklist lives in the main workspace as `SYNTAX.md`; every example in this branch
+> uses canonical syntax (type-first).
