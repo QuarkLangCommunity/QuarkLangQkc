@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 语法正典清单（SYNTAX.md）
+    url: https://github.com/QuarkLangCommunity/QuarkLangQkc/blob/main/SYNTAX.md
+    about: 写代码前先对照：声明一律「修饰 + 类型 + 名字」（类型在前）
+  - name: 📚 语言规范（docs 分支）
+    url: https://github.com/QuarkLangCommunity/QuarkLangQkc/blob/docs/spec.md
+    about: 完整语言规范与设计决议
+  - name: 🤝 贡献指南
+    url: https://github.com/QuarkLangCommunity/QuarkLangQkc/blob/main/CONTRIBUTING.md
+    about: 提 PR 的流程、自检命令与代码风格

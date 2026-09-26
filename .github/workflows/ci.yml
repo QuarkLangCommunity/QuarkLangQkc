@@ -74,6 +74,16 @@ jobs:
           fi
       - name: 编辑器：VS Code 扩展的 LSP 客户端联调
         run: QKLSP=/tmp/qklsp node editors/vscode/test/protocol.test.js
+      - name: 覆盖率报告（语句覆盖率，写入 job summary）
+        run: |
+          go test ./... -coverprofile=/tmp/cover.out -covermode=atomic -count=1 >/dev/null
+          total="$(go tool cover -func=/tmp/cover.out | tail -1)"
+          echo "### 覆盖率" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$total" >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=/tmp/cover.out | awk '{split($1,a,":"); pkg=a[1]; c[pkg]=$NF} END {for (p in c) print p, c[p]}' | sort >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$total"
       - name: 库级基准冒烟（编译 + 跑一次，防基准腐化）
         run: go test ./internal/lang/ ./cmd/qkcheck ./cmd/qkdoc ./cmd/qklsp -run XXX -bench . -benchtime 1x -count=1
       - name: 工具链基准冒烟
