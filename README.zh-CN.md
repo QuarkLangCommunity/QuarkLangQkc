@@ -26,7 +26,8 @@
 <p align="center"><img src="assets/demo.gif" alt="QuarkLang 演示：解释执行、编译执行、静态检查" width="900"></p>
 
 > GIF 内容全部来自真实运行（生成脚本 `scripts/make-demo-gif.py`，可复现）：
-> `quark hello.qk` → `qkc -run hello.qk` → `qkcheck examples/`（真实告警，非编造）。
+> `quark hello.qk` → `qkc -run hello.qk` → `QK_LANG=en qkcheck examples/`（真实告警，非编造）。
+> 最后一行为**英文模式**；同一条命令默认输出中文。
 
 ## 🚀 快速开始
 
