@@ -162,8 +162,7 @@ func TestDocModelExtraction(t *testing.T) {
 }
 
 func TestDocMarkdownPubFilter(t *testing.T) {
-	defer i18n.SetLocale(i18n.Locale())
-	i18n.SetLocale(i18n.ZH) // this test asserts the Chinese wording; English rendering is covered by the tests in internal/i18n
+	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	d, _ := buildFixtureDoc(t)
 	md := d.Markdown(DocOptions{Path: "mathlib.qk"})
 	if !strings.Contains(md, "# mathlib.qk") {

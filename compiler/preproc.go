@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"quarklang/internal/i18n"
 	"regexp"
 	"runtime"
 	"strings"
@@ -58,7 +57,7 @@ var (
 // Process preprocess source (returns the expanded source)
 func (p *preprocCtx) Process(src, filename string) (string, error) {
 	if p.depth > 16 {
-		return "", errors.New(i18n.T("预处理 #include 层数过深（>16）：%s", filename))
+		return "", errors.New(msg("预处理 #include 层数过深（>16）：%s", filename))
 	}
 	lines := strings.Split(src, "\n")
 	var out []string
@@ -85,7 +84,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 				active = top.active
 			} else { // elif
 				if len(stack) == 0 {
-					return "", errors.New(i18n.T("%s:%d: #elif 没有对应的 #if", filename, i+1))
+					return "", errors.New(msg("%s:%d: #elif 没有对应的 #if", filename, i+1))
 				}
 				top := &stack[len(stack)-1]
 				top.active = top.parentActive && !top.taken && cond
@@ -98,7 +97,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 			switch m[1] {
 			case "else":
 				if len(stack) == 0 {
-					return "", errors.New(i18n.T("%s:%d: #else 没有对应的 #if", filename, i+1))
+					return "", errors.New(msg("%s:%d: #else 没有对应的 #if", filename, i+1))
 				}
 				top := &stack[len(stack)-1]
 				top.active = top.parentActive && !top.taken
@@ -107,7 +106,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 				continue
 			case "endif":
 				if len(stack) == 0 {
-					return "", errors.New(i18n.T("%s:%d: #endif 没有对应的 #if", filename, i+1))
+					return "", errors.New(msg("%s:%d: #endif 没有对应的 #if", filename, i+1))
 				}
 				f := stack[len(stack)-1]
 				stack = stack[:len(stack)-1]
@@ -157,7 +156,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 			}
 			b, err := os.ReadFile(inc)
 			if err != nil {
-				return "", errors.New(i18n.T("%s:%d: #include 失败：%v", filename, i+1, err))
+				return "", errors.New(msg("%s:%d: #include 失败：%v", filename, i+1, err))
 			}
 			p.depth++
 			sub, err := p.Process(string(b), inc)
@@ -173,7 +172,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 		}
 	}
 	if len(stack) != 0 {
-		return "", errors.New(i18n.T("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack)))
+		return "", errors.New(msg("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack)))
 	}
 	return strings.Join(out, "\n"), nil
 }
@@ -243,7 +242,7 @@ func (p *preprocCtx) evalUnary(e string) (bool, error) {
 	if reDefineNm.MatchString(e) {
 		return p.defines[e], nil
 	}
-	return false, errors.New(i18n.T("无法识别的条件表达式：%q", e))
+	return false, errors.New(msg("无法识别的条件表达式：%q", e))
 }
 
 // splitTop split on top-level operators (ignoring what is inside parentheses)

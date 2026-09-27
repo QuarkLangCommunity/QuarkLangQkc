@@ -4,7 +4,6 @@ package lang
 
 import (
 	"fmt"
-	"quarklang/internal/i18n"
 	"strconv"
 )
 
@@ -187,7 +186,7 @@ func lex(src string, collectComments bool) ([]Token, []Comment, error) {
 }
 
 func (lx *lexer) errf(line, col int, format string, args ...interface{}) error {
-	return &LexError{Msg: i18n.T(format, args...), Line: line, Col: col}
+	return &LexError{Msg: msg(format, args...), Line: line, Col: col}
 }
 
 func (lx *lexer) peekByte() byte {

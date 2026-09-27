@@ -10,7 +10,6 @@ import "C"
 
 import (
 	"errors"
-	"quarklang/internal/i18n"
 	"strings"
 	"unsafe"
 )
@@ -58,7 +57,7 @@ func (lh *libHandle) resolve(sym string) (unsafe.Pointer, error) {
 func ffiCall(fn unsafe.Pointer, paramTypes []int, nums []float64, ptrs []unsafe.Pointer, retType int) (int64, float64, unsafe.Pointer, error) {
 	n := len(paramTypes)
 	if n > 4 {
-		return 0, 0, nil, errors.New(i18n.T("FFIError: windows 自研 ABI 支持 <=4 参数"))
+		return 0, 0, nil, errors.New(msg("FFIError: windows 自研 ABI 支持 <=4 参数"))
 	}
 	ctypes := make([]C.int, n)
 	cnums := make([]C.double, n)

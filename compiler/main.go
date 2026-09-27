@@ -11,12 +11,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"quarklang/compiler/internal/cgen"
 	"quarklang/internal/i18n"
 	"runtime"
 	"sort"
 	"strings"
-
-	"quarklang/compiler/internal/cgen"
 )
 
 // Incremental compilation: cache the IR and native binary keyed by source file content hash.
@@ -134,7 +133,7 @@ func linkDiag(libs []linkLib) string {
 		for _, g := range l.groups {
 			gs = append(gs, strings.Join(g, " "))
 		}
-		parts = append(parts, fmt.Sprintf(i18n.T("%s（尝试过：%s）"), l.name, strings.Join(gs, " / ")))
+		parts = append(parts, fmt.Sprintf(msg("%s（尝试过：%s）"), l.name, strings.Join(gs, " / ")))
 	}
 	return "library FFI 链接失败：" + strings.Join(parts, "；")
 }
@@ -226,7 +225,10 @@ func main() {
 		case "--lang", "-lang":
 			// This loop advances by chopping off the first element; there is no index variable
 			if len(args) >= 2 {
-				i18n.SetLocale(args[1]) // zh | en; an unknown value keeps the current language
+				if l, ok := i18n.ParseLang(args[1]); ok {
+					i18n.SetLocale(l)
+					cgen.SetLocalizer(i18n.New(nil, l)) // lowering diagnostics
+				} // zh | en; an unknown value keeps the current language
 				args = args[2:]
 			} else {
 				args = args[1:]
@@ -263,7 +265,7 @@ parsed:
 	}
 	ppTag := pp.os + "-" + pp.arch
 	if os.Getenv("QKC_DEBUG_PP") != "" {
-		fmt.Fprintln(os.Stderr, i18n.T("qkc[debug]: 预处理目标 ="), ppTag)
+		fmt.Fprintln(os.Stderr, msg("qkc[debug]: 预处理目标 ="), ppTag)
 	}
 
 	hash, err := srcHash(args[0])
@@ -360,7 +362,7 @@ parsed:
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		fmt.Fprintf(os.Stderr, i18n.T("qkc: 已生成库制品 %s%s ｜ 平台变体：%s ｜ 导出 %d 个\n"), out, note, strings.Join(keys, ","), len(exports))
+		fmt.Fprintf(os.Stderr, msg("qkc: 已生成库制品 %s%s ｜ 平台变体：%s ｜ 导出 %d 个\n"), out, note, strings.Join(keys, ","), len(exports))
 		return
 	}
 
@@ -377,13 +379,13 @@ parsed:
 		}
 		name, lir, exact := pickVariant(variants, ppTag)
 		if !exact {
-			fmt.Fprintf(os.Stderr, i18n.T("qkc: 提示：库 %s 无 %s 变体，退回 %s（跨系统请用 --lib-targets 生成对应变体）\n"), man.Name, ppTag, name)
+			fmt.Fprintf(os.Stderr, msg("qkc: 提示：库 %s 无 %s 变体，退回 %s（跨系统请用 --lib-targets 生成对应变体）\n"), man.Name, ppTag, name)
 		}
 		note := ""
 		if man.Obfuscated {
 			note = "，已混淆"
 		}
-		fmt.Fprintf(os.Stderr, i18n.T("qkc: 引用库 %s v%s（变体 %s，导出 %d 个符号%s）\n"), man.Name, man.Version, name, len(man.Exports), note)
+		fmt.Fprintf(os.Stderr, msg("qkc: 引用库 %s v%s（变体 %s，导出 %d 个符号%s）\n"), man.Name, man.Version, name, len(man.Exports), note)
 		libIRs = append(libIRs, lir)
 		sum := sha256.Sum256([]byte(lir))
 		libFP += "|" + man.Name + ":" + man.Version + ":" + name + ":" + hex.EncodeToString(sum[:6])
@@ -538,7 +540,7 @@ parsed:
 
 // qkcUsage prints the command-line usage.
 func qkcUsage() {
-	fmt.Fprintln(os.Stderr, i18n.T(`usage: qkc [options] <file.qk>
+	fmt.Fprintln(os.Stderr, msg(`usage: qkc [options] <file.qk>
 
   （默认）            输出 LLVM IR 到 stdout
   --emit-ir           同上（显式）

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"quarklang/internal/lang"
 	"strings"
 	"testing"
 
@@ -213,4 +214,12 @@ func TestQkreplQuietFlag(t *testing.T) {
 	if strings.Contains(out, "qkrepl") {
 		t.Errorf("-q 不应打印横幅，got %q", out)
 	}
+}
+
+// TestMain pins the language for the whole package: these tests assert Chinese wording, and the
+// REPL renders both through the process default and through internal/lang's injected localizer.
+func TestMain(m *testing.M) {
+	lang_i18n.SetLocale(lang_i18n.ZH)
+	lang.SetLocalizer(lang_i18n.New(nil, lang_i18n.ZH))
+	os.Exit(m.Run())
 }

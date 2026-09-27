@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"quarklang/internal/i18n"
 	"strings"
 	"testing"
 )
@@ -51,6 +52,8 @@ func TestLintUnusedVar(t *testing.T) {
 }
 
 func TestLintUnusedVarAssignOnly(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording
+	i18n.Misses()
 	src := `fn main(IOStream io) {
     int acc = 0;
     acc = 5;
@@ -167,6 +170,8 @@ func TestLintUnreachableInLoopBody(t *testing.T) {
 }
 
 func TestLintShadowForC(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording
+	i18n.Misses()
 	src := `fn main(IOStream io) {
     int i = 9;
     for (int i = 0; i < 2; i = i + 1) {
@@ -223,6 +228,8 @@ fn main(IOStream io) {
 }
 
 func TestLintMissingReturnFallthrough(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording
+	i18n.Misses()
 	src := `fn f(int x) int {
     if (x > 0) {
         return 1;

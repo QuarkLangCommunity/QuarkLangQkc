@@ -63,7 +63,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case "--lang", "-lang":
 			if i+1 < len(args) {
 				i++
-				i18n.SetLocale(args[i]) // zh | en; unknown values keep the current locale
+				if l, ok := i18n.ParseLang(args[i]); ok {
+					i18n.SetLocale(l)
+					lang.SetLocalizer(i18n.New(nil, l)) // interpreter diagnostics follow the same language
+				} // zh | en; unknown values keep the current locale
 			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkdoc", version)
