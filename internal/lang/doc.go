@@ -1,16 +1,16 @@
 package lang
 
-// ============ qkdoc：API 文档模型 ============
+// ============ qkdoc: API documentation model ============
 //
-// 从单文件 AST + 注释构建文档模型：`/* */` 与 `//` 均可作文档注释，
-// 取「紧邻声明上方、无空行」的连续注释块（godoc 规则）。`pub` 决定是否导出。
+// Builds a documentation model from a single-file AST plus comments: both `/* */` and `//` count as doc comments,
+// taking the contiguous comment block immediately above a declaration with no blank line in between (the godoc rule). `pub` decides export.
 
 import (
 	"sort"
 	"strings"
 )
 
-// DocItemKind 文档条目类别。
+// DocItemKind is a documentation item kind.
 const (
 	DocFunc      = "func"
 	DocStruct    = "struct"
@@ -22,7 +22,7 @@ const (
 	DocMacro     = "macro"
 )
 
-// DocField 是结构体字段 / 接口方法 / 实现方法 / 库符号。
+// DocField is a struct field / interface method / impl method / library symbol.
 type DocField struct {
 	Name      string
 	Signature string // 方法/符号的完整签名（字段为空）
@@ -31,7 +31,7 @@ type DocField struct {
 	Pos       Pos
 }
 
-// DocItem 是一个文档条目。
+// DocItem is one documentation item.
 type DocItem struct {
 	Kind      string
 	Name      string
@@ -42,7 +42,7 @@ type DocItem struct {
 	Fields    []DocField
 }
 
-// Doc 是一个文件的文档模型。
+// Doc is a file's documentation model.
 type Doc struct {
 	Path      string
 	Kind      string // main | library
@@ -55,7 +55,7 @@ type Doc struct {
 	Macros    []*DocItem // #macro 命名参数宏（token 级展开，不在 AST）
 }
 
-// All 按源码顺序返回全部条目（用于概览表）。
+// All returns every item in source order (used by the overview table).
 func (d *Doc) All() []*DocItem {
 	var out []*DocItem
 	out = append(out, d.Types...)
@@ -72,7 +72,7 @@ func (d *Doc) All() []*DocItem {
 	return out
 }
 
-// HasPub 判断文件是否使用了 pub 导出。
+// HasPub reports whether the file uses pub exports.
 func (d *Doc) HasPub() bool {
 	for _, it := range d.All() {
 		if it.Pub {
@@ -82,12 +82,12 @@ func (d *Doc) HasPub() bool {
 	return false
 }
 
-// BuildDoc 由单文件 AST 与注释构建文档模型（不含宏定义，见 BuildDocWithMacros）。
+// BuildDoc builds the documentation model from a single-file AST and comments (macro definitions are excluded; see BuildDocWithMacros).
 func BuildDoc(prog *Program, comments []Comment) *Doc {
 	return BuildDocWithMacros(prog, comments, nil)
 }
 
-// BuildDocWithMacros 同上，另收录宏定义（#macro 在解析前被切出，需显式传入）。
+// BuildDocWithMacros is the same but also includes macro definitions (#macro is split out before parsing, so it must be passed in explicitly).
 func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *Doc {
 	d := &Doc{Kind: prog.Kind, Imports: append([]string{}, prog.Imports...)}
 	if d.Kind == "" {
@@ -106,7 +106,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 		}
 	}
 
-	// 别名
+	// Alias
 	for _, ta := range prog.TypeAliases {
 		noteDecl(ta.Pos)
 		d.Types = append(d.Types, &DocItem{
@@ -115,7 +115,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 			Doc:       docs.docFor(ta.Pos.Line),
 		})
 	}
-	// 结构体
+	// Struct
 	structNames := map[string]bool{}
 	for _, sd := range prog.Structs {
 		if sd.Name == "" || strings.HasPrefix(sd.Name, "__anon_") {
@@ -133,7 +133,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 		}
 		d.Types = append(d.Types, it)
 	}
-	// 接口
+	// Interface
 	for _, id := range prog.Interfaces {
 		if id.Name == "" || strings.HasPrefix(id.Name, "__anon_") {
 			continue
@@ -155,7 +155,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 		}
 		d.Types = append(d.Types, it)
 	}
-	// impl / space（无接口名的自我实现；space 与 impl 同为 ImplDecl，按是否实名 struct 区分）
+	// impl / space (self-implementations with no interface name; space and impl are both ImplDecl, distinguished by whether the struct is named)
 	for _, im := range prog.Impls {
 		noteDecl(im.Pos)
 		kind := DocImpl
@@ -176,7 +176,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 		}
 		d.Impls = append(d.Impls, it)
 	}
-	// library（FFI 绑定）
+	// library (FFI binding)
 	for _, lb := range prog.Libraries {
 		noteDecl(lb.Pos)
 		it := &DocItem{
@@ -188,7 +188,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 		}
 		d.Libraries = append(d.Libraries, it)
 	}
-	// 宏（命名参数宏）
+	// Macro (named-parameter macro)
 	for _, m := range macros {
 		noteDecl(m.Pos)
 		sig := "#macro " + m.Name + " (" + strings.Join(m.Params, ", ") + ")"
@@ -197,7 +197,7 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 			Signature: sig, Doc: docs.docFor(m.Pos.Line),
 		})
 	}
-	// 顶层函数
+	// Top-level functions
 	for _, fn := range prog.Funcs {
 		noteDecl(fn.Pos)
 		d.Funcs = append(d.Funcs, &DocItem{
@@ -239,14 +239,14 @@ func funcSignature(f *FuncDecl) string {
 	return "fn" + typeParams(f.TypeParams) + " " + f.Name + "(" + paramsText(f.Params) + ") " + retText(f.Ret)
 }
 
-// libFuncSignature：library 绑定符号是已编译的 Func（无函数体）。
+// libFuncSignature: a library binding symbol is an already-compiled Func (with no body).
 func libFuncSignature(f *Func) string {
 	return "fn" + typeParams(f.TypeParams) + " " + f.Name + "(" + paramsText(f.Params) + ") " + retText(f.Ret)
 }
 
-// ---------- 注释索引 ----------
+// ---------- Comment index ----------
 
-// docComment 是注释 + 位置上下文：trailing = 同行前面已有代码（`int x; // 说明`）。
+// docComment is a comment plus its positional context: trailing = code already appeared earlier on the same line (`int x; // note`).
 type docComment struct {
 	Comment
 	trailing bool
@@ -258,7 +258,7 @@ type docIndex struct {
 	earliest int
 }
 
-// newDocIndex 建立注释索引。src 用于判定行尾注释（同一行前面是否有代码）。
+// newDocIndex builds the comment index. src is used to detect end-of-line comments (whether code precedes them on the same line).
 func newDocIndex(comments []Comment, src string) *docIndex {
 	idx := &docIndex{byEnd: map[int][]docComment{}, byStart: map[int]docComment{}, earliest: 1 << 30}
 	lines := strings.Split(src, "\n")
@@ -290,7 +290,7 @@ func newDocIndex(comments []Comment, src string) *docIndex {
 	return idx
 }
 
-// docFor 取声明上方紧邻（无空行）的连续注释块；没有上方注释时退回同行行尾注释。
+// docFor takes the contiguous comment block immediately above a declaration (no blank line); with none, it falls back to a same-line trailing comment.
 func (idx *docIndex) docFor(declLine int) string {
 	if declLine <= 0 {
 		return ""
@@ -301,7 +301,7 @@ func (idx *docIndex) docFor(declLine int) string {
 	return idx.trailingDoc(declLine)
 }
 
-// leadingDoc 声明上方紧邻的连续注释块（只取独立成行的注释）。
+// leadingDoc: the contiguous comment block immediately above a declaration (only line-standing comments).
 func (idx *docIndex) leadingDoc(declLine int) string {
 	cur := declLine - 1
 	var blocks []string
@@ -327,7 +327,7 @@ func (idx *docIndex) leadingDoc(declLine int) string {
 	return strings.TrimSpace(strings.Join(blocks, ""))
 }
 
-// trailingDoc 与声明同行的行尾注释（`int x; // 横坐标`）。
+// trailingDoc: the end-of-line comment on the declaration's line (`int x; // x coordinate`).
 func (idx *docIndex) trailingDoc(declLine int) string {
 	for _, c := range idx.byEnd[declLine] {
 		if c.trailing {
@@ -337,8 +337,8 @@ func (idx *docIndex) trailingDoc(declLine int) string {
 	return ""
 }
 
-// fileDoc 取文件头注释：从最早注释起、彼此紧邻的连续注释块；
-// 若该块正好是首个声明的文档注释（与本行紧邻），则不重复算作文件注释。
+// fileDoc takes the file header comment: the contiguous comment block starting from the earliest comment;
+// if that block is exactly the first declaration's doc comment (adjacent to this line), it is not counted again as a file comment.
 func (idx *docIndex) fileDoc(firstDeclLine int) string {
 	if idx.earliest >= 1<<30 {
 		return ""
@@ -368,7 +368,7 @@ func (idx *docIndex) fileDoc(firstDeclLine int) string {
 	return strings.TrimSpace(strings.Join(blocks, ""))
 }
 
-// cleanComment 去掉注释定界符并对齐缩进。
+// cleanComment strips the comment delimiters and aligns the indentation.
 func cleanComment(c Comment) string {
 	text := c.Text
 	if c.Block {
@@ -392,7 +392,7 @@ func cleanComment(c Comment) string {
 		}
 		text = strings.Join(lines, "\n")
 	}
-	// 去公共缩进
+	// Strip the common indentation
 	lines := strings.Split(text, "\n")
 	indent := -1
 	for _, ln := range lines {
@@ -414,7 +414,7 @@ func cleanComment(c Comment) string {
 	return strings.Trim(strings.Join(lines, "\n"), "\n") + "\n"
 }
 
-// Summary 取文档首行摘要（表格用）。
+// Summary takes the first line of documentation (for tables).
 func Summary(doc string) string {
 	for _, ln := range strings.Split(doc, "\n") {
 		s := strings.TrimSpace(ln)

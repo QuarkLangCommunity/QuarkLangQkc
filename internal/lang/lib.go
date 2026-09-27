@@ -11,10 +11,10 @@ import (
 	"strings"
 )
 
-// ============ 二进制库互调（跨系统） ============
-// program library; + pub 导出的符号打包为 .qlib（gob 二进制，与平台无关）。
+// ============ Binary library interop (cross-platform) ============
+// program library; + pub-exported symbols are packaged as .qlib (gob binary, platform-independent).
 
-// ExportLibrary 把 program library 的 pub 符号导出为 .qlib 二进制库。
+// ExportLibrary exports a program library's pub symbols as a .qlib binary library.
 func ExportLibrary(prog *Program, outPath string) error {
 	if prog.Kind != "library" {
 		return errors.New(i18n.T("ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）", prog.Kind))
@@ -51,7 +51,7 @@ func ExportLibrary(prog *Program, outPath string) error {
 	return os.WriteFile(outPath, buf.Bytes(), 0o644)
 }
 
-// ImportLibrary 读取 .qlib 二进制库，返回导出符号源码文本表。
+// ImportLibrary reads a .qlib binary library and returns the table of exported symbol source text.
 func ImportLibrary(path string) (map[string]string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -64,14 +64,14 @@ func ImportLibrary(path string) (map[string]string, error) {
 	return syms, nil
 }
 
-// LoadImport 按编译/运行选项寻找 import：同目录 .qk（源码）或 .qlib（库）。
+// LoadImport finds an import by compile/run options: a same-directory .qk (source) or .qlib (library).
 func LoadImport(dir, path string) (string, error) {
 	src, _, err := LoadImportIn([]string{dir}, path)
 	return src, err
 }
 
-// LoadImportIn 在多个目录中依次查找 import（同目录优先，其次额外搜索路径）。
-// 返回源码文本与实际命中的文件路径（.qlib 时文件路径为该库文件）。
+// LoadImportIn searches several directories in turn for an import (same directory first, then extra search paths).
+// It returns the source text and the path actually hit (for a .qlib, the path is that library file).
 func LoadImportIn(dirs []string, path string) (string, string, error) {
 	srcName := path
 	if !strings.HasSuffix(srcName, ".qk") {
@@ -110,13 +110,13 @@ func LoadImportIn(dirs []string, path string) (string, string, error) {
 		path, strings.Join(dirs, ", "), path, path))
 }
 
-// stripProgramDecl 去掉导入源中的 program library;/program main; 声明行（库形态由主程序决定）。
+// stripProgramDecl removes program library;/program main; declaration lines from imported source (the library form is decided by the main program).
 func stripProgramDecl(src string) string {
 	out, _ := stripProgramDeclMapped(src)
 	return out
 }
 
-// stripProgramDeclMapped 同 stripProgramDecl，另返回剥离后每行对应的**原文件行号**（1 基）。
+// stripProgramDeclMapped is stripProgramDecl plus the **original line number** (1-based) each stripped line maps to.
 func stripProgramDeclMapped(src string) (string, []int) {
 	var sb strings.Builder
 	var lines []int
@@ -132,12 +132,12 @@ func stripProgramDeclMapped(src string) (string, []int) {
 	return sb.String(), lines
 }
 
-// ============ 源码位置映射（合并 import 后仍能回到原文件） ============
+// ============ Source position mapping (still resolvable after imports are merged) ============
 //
-// CompileWithImports 把主文件与各导入库**文本合并**后编译，合并源码的行号与
-// 任一原文件都不对应。工具（qkcheck / qklsp）要把诊断指回真实文件，需要这张表。
+// CompileWithImports compiles the main file and its imports after **merging their text**; the merged source's line numbers
+// match no original file. Tools (qkcheck / qklsp) need this table to point diagnostics back at real files.
 
-// SrcMap 记录合并源码每一行的来源：合并第 i 行 ← lines[i-1]。
+// SrcMap records where each line of the merged source came from: merged line i ← lines[i-1].
 type SrcMap struct {
 	lines []srcLoc
 }
@@ -147,7 +147,7 @@ type srcLoc struct {
 	line int    // 该行在源文件中的行号（1 基）
 }
 
-// Map 把合并源码的行号映射回（文件, 文件内行号）。行号非法时返回 ("", 0)。
+// Map maps a merged-source line number back to (file, line inside that file). Invalid line numbers return ("", 0).
 func (m *SrcMap) Map(line int) (string, int) {
 	if m == nil || line < 1 || line > len(m.lines) {
 		return "", 0
@@ -156,19 +156,19 @@ func (m *SrcMap) Map(line int) (string, int) {
 	return l.file, l.line
 }
 
-// mapBuilder 累积合并源码并同时记录每行来源。
+// mapBuilder accumulates the merged source while recording each line's origin.
 type mapBuilder struct {
 	b    strings.Builder
 	segs []srcLoc
 	idx  map[string]int // (文件\x00行号) → 合并源码行号（1 基）
 }
 
-// append 追加一段源码（text 末尾的换行由调用方保证与旧实现一致）。
+// append appends a chunk of source (the caller guarantees the trailing newline matches the old behaviour).
 func (m *mapBuilder) append(text, file string) {
 	m.appendMapped(text, file, nil)
 }
 
-// appendMapped 追加一段源码，srcLines[i] 给出该段第 i 行对应的原文件行号（nil = 顺序一致）。
+// appendMapped appends a chunk of source; srcLines[i] gives the original line number of that chunk's i-th line (nil = sequential).
 func (m *mapBuilder) appendMapped(text, file string, srcLines []int) {
 	if m.idx == nil {
 		m.idx = map[string]int{}
@@ -191,7 +191,7 @@ func (m *mapBuilder) appendMapped(text, file string, srcLines []int) {
 	}
 }
 
-// mergedLine 把（文件, 文件内行号）换算成合并源码行号；未命中返回 0。
+// mergedLine converts (file, line inside that file) into a merged-source line number; 0 when it does not match.
 func (m *mapBuilder) mergedLine(file string, line int) int {
 	return m.idx[file+"\x00"+strconv.Itoa(line)]
 }
@@ -200,19 +200,19 @@ func (m *mapBuilder) String() string { return m.b.String() }
 
 func (m *mapBuilder) srcMap() *SrcMap { return &SrcMap{lines: m.segs} }
 
-// CompileWithImports 编译源码并解析 import（同目录默认搜索范围；v1 单层）。
+// CompileWithImports compiles source and resolves imports (the same directory is searched by default; v1 is single-level).
 func CompileWithImports(src, filename string) (*Program, error) {
 	prog, _, err := CompileWithImportsMapped(src, filename)
 	return prog, err
 }
 
-// CompileWithImportsMapped 同 CompileWithImports，另返回源码位置映射表。
+// CompileWithImportsMapped is CompileWithImports plus the source position mapping table.
 func CompileWithImportsMapped(src, filename string) (*Program, *SrcMap, error) {
 	return CompileWithImportPaths(src, filename, nil)
 }
 
-// CompileWithImportPaths 同 CompileWithImportsMapped，另支持额外 import 搜索目录
-// （工具用：qkcheck -L / qklsp 工作区；语言本身仍以同目录为准，额外目录仅为兜底）。
+// CompileWithImportPaths is CompileWithImportsMapped plus extra import search directories
+// (for tools: qkcheck -L / the qklsp workspace; the language itself still resolves relative to the same directory, the extra directories are only a fallback).
 func CompileWithImportPaths(src, filename string, extraPaths []string) (*Program, *SrcMap, error) {
 	dir := "."
 	if filename != "" {
@@ -221,7 +221,7 @@ func CompileWithImportPaths(src, filename string, extraPaths []string) (*Program
 	var merged mapBuilder
 	merged.append(src+"\n", filename)
 	visited := map[string]bool{}
-	// 递归合并：处理主文件与各库文件中的 import（visited 防环）
+	// Recursive merge: handle imports in the main file and in each library file (visited guards against cycles)
 	var collect func(text, base, file string) error
 	collect = func(text, base, file string) error {
 		toks, err := Lex(text)
@@ -294,13 +294,13 @@ func containsStr(list []string, s string) bool {
 	return false
 }
 
-// extractBody 按函数体行区间从源码提取函数体文本（含大括号）。
+// extractBody extracts a function body's text (braces included) from the source by line range.
 func extractBody(src string, fn *FuncDecl) string {
 	if fn.BodyStart.Line <= 0 {
 		return ""
 	}
 	lines := strings.Split(src, "\n")
-	// '{' 的下一行起、'}' 的前一行止（索引为 0 基；单行函数体为空）
+	// From the line after '{' to the line before '}' (0-based indices; a single-line body is empty)
 	start := fn.BodyStart.Line
 	end := fn.BodyEnd.Line - 2
 	if start <= 0 || end < start || end >= len(lines) {

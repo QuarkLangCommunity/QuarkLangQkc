@@ -1,17 +1,17 @@
 package lang
 
-// ============ qkrepl：交互式求值会话（多行块） ============
+// ============ qkrepl: interactive evaluation session (multi-line blocks) ============
 //
-// 必须在包内实现：解释器的求值设施（interp / execStmt / evalExpr / scope）都是未导出的。
+// It must live inside the package: the interpreter's evaluation facilities (interp / execStmt / evalExpr / scope) are unexported.
 //
-// 设计要点：
-//   - 会话持有一个 *interp（由最小 bootstrap 程序经 runWithInterp 得到），
-//     全局作用域跨输入存活 → 变量、函数、类型在后续输入中可见；
-//   - 每段输入若解析为**顶层声明**（fn/struct/interface/impl/space/library/type），
-//     走 registerProgram 登记（与整程序同一条路径，行为一致）；
-//   - 否则包成 `fn __repl_N() void { ... }` 逐条语句求值：表达式回显其值，
-//     `log` 的记录回显；只走 Lex/Parse（不 Compile）→ CallExpr.FnIdx 恒为 -1，
-//     运行期按**名字**派发，避免跨段函数索引失效（详见 README）。
+// Design notes:
+//   - the session holds an *interp (obtained from a minimal bootstrap program via runWithInterp), and the
+//     global scope survives across inputs → variables, functions and types stay visible in later inputs;
+//   - when an input parses as a **top-level declaration** (fn/struct/interface/impl/space/library/type),
+//     it goes through registerProgram (the same path as a whole program, so behaviour matches);
+//   - otherwise it is wrapped in `fn __repl_N() void { ... }` and evaluated statement by statement: expressions echo their value,
+//     `log` entries are echoed; only Lex/Parse run (not Compile) → CallExpr.FnIdx stays -1 and
+//     dispatch happens **by name** at runtime, so function indices from earlier chunks cannot go stale (see README).
 
 import (
 	"bufio"
@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-// REPLSession 是一次交互式求值会话。
+// REPLSession is one interactive evaluation session.
 type REPLSession struct {
 	in    *interp
 	out   io.Writer
@@ -30,7 +30,7 @@ type REPLSession struct {
 	chunk int
 }
 
-// NewREPLSession 创建会话：bootstrap 一个空 main 取得解释器，再声明 REPL 可用的 io。
+// NewREPLSession creates a session: bootstrap an empty main to obtain the interpreter, then declare the io the REPL can use.
 func NewREPLSession(stdin io.Reader, stdout io.Writer) (*REPLSession, error) {
 	if stdin == nil {
 		stdin = strings.NewReader("")
@@ -47,13 +47,13 @@ func NewREPLSession(stdin io.Reader, stdout io.Writer) (*REPLSession, error) {
 		return nil, fmt.Errorf("REPL bootstrap: %w", err)
 	}
 	s := &REPLSession{in: in, out: stdout, stdin: stdin}
-	// 会话自己的 IOStream（包内可设 rd，readln 不会 nil 解引用）
+	// The session's own IOStream (rd is settable inside the package, so readln cannot nil-dereference)
 	stream := &IOStream{In: stdin, Out: stdout, rd: bufio.NewReader(stdin)}
 	_ = in.globalScope.declare("io", IOV(stream), Pos{})
 	return s, nil
 }
 
-// Eval 求值一段输入，返回应打印的文本（求值输出 + 表达式回显）。
+// Eval evaluates one input and returns the text to print (evaluation output + expression echo).
 func (s *REPLSession) Eval(src string) (out string, err error) {
 	defer func() { // 解释器不保证无 panic（FFI / 外部对象），REPL 必须活下来
 		if r := recover(); r != nil {
@@ -63,14 +63,14 @@ func (s *REPLSession) Eval(src string) (out string, err error) {
 	if strings.TrimSpace(src) == "" {
 		return "", nil
 	}
-	// 1) 顶层声明：登记进会话
+	// 1) top-level declaration: register it into the session
 	if prog, perr := ParseSource(src); perr == nil && hasTopDecls(prog) {
 		if rerr := s.in.registerProgramReplacing(prog); rerr != nil {
 			return "", rerr
 		}
 		return declSummary(prog), nil
 	}
-	// 2) 语句 / 表达式：包一层函数后逐条求值
+	// 2) statement / expression: wrap in a function and evaluate statement by statement
 	s.chunk++
 	prog, perr := ParseSource(wrapChunk(fmt.Sprintf("__repl_%d", s.chunk), src))
 	if perr != nil {
@@ -81,7 +81,7 @@ func (s *REPLSession) Eval(src string) (out string, err error) {
 	return s.execBody(fd.Body, fn)
 }
 
-// mayEndStatement 末字符是否可能结束一条语句/表达式（据此决定是否自动补 `;`）。
+// mayEndStatement reports whether the last character can end a statement/expression (deciding whether to append an automatic `;`).
 func mayEndStatement(c byte) bool {
 	switch {
 	case c >= '0' && c <= '9', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= 0x80:
@@ -92,8 +92,8 @@ func mayEndStatement(c byte) bool {
 	return false
 }
 
-// wrapChunk 把 REPL 输入包成一个函数体。语言要求语句以 `;` 结束：
-// 末字符是表达式结尾（标识符/字面量/`)`/`]`）时自动补一个 `;`（REPL 便利）。
+// wrapChunk wraps REPL input as a function body. The language requires statements to end with `;`:
+// when the last character ends an expression (identifier/literal/`)`/`]`) a `;` is appended automatically (REPL convenience).
 func wrapChunk(name, src string) string {
 	body := src
 	t := strings.TrimSpace(body)
@@ -103,7 +103,7 @@ func wrapChunk(name, src string) string {
 	return fmt.Sprintf("fn %s() void {\n%s\n}\n", name, body)
 }
 
-// execBody 在会话全局作用域中逐条执行语句，返回需打印的文本。
+// execBody executes statements one by one in the session's global scope and returns the text to print.
 func (s *REPLSession) execBody(body *Block, fn *Func) (string, error) {
 	var out strings.Builder
 	for _, st := range body.Stmts {
@@ -139,9 +139,9 @@ func (s *REPLSession) execBody(body *Block, fn *Func) (string, error) {
 	return out.String(), nil
 }
 
-// resolveStructLit 为 `P p = .{...};` 这类声明补上字面量的目标类型名。
-// 整程序路径由 typecheck 填充（typecheck.go: StructLit.Name = 目标结构体），
-// REPL 跳过类型检查，因此在这里按声明的类型标注补齐——否则得到匿名结构体，方法调用会失败。
+// resolveStructLit fills in the target type name for declarations such as `P p = .{...};`.
+// The whole-program path fills this in during typecheck (typecheck.go: StructLit.Name = the target struct),
+// but the REPL skips type checking, so it is completed here from the declared type annotation — otherwise the value would become an anonymous struct and method calls would fail.
 func (s *REPLSession) resolveStructLit(st Stmt) {
 	ds, ok := st.(*DeclStmt)
 	if !ok {
@@ -157,24 +157,24 @@ func (s *REPLSession) resolveStructLit(st Stmt) {
 	}
 }
 
-// Incomplete 判断输入是否「还没打完」：块未闭合、字符串未结束等。
-// CLI 据此继续读下一行（多行块）。
+// Incomplete reports whether the input is "not finished yet": an unclosed block, an unterminated string, etc.
+// The CLI keeps reading the next line accordingly (multi-line blocks).
 func (s *REPLSession) Incomplete(src string) bool {
 	if strings.TrimSpace(src) == "" {
 		return false
 	}
-	// 词法层未闭合（字符串 / 原始字符串 / 块注释）
+	// Unterminated at the lexical level (string / raw string / block comment)
 	if _, _, err := LexWithComments(src); err != nil {
 		return strings.Contains(err.Error(), "unterminated")
 	}
-	// 作为完整程序或语句块能解析 → 完整
+	// Parses as a complete program or statement block → complete
 	if _, err := ParseSource(src); err == nil {
 		return false
 	}
 	if _, err := ParseSource(wrapChunk("__repl_probe", src)); err == nil {
 		return false
 	}
-	// 两种解析都失败：错误为「块未闭合」即需要继续输入
+	// Both parses failed: if the error is "unclosed block" more input is needed
 	incomplete := func(err error) bool {
 		return err != nil && strings.Contains(err.Error(), "unterminated block")
 	}
@@ -185,13 +185,13 @@ func (s *REPLSession) Incomplete(src string) bool {
 	return incomplete(err)
 }
 
-// hasTopDecls 判断程序里是否有可登记的顶层声明。
+// hasTopDecls reports whether the program has any registrable top-level declaration.
 func hasTopDecls(prog *Program) bool {
 	return len(prog.Funcs) > 0 || len(prog.Structs) > 0 || len(prog.Interfaces) > 0 ||
 		len(prog.Impls) > 0 || len(prog.Libraries) > 0 || len(prog.TypeAliases) > 0
 }
 
-// declSummary 汇总本次登记的定义（回显用）。
+// declSummary summarises the definitions registered this round (for echoing).
 func declSummary(prog *Program) string {
 	var b strings.Builder
 	for _, f := range prog.Funcs {
@@ -219,7 +219,7 @@ func declSummary(prog *Program) string {
 	return b.String()
 }
 
-// shiftErrLine 把错误位置按 delta 平移（包装输入带来的行号偏移），最小为 1。
+// shiftErrLine shifts an error position by delta (the line offset introduced by wrapping the input), with a minimum of 1.
 func shiftErrLine(err error, delta int) error {
 	if err == nil || delta == 0 {
 		return err

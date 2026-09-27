@@ -1,6 +1,6 @@
 package lang
 
-// ============ qkdoc：Markdown / HTML 渲染 ============
+// ============ qkdoc: Markdown / HTML rendering ============
 
 import (
 	"fmt"
@@ -9,17 +9,17 @@ import (
 	"strings"
 )
 
-// DocOptions 控制渲染。
+// DocOptions controls rendering.
 type DocOptions struct {
 	Title string // 标题（默认取 Path）
 	All   bool   // true = 含未 pub 的符号；false = 只渲染 pub（文件无 pub 时自动渲染全部）
 	Path  string // 源文件路径（展示用）
 }
 
-// visible 判断条目是否应渲染：
-//   - -all 或文件没有 pub → 全部渲染；
-//   - impl / space / library 不参与 pub 过滤（语言里 pub 不能前缀它们；
-//     它们是命名空间与实现主体，正是库对外 API 的载体）。
+// visible decides whether an item should be rendered:
+//   - with -all, or when the file has no pub → everything is rendered;
+//   - impl / space / library do not take part in pub filtering (the language does not allow pub on them;
+//     they are namespaces and implementation bodies, which is exactly what a library's public API consists of).
 func (d *Doc) visible(it *DocItem, opts DocOptions) bool {
 	if opts.All || !d.HasPub() {
 		return true
@@ -66,7 +66,7 @@ func kindLabel(kind string) string {
 	return kind
 }
 
-// Markdown 渲染为 Markdown 文档。
+// Markdown renders a Markdown document.
 func (d *Doc) Markdown(opts DocOptions) string {
 	var b strings.Builder
 	b.Grow(markdownSizeHint(d))
@@ -90,7 +90,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 	}
 	b.WriteString("\n\n")
 
-	// 概览
+	// Overview
 	var rows []*DocItem
 	for _, it := range d.All() {
 		if d.visible(it, opts) {
@@ -115,7 +115,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 	}
 	b.WriteString("\n")
 
-	// 详情
+	// Details
 	impls, spaces := splitImpls(d.Impls)
 	sections := []struct {
 		title string
@@ -188,27 +188,27 @@ func writeFieldsMD(b *strings.Builder, it *DocItem) {
 	}
 }
 
-// markdownSizeHint 预估输出规模（每条目约 200 字节 + 文件注释），用于一次性预分配。
+// markdownSizeHint estimates the output size (about 200 bytes per item plus the file comment) for a single preallocation.
 func markdownSizeHint(d *Doc) int {
 	n := len(d.All())
 	size := 256 + n*220 + len(d.FileDoc)
 	return size
 }
 
-// cell 让文本可安全放进 Markdown 表格。
+// cell makes text safe to place inside a Markdown table.
 func cell(s string) string {
 	s = strings.ReplaceAll(s, "|", "\\|")
 	s = strings.ReplaceAll(s, "\n", " ")
 	return strings.TrimSpace(s)
 }
 
-// HTML 渲染为自包含 HTML 页面（零依赖、无外部资源）。
+// HTML renders a self-contained HTML page (no dependencies, no external assets).
 func (d *Doc) HTML(opts DocOptions) string {
 	return MarkdownToHTML(d.Markdown(opts), d.title(opts))
 }
 
-// MarkdownToHTML 把 qkdoc 生成的 Markdown 转为自包含 HTML 页面
-// （只覆盖本包生成的语法子集：标题/表格/代码块/引用/段落；转义所有文本）。
+// MarkdownToHTML converts qkdoc-generated Markdown into a self-contained HTML page
+// (covering only the syntax subset this package emits: headings/tables/code blocks/quotes/paragraphs; all text is escaped).
 func MarkdownToHTML(md, title string) string {
 	var b strings.Builder
 	b.WriteString("<!doctype html>\n<html lang=\"zh\">\n<head>\n<meta charset=\"utf-8\">\n")
@@ -235,7 +235,7 @@ blockquote { color: #888; margin: .5rem 0; }
 	return b.String()
 }
 
-// renderMDBlock 把一小段 Markdown 块转成 HTML（覆盖 qkdoc 自己生成的语法子集）。
+// renderMDBlock converts one Markdown block into HTML (covering the syntax subset qkdoc itself emits).
 func renderMDBlock(block string) string {
 	block = strings.Trim(block, "\n")
 	if block == "" {
@@ -301,7 +301,7 @@ func splitRow(ln string) []string {
 	return parts
 }
 
-// inlineMD 处理行内 `code` 与 **粗体**，其余转义。
+// inlineMD handles inline `code` and **bold**, escaping everything else.
 func inlineMD(s string) string {
 	var b strings.Builder
 	for {
@@ -342,7 +342,7 @@ func boldMD(s string) string {
 	return b.String()
 }
 
-// splitImpls 把 impl / space 分开（两者同为 ImplDecl，按 Kind 区分）。
+// splitImpls separates impl / space (both are ImplDecl, distinguished by Kind).
 func splitImpls(items []*DocItem) (impls, spaces []*DocItem) {
 	for _, it := range items {
 		if it.Kind == DocSpace {
