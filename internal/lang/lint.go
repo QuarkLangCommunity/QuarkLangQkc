@@ -1,12 +1,12 @@
 package lang
 
-// ============ qkcheck：静态检查（只读 AST，不改变任何语义） ============
+// ============ qkcheck: static analysis (read-only over the AST; changes no semantics) ============
 //
-// 设计原则：
-//   - 与 typecheck 的作用域规则**逐条对齐**（if/while/for-C 体共用外层作用域；
-//     for-in / catch 引入嵌套作用域），否则会产生误报；
-//   - 只报编译器**不报**的问题（语法/类型硬错误由 typecheck 负责，CLI 另行呈现）；
-//   - 诊断带行号列号，可被 CI 与编辑器消费。
+// Design principles:
+//   - scope rules are aligned **item by item** with typecheck (if/while/for-C bodies share the outer scope;
+//     for-in / catch introduce nested scopes) — otherwise false positives appear;
+//   - only report what the compiler does **not** report (syntax/type hard errors belong to typecheck and are surfaced by the CLI);
+//   - diagnostics carry line and column so CI and editors can consume them.
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ import (
 	"strings"
 )
 
-// 诊断码（稳定标识，供 CI / 编辑器过滤）。
+// Diagnostic codes (stable identifiers for CI / editor filtering).
 const (
 	CodeUnusedVar    = "QK101" // 未使用局部变量（声明后从未读取）
 	CodeUnusedParam  = "QK102" // 未使用形参（-params 开启）
@@ -36,7 +36,7 @@ const (
 	CodeUnusedFunc   = "QK115" // 未被调用的函数（仅 program main；库文件里的函数是 API）
 )
 
-// Diag 是一条静态检查诊断。
+// Diag is one static-analysis diagnostic.
 type Diag struct {
 	Pos  Pos
 	Code string
@@ -48,17 +48,17 @@ func (d Diag) String() string {
 	return fmt.Sprintf("%d:%d: %s: %s [%s]", d.Pos.Line, d.Pos.Col, d.Sev, d.Msg, d.Code)
 }
 
-// LintOptions 控制可选检查项。
+// LintOptions controls the optional checks.
 type LintOptions struct {
-	// Params 同时检查未使用形参。默认关闭：接口实现常有忽略的形参。
+	// Params also checks unused parameters. Off by default: interface implementations often ignore parameters.
 	Params bool
-	// File 当前文件路径（import 解析与位置相关检查用；可空）。
+	// File is the current file path (used for import resolution and position-sensitive checks; may be empty).
 	File string
-	// LibDirs 额外 import 搜索目录（与 qkcheck -L 一致；可空 = 只看同目录）。
+	// LibDirs are extra import search directories (same as qkcheck -L; empty = the same directory only).
 	LibDirs []string
 }
 
-// Lint 对已解析的程序做静态检查，返回按位置排序的诊断。
+// Lint statically checks a parsed program and returns diagnostics sorted by position.
 func Lint(prog *Program, opts LintOptions) []Diag {
 	l := &linter{
 		opts:      opts,
@@ -130,7 +130,7 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 	return l.diags
 }
 
-// LintSource 便捷入口：解析源码并静态检查（解析失败返回错误与已得诊断）。
+// LintSource is a convenience entry point: parse the source and lint it (a parse failure returns the error plus whatever diagnostics were found).
 func LintSource(src string, opts LintOptions) ([]Diag, error) {
 	prog, err := ParseSource(src)
 	if err != nil {
@@ -139,7 +139,7 @@ func LintSource(src string, opts LintOptions) ([]Diag, error) {
 	return Lint(prog, opts), nil
 }
 
-// ---------- 作用域模型（与 typecheck 对齐） ----------
+// ---------- Scope model (aligned with typecheck) ----------
 
 type lvar struct {
 	name     string
@@ -167,7 +167,7 @@ type linter struct {
 
 	curFn *FuncDecl
 
-	// 新增检查的状态
+	// State for the newly added checks
 	globals   map[string]string // 全局符号名 → 类别（fn/type/space/library/macro/alias）
 	pending   map[string]Pos    // 变量 → 最近一次「尚未被读取」的赋值位置（QK113）
 	tryDepth  int               // try 块深度（QK110 豁免：try 内的除零是刻意错误处理）
@@ -212,7 +212,7 @@ func (l *linter) lookupOuter(name string) *lvar {
 	return nil
 }
 
-// declare 登记一个声明。同名外层变量存在且当前是嵌套作用域时记为遮蔽。
+// declare registers a declaration. An outer variable with the same name in a nested scope is recorded as shadowing.
 func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) *lvar {
 	if name == "_" || strings.HasPrefix(name, "_") {
 		return nil // _ 前缀 = 显式忽略
@@ -228,7 +228,7 @@ func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) 
 		v.outer = outer
 		l.warn(pos, CodeShadow, "%s %s 遮蔽外层同名变量（外层声明于第 %d 行）", lintKindName(kind), name, outer.pos.Line)
 	}
-	// QK112：函数内声明遮蔽全局符号（函数/类型/空间/库/宏）——调用点会突然指向局部变量
+	// QK112: a declaration inside a function shadows a global symbol (function/type/space/library/macro) — call sites would suddenly resolve to the local
 	if isRefType(declTypeOf(l, name)) {
 		l.refVars[name] = true
 	}
@@ -255,7 +255,7 @@ func lintKindName(kind string) string {
 	}
 }
 
-// use 记一次读取；读取后清除「未读赋值」记录（QK113 只有从未读取的赋值才算死存储）。
+// use records a read; it clears the "assigned but unread" record (QK113 only counts never-read assignments as dead stores).
 func (l *linter) use(name string) {
 	if v := l.lookup(name); v != nil {
 		v.reads++
@@ -263,7 +263,7 @@ func (l *linter) use(name string) {
 	delete(l.pending, name)
 }
 
-// lintGlobalName 全局符号类别的中文名。
+// lintGlobalName is the display name of a global symbol category.
 func lintGlobalName(cat string) string {
 	switch cat {
 	case "fn":
@@ -282,25 +282,25 @@ func lintGlobalName(cat string) string {
 	return "符号"
 }
 
-// write 记一次赋值。
+// write records an assignment.
 func (l *linter) write(name string) {
 	if v := l.lookup(name); v != nil {
 		v.writes++
 	}
 }
 
-// ---------- 函数检查 ----------
+// ---------- Function checks ----------
 
 func (l *linter) checkFunc(f *FuncDecl) {
 	l.checkBody(f, f.Body, "")
 }
 
-// checkMethod 检查 impl / space 中的方法；implType 为所属类型（用于 void 调用解析）。
+// checkMethod checks methods in an impl / space; implType is the owning type (used to resolve void calls).
 func (l *linter) checkMethod(f *FuncDecl, implType string) {
 	l.checkBody(f, f.Body, implType)
 }
 
-// checkLibFuncs 库绑定（library 声明）只有签名，无体；此处不做检查。
+// checkLibFuncs: library bindings (library declarations) only have signatures and no body, so nothing is checked here.
 func (l *linter) checkLibFuncs(prog *Program) {}
 
 func (l *linter) checkBody(f *FuncDecl, body *Block, implType string) {
@@ -316,7 +316,7 @@ func (l *linter) checkBody(f *FuncDecl, body *Block, implType string) {
 		l.declare(p.Name, p.Pos, "param", p.Type)
 	}
 	term, allRet := l.block(body)
-	// 未使用变量/形参（函数级汇报）
+	// Unused variables/parameters (reported per function)
 	for _, v := range l.fnVars {
 		if v.reads > 0 {
 			continue
@@ -333,7 +333,7 @@ func (l *linter) checkBody(f *FuncDecl, body *Block, implType string) {
 			l.warn(v.pos, codeForKind(v.kind), "%s %s 声明后从未使用", lintKindName(v.kind), v.name)
 		}
 	}
-	// 缺返回：声明了非 void 返回类型，但存在不产生返回值的路径（运行期得到 nil）
+	// Missing return: a non-void return type is declared but some path produces no value (yields nil at runtime)
 	if ret := strings.TrimSpace(f.Ret); ret != "" && ret != "void" && f.Name != "main" {
 		switch {
 		case !term:
@@ -353,10 +353,10 @@ func codeForKind(kind string) string {
 	return CodeUnusedVar
 }
 
-// ---------- 语句遍历 ----------
+// ---------- Statement walk ----------
 
-// block 遍历语句块，返回（是否有终止语句, 终止是否全部为 return）。
-// 终止 = return / log / break；不可达语句只报第一条。
+// block walks a statement block and returns (does it terminate, do all terminators return).
+// Terminators = return / log / break; only the first unreachable statement is reported.
 func (l *linter) block(b *Block) (term bool, allRet bool) {
 	if b == nil {
 		return false, false
@@ -409,7 +409,7 @@ func posOfStmt(s Stmt) Pos {
 	return Pos{}
 }
 
-// stmt 遍历一条语句，返回该语句是否终止（return/log/break）以及是否以 return 终止。
+// stmt walks one statement and reports whether it terminates (return/log/break) and whether it ends with return.
 func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 	switch t := s.(type) {
 	case *ExprStmt:
@@ -441,17 +441,17 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		}
 		return false, false
 	case *AssignStmt:
-		// QK108：自赋值 x = x（含 p.x / l[i] 的结构等价形式）
+		// QK108: self assignment x = x (including the structurally equivalent p.x / l[i] forms)
 		if sameExpr(t.Target, t.X) {
 			l.warn(t.Pos, CodeSelfAssign, "自赋值：%s 赋值给自身（无效果）", exprText(t.Target))
 		}
-		// 先求右值与目标子表达式：`x = x + 1` 里的读取会清除「未读赋值」记录，
-		// 否则会把自己读自己的场景误判成死存储（QK113 误报源）。
+		// Evaluate the right-hand side and the target subexpressions first: a read in `x = x + 1` clears the "assigned but unread" record,
+		// otherwise reading a variable in terms of itself would be misjudged as a dead store (a QK113 false-positive source).
 		l.expr(t.X, true, "")
 		switch tg := t.Target.(type) {
 		case *Ident:
-			// QK113：上一次对同一变量的赋值（含声明初值）若从未被读取 → 死存储。
-			// 两类豁免（宁漏报不误报）：引用类型写穿；循环体内赋值会被下一轮读取。
+			// QK113: the previous assignment to the same variable (including its declaration initializer) was never read → dead store.
+			// Two exemptions (prefer a missed report over a false one): write-through of reference types; assignments inside loops are read on the next round.
 			if prev, ok := l.pending[tg.Name]; ok && !l.refVars[tg.Name] && l.loopDepth == 0 {
 				l.warn(prev, CodeDeadStore, "对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）", tg.Name, t.Pos.Line)
 			}
@@ -480,7 +480,7 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		if t.Else != nil {
 			t2, r2 = l.block(t.Else)
 		}
-		// 两分支都终止才算终止；无 else 时 else 隐含不终止
+		// Both branches must terminate for the statement to terminate; without an else the else branch implicitly does not terminate
 		return t1 && t2, r1 && r2
 	case *WhileStmt:
 		l.expr(t.Cond, true, "")
@@ -537,9 +537,9 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 	return false, false
 }
 
-// ---------- 表达式遍历 ----------
+// ---------- Expression walk ----------
 
-// expr 遍历表达式。valueCtx=true 表示该表达式的值被使用（用于 void 误用检查）。
+// expr walks an expression. valueCtx=true means the expression's value is used (for the void-misuse check).
 func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 	switch t := e.(type) {
 	case nil:
@@ -562,13 +562,13 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 	case *BinOp:
 		l.expr(t.L, true, implType)
 		l.expr(t.R, true, implType)
-		// QK110：常量除零/取模零（try 内豁免：那是刻意的错误处理）
+		// QK110: division/modulo by a constant zero (exempt inside try: that is deliberate error handling)
 		if (t.Op == "/" || t.Op == "%") && l.tryDepth == 0 {
 			if n, ok := t.R.(*IntLit); ok && n.V == 0 {
 				l.warn(t.Pos, CodeDivZero, "常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）", t.Op)
 			}
 		}
-		// QK114：自身比较 x == x / x != x（只对可寻址形态：标识符/成员/下标）
+		// QK114: self comparison x == x / x != x (only for addressable forms: identifier/member/index)
 		if (t.Op == "==" || t.Op == "!=") && isRefLike(t.L) && sameExpr(t.L, t.R) {
 			name := exprText(t.L)
 			if t.Op == "==" {
@@ -616,7 +616,7 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 
 func isVoidRet(ret string) bool { return strings.TrimSpace(ret) == "void" }
 
-// singleFunc 返回唯一的同名函数（无重载）；重载无法静态判定返回类型时返回 nil。
+// singleFunc returns the unique function with that name (no overloads); nil when overloads make the return type statically undecidable.
 func (l *linter) singleFunc(name string) *FuncDecl {
 	defs := l.funcs[name]
 	if len(defs) != 1 {
@@ -645,10 +645,10 @@ func (l *linter) spaceFunc(space, name string) *FuncDecl {
 	return nil
 }
 
-// ---------- 接口近失配（接口未实现） ----------
+// ---------- Interface near-miss (interface not implemented) ----------
 
-// checkInterfaces 对每个接口，找出「实现了部分方法」的具体类型，报出缺失的方法。
-// 结构满足在赋值点由 typecheck 报错；这里补的是「意图实现但漏了方法」的场景。
+// checkInterfaces finds, for each interface, the concrete types that implement **some** methods and reports the missing ones.
+// Structural satisfaction is reported by typecheck at the assignment site; this covers the "meant to implement but missed a method" case.
 func (l *linter) checkInterfaces(prog *Program) {
 	if len(prog.Interfaces) == 0 {
 		return
@@ -657,7 +657,7 @@ func (l *linter) checkInterfaces(prog *Program) {
 	for _, s := range prog.Structs {
 		structs[s.Name] = true
 	}
-	// 类型的实例方法集（impl 内首参为本类型/Self 的方法）
+	// The type's instance-method set (methods in impl whose first parameter is this type/Self)
 	methodsOf := map[string]map[string]bool{}
 	typePos := map[string]Pos{}
 	for _, im := range prog.Impls {
@@ -720,9 +720,9 @@ func (l *linter) collectIfaceMethods(prog *Program, iface *InterfaceDecl, out ma
 	}
 }
 
-// ---------- 辅助：表达式结构键 / 出口判定 / 分支清除 / 导入检查 ----------
+// ---------- Helpers: expression structural keys / exit tests / branch clearing / import checks ----------
 
-// isRefType 判断类型串是否为引用类型：T& 或 pointer …（写穿语义，不是重新绑定）。
+// isRefType reports whether a type string is a reference type: T& or pointer … (write-through semantics, not rebinding).
 func isRefType(t string) bool {
 	t = strings.TrimSpace(t)
 	if t == "" {
@@ -734,7 +734,7 @@ func isRefType(t string) bool {
 	return false
 }
 
-// declTypeOf 取某变量的声明类型（QK112/QK113 辅助；未登记返回 ""）。
+// declTypeOf returns a variable's declared type (helpers for QK112/QK113; "" when unregistered).
 func declTypeOf(l *linter, name string) string {
 	if v := l.lookup(name); v != nil {
 		return v.typeName
@@ -742,9 +742,9 @@ func declTypeOf(l *linter, name string) string {
 	return ""
 }
 
-// sameExpr 结构等价比较：只认简单形态（标识符 / 成员 / 下标 / 字面量），
-// 其余（调用、运算等）一律视为不相等 → 不报，宁漏不误。
-// 全部走指针/值比较，零分配（旧实现用 fmt.Sprintf 造键，是 lint 阶段的主要分配来源）。
+// sameExpr: structural equality over simple forms only (identifier / member / index / literal);
+// everything else (calls, operations, …) counts as unequal → do not report; prefer a miss over a false positive.
+// All comparisons are pointer/value based and allocation-free (the old implementation built keys with fmt.Sprintf, the main allocation source in linting).
 func sameExpr(a, b Expr) bool {
 	switch x := a.(type) {
 	case *Ident:
@@ -775,7 +775,7 @@ func sameExpr(a, b Expr) bool {
 	return false
 }
 
-// isRefLike 是否可寻址形态（自赋值/自身比较只对这些形态报告）。
+// isRefLike reports whether a form is addressable (self assignment/self comparison are only reported for those).
 func isRefLike(e Expr) bool {
 	switch e.(type) {
 	case *Ident, *MemberExpr, *IndexExpr:
@@ -784,7 +784,7 @@ func isRefLike(e Expr) bool {
 	return false
 }
 
-// exprText 生成诊断里展示的表达式文本（仅在实际报错时调用 → 慢路径无所谓分配）。
+// exprText renders the expression text shown in a diagnostic (only called when actually reporting → allocation on the slow path is fine).
 func exprText(e Expr) string {
 	var b strings.Builder
 	writeExprText(&b, e)
@@ -815,8 +815,8 @@ func writeExprText(b *strings.Builder, e Expr) {
 	}
 }
 
-// checkConstCond 常量条件：if (true/false)、while (false)。
-// while (true) 由调用点单独判定（有 break/return 出口时不报）。
+// checkConstCond: constant conditions such as if (true/false), while (false).
+// while (true) is judged separately at the call site (not reported when a break/return exit exists).
 func (l *linter) checkConstCond(cond Expr, pos Pos, kw string) {
 	bl, ok := cond.(*BoolLit)
 	if !ok {
@@ -832,8 +832,8 @@ func (l *linter) checkConstCond(cond Expr, pos Pos, kw string) {
 	}
 }
 
-// branch 进入嵌套块/分支前清除未读赋值记录：
-// 分支内可能有读取，保守清空 → 宁漏报不误报（QK113）。
+// branch clears the unread-assignment records before entering a nested block or branch:
+// a read may happen inside, so clearing conservatively avoids false positives (QK113).
 func (l *linter) branch(b *Block) {
 	if b == nil || len(l.pending) == 0 {
 		return // 已经是空表：无需清（常见情形，省 clear 开销）
@@ -841,7 +841,7 @@ func (l *linter) branch(b *Block) {
 	clear(l.pending) // 复用同一张表，避免每个分支新建 map
 }
 
-// hasBreak 判断块内是否存在 break（不进入嵌套循环：嵌套循环里的 break 不外逃）。
+// hasBreak reports whether a block contains a break (it does not descend into nested loops: a break inside them does not escape).
 func hasBreak(b *Block) bool {
 	if b == nil {
 		return false
@@ -863,7 +863,7 @@ func hasBreak(b *Block) bool {
 	return false
 }
 
-// hasReturn 判断块内是否存在 return / log（函数级出口）。
+// hasReturn reports whether a block contains return / log (function-level exits).
 func hasReturn(b *Block) bool {
 	if b == nil {
 		return false
@@ -897,7 +897,7 @@ func hasReturn(b *Block) bool {
 	return false
 }
 
-// collectUses 收集本文件出现过的标识符名与空间名（QK111 判定「导入是否被使用」）。
+// collectUses collects identifier and space names that appear in this file (used by QK111 to decide whether an import is used).
 func (l *linter) collectUses(prog *Program) {
 	var walkBlock func(b *Block)
 	var walkExpr func(e Expr)
@@ -1028,8 +1028,8 @@ func (l *linter) collectUses(prog *Program) {
 	}
 }
 
-// collectTypeNames 把类型串里的标识符记为「已使用」：`LibPoint p` 的类型标注不是 Ident，
-// 只导入库的类型（或泛型实参里的库类型）同样属于「用到该导入」。
+// collectTypeNames marks identifiers inside type strings as used: a type annotation like `LibPoint p` is not an Ident,
+// and importing only a library's types (or a library type inside generic arguments) still counts as using that import.
 func (l *linter) collectTypeNames(t string) {
 	if t == "" {
 		return
@@ -1054,10 +1054,10 @@ func (l *linter) collectTypeNames(t string) {
 	}
 }
 
-// checkImports 未使用的 import（QK111）：
-// 载入被导入文件 → 收集其对外符号（pub 函数/类型 + 全部宏 + space/library 名），
-// 若本文件从未出现其中任何名字 → 报「未使用导入」。
-// 库无法解析、或符号集为空（.qlib 等）时**跳过**——宁可漏报也不误报。
+// checkImports: unused imports (QK111):
+// load the imported file → collect its public symbols (pub functions/types + all macros + space/library names),
+// and if none of those names ever appears in this file → report "unused import".
+// Skip when the library cannot be resolved or its symbol set is empty (.qlib etc.) — prefer a miss over a false positive.
 func (l *linter) checkImports(prog *Program) {
 	if len(prog.Imports) == 0 {
 		return
@@ -1098,14 +1098,14 @@ func (l *linter) checkImports(prog *Program) {
 	}
 }
 
-// checkUnusedFuncs 未被调用的函数：
-// 只对 program main 报（库文件里的函数就是对外 API），且只在整文件都没出现过该名字时报。
+// checkUnusedFuncs: functions that are never called:
+// only reported for program main (functions in a library file are the public API), and only when the name never appears in the whole file.
 func (l *linter) checkUnusedFuncs(prog *Program) {
-	// 只对「有 main 的程序」报（死代码判定只在可执行程序里成立）：
-	//   - program library; → 库，函数是 API，不报；
-	//   - 没有 main 的文件（如 compiler/testdata/mathlib.qk 这种漏写 program library; 的库）→ 依据不足，不报；
-	//   - program main; 即使出现 pub（pub 在 main 程序里不生效）仍按可执行程序判定 → 报。
-	// 判定口径由统计基准（lintstat_test.go）与语料快照共同钉住。
+	// Only reported for a program **with a main** (dead-code judgement only holds for an executable program):
+	//   - program library; → a library, its functions are the API, not reported;
+	//   - a file without main (such as compiler/testdata/mathlib.qk, a library missing `program library;`) → not enough evidence, not reported;
+	//   - program main; is treated as executable even when pub appears (pub has no effect in a main program) → reported.
+	// The rule is pinned by the statistical benchmark (lintstat_test.go) together with the corpus snapshot.
 	if prog.Kind == "library" || !hasMainFunc(prog) {
 		return
 	}
@@ -1117,7 +1117,7 @@ func (l *linter) checkUnusedFuncs(prog *Program) {
 	}
 }
 
-// hasMainFunc 判断程序是否定义了 main。
+// hasMainFunc reports whether the program defines main.
 func hasMainFunc(prog *Program) bool {
 	for _, f := range prog.Funcs {
 		if f.Name == "main" {
@@ -1127,7 +1127,7 @@ func hasMainFunc(prog *Program) bool {
 	return false
 }
 
-// libPublicSymbols 收集库对外可见的符号名（pub 函数/类型、space 与其方法、FFI 库、宏）。
+// libPublicSymbols collects a library's publicly visible symbol names (pub functions/types, spaces and their methods, FFI libraries, macros).
 func libPublicSymbols(lib *Program, macros []*MacroDef) []string {
 	var out []string
 	for _, m := range macros {
