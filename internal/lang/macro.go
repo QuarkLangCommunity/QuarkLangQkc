@@ -7,22 +7,22 @@ import (
 	"strings"
 )
 
-// SplitMacroDefs 从 token 流中切分出所有 #macro name (参数...) { 主体 } 定义，
-// 返回宏列表与剩余 token。
+// SplitMacroDefs splits every #macro name (params...) { body } definition out of a token stream,
+// returning the macro list and the remaining tokens.
 //
-// 语法（用户定案）：
+// Syntax (settled by the user):
 //
-//	#macro name (p1, p2, ...) { 主体 }
-//	#macro name [p1, p2] { 主体 }   // 参数列表分隔符 () [] {} 任意
-//	#macro name {p1, p2} { 主体 }
+//	#macro name (p1, p2, ...) { body }
+//	#macro name [p1, p2] { body }   // the parameter-list delimiter may be () [] or {}
+//	#macro name {p1, p2} { body }
 //
-// 参数均为名字、逗号分隔、个数不限；主体内按名替换为调用实参 token。
-// 调用形式（与定义同形，分隔符同样任意）：
+// Parameters are names, comma-separated, with no limit on the count; inside the body they are replaced by the call's argument tokens.
+// Invocation (mirrors the definition; the delimiter is likewise free):
 //
 //	name(args) / name[args] / name{args}
 func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
-	// 快路径：全文没有 `#` 开头的 token（宏/预处理指令），即无宏可切 →
-	// 直接返回原切片（零拷贝、零分配）。绝大多数源文件走这条路。
+	// Fast path: when the whole file has no token starting with `#` (macro/preprocessor directives) there is nothing to split →
+	// return the original slice (zero copy, zero allocation). The vast majority of source files take this path.
 	hasSharp := false
 	for i := range toks {
 		if toks[i].Kind == TSharp {
@@ -89,7 +89,7 @@ func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
 	return macros, rest, nil
 }
 
-// closeOf 返回左分隔符对应的右分隔符。
+// closeOf returns the closing delimiter matching an opening one.
 func closeOf(k TokenKind) (TokenKind, bool) {
 	switch k {
 	case TLParen:
@@ -102,8 +102,8 @@ func closeOf(k TokenKind) (TokenKind, bool) {
 	return 0, false
 }
 
-// takeBalancedPair 从 toks[i]（左分隔符）开始取平衡块（()[]{} 混合配对计数），
-// 返回块内 token 与结束位置；块闭合符必须与 openK 对应。
+// takeBalancedPair takes a balanced block starting at toks[i] (an opening delimiter), counting mixed ()[]{} pairs,
+// and returns the tokens inside plus the end position; the closing delimiter must correspond to openK.
 func takeBalancedPair(toks []Token, i int, closeK TokenKind) ([]Token, int, error) {
 	depth := 0
 	for j := i; j < len(toks); j++ {
@@ -123,7 +123,7 @@ func takeBalancedPair(toks []Token, i int, closeK TokenKind) ([]Token, int, erro
 	return nil, 0, errors.New(i18n.T("ParseError: 分隔符不配对，第 %d 行", toks[i].Line))
 }
 
-// splitTop 把 token 序列按顶层逗号切分（忽略 ()[]{} 内部的逗号）。
+// splitTop splits a token sequence on top-level commas (ignoring commas inside ()[]{}).
 func splitTop(toks []Token) [][]Token {
 	var parts [][]Token
 	depth := 0
@@ -145,8 +145,8 @@ func splitTop(toks []Token) [][]Token {
 	return parts
 }
 
-// ExpandMacros 在 token 流上展开命名宏调用：name(args)/name[args]/name{args}。
-// mode 为动态预处理态（"run"/"compile"/"explain"）；主体不递归再展开。
+// ExpandMacros expands named macro calls in a token stream: name(args)/name[args]/name{args}.
+// mode is the dynamic preprocessing state ("run"/"compile"/"explain"); bodies are not re-expanded recursively.
 func ExpandMacros(toks []Token, macros []*MacroDef, mode string) ([]Token, error) {
 	if len(macros) == 0 {
 		return toks, nil
@@ -193,7 +193,7 @@ func ExpandMacros(toks []Token, macros []*MacroDef, mode string) ([]Token, error
 	return out, nil
 }
 
-// macroCallExcluded：声明位置/成员访问/作用域调用/预处理命令处不展开宏。
+// macroCallExcluded: macros are not expanded at declaration positions, member accesses, scoped calls or preprocessor commands.
 func macroCallExcluded(i int, toks []Token) bool {
 	if i == 0 {
 		return false
@@ -205,10 +205,10 @@ func macroCallExcluded(i int, toks []Token) bool {
 	return false
 }
 
-// expandBody 展开宏主体：参数按名替换；#when (compile|run) { ... } 按态选块；
-// #return <token...> 是宏的返回值（展开结果 = 返回指令后的 token，参数替换后），立即终止整个展开；
-// #error("msg") 直接报错；#insert/#execute/#ast 已随 pattern 语法移除。
-// 返回 (输出, 是否被 #return 终止)。
+// expandBody expands a macro body: parameters are replaced by name; #when (compile|run) { ... } selects a block by state;
+// #return <token...> is the macro's return value (the expansion result is the tokens after the return directive, with parameters substituted) and terminates the whole expansion immediately;
+// #error("msg") reports an error directly; #insert/#execute/#ast were removed with the pattern syntax.
+// Returns (output, whether a #return terminated it).
 func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder []string) ([]Token, bool, error) {
 	var out []Token
 	i := 0
@@ -229,8 +229,8 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 		cmd := body[i+1].Text
 		i += 2
 		if cmd == "return" {
-			// #return <expr>：显示结果 = 返回指令后的全部内容（参数替换 + 后续指令继续处理），
-			// 例如 #return #insert(#ast(a))；并终止整个宏展开。
+			// #return <expr>: the shown result is everything after the return directive (parameters substituted + later directives still processed),
+			// e.g. #return #insert(#ast(a)); and it terminates the whole macro expansion.
 			sub, _, err := expandBody(body[i:], subst, mode, paramOrder)
 			if err != nil {
 				return nil, false, err
@@ -279,13 +279,13 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 			}
 			return nil, false, errors.New(i18n.T("第 %d 行：预处理错误 #error(%s)", t.Line, args[0].Text))
 		case "insert":
-			// #insert(#ast(name))：直插参数 name 的 token；#insert(#ast(...))：按序直插全部参数
+			// #insert(#ast(name)): splice in the tokens of parameter name; #insert(#ast(...)): splice in all parameters in order
 			inner, err := parseAstArg(args)
 			if err != nil {
 				return nil, false, err
 			}
 			if inner == "..." {
-				// 全部参数按声明顺序直插（逗号连接，转发调用形式 f(#insert(#ast(...)))）
+				// All parameters are spliced in declaration order (comma-joined, forwarding the call form f(#insert(#ast(...))))
 				for pi, pname := range paramOrder {
 					if pi > 0 {
 						out = append(out, Token{Kind: TComma, Text: ",", Line: t.Line, Col: t.Col})
@@ -300,7 +300,7 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 				out = append(out, captured...)
 			}
 		case "execute":
-			// #execute(name)：直插一个标识符 token（原语义：拼接生成的名字）
+			// #execute(name): splice in an identifier token (original semantics: a name built by concatenation)
 			if len(args) < 1 || args[0].Kind != TIdent {
 				return nil, false, errors.New(i18n.T("第 %d 行：#execute 需要 (名字)", t.Line))
 			}
@@ -312,7 +312,7 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 	return out, false, nil
 }
 
-// parseAstArg 解析 (#ast(名字)) 参数，返回名字；名字可为参数名或 ...（全部参数）。
+// parseAstArg parses an (#ast(name)) argument and returns the name; the name may be a parameter name or ... (all parameters).
 func parseAstArg(args []Token) (string, error) {
 	if len(args) < 4 || args[0].Kind != TSharp || args[1].Kind != TIdent || args[1].Text != "ast" ||
 		args[2].Kind != TLParen || args[len(args)-1].Kind != TRParen {
@@ -327,7 +327,7 @@ func parseAstArg(args []Token) (string, error) {
 	return "", errors.New(i18n.T("#insert 需要 (#ast(名字)) 形式"))
 }
 
-// String 便于报错展示。
+// String renders it for error messages.
 func (m *MacroDef) String() string {
 	return fmt.Sprintf("#macro %s (%s)", m.Name, strings.Join(m.Params, ", "))
 }
