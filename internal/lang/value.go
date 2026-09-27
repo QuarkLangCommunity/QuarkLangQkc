@@ -12,9 +12,9 @@ import (
 	"unsafe"
 )
 
-// Value is any QuarkLang runtime value：24 字节标签联合体。
-// charley 设计: 标量（int/float/bool）内联在 i 字段零堆分配（消灭 convT64/mallocgc）；
-// 对象与字符串引用走 unsafe.Pointer（Go GC 可见，保活无野指针）。
+// Value is any QuarkLang runtime value: a 24-byte tagged union.
+// charley's design: scalars (int/float/bool) are inlined in the i field with zero heap allocation (removes convT64/mallocgc);
+// objects and string references go through unsafe.Pointer (visible to the Go GC, kept alive, no dangling pointers).
 type Value struct {
 	tag uint8
 	i   int64          // 标量内联：int 值 / float 位模式 / bool 0|1
@@ -51,7 +51,7 @@ const (
 
 func FileV(f *FileValue) Value { return Value{tag: byte(vFile), ptr: unsafe.Pointer(f)} }
 
-// ---- file 值（路径对象） ----
+// ---- file value (path object) ----
 type FileValue struct {
 	Path string
 }
@@ -61,7 +61,7 @@ func (f *FileValue) FilePath() string { return f.Path }
 func (f *FileValue) String() string   { return "<file " + f.Path + ">" }
 func (f *FileValue) TypeName() string { return "file" }
 
-// ---- 标量构造器（保持旧名，调用点无需改） ----
+// ---- scalar constructors (old names kept so call sites need no change) ----
 
 func IntV(n int64) Value   { return Value{tag: byte(vInt), i: n} }
 func IntV32(n int32) Value { return IntV(int64(n)) }
@@ -82,11 +82,11 @@ func StrV(str string) Value {
 }
 func NilV() Value { return Value{} }
 
-// ---- FFI 原生指针值（不透明句柄：可空、可往返 FFI，不做指针算术） ----
+// ---- FFI native pointer value (opaque handle: nullable, round-trippable through FFI, no pointer arithmetic) ----
 
-// PtrV 包装来自 FFI 的裸指针（void* 句柄）。指针由系统库分配/返回，
-// 不归 Go 堆管，直接存 ptr 字段（GC 只扫描 Go 堆指针，非 Go 堆地址自动忽略）。
-// nil 归一化为 null（NilV）：空指针的语言表示就是 null。
+// PtrV wraps a raw pointer coming from FFI (a void* handle). The memory is allocated/returned by a system library and is not
+// managed by the Go heap, so it is stored directly in the ptr field (the GC scans only Go heap pointers and ignores non-Go addresses).
+// nil is normalized to null (NilV): the language representation of a null pointer is null.
 func PtrV(p unsafe.Pointer) Value {
 	if p == nil {
 		return NilV()
@@ -111,9 +111,9 @@ func StructV(st *StructValue) Value     { return Value{tag: byte(vStruct), ptr: 
 func LibraryV(o *libObj) Value          { return Value{tag: byte(vLib), ptr: unsafe.Pointer(o)} }
 func RefV(r *refValue) Value            { return Value{tag: byte(vRef), ptr: unsafe.Pointer(r)} }
 
-// ---- 引用值（按引用传参） ----
+// ---- reference value (by-reference argument passing) ----
 
-// refKind 是引用单元的种类。
+// refKind is the kind of reference cell.
 type refKind uint8
 
 const (
@@ -122,8 +122,8 @@ const (
 	refIndex                 // List 元素（obj 是 List 值，key 是下标）
 )
 
-// refValue 是实参的引用单元：形参按引用绑定时，读/写直接穿透到调用方的左值单元。
-// 非左值实参不构造引用（按值传递，callee 侧视作临时单元）。
+// refValue is an argument's reference cell: when a parameter binds by reference, reads/writes go straight through to the caller's lvalue cell.
+// Non-lvalue arguments do not build a reference (they are passed by value and treated as a temporary cell inside the callee).
 type refValue struct {
 	kind refKind
 	sc   *scope // refIdent：名字所在作用域
@@ -132,7 +132,7 @@ type refValue struct {
 	key  Value  // refIndex：下标
 }
 
-// load 读引用单元当前值（不递归解引用链；链由 deref/store 处理）。
+// load reads the reference cell's current value (it does not follow a dereference chain; deref/store handles chains).
 func (r *refValue) load() Value {
 	switch r.kind {
 	case refIdent:
@@ -157,14 +157,14 @@ func (r *refValue) load() Value {
 	return NilV()
 }
 
-// store 写引用单元（写穿引用链；返回 false = 目标不可写）。
+// store writes the reference cell (writing through reference chains; false = the target is not writable).
 func (r *refValue) store(v Value) bool {
 	switch r.kind {
 	case refIdent:
 		if r.sc == nil {
 			return false
 		}
-		// 目标槽位本身还是引用（f→g 链）：继续写穿，不覆盖引用单元
+		// The target slot is itself a reference (an f→g chain): keep writing through instead of overwriting the reference cell
 		if cur := r.sc.rawGet(r.name); cur.IsRef() && cur.Ref() != r {
 			return cur.Ref().store(v)
 		}
@@ -184,10 +184,10 @@ func (r *refValue) store(v Value) bool {
 	return false
 }
 
-// deref 解引用引用链：引用值对语言层完全透明（所有读路径统一解引用）。
-// 引用链由调用实参构造（f(x) 内再 g(x) 直接复用同一引用单元，链长 ≤ 1）。
-// deref 解引用（引用传递的统一读路径）。热路径：绝大多数值不是引用，
-// 这里保持「极小、可内联」的哨兵判断，真正的解引用循环放到 derefSlow。
+// deref follows a reference chain: reference values are completely transparent to the language (every read path dereferences).
+// Chains are built from call arguments (calling g(x) inside f(x) reuses the same reference cell, so the chain length is ≤ 1).
+// deref dereferences (the unified read path for reference passing). Hot path: the vast majority of values are not references,
+// so this keeps a minimal, inlinable sentinel check and moves the real dereference loop into derefSlow.
 func (v Value) deref() Value {
 	if v.tag != byte(vRef) {
 		return v
@@ -209,7 +209,7 @@ func (v Value) derefSlow() Value {
 	return v
 }
 
-// derefArgs 解引用实参列表（FFI/内建/线程边界只接受值）。
+// derefArgs dereferences an argument list (FFI/builtins/thread boundaries accept values only).
 func derefArgs(args []Value) []Value {
 	for i, a := range args {
 		if a.IsRef() {
@@ -219,11 +219,11 @@ func derefArgs(args []Value) []Value {
 	return args
 }
 
-// IsRef 是唯一能看到引用单元本身的判定（其余判定/取值对引用透明）。
+// IsRef is the only test that can see the reference cell itself (all other tests and reads are transparent to references).
 func (v Value) IsRef() bool    { return v.tag == byte(vRef) }
 func (v Value) Ref() *refValue { return (*refValue)(v.ptr) }
 
-// ---- 类型判定 ----
+// ---- type tests ----
 
 func (v Value) IsNil() bool         { return v.deref().tag == byte(vNil) }
 func (v Value) IsInt() bool         { return v.deref().tag == byte(vInt) }
@@ -257,7 +257,7 @@ func (v Value) File() *FileValue {
 	return ptr
 }
 
-// ---- 取值（调用方保证类型匹配；不匹配返回零值/空，语义由测试兜底） ----
+// ---- value extraction (the caller guarantees the type; a mismatch yields zero/empty and the tests pin the semantics) ----
 
 func (v Value) Int() int64                { v = v.deref(); return v.i }
 func (v Value) Float() float64            { v = v.deref(); return math.Float64frombits(uint64(v.i)) }
@@ -279,7 +279,7 @@ func (v Value) Chan() *Channel            { v = v.deref(); return (*Channel)(v.p
 func (v Value) Struct() *StructValue      { v = v.deref(); return (*StructValue)(v.ptr) }
 func (v Value) Lib() *libObj              { v = v.deref(); return (*libObj)(v.ptr) }
 
-// TypeName 返回值的运行时类型名。
+// TypeName returns the value's runtime type name.
 func (v Value) TypeName() string {
 	switch ValueKind(v.tag) {
 	case vNil:
@@ -328,7 +328,7 @@ func (v Value) TypeName() string {
 	return "<unknown>"
 }
 
-// String 返回值的显示字符串。
+// String returns the value's display string.
 func (v Value) String() string {
 	switch ValueKind(v.tag) {
 	case vNil:
@@ -385,7 +385,7 @@ func (v Value) String() string {
 // ---- rolling List<T> (spec §4) ----
 
 // List is a rolling two-pointer buffer: visible elements live in [head, tail).
-// mem/blockID 挂接全局内存管理器（写入时标记所属 block 为脏）。
+// mem/blockID hook into the global memory manager (a write marks the owning block dirty).
 type List struct {
 	items   []Value
 	head    int
@@ -398,7 +398,7 @@ func NewList(items ...Value) *List {
 	return &List{items: items, tail: len(items)}
 }
 
-// reset 复用 List 的底层切片（对象池化用）。
+// reset reuses a List's backing slice (for object pooling).
 func (l *List) reset() {
 	l.items = l.items[:0]
 	l.head = 0
@@ -463,7 +463,7 @@ func (l *List) AppendAll(o *List) {
 	}
 }
 
-// setIndex 写 i-th 可见元素（0-based，相对 head）；越界报错。
+// setIndex writes the i-th visible element (0-based, relative to head); out of range is an error.
 func (l *List) setIndex(i int, v Value) error {
 	idx := l.head + i
 	if i < 0 || idx >= l.tail {
@@ -565,7 +565,7 @@ func (h *HashTable) Remove(k Value) { delete(h.m, hashKey(k)) }
 // Size returns the number of entries.
 func (h *HashTable) Size() int { return len(h.m) }
 
-// Keys 返回键列表（String 键重建；其他类型按 "类型名:值" 前缀重建）。
+// Keys returns the key list (String keys are rebuilt; other types are rebuilt with a "typeName:value" prefix).
 func (h *HashTable) Keys() []Value {
 	out := make([]Value, 0, len(h.m))
 	for k := range h.m {
@@ -602,7 +602,7 @@ type Func struct {
 	paramCopyd []bool   // Copyd 参数标志（惰性缓存，调用热路径免字符串扫描）
 }
 
-// ParamNames 返回参数名数组（惰性缓存，所有调用共享）。
+// ParamNames returns the parameter-name array (lazily cached and shared by every call).
 func (f *Func) ParamNames() []string {
 	if f.paramNames == nil {
 		f.paramNames = make([]string, len(f.Params))
@@ -613,8 +613,8 @@ func (f *Func) ParamNames() []string {
 	return f.paramNames
 }
 
-// CopydFlags 返回参数 Copyd 标志（惰性缓存，与 ParamNames 同一思路）。
-// 两种写法都认：类型标注 int[Copyd]/Copyd<T>，以及形参修饰 copyd（fn f(copyd int a)）。
+// CopydFlags returns the parameter Copyd flags (lazily cached, same idea as ParamNames).
+// Both spellings are recognised: the type annotation int[Copyd]/Copyd<T>, and the parameter modifier copyd (fn f(copyd int a)).
 func (f *Func) CopydFlags() []bool {
 	if f.paramCopyd == nil {
 		f.paramCopyd = make([]bool, len(f.Params))
@@ -625,14 +625,14 @@ func (f *Func) CopydFlags() []bool {
 	return f.paramCopyd
 }
 
-// paramWrapCopyd 返回第 i 个参数是否按「Copyd 类型」包装绑定（绑 Copyd 值，.ptr() 可取包装值）；
-// copyd 修饰形参绑定深拷贝后的裸值（标量可直接参与运算；.ptr() 不适用）。
+// paramWrapCopyd reports whether parameter i binds as a "Copyd type" (it binds the Copyd value, readable via .ptr());
+// a copyd-modified parameter binds the deep-copied bare value (scalars can be used directly; .ptr() does not apply).
 func (f *Func) paramWrapCopyd(i int) bool {
 	return i >= 0 && i < len(f.Params) && isCopydType(f.Params[i].Type)
 }
 
-// execCtx 是函数执行的内部上下文（v2：语言面不再有 FuncBuffer）。
-// 函数执行记录日志（log），结果由 return 直接产生。
+// execCtx is the internal context of a function execution (v2: there is no FuncBuffer at the language level any more).
+// A function execution records log entries; the result comes directly from return.
 type execCtx struct {
 	Fn       *Func
 	Args     []Value
@@ -644,14 +644,14 @@ type execCtx struct {
 	depth    int      // 调用深度（栈溢出防护，按 ctx 传播，线程安全）
 	link     *execCtx // 空闲链（无锁 LIFO 栈）
 
-	// argArena 是实参切片的复用区（本 ctx 独占 → 无跨 goroutine 共享）。
-	// evalArgs 在其尾部追加，调用完成后由调用点截断归还；容量随调用保留复用。
+	// argArena is the reuse area for argument slices (owned by this ctx → no sharing across goroutines).
+	// evalArgs appends at its tail and the call site truncates it back after the call; the capacity is kept for reuse.
 	argArena []Value
 }
 
-// newCtx 接管调用参数切片所有权（evalArgs 每次新建，免复制）。
-// 无锁 LIFO 空闲链（atomic CAS）：实测优于纯分配（malloc+GC 扫描 > 2 次原子操作），
-// 且对 taskm 并发线程安全（CAS 无共享状态破坏）。
+// newCtx takes ownership of the call's argument slice (evalArgs creates a fresh one per call, so no copy is needed).
+// A lock-free LIFO free chain (atomic CAS): measured better than plain allocation (malloc+GC scanning beats two atomics),
+// and it is safe for taskm threads (CAS breaks no shared state).
 func (in *interp) newCtx(fn *Func, args []Value, pos Pos) *execCtx {
 	var ctx *execCtx
 	for {
@@ -682,7 +682,7 @@ func (in *interp) newCtx(fn *Func, args []Value, pos Pos) *execCtx {
 	return ctx
 }
 
-// ensureLog 确保日志列表存在（惰性兼容：池版 Log 恒非空，此调用几乎免费）。
+// ensureLog makes sure the log list exists (lazy compatibility: a pooled Log is never nil, so this call is nearly free).
 func (ctx *execCtx) ensureLog() *List {
 	if ctx.Log == nil {
 		ctx.Log = NewList()
@@ -690,7 +690,7 @@ func (ctx *execCtx) ensureLog() *List {
 	return ctx.Log
 }
 
-// putCtx 归还原子链（无锁 CAS 推入）。
+// putCtx returns the ctx to the atomic chain (lock-free CAS push).
 func (in *interp) putCtx(ctx *execCtx) {
 	ctx.Fn = nil
 	ctx.Args = nil
@@ -710,7 +710,7 @@ func (in *interp) putCtx(ctx *execCtx) {
 // ---- IO objects (spec §10) ----
 
 // IOStream is the default main() parameter: input + output + redirectable.
-// mu implements the 执行表 (spec §14.2): FIFO by arrival time, reads (RLock)
+// mu implements the execution table (spec §14.2): FIFO by arrival time, reads (RLock)
 // have priority over writes (Lock).
 type IOStream struct {
 	In  io.Reader
@@ -769,7 +769,7 @@ type FuncValue struct{ fn *Func }
 func (f *FuncValue) TypeName() string { return "fn" }
 func (f *FuncValue) String() string   { return "<fn " + f.fn.Name + ">" }
 
-// Task 是线程（taskm）的执行上下文：done = 线程是否空闲。
+// Task is a thread's (taskm) execution context: done = is the thread idle.
 type Task struct {
 	ctx     *execCtx
 	doneCh  chan struct{}
@@ -779,7 +779,7 @@ type Task struct {
 	Busy    bool // 是否有函数占用（done 即 !Busy）
 }
 
-// ThreadValue 是 thread 类实例（xmind：taskm.spawn() 返回 thread 类，内含 pid）。
+// ThreadValue is a thread class instance (xmind: taskm.spawn() returns a thread instance carrying a pid).
 type ThreadValue struct {
 	Pid int
 	t   *Task
@@ -819,7 +819,7 @@ func (s *StructValue) String() string {
 	return "<" + s.SType + " {" + strings.Join(parts, ", ") + "}>"
 }
 
-// CopydValue 包装 Copyd<T> 参数值；.ptr() 取出包装的地址。
+// CopydValue wraps a Copyd<T> parameter value; .ptr() returns the wrapped address.
 type CopydValue struct{ V Value }
 
 func (c *CopydValue) TypeName() string { return "Copyd" }
@@ -828,7 +828,7 @@ func (c *CopydValue) String() string   { return c.V.String() } // Copyd 透明
 // Channel is the coroutine communication primitive (block-buffered).
 type Channel struct{ ch chan Value }
 
-// NewChannel 创建容量为 cap 的缓冲 channel。
+// NewChannel creates a buffered channel with capacity cap.
 func NewChannel(cap int) *Channel { return &Channel{ch: make(chan Value, cap)} }
 
 func (c *Channel) TypeName() string { return "Channel" }
@@ -836,15 +836,15 @@ func (c *Channel) String() string   { return "<Channel>" }
 
 // ---- deep copy (Copyd semantics; HashTable stores deep copies) ----
 
-// deepCopy 深拷贝 List/HashTable（HashTable.Put 的既有语义：存表值快照）；
-// struct 不在其中（保持既有行为，HashTable/内存语义不受影响）——Copyd 传参用 copyDeep。
+// deepCopy deep-copies List/HashTable (HashTable.Put's existing semantics: store a snapshot of the table value);
+// struct is not included (existing behaviour is kept, so HashTable/memory semantics are unaffected) — Copyd arguments use copyDeep.
 func deepCopy(v Value) Value { return copyDeep(v, false) }
 
-// copydCopy 是 Copyd 传参/绑定用的深拷贝：在 deepCopy 基础上连 struct 一起递归拷贝
-// （callee 修改 copyd 形参的字段不影响调用方）。
+// copydCopy is the deep copy used for Copyd argument passing/binding: on top of deepCopy it also copies structs recursively
+// (so callee writes to a copyd parameter's fields do not affect the caller).
 func copydCopy(v Value) Value { return copyDeep(v, true) }
 
-// copyDeep 递归拷贝；deepStruct=true 时 struct 也复制（List/Table 元素同样递归）。
+// copyDeep copies recursively; with deepStruct=true structs are copied too (List/Table elements recurse as well).
 func copyDeep(v Value, deepStruct bool) Value {
 	v = v.deref()
 	if v.IsList() {
@@ -875,7 +875,7 @@ func copyDeep(v Value, deepStruct bool) Value {
 	return v
 }
 
-// implDefsFor 聚合某类型所有 impl（无接口 + 各接口实现）。
+// implDefsFor aggregates all impls of a type (no interface + each interface implementation).
 func (in *interp) implDefsFor(typ string) []*ImplDef {
 	var out []*ImplDef
 	for k, d := range in.impls {
