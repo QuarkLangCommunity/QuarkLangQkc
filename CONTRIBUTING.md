@@ -20,7 +20,7 @@ git clone https://github.com/QuarkLangCommunity/QuarkLangQkc && cd QuarkLangQkc
 git switch -c fix/short-description    # branch names: fix/… feat/… docs/… ci/…
 # …make your change…
 go test ./... && (cd compiler && go test ./...)      # ① both test layers
-(cd compiler && ./testdata/compare.sh)               # ② dual-path parity (expects "全部一致")
+(cd compiler && ./testdata/compare.sh)               # ② dual-path parity (must print "all identical")
 git commit -m "Short title (English or Chinese, one line)"   # ③ commit message: imperative, add a body when useful
 git push -u origin HEAD && gh pr create --fill       # ④ open the PR; CI runs the three-platform matrix
 ```
@@ -29,7 +29,7 @@ Merge requirements (automated — no human approval needed today):
 
 | Gate | What it means |
 |---|---|
-| 7 required checks | `测试（os）` on all three platforms, `Linux 专项`, `库与预处理器（os）` on all three |
+| 7 required checks | `tests (os)` on all three platforms, `linux extras (dual-path / editors / release)`, `libraries & preprocessor (os)` on all three |
 | Branch protection | `main` rejects direct pushes, force-pushes and deletions |
 
 ## Pre-push checklist (runs locally)

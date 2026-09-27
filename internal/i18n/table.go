@@ -1,7 +1,7 @@
 package i18n
 
-// table 是「中文模板 → 英文模板」映射。键是源码里的**原始模板**（占位符 %s/%d/%q/%v 顺序一致）。
-// 维护约定：新增中文文案时 TestCoverage 会列出缺失条目，请在 internal/i18n/table.go 登记英文。
+// table is the "Chinese template -> English template" map. The keys are the **original templates** from the source (placeholders %s/%d/%q/%v in the same order).
+// Maintenance convention: when Chinese text is added, TestCoverage lists the missing entries; register the English in internal/i18n/table.go.
 var table = map[string]string{
 	"RunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行": "RunError: #error (\"cannot run a library\"): a program library is compiled as a library and cannot be run",
 	"ParseError: %q 不是合法整数":                                "ParseError: %q is not a valid integer",

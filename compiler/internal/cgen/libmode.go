@@ -1,22 +1,22 @@
 package cgen
 
-// libmode.go —— **库模式**：编译库制品（--emit-lib）时豁免 main 入口要求。
+// libmode.go — **lib mode**: compiling a library artifact (--emit-lib) exempts it from the main entry requirement.
 //
-// 为什么放在语言前端：库是"语言本体的正常产物"，不该靠塞一个假 main 来绕过检查
-// （假 main 会与使用方的 main 冲突，也会污染导出符号表）。
+// Why this lives in the language frontend: a library is "a normal product of the language proper", and the check should not be bypassed by stuffing in a fake main
+// (a fake main would clash with the consumer's main and also pollute the exported symbol table).
 
 var libMode bool
 
-// SetLibMode 开关库模式（由 qkc --emit-lib 设置）
+// SetLibMode toggles lib mode (set by qkc --emit-lib)
 func SetLibMode(v bool) { libMode = v }
 
-// InLibMode 当前是否库模式
+// InLibMode reports whether lib mode is currently on
 func InLibMode() bool { return libMode }
 
-// forceHelpers：与库链接时，宿主程序**必须提供全部运行时辅助函数**。
-// 原因：链接共享库后 LTO 无法再丢弃未用的运行时代码（如 ql_any_str_int），
-// 它们对 ql_int_to_str/ql_float_to_str 的引用需要由宿主程序的定义来满足。
+// forceHelpers: when linking against a library the host program **must provide every runtime helper**.
+// Reason: once a shared library is linked, LTO can no longer drop unused runtime code (such as ql_any_str_int),
+// and their references to ql_int_to_str/ql_float_to_str must be satisfied by host-program definitions.
 var forceHelpers bool
 
-// SetForceRuntimeHelpers 开关"强制发射全部运行时辅助函数"
+// SetForceRuntimeHelpers toggles "force-emit all runtime helpers"
 func SetForceRuntimeHelpers(v bool) { forceHelpers = v }

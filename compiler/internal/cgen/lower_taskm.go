@@ -1,15 +1,15 @@
 package cgen
 
-// taskm 线程 / 通道 lowering（阶段 D）：对接 qthreads.c 运行时。
+// taskm thread / channel lowering (Phase D): hooks into the qthreads.c runtime.
 //
-// 与解释器语义对齐：
-//   - taskm.spawn() → 线程句柄（编译路径 = 运行时小整数 pid，与语言 pid 同为 int）
-//   - t.merge(fn[, arg]) / taskm.merge(pid, fn[, arg]) → 在线程上执行 fn（返回值丢弃）
-//   - taskm.block(pid) → 等待线程空闲；taskm.done(pid) → 线程是否空闲
-//   - taskm.channel([n]) / c.send(v) / c.recv() → 有界通道（容量默认 1024）
+// Aligned with interpreter semantics:
+//   - taskm.spawn() → thread handle (compiled path = runtime small-integer pid, an int like the language pid)
+//   - t.merge(fn[, arg]) / taskm.merge(pid, fn[, arg]) → run fn on the thread (return value discarded)
+//   - taskm.block(pid) → wait for the thread to become idle; taskm.done(pid) → whether the thread is idle
+//   - taskm.channel([n]) / c.send(v) / c.recv() → bounded channel (default capacity 1024)
 //
-// 限制（明确报错，不静默错编）：merge 的目标函数最多 1 个 int 形参（运行时 arg 为 int）；
-// thread.talk 未 lower。
+// Limits (explicit errors, no silent miscompiles): a merge target function takes at most 1 int parameter (the runtime arg is an int);
+// thread.talk is not lowered.
 
 import (
 	"strings"
@@ -17,7 +17,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// taskPid 取线程句柄（thread 变量或 int pid，编译路径同为 i32）。
+// taskPid takes the thread handle (a thread variable or an int pid; both are i32 on the compiled path).
 func (fc *funcCtx) taskPid(x lang.Expr) (*expr, error) {
 	t := fc.typeOf(x)
 	if t != "int" && t != "thread" && t != "?" {
@@ -26,7 +26,7 @@ func (fc *funcCtx) taskPid(x lang.Expr) (*expr, error) {
 	return fc.expr(x)
 }
 
-// runnerFor 登记 merge 的 runner（目标函数最多 1 个 int 形参）。
+// runnerFor registers a merge runner (the target function takes at most 1 int parameter).
 func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) (*expr, error) {
 	l := fc.l
 	id, ok := fnExpr.(*lang.Ident)
@@ -67,10 +67,10 @@ func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) 
 	return &expr{kind: kRunner, typ: "runner", s: r, i: int64(len(ptypes))}, nil
 }
 
-// isListTypeE 判断语言类型是否 List<...>。
+// isListTypeE reports whether a language type is List<...>.
 func (l *lowerer) isListTypeE(t string) bool { return strings.HasPrefix(t, "List<") }
 
-// addRunner 登记 runner（去重），返回 IR 名。
+// addRunner registers a runner (deduplicated) and returns its IR name.
 func (l *lowerer) addRunner(fn string, params []string) string {
 	key := fn + "|" + strings.Join(params, ",")
 	if n, ok := l.runnerIdx[key]; ok {
@@ -96,7 +96,7 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// taskmCall lower taskm.<method>(...)。
+// taskmCall lowers taskm.<method>(...).
 func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, error) {
 	l := fc.l
 	switch me.Name {
@@ -155,7 +155,7 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 	return nil, l.errf(me.Pos, "暂未支持 taskm.%s（编译器支持 spawn/merge/block/done/channel）", me.Name)
 }
 
-// threadCall lower t.merge(fn[, arg]) / t.pid()。
+// threadCall lowers t.merge(fn[, arg]) / t.pid().
 func (fc *funcCtx) threadCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr) (*expr, error) {
 	l := fc.l
 	switch me.Name {
@@ -163,14 +163,14 @@ func (fc *funcCtx) threadCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr)
 		if len(c.Args) != 0 {
 			return nil, l.errf(me.Pos, "t.pid() 不接受参数")
 		}
-		return recv, nil // 编译路径 thread 变量本身就是 pid（i32）
+		return recv, nil // on the compiled path a thread variable is itself the pid (i32)
 	case "merge":
 		if len(c.Args) < 1 || len(c.Args) > 9 {
 			return nil, l.errf(me.Pos, "t.merge(fn[, args...]) 需要 1..9 个参数（最多 8 个实参），got %d", len(c.Args))
 		}
 		return fc.mergeCall(me, recv, c.Args[0], c.Args[1:])
 	case "talk":
-		// 解释器语义：校验参数是 channel，然后什么都不做
+		// Interpreter semantics: verify the argument is a channel, then do nothing
 		if len(c.Args) != 1 {
 			return nil, l.errf(me.Pos, "t.talk(c) 需要 1 个参数")
 		}
@@ -185,7 +185,7 @@ func (fc *funcCtx) threadCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr)
 	return nil, l.errf(me.Pos, "暂未支持 thread 方法 %q（编译器支持 merge/pid/talk）", me.Name)
 }
 
-// mergeCall 构造 taskm.merge(pid, runner, args...)（实参经 i64 槽交给运行时）。
+// mergeCall builds taskm.merge(pid, runner, args...) (arguments are passed to the runtime through i64 slots).
 func (fc *funcCtx) mergeCall(me *lang.MemberExpr, pid *expr, fnExpr lang.Expr, extra []lang.Expr) (*expr, error) {
 	runner, err := fc.runnerFor(fnExpr, extra, me.Pos)
 	if err != nil {
@@ -206,7 +206,7 @@ func (fc *funcCtx) mergeCall(me *lang.MemberExpr, pid *expr, fnExpr lang.Expr, e
 	return &expr{kind: kMerge, typ: "void", call: &callExpr{name: "ql_merge", args: args}}, nil
 }
 
-// mergeArgOK 判断实参类型能否用 i64 槽携带。
+// mergeArgOK reports whether an argument type can be carried in an i64 slot.
 func (fc *funcCtx) mergeArgOK(t string) bool {
 	switch t {
 	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel":
@@ -215,7 +215,7 @@ func (fc *funcCtx) mergeArgOK(t string) bool {
 	return fc.l.isStructType(t) || fc.l.isListTypeE(t)
 }
 
-// channelCall lower c.send(v) / c.recv()。
+// channelCall lowers c.send(v) / c.recv().
 func (fc *funcCtx) channelCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr) (*expr, error) {
 	l := fc.l
 	switch me.Name {

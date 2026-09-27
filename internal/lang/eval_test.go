@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"strings"
 	"testing"
 )
@@ -20,7 +21,7 @@ func runSrc(t *testing.T, src string, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// ============ v2 核心语义 ============
+// ============ v2 core semantics ============
 
 func TestHello(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
@@ -34,7 +35,7 @@ func TestHello(t *testing.T) {
 	}
 }
 
-// 函数必须带返回类型；return 返回真实值并结束
+// Functions must carry a return type; return yields the real value and ends the function
 func TestReturnValue(t *testing.T) {
 	out, err := runSrc(t, `
 fn sq(int n) int {
@@ -53,7 +54,7 @@ fn main(IOStream io) {
 	}
 }
 
-// log 记录并结束函数（return 不再执行）
+// log records and ends the function (return is no longer executed)
 func TestLogEndsFunction(t *testing.T) {
 	out, err := runSrc(t, `
 fn f() int {
@@ -73,7 +74,7 @@ fn main(IOStream io) {
 	}
 }
 
-// try/catch（名字 + 类型）
+// try/catch (name + type)
 func TestTryCatch(t *testing.T) {
 	out, err := runSrc(t, `
 fn main(IOStream io) {
@@ -93,7 +94,7 @@ fn main(IOStream io) {
 	}
 }
 
-// .{...} 匿名结构体字面量（字段名可为关键字 in/out）
+// .{...} anonymous struct literal (field names may be the keywords in/out)
 func TestStructLiteral(t *testing.T) {
 	out, err := runSrc(t, `
 fn main(IOStream io) {
@@ -108,7 +109,7 @@ fn main(IOStream io) {
 	}
 }
 
-// 滚动 List：* 取开头、next 滚动、for 语法糖、耗尽、reset
+// Rolling List: * takes the head, next rolls forward, for syntactic sugar, exhaustion, reset
 func TestRollingList(t *testing.T) {
 	out, err := runSrc(t, `
 fn main(IOStream io) {
@@ -142,7 +143,7 @@ fn main(IOStream io) {
 	}
 }
 
-// ============ 签名（v2）：f(args) @instance() ============
+// ============ signature (v2): f(args) @instance() ============
 
 func TestMemorizeSignature(t *testing.T) {
 	out, err := runSrc(t, `
@@ -165,7 +166,7 @@ fn main(IOStream io) {
 	}
 }
 
-// ============ taskm 线程模型 ============
+// ============ taskm thread model ============
 
 func TestTaskmThreads(t *testing.T) {
 	out, err := runSrc(t, `
@@ -231,6 +232,8 @@ fn main(IOStream io) {
 }
 
 func TestImplConformanceError(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // this test asserts the Chinese wording; English rendering is covered by the tests in internal/i18n
 	src := `
 type interface {
     fn call(void prefix, void rec) void;
@@ -260,7 +263,7 @@ fn main(IOStream io) {
 	}
 }
 
-// ============ 泛型 / 指针 / Copyd ============
+// ============ generics / pointers / Copyd ============
 
 func TestGenericNode(t *testing.T) {
 	out, err := runSrc(t, `
@@ -342,7 +345,7 @@ fn main(IOStream io) {
 	}
 }
 
-// ============ 真实内存系统 ============
+// ============ real memory system ============
 
 func TestMemoryCompactReclaims(t *testing.T) {
 	src := `
@@ -367,15 +370,17 @@ fn main(IOStream io) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// merge 的函数块（owner=pid）已被 compact 回收；线程自身的持久块（owner=0）保留 → 剩 1
+	// the function block of merge (owner=pid) has been reclaimed by compact; the thread's own persistent block (owner=0) is kept → 1 remains
 	if n := in.mem.BlockCount(); n != 1 {
 		t.Fatalf("expected 1 block (persistent thread block) after compact, got %d", n)
 	}
 }
 
-// ============ 严格检查 ============
+// ============ strict checks ============
 
 func TestTypeCheckErrors(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // this test asserts the Chinese wording; English rendering is covered by the tests in internal/i18n
 	cases := []struct {
 		name string
 		src  string
@@ -431,7 +436,7 @@ fn main(IOStream io) {
 	}
 }
 
-// ============ 边界单元测试 ============
+// ============ edge unit tests ============
 
 func TestArithmeticEdges(t *testing.T) {
 	out, err := runSrc(t, `
@@ -523,7 +528,7 @@ fn main(IOStream io) {
 func TestIORedirect(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "out.txt")
-	// 显式 close：Windows 上进程仍持有句柄时 TempDir 清理会失败（跨系统差异）
+	// explicit close: on Windows TempDir cleanup fails while the process still holds the handle (cross-system difference)
 	src := fmt.Sprintf(`fn main(IOStream io) {
     OutputStream f = FileOutputStream("%s");
     io.setOut(f);
@@ -547,9 +552,9 @@ func TestIORedirect(t *testing.T) {
 	}
 }
 
-// ============ 宏系统 ============
+// ============ macro system ============
 
-// 命名宏：#macro name (参数) { 主体 }，调用 name(args)，参数按名替换
+// Named macros: #macro name (parameters) { body }, called as name(args), parameters are substituted by name
 func TestMacroNamedParams(t *testing.T) {
 	out, err := runSrc(t, `#macro emit (expr) {
     #when (run) {
@@ -568,7 +573,7 @@ fn main(IOStream io) {
 	}
 }
 
-// #when(compile) 块在运行态被丢弃
+// #when(compile) blocks are dropped at run time
 func TestMacroWhenCompileDropped(t *testing.T) {
 	out, err := runSrc(t, `#macro only (x) {
     #when (compile) { #return io.println("COMPILE-ONLY"); }
@@ -588,7 +593,7 @@ fn main(IOStream io) {
 	}
 }
 
-// #error 在选中的预处理分支中直接报错
+// #error raises an error directly in the selected preprocessor branch
 func TestMacroErrorDirective(t *testing.T) {
 	_, err := runSrc(t, `#macro bad (x) {
     #when (run) {
@@ -615,7 +620,7 @@ program library;`)
 	}
 }
 
-// program main; 正常运行
+// program main; runs normally
 func TestProgramMain(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
     io.println("ok");
@@ -630,7 +635,7 @@ program main;`)
 	}
 }
 
-// pub / import 预制宏：解析层记录
+// pub / import preprocessor macros: recorded by the parse layer
 func TestPubAndImportParse(t *testing.T) {
 	prog, err := Compile(`import "util";
 program library;
@@ -657,8 +662,10 @@ pub type struct {
 	}
 }
 
-// 参数列表与调用分隔符 () [] {} 可互换；参数个数不限但调用必须匹配
+// Parameter-list and call delimiters () [] {} are interchangeable; the parameter count is unlimited but the call must match
 func TestMacroDelimitersAndArity(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // this test asserts the Chinese wording
 	out, err := runSrc(t, `#macro add [a, b] {
     #when (run) {
         #return a + b
@@ -707,7 +714,7 @@ func TestDeleteReclaimsBlock(t *testing.T) {
 	}
 }
 
-// pointer 修饰 + new <type>[size]（堆上申请，失败 badAlloc）
+// pointer modifier + new <type>[size] (allocated on the heap, failure gives badAlloc)
 func TestPointerAndNew(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
     pointer List<int> l = new int[10];
@@ -722,7 +729,7 @@ func TestPointerAndNew(t *testing.T) {
 	}
 }
 
-// new 非法大小 → badAlloc
+// new with an illegal size → badAlloc
 func TestNewBadAlloc(t *testing.T) {
 	_, err := runSrc(t, `fn main(IOStream io) {
     try {
@@ -736,7 +743,7 @@ func TestNewBadAlloc(t *testing.T) {
 	}
 }
 
-// program 声明位置：前后均可（用户确认：program main; 在前/后无关系）
+// program declaration position: either before or after (user confirmed: program main; before/after makes no difference)
 func TestProgramPlacementAnywhere(t *testing.T) {
 	out, err := runSrc(t, `program main;
 fn main(IOStream io) {
@@ -760,7 +767,7 @@ program main;`)
 	}
 }
 
-// String 文本处理内置方法集
+// String text-processing built-in method set
 func TestStringMethods(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
     String s = "  Hello, QuarkLang World  ";
@@ -787,7 +794,7 @@ func TestStringMethods(t *testing.T) {
 	}
 }
 
-// String 越界访问报错
+// String out-of-bounds access raises an error
 func TestStringBoundsError(t *testing.T) {
 	_, err := runSrc(t, `fn main(IOStream io) {
     io.println("abc".charAt(5));
@@ -797,7 +804,7 @@ func TestStringBoundsError(t *testing.T) {
 	}
 }
 
-// 循环内变量重复声明必须更新槽位（曾致 indexOf 旧值残留→substring 越界）
+// Redeclaring a variable inside a loop must update its slot (once left the old indexOf value behind → substring out of bounds)
 func TestLoopRedeclareUpdatesSlot(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
     String html = "AAA/xxxxB/yyyyyC/zzzzzz";

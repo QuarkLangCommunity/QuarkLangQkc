@@ -1,4 +1,4 @@
-// S6/S14：接口结构化满足 + dynamic 分发（vtable）
+// S6/S14: structural interface satisfaction + dynamic dispatch (vtable)
 type interface { fn sum(Self self) int; fn tag(Self self) String; } Iface;
 type struct { int a; } A;
 impl {

@@ -51,7 +51,7 @@ cd compiler && go build -o qkc . && ./qkc -run ../examples/hello.qk
 
 ```sh
 # ④ Toolchain (all reuse the same front end): lint / docs / REPL / language server
-go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/          # exits 1 when there are findings
+go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/          # exits 1 on findings; -json for CI
 go build -o qkdoc   ./cmd/qkdoc   && ./qkdoc -o API.md examples/tour.qk
 go build -o qkrepl  ./cmd/qkrepl  && ./qkrepl -e "int x = 6;" -e "x * 7"
 go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integration in editors/
@@ -95,7 +95,7 @@ qkcheck --lang en examples/           # per-invocation flag (also: --lang zh)
 qkc --lang en hello.qk                # all CLIs accept --lang: quark/qkc/qkcheck/qkdoc/qkrepl/qklsp
 ```
 
-- **Default is Chinese** (`zh`) to keep existing behaviour; `QK_LANG=en` (or `--lang en`) switches to English.
+- **The default follows your system locale**: an English machine reports English, a Chinese machine Chinese; `QK_LANG` (or `--lang`) always wins.
 - Untranslated messages **fall back to Chinese rather than disappearing** — information is never dropped.
 - Coverage is enforced in CI: `TestTableCoversWiredTemplates` fails if a wired Chinese message has no English entry,
   and `TestEnglishModeRendersEnglish` renders real type/parse/lint failures in English and rejects any leftover Chinese.
@@ -513,7 +513,7 @@ PRs and issues are welcome. The three lowest-friction ways to get involved:
   ```sh
   go test ./...                            # interpreter + toolchain
   (cd compiler && go test ./...)           # compiler
-  (cd compiler && ./testdata/compare.sh)   # dual-path parity (expects "全部一致" / all-identical)
+  (cd compiler && ./testdata/compare.sh)   # dual-path parity (must print "all identical")
   go test ./internal/lang/ -run 'TestLintBenchmark|TestLintStatsP99'   # lint FP/FN gates
   ```
 
@@ -523,6 +523,27 @@ PRs and issues are welcome. The three lowest-friction ways to get involved:
 
 The v2 syntax surface is complete (interpreter and compiler agree); compiled performance is on par with C.
 See `docs/benchmarks.md` (docs branch) for methodology.
+
+## Known gaps
+
+Written down on purpose — a young language is better judged by what it admits than by what it advertises.
+
+- **Compiler parity is per-construct, not per-program.** The interpreter and `qkc` are held to byte-identical output
+  on the checked-in corpus (`compiler/testdata/compare.sh`, enforced in CI). Constructs the compiler cannot lower yet
+  produce a hard "not supported yet" diagnostic instead of a silent behavioural difference — e.g. reading the error
+  value inside a `catch` body.
+- **Known bug**: `return .{...};` fails with `return type is Point, got .` because the typechecker does not propagate
+  an expected type into the literal yet ([issue #7](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/7)).
+- **Thin standard library**: six official libraries (json, regex, cleg, gl, vulkan, actions). There is no package
+  registry — `qkm` and `qkc -L` resolve dependencies locally.
+- **Macro system**: token-level macros are shared by both engines, but compile-time symbol insertion (`#ast`) and
+  import resolution are still in progress.
+- **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
+- **Test coverage is 65.1%** (root module); the linter's statistical gates cover its generated corpus, not all code.
+- **Source comments** are mid-translation to English (README, docs, `SYNTAX.md` and tool output are already English).
+- **Compiled-path runtime text is Chinese-only for now.** `QK_LANG=en` switches the interpreter's diagnostics, but the
+  C runtime embedded into compiled binaries still prints the Chinese error text (e.g. `越界`), so the dual-path
+  byte-equality gate is currently asserted in the default Chinese mode.
 
 ## License
 

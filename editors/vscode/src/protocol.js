@@ -1,13 +1,13 @@
 'use strict';
-// QuarkLang LSP 客户端（零 npm 依赖）：JSON-RPC over stdio 的收发与生命周期。
-// 本文件不依赖 vscode，可单独用 node 测试（见 test/protocol.test.js）。
+// QuarkLang LSP client (zero npm dependencies): JSON-RPC over stdio transport and lifecycle.
+// This file does not depend on vscode, so it can be tested with node alone (see test/protocol.test.js).
 
 const cp = require('child_process');
 
 class LspClient {
   /**
-   * @param {string} command  qklsp 可执行文件
-   * @param {string[]} args   额外参数（如 -L dir）
+   * @param {string} command  qklsp executable
+   * @param {string[]} args   extra arguments (e.g. -L dir)
    */
   constructor(command, args = [], opts = {}) {
     this.command = command;
@@ -55,7 +55,7 @@ class LspClient {
       try {
         msg = JSON.parse(body);
       } catch (e) {
-        this._onTrace('解析报文失败: ' + e.message);
+        this._onTrace('failed to parse message: ' + e.message);
         continue;
       }
       this._dispatch(msg);
@@ -63,11 +63,11 @@ class LspClient {
   }
 
   _dispatch(msg) {
-    if (this._trace) this._onTrace('收到: ' + JSON.stringify(msg).slice(0, 400));
+    if (this._trace) this._onTrace('received: ' + JSON.stringify(msg).slice(0, 400));
     if (msg.id !== undefined && this._pending.has(msg.id)) {
       const { resolve, reject } = this._pending.get(msg.id);
       this._pending.delete(msg.id);
-      if (msg.error) reject(new Error(msg.error.message || 'LSP 错误'));
+      if (msg.error) reject(new Error(msg.error.message || 'LSP error'));
       else resolve(msg.result);
       return;
     }
@@ -81,16 +81,16 @@ class LspClient {
     if (!this.running) return;
     const data = Buffer.from(JSON.stringify(obj), 'utf8');
     const head = Buffer.from(`Content-Length: ${data.length}\r\n\r\n`, 'ascii');
-    if (this._trace) this._onTrace('发送: ' + JSON.stringify(obj).slice(0, 400));
+    if (this._trace) this._onTrace('sent: ' + JSON.stringify(obj).slice(0, 400));
     this._proc.stdin.write(Buffer.concat([head, data]));
   }
 
-  /** 发通知（无响应）。 */
+  /** Send a notification (no response). */
   notify(method, params) {
     this._write({ jsonrpc: '2.0', method, params });
   }
 
-  /** 发请求，返回 Promise。 */
+  /** Send a request; returns a Promise. */
   request(method, params) {
     const id = ++this._id;
     return new Promise((resolve, reject) => {
@@ -99,13 +99,13 @@ class LspClient {
       setTimeout(() => {
         if (this._pending.has(id)) {
           this._pending.delete(id);
-          reject(new Error(`${method} 超时`));
+          reject(new Error(`${method} timed out`));
         }
       }, 10000);
     });
   }
 
-  /** 注册服务端通知处理。 */
+  /** Register a server notification handler. */
   on(method, fn) {
     if (!this._handlers.has(method)) this._handlers.set(method, []);
     this._handlers.get(method).push(fn);
@@ -146,13 +146,13 @@ class LspClient {
     this.notify('textDocument/didClose', { textDocument: { uri } });
   }
 
-  /** 优雅退出：shutdown → exit → 必要时 kill。 */
+  /** Graceful shutdown: shutdown → exit → kill if necessary. */
   async stop() {
     if (!this.running) return;
     try {
       await this.request('shutdown', null);
     } catch (e) {
-      /* 忽略：进程可能已退出 */
+      /* ignored: the process may have exited already */
     }
     this.notify('exit', null);
     await new Promise((resolve) => {

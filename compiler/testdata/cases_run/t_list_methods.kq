@@ -1,4 +1,4 @@
-// E5：List 内建方法（滚动双游标；get(i) 与 l[i] 同义；*l 取头不消费）
+// E5: List built-in methods (rolling two cursors; get(i) is synonymous with l[i]; *l peeks the head without consuming)
 fn main(IOStream io) {
     List<int> l = [3, 1, 2];
     l.__sort__();

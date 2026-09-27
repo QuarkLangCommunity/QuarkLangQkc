@@ -1,4 +1,4 @@
-// S1：函数重载（按参数个数+类型解析，含 int→float 隐式转换优先级）
+// S1: function overloading (resolved by argument count + type, including the priority of the implicit int->float conversion)
 fn add(int a, int b) int { return a + b; }
 fn add(String a, String b) String { return a + "<" + b; }
 fn add(float a, float b) float { return a + b; }

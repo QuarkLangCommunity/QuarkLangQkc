@@ -1,19 +1,19 @@
 package lang
 
-// qkcheck 基准：误报率 / 漏报率可复现测量。
+// qkcheck benchmark: reproducible measurement of the false-positive / false-negative rates.
 //
-// 基准集（testdata/lintbench/）：
-//   - defects/*.qk：人工植入的已知缺陷，每处期望被某个诊断码在指定行报出
-//   - clean/*.qk：人工复核的干净代码（含刻意不报的反例：try 内除零、while(true)+break、
-//     重载里的 void、完整接口实现、被使用的导入）
-//   - expect.txt：期望清单（`<相对路径> [params] <CODE@行,... | ->`）
+// Benchmark corpus (testdata/lintbench/):
+//   - defects/*.qk: hand-injected known defects, each expected to be reported by some diagnostic code at a designated line
+//   - clean/*.qk: hand-reviewed clean code (including counterexamples deliberately not reported: divide by zero inside try, while(true)+break,
+//     void in an overload, a complete interface implementation, a used import)
+//   - expect.txt: expectation list (`<relative path> [params] <CODE@line,... | ->`)
 //
-// 口径：
-//   TP = 报出且标注过的诊断；FP = 报出但未标注（含干净文件上的任何报出）；
-//   FN = 标注了但没报出。
-//   误报率 = FP/(TP+FP)；漏报率 = FN/(TP+FN)。
+// Counting rules:
+//   TP = diagnostics reported and annotated; FP = reported but not annotated (including any report on a clean file);
+//   FN = annotated but not reported.
+//   false-positive rate = FP/(TP+FP); false-negative rate = FN/(TP+FN).
 //
-// 默认任何 FP 或 FN 都让测试失败（回归门禁）；测量模式：
+// By default any FP or FN fails the test (regression gate); measurement mode:
 //
 //	LINTBENCH_NOFAIL=1 go test ./internal/lang/ -run TestLintBenchmark -v
 
@@ -83,7 +83,7 @@ func loadBenchExpect(t *testing.T) (map[string][]benchWant, map[string]bool) {
 	return want, params
 }
 
-// runBenchCase 对单个基准文件跑一次检查。
+// runBenchCase runs one check over a single benchmark file.
 func runBenchCase(t *testing.T, path string, withParams bool) []Diag {
 	t.Helper()
 	src, err := os.ReadFile(path)
@@ -155,7 +155,7 @@ func TestLintBenchmark(t *testing.T) {
 		rows = append(rows, r)
 	}
 
-	// 报告
+	// report
 	t.Log("==== qkcheck 基准测量（testdata/lintbench）====")
 	for _, r := range rows {
 		status := "✔"

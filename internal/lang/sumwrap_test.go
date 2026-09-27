@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// sum 数学优化：闭式结果必须与语言 int=32 位语义一致（wrap），双路径同值
+// sum mathematical optimization: the closed-form result must agree with the language's int=32-bit semantics (wrap); both paths yield the same value
 func TestSumClosedFormWrap(t *testing.T) {
 	out, err := runSrc(t, `fn ident(int n) int {
     return n * 3 + 1;
@@ -24,8 +24,8 @@ fn main(IOStream io) {
 }
 
 func expectedWrapV() string {
-	// 14999999950000000 mod 2^32（int=32 位补码）
-	// 由编译器路径基准值锁定：-1532588160
+	// 14999999950000000 mod 2^32 (int = 32-bit two's complement)
+	// pinned by the compiler-path baseline value: -1532588160
 	const want = "-1532588160\n"
 	return want
 }

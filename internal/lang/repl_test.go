@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// newTestREPL 建会话，输出写入字符串缓冲。
+// newTestREPL builds a session with the output written to a string buffer.
 func newTestREPL(t *testing.T, stdin string) (*REPLSession, *strings.Builder) {
 	t.Helper()
 	var out strings.Builder
@@ -73,7 +73,7 @@ func TestREPLFunctionDefinitionAndCall(t *testing.T) {
 	}
 }
 
-// 跨段调用必须是按名字派发（FnIdx=-1），否则会错调到上一次登记的函数。
+// A cross-chunk call must be dispatched by name (FnIdx=-1), otherwise it would wrongly call the function registered last time.
 func TestREPLCrossChunkDispatch(t *testing.T) {
 	s, _ := newTestREPL(t, "")
 	if _, err := s.Eval("fn foo(int n) int {\n    return 1;\n}"); err != nil {
@@ -92,7 +92,7 @@ func TestREPLCrossChunkDispatch(t *testing.T) {
 	if strings.TrimSpace(got) != "2" {
 		t.Errorf("caller 应调用 bar 得 2，got %q", got)
 	}
-	// 重新定义 foo 后仍按名字解析
+	// after foo is redefined it is still resolved by name
 	if _, err := s.Eval("fn foo(int n) int {\n    return 111;\n}"); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestREPLParseErrorMessageLine(t *testing.T) {
 	if err == nil {
 		t.Fatal("语法错误应返回错误")
 	}
-	// 包装带来 +1 行偏移，必须换算回用户输入的行号（第 2 行）
+	// the wrapper introduces a +1 line offset, which must be converted back to the user's input line number (line 2)
 	if !strings.Contains(err.Error(), "line 2") {
 		t.Errorf("错误行号应换算为第 2 行，got %v", err)
 	}

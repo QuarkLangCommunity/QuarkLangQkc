@@ -1,5 +1,5 @@
-// 刻意不报：导入的库**只用到类型标注**（List<LibBox> / LibBox），类型串不是 Ident，
-// 必须显式从类型标注收集名字；本用例不含该库的方法调用，以隔离这一点。
+// Deliberately not reported: the imported library is used **only in type annotations** (List<LibBox> / LibBox); a type string is not an Ident,
+// so names must be collected from type annotations explicitly. This case contains no call to that library's methods, to isolate the behaviour.
 program library;
 import "helpertypes";
 

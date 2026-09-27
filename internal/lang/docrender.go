@@ -11,9 +11,9 @@ import (
 
 // DocOptions controls rendering.
 type DocOptions struct {
-	Title string // 标题（默认取 Path）
-	All   bool   // true = 含未 pub 的符号；false = 只渲染 pub（文件无 pub 时自动渲染全部）
-	Path  string // 源文件路径（展示用）
+	Title string // title (defaults to Path)
+	All   bool   // true = include non-pub symbols; false = render pub only (when the file has no pub, everything is rendered)
+	Path  string // source file path (for display)
 }
 
 // visible decides whether an item should be rendered:
@@ -26,7 +26,7 @@ func (d *Doc) visible(it *DocItem, opts DocOptions) bool {
 	}
 	switch it.Kind {
 	case DocImpl, DocSpace, DocLibrary, DocMacro:
-		return true // 语言里 pub 不能前缀它们；宏/空间/实现正是库对外 API 的载体
+		return true // the language does not allow pub on them; macros/spaces/impls are exactly what a library exposes as its API
 	}
 	return it.Pub
 }
@@ -182,7 +182,7 @@ func writeFieldsMD(b *strings.Builder, it *DocItem) {
 	for _, f := range it.Fields {
 		name, sig := f.Name, f.Signature
 		if sig == "" {
-			sig = f.Name // expand interface X; 之类
+			sig = f.Name // expand interface X; and the like
 		}
 		writeRow(name, cell(sig), cell(Summary(f.Doc)))
 	}
@@ -267,7 +267,7 @@ func renderMDBlock(block string) string {
 			if strings.TrimSpace(ln) == "" {
 				continue
 			}
-			if i == 1 && strings.Contains(ln, "---") { // 分隔行
+			if i == 1 && strings.Contains(ln, "---") { // separator row
 				continue
 			}
 			cells := splitRow(ln)

@@ -1,7 +1,7 @@
-// 刻意不报的两类「同名」：
-//   1) 局部变量遮蔽**类型名**：类型标注走类型串解析（`Point p` 与标识符查表无关），不会改变语义；
-//   2) 局部变量遮蔽 **space 名**：空间调用一律写 `space::fn`（正典 S10），也不会被局部变量劫持。
-// 只对「遮蔽全局函数」报警（那会改变 `f(...)` 的解析目标）。
+// Two kinds of "same name" that are deliberately NOT reported:
+//   1) a local variable shadowing a **type name**: type annotations are parsed as type strings (`Point p` never does identifier lookup), so semantics cannot change;
+//   2) a local variable shadowing a **space name**: space calls are always written `space::fn` (canonical S10) and cannot be hijacked by a local.
+// Only shadowing a **global function** is reported (that would change what `f(...)` resolves to).
 type struct { int v; } Point;
 space {
     fn max(int a, int b) int { return a; }

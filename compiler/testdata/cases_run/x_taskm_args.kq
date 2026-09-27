@@ -8,7 +8,7 @@ fn mix(int a, String s, float f, bool b) int {
 }
 fn touch(P p, int d) int { p.v = p.v + d; return p.v; }
 
-// merge 最多 8 个实参（qthreads 运行时 8 个 i64 槽）
+// merge takes at most 8 arguments (the qthreads runtime has 8 i64 slots)
 fn sum8(int a, int b, int c, int d, int e, int f, int g, int h) int {
     return a + b + c + d + e + f + g + h;
 }

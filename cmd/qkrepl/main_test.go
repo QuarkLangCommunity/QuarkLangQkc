@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	lang_i18n "quarklang/internal/i18n"
 )
 
 func runCapture(t *testing.T, stdin string, args ...string) (string, string, int) {
@@ -16,6 +18,9 @@ func runCapture(t *testing.T, stdin string, args ...string) (string, string, int
 }
 
 func TestQkreplEvalFlag(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
+	t.Setenv("QK_LANG", "zh")         // this file asserts Chinese echo output
 	out, errOut, code := runCapture(t, "", "-e", "1 + 2 * 3")
 	if code != 0 {
 		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
@@ -26,6 +31,8 @@ func TestQkreplEvalFlag(t *testing.T) {
 }
 
 func TestQkreplEvalFlagMultiple(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, _, code := runCapture(t, "", "-e", "int x = 5;", "-e", "x * 8")
 	if code != 0 {
 		t.Fatalf("应退出 0，got %d", code)
@@ -36,6 +43,8 @@ func TestQkreplEvalFlagMultiple(t *testing.T) {
 }
 
 func TestQkreplEvalFlagError(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	_, errOut, code := runCapture(t, "", "-e", "1 / 0")
 	if code != 1 {
 		t.Fatalf("出错应退出 1，got %d", code)
@@ -46,6 +55,8 @@ func TestQkreplEvalFlagError(t *testing.T) {
 }
 
 func TestQkreplBatchMode(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	in := "int x = 21;\nx * 2\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
@@ -60,6 +71,8 @@ func TestQkreplBatchMode(t *testing.T) {
 }
 
 func TestQkreplBatchMultiLineBlock(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	in := "fn double(int n) int {\n    return n * 2;\n}\ndouble(21)\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
@@ -74,6 +87,8 @@ func TestQkreplBatchMultiLineBlock(t *testing.T) {
 }
 
 func TestQkreplBatchControlFlow(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	in := "int i = 0;\nwhile (i < 3) {\n    i = i + 1;\n}\ni\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
@@ -85,6 +100,8 @@ func TestQkreplBatchControlFlow(t *testing.T) {
 }
 
 func TestQkreplBatchErrorContinues(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	in := "int a = 1;\nnope + 1\na + 41\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 1 {
@@ -99,6 +116,8 @@ func TestQkreplBatchErrorContinues(t *testing.T) {
 }
 
 func TestQkreplIoOutput(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, errOut, code := runCapture(t, `io.println("hello", 42)`+"\n")
 	if code != 0 {
 		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
@@ -109,6 +128,8 @@ func TestQkreplIoOutput(t *testing.T) {
 }
 
 func TestQkreplHelpAndQuit(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, _, code := runCapture(t, ":help\n")
 	if code != 0 || !strings.Contains(out, ":load") {
 		t.Errorf(":help 应打印帮助，got code=%d %q", code, out)
@@ -123,6 +144,8 @@ func TestQkreplHelpAndQuit(t *testing.T) {
 }
 
 func TestQkreplUnknownCommand(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	_, errOut, code := runCapture(t, ":nope\n")
 	if code != 1 {
 		t.Fatalf("未知命令应退出 1，got %d", code)
@@ -133,6 +156,8 @@ func TestQkreplUnknownCommand(t *testing.T) {
 }
 
 func TestQkreplLoad(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	dir := t.TempDir()
 	p := filepath.Join(dir, "lib.qk")
 	src := "fn triple(int n) int {\n    return n * 3;\n}\n"
@@ -153,6 +178,8 @@ func TestQkreplLoad(t *testing.T) {
 }
 
 func TestQkreplLoadMissingFile(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	_, errOut, code := runCapture(t, ":load /nonexistent/x.qk\n")
 	if code != 1 || !strings.Contains(errOut, "error:") {
 		t.Errorf("缺文件应报错退出 1，got code=%d %q", code, errOut)
@@ -160,6 +187,8 @@ func TestQkreplLoadMissingFile(t *testing.T) {
 }
 
 func TestQkreplUsage(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	if _, _, code := runCapture(t, "", "-e"); code != 2 {
 		t.Errorf("-e 缺参数应退出 2")
 	}
@@ -175,6 +204,8 @@ func TestQkreplUsage(t *testing.T) {
 }
 
 func TestQkreplQuietFlag(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, _, code := runCapture(t, "1 + 1\n", "-q")
 	if code != 0 {
 		t.Fatalf("应退出 0，got %d", code)

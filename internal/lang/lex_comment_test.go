@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestLexRawStringLineNumbers 回归：多行原始字符串之后的行号不再漂移。
-// （旧实现 lexRawString 内自增 line 后又走 advance()，每个换行多算一行。）
+// TestLexRawStringLineNumbers regression: line numbers no longer drift after a multi-line raw string.
+// (The old implementation incremented line inside lexRawString and then also ran advance(), so every newline added one line too many.)
 func TestLexRawStringLineNumbers(t *testing.T) {
 	src := "String a = \"x\";\nString r = `raw\nline`;\nint b = 1;\n"
 	toks, err := Lex(src)
@@ -19,11 +19,11 @@ func TestLexRawStringLineNumbers(t *testing.T) {
 			bLine = tk.Line
 		}
 	}
-	if bLine != 4 { // 原始字符串占第 2–3 行，int b 在第 4 行
+	if bLine != 4 { // the raw string occupies lines 2-3, int b is on line 4
 		t.Errorf("多行原始字符串之后的 token 应在第 4 行，got %d", bLine)
 	}
 
-	// 两个换行的原始字符串：漂移 2 行的旧行为同样必须消失
+	// raw string with two newlines: the old 2-line drift must disappear as well
 	src2 := "String r = `a\nb\nc`;\nint b = 1;\n"
 	toks2, err := Lex(src2)
 	if err != nil {
@@ -63,7 +63,7 @@ func TestLexWithComments(t *testing.T) {
 		t.Errorf("行尾注释识别不对: %+v", comments[2])
 	}
 
-	// Lex 不受影响：token 流与开关无关
+	// Lex is unaffected: the token stream does not depend on the switch
 	toks2, err := Lex(src)
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestLexWithComments(t *testing.T) {
 	}
 }
 
-// TestCommentsDoNotShiftLines 回归：块注释跨行不影响其后 token 行号。
+// TestCommentsDoNotShiftLines regression: a block comment spanning several lines does not affect the line numbers of the tokens after it.
 func TestCommentsDoNotShiftLines(t *testing.T) {
 	src := "/* a\nb\nc */\nint x = 1;\n"
 	toks, err := Lex(src)

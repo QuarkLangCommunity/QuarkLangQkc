@@ -55,7 +55,7 @@ func NewREPLSession(stdin io.Reader, stdout io.Writer) (*REPLSession, error) {
 
 // Eval evaluates one input and returns the text to print (evaluation output + expression echo).
 func (s *REPLSession) Eval(src string) (out string, err error) {
-	defer func() { // 解释器不保证无 panic（FFI / 外部对象），REPL 必须活下来
+	defer func() { // the interpreter does not guarantee a lack of panics (FFI / external objects); the REPL must survive
 		if r := recover(); r != nil {
 			out, err = "", errors.New(i18n.T("REPL: 内部错误（已恢复）: %v", r))
 		}
@@ -109,7 +109,7 @@ func (s *REPLSession) execBody(body *Block, fn *Func) (string, error) {
 	for _, st := range body.Stmts {
 		s.resolveStructLit(st)
 		ctx := s.in.newCtx(fn, nil, posOfStmt(st))
-		ctx.depth = 0 // 池化 ctx 可能残留深度
+		ctx.depth = 0 // a pooled ctx may carry a leftover depth
 		var err error
 		if es, ok := st.(*ExprStmt); ok {
 			var v Value
@@ -130,7 +130,7 @@ func (s *REPLSession) execBody(body *Block, fn *Func) (string, error) {
 		}
 		s.in.putCtx(ctx)
 		if err == errReturn || err == errLoopBreak {
-			break // return / log 结束本段
+			break // return / log ends this chunk
 		}
 		if err != nil {
 			return out.String(), shiftErrLine(err, -1)

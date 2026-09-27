@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// 尾延迟 P99/P999：QuarkLang 解释器（零 GC，block 复用）vs Go（GC 停顿）。
+// Tail latency P99/P999: the QuarkLang interpreter (zero-GC, block reuse) vs Go (GC pause).
 func TestP99Latency(t *testing.T) {
 	qsrc := "fn main(IOStream io) {\n" +
 		"    int i = 0;\n" +

@@ -133,8 +133,8 @@ type lexer struct {
 	comments        []Comment
 }
 
-// singleCharText 返回单字符 token 的文本：预建表，避免每个标点都分配一个 1 字节字符串
-// （实测每文件数千个标点 token，是词法层最大的分配来源之一）。
+// singleCharText returns the text of a single-character token: the table is prebuilt so that no 1-byte string
+// is allocated per punctuation mark (measured: thousands of punctuation tokens per file, one of the largest allocation sources in the lexer).
 var singleCharTable = func() [256]string {
 	var t [256]string
 	for i := 0; i < 256; i++ {
@@ -145,12 +145,12 @@ var singleCharTable = func() [256]string {
 
 func singleCharText(c byte) string { return singleCharTable[c] }
 
-// Comment 是源码注释（qkdoc / qklsp 等工具用；常规编译流程丢弃注释）。
+// Comment is a source comment (used by tools such as qkdoc / qklsp; the normal compile pipeline discards comments).
 type Comment struct {
-	Text    string // 原文（含 `//` 或 `/* */` 定界符）
-	Pos     Pos    // 起始位置
-	EndLine int    // 结束行（行注释 = 起始行；块注释 = `*/` 所在行）
-	Block   bool   // true = /* */，false = //
+	Text    string // raw text (including the `//` or `/* */` delimiters)
+	Pos     Pos    // start position
+	EndLine int    // end line (line comment = start line; block comment = line holding the `*/`)
+	Block   bool   // true = /* */, false = //
 }
 
 func (lx *lexer) addComment(c Comment) {
@@ -165,14 +165,14 @@ func Lex(src string) ([]Token, error) {
 	return toks, err
 }
 
-// LexWithComments 与 Lex 相同，但额外按出现顺序收集注释。
+// LexWithComments is like Lex but additionally collects comments in order of appearance.
 func LexWithComments(src string) ([]Token, []Comment, error) {
 	return lex(src, true)
 }
 
 func lex(src string, collectComments bool) ([]Token, []Comment, error) {
 	lx := &lexer{src: src, line: 1, col: 1, collectComments: collectComments}
-	// 预分配 token 容量：实测每 token 约 3–4 字节源码，避免 append 反复扩容复制
+	// Preallocate token capacity: measured at ~3-4 bytes of source per token, avoids repeated append growth and copying
 	toks := make([]Token, 0, len(src)/3+8)
 	for {
 		tok, err := lx.next()
@@ -409,8 +409,8 @@ func (lx *lexer) lexNumber(line, col int) (Token, error) {
 	return Token{Kind: TInt, Text: text, Int: n, Line: line, Col: col}, nil
 }
 
-// lexRawString 反引号原始字符串（同 Go：无转义、可多行、换行计入行号）。
-// 注意：与 Go 的差异是 \r 原样保留在字符串值中（本实现不做丢弃）。
+// lexRawString lexes a backquoted raw string (as in Go: no escapes, may span lines, newlines count towards the line number).
+// Note the difference from Go: \r is kept as-is in the string value (this implementation does not drop it).
 func (lx *lexer) lexRawString(line, col int) (Token, error) {
 	lx.advance() // `
 	start := lx.pos
@@ -421,8 +421,8 @@ func (lx *lexer) lexRawString(line, col int) (Token, error) {
 			lx.advance()
 			return Token{Kind: TStr, Text: text, Line: line, Col: col}, nil
 		}
-		// 行/列推进统一交给 advance()：此前这里额外自增 line 会造成
-		// 多行原始字符串之后所有 token 的行号偏移（每个换行多算 1 行）。
+		// Line/column advancement is delegated to advance() alone: an extra line increment here used to
+		// shift the line numbers of every token after a multi-line raw string (one extra line per newline).
 		lx.advance()
 	}
 	return Token{}, lx.errf(line, col, "unterminated raw string")
@@ -458,7 +458,7 @@ func (lx *lexer) lexString(line, col int) (Token, error) {
 			case '\\':
 				sb = append(sb, '\\')
 			default:
-				// 未知转义保留字面（纯文本语义：仅标准转义生效）
+				// unknown escape keeps the literal text (plain-text semantics: only the standard escapes take effect)
 				sb = append(sb, '\\', e)
 			}
 			lx.advance()

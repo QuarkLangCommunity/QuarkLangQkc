@@ -1,6 +1,6 @@
 package main
 
-// 文档模型与语言分析：把 internal/lang 的解析/检查能力包装成 LSP 需要的位置信息。
+// Document model and language analysis: wraps the parse/check capabilities of internal/lang into the position information LSP needs.
 
 import (
 	"net/url"
@@ -14,7 +14,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// Document 是一个打开的文档及其分析结果。
+// Document is an open document together with its analysis result.
 type Document struct {
 	URI   string
 	Path  string
@@ -29,9 +29,9 @@ type Document struct {
 	parseErrLn int
 	parseErrCl int
 
-	syms        []symbol // 符号表缓存（文本变化时失效；补全/跳转/悬停共用）
+	syms        []symbol // symbol table cache (invalidated when the text changes; shared by completion/definition/hover)
 	symsValid   bool
-	globalCands []symbol // 补全候选的「与光标行无关」部分（关键字 + 内置 + 全局符号）
+	globalCands []symbol // the "independent of the cursor line" part of the completion candidates (keywords + builtins + global symbols)
 	globalValid bool
 }
 
@@ -46,7 +46,7 @@ func (d *Document) setText(text string) {
 	d.analyze()
 }
 
-// analyze 重新解析并构建文档模型（符号表按需惰性重建）。
+// analyze re-parses and rebuilds the document model (the symbol table is rebuilt lazily on demand).
 func (d *Document) analyze() {
 	d.syms, d.symsValid = nil, false
 	d.globalCands, d.globalValid = nil, false
@@ -65,7 +65,7 @@ func (d *Document) analyze() {
 	d.doc.Path = d.Path
 }
 
-// uriToPath 把 file:// URI 转成本地路径（非 file URI 原样返回）。
+// uriToPath converts a file:// URI into a local path (non-file URIs are returned unchanged).
 func uriToPath(uri string) string {
 	if !strings.HasPrefix(uri, "file://") {
 		return uri
@@ -84,8 +84,8 @@ func uriToPath(uri string) string {
 	return filepath.FromSlash(pathFromURISlash(p))
 }
 
-// pathFromURISlash 去掉 Windows 盘符前的引导斜杠（/C:/x → C:/x），其余平台原样返回。
-// 单独抽出便于在任何平台做单元测试（跨系统一致性）。
+// pathFromURISlash strips the leading slash before a Windows drive letter (/C:/x -> C:/x); other platforms are returned unchanged.
+// Extracted separately so it can be unit-tested on any platform (cross-system consistency).
 func pathFromURISlash(p string) string {
 	if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' &&
 		((p[1] >= 'a' && p[1] <= 'z') || (p[1] >= 'A' && p[1] <= 'Z')) && p[2] == ':' {
@@ -94,7 +94,7 @@ func pathFromURISlash(p string) string {
 	return p
 }
 
-// pathToURI 把本地路径转成 file:// URI（LSP 要求三段斜杠：file:///C:/x、file:///home/x）。
+// pathToURI converts a local path into a file:// URI (LSP requires three slashes: file:///C:/x, file:///home/x).
 func pathToURI(path string) string {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -103,7 +103,7 @@ func pathToURI(path string) string {
 	return "file://" + uriSlashPath(filepath.ToSlash(abs))
 }
 
-// uriSlashPath 保证斜杠路径以 / 开头（Windows 盘符 C:/x → /C:/x），拼上 file:// 后为 file:///C:/x。
+// uriSlashPath ensures a slash path starts with / (Windows drive C:/x -> /C:/x), which becomes file:///C:/x once file:// is prefixed.
 func uriSlashPath(p string) string {
 	if strings.HasPrefix(p, "/") {
 		return p
@@ -111,9 +111,9 @@ func uriSlashPath(p string) string {
 	return "/" + p
 }
 
-// ---------- 位置换算（LSP 0 基 / UTF-16 列 ↔ 语言 1 基 / 字节列） ----------
+// ---------- Position conversion (LSP 0-based / UTF-16 columns <-> language 1-based / byte columns) ----------
 
-// byteColToUTF16 行内字节列（1 基）→ UTF-16 码元偏移（0 基）。
+// byteColToUTF16 converts an in-line byte column (1-based) to a UTF-16 code unit offset (0-based).
 func byteColToUTF16(line string, byteCol int) int {
 	if byteCol <= 1 {
 		return 0
@@ -130,7 +130,7 @@ func byteColToUTF16(line string, byteCol int) int {
 	return n
 }
 
-// utf16ToByteCol UTF-16 码元偏移（0 基）→ 行内字节列（1 基）。
+// utf16ToByteCol converts a UTF-16 code unit offset (0-based) to an in-line byte column (1-based).
 func utf16ToByteCol(line string, char int) int {
 	if char <= 0 {
 		return 1
@@ -174,7 +174,7 @@ func rangeAt(line, col, endCol int) lspRange {
 	}
 }
 
-// lineByteRange：整行范围（诊断用）。
+// lineByteRange: the range of a whole line (used for diagnostics).
 func (d *Document) lineRange(line int) lspRange {
 	if line < 1 {
 		line = 1
@@ -203,7 +203,7 @@ func errLineCol(err error) (int, int) {
 	return 0, 0
 }
 
-// ---------- 符号表 ----------
+// ---------- Symbol table ----------
 
 type symbol struct {
 	Name  string
@@ -212,11 +212,11 @@ type symbol struct {
 	Doc   string
 	Line  int
 	Col   int
-	Local bool   // 局部变量/形参（只在函数范围内可见）
-	Scope [2]int // 局部符号的作用范围（函数起止行，1 基；非局部为 0）
+	Local bool   // local variable/parameter (visible only inside the function scope)
+	Scope [2]int // scope of a local symbol (function start and end lines, 1-based; 0 for non-local)
 }
 
-// symbols 汇总文档中的全部符号（全局 + 局部）；结果按文档版本缓存。
+// symbols collects every symbol in the document (global + local); the result is cached per document version.
 func (d *Document) symbols() []symbol {
 	if d.symsValid {
 		return d.syms
@@ -261,7 +261,7 @@ func (d *Document) buildSymbols() []symbol {
 	return out
 }
 
-// collectLocals 收集函数体内的局部声明（变量 / 循环变量 / catch 变量）。
+// collectLocals collects local declarations inside function bodies (variables / loop variables / catch variables).
 func collectLocals(b *lang.Block, start, end int, out *[]symbol) {
 	if b == nil {
 		return
@@ -297,8 +297,8 @@ func collectLocals(b *lang.Block, start, end int, out *[]symbol) {
 	}
 }
 
-// lookup 在给定位置查找符号：先找作用域覆盖该位置的局部符号（取最近的前向声明），
-// 再退回全局符号。返回 nil 表示未找到。
+// lookup finds a symbol at the given position: first a local symbol whose scope covers that position (the nearest preceding declaration),
+// then falling back to global symbols. Returns nil when nothing is found.
 func (d *Document) lookup(name string, line int) *symbol {
 	syms := d.symbols()
 	var best *symbol
@@ -339,13 +339,13 @@ func kindRank(kind string) string {
 	return "4"
 }
 
-// wordAt 取指定位置（1 基行、字节列）上的标识符。
+// wordAt returns the identifier at the given position (1-based line, byte column).
 func (d *Document) wordAt(line, col int) string {
 	if line < 1 || line > len(d.Lines) {
 		return ""
 	}
 	text := []rune(d.Lines[line-1])
-	// 字节列 → rune 下标
+	// byte column -> rune index
 	byteIdx := col - 1
 	if byteIdx < 0 {
 		byteIdx = 0
@@ -360,7 +360,7 @@ func (d *Document) wordAt(line, col int) string {
 			(r >= 'A' && r <= 'Z') || r > 0x7f
 	}
 	if runeIdx < len(text) && !isWord(text[runeIdx]) && runeIdx > 0 && isWord(text[runeIdx-1]) {
-		runeIdx-- // 光标落在词尾之后
+		runeIdx-- // the cursor sits after the end of the word
 	}
 	start, end := runeIdx, runeIdx
 	for start > 0 && isWord(text[start-1]) {
@@ -375,9 +375,9 @@ func (d *Document) wordAt(line, col int) string {
 	return string(text[start:end])
 }
 
-// completionCandidates 汇总补全候选（关键字 + 类型 + 符号）。
-// 「与光标行无关」的部分（关键字/内置/全局符号）按文档版本缓存；
-// 每次只额外挑选该行可见的局部符号 → 逐键补全近乎零分配。
+// completionCandidates collects completion candidates (keywords + types + symbols).
+// The part independent of the cursor line (keywords/builtins/global symbols) is cached per document version;
+// only the local symbols visible on that line are picked additionally -> near-zero allocation per keystroke.
 func (d *Document) completionCandidates(line int) []symbol {
 	if !d.globalValid {
 		seen := map[string]bool{}

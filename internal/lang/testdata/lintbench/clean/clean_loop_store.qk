@@ -1,4 +1,4 @@
-// 刻意不报：循环体内的赋值会被下一轮读取（线性扫描无法判定），不做死存储判定。
+// Deliberately not reported: an assignment inside a loop body is read on the next iteration (a linear scan cannot decide), so no dead-store judgement is made.
 fn f(int n) int {
     int i = 0;
     while (i < n) {

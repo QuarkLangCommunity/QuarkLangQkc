@@ -1,4 +1,4 @@
-// 正常函数：返回路径完整、变量均被读取。
+// Normal function: every path returns and every variable is read.
 fn add(int a, int b) int {
     int sum = a + b;
     return sum;

@@ -1,4 +1,4 @@
-// 真实风格代码：分支、循环、容器、字符串、接口缺省实现（未实现者也只在近失配时报）。
+// Realistic code: branches, loops, containers, strings, a default interface implementation (missing methods are only reported as a near-miss).
 fn classify(int n) String {
     if (n < 0) {
         return "neg";

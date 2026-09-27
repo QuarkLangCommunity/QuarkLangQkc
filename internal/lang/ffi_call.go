@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-// callLibMethod 调用系统库导出函数（FFI：dlopen/dlsym + libffi，跨系统 POSIX/Windows）。
+// callLibMethod calls an exported function of a system library (FFI: dlopen/dlsym + libffi, cross-platform POSIX/Windows).
 func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos, ctx *execCtx) (Value, error) {
 	fn := lib.methods[name]
 	if fn == nil {
@@ -30,10 +30,10 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 	if err != nil {
 		return NilV(), &RunError{Msg: err.Error(), Pos: pos, Ctx: ctx}
 	}
-	// 本文件只做「值 ↔ C 参数」的通用打包（C.CString/C.GoString 均为可移植 cgo），
-	// 具体 ABI 调用由各平台的 ffiCall 提供（POSIX: libffi；Windows: 自研 wrapper）。
+	// This file only does the generic "Value <-> C argument" marshalling (C.CString/C.GoString are portable cgo);
+	// the actual ABI call is provided by each platform's ffiCall (POSIX: libffi; Windows: a hand-written wrapper).
 	//
-	// 参数打包：int/bool/float→数值通道；String→char*（调用后释放）
+	// Argument marshalling: int/bool/float -> numeric channel; String -> char* (freed after the call)
 	types := make([]int, 0, len(fn.Params))
 	nums := make([]float64, 0, len(fn.Params))
 	ptrs := make([]unsafe.Pointer, 0, len(fn.Params))
@@ -43,7 +43,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 			return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("LibraryError: %s 参数不足"), name), Pos: pos, Ctx: ctx}
 		}
 		a := args[i]
-		if p.Type == "pointer" { // 不透明句柄：接受指针值或 null（void*），可往返
+		if p.Type == "pointer" { // opaque handle: accepts a pointer value or null (void*), round-trippable
 			if a.IsNil() {
 				types = append(types, ffiPtr)
 				nums = append(nums, 0)
@@ -89,7 +89,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 			}
 			types = append(types, ffiTypeOf(p.Type))
 			ptrs = append(ptrs, nil)
-		default: // String / 指针
+		default: // String / pointer
 			if !a.IsStr() {
 				return NilV(), &RunError{Msg: fmt.Sprintf(i18n.T("TypeError: %s 参数 %s 目前仅支持 String/int/float"), name, p.Name), Pos: pos, Ctx: ctx}
 			}
@@ -134,14 +134,14 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 	case "f32", "float", "double":
 		return FloatV(rf), nil
 	case "pointer":
-		return PtrV(rp), nil // 不透明句柄：返回原生指针值（nil → null）
+		return PtrV(rp), nil // opaque handle: returns the native pointer value (nil -> null)
 	case "String":
 		if rp == nil {
 			return NilV(), nil
 		}
 		return StrV(C.GoString((*C.char)(rp))), nil
 	default:
-		// 其它指针返回仍以十六进制字符串呈现（声明为 pointer 才得到原生指针值）
+		// other pointer returns are still rendered as a hex string (only a `pointer` declaration yields a native pointer value)
 		if rp == nil {
 			return NilV(), nil
 		}

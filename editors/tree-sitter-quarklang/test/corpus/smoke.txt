@@ -1,5 +1,5 @@
 ==================
-最小程序
+Minimal program
 ==================
 
 fn main(IOStream io) void {

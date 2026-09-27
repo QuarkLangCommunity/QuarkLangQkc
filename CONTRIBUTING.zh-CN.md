@@ -19,7 +19,7 @@ git clone https://github.com/QuarkLangCommunity/QuarkLangQkc && cd QuarkLangQkc
 git switch -c fix/短描述            # 分支名：fix/… feat/… docs/… ci/…
 # …改代码…
 go test ./... && (cd compiler && go test ./...)      # ① 两层测试
-(cd compiler && ./testdata/compare.sh)               # ② 双路径一致性（期望「全部一致」）
+(cd compiler && ./testdata/compare.sh)               # ② 双路径一致性（脚本输出 `all identical`）
 git commit -m "简短标题（中文，一行说清改了什么）"      # ③ 提交信息：中文、动词开头、必要时补正文
 git push -u origin HEAD && gh pr create --fill       # ④ 开 PR；CI 会跑三平台矩阵
 ```
@@ -28,7 +28,7 @@ PR 合入条件（自动化，不需要人工点 Approve）：
 
 | 门禁 | 说明 |
 |---|---|
-| 7 项必需检查 | 三平台 `测试（os）`、`Linux 专项`、三平台 `库与预处理器` |
+| 7 项必需检查 | 三平台 `tests (os)`、`linux extras (dual-path / editors / release)`、三平台 `libraries & preprocessor (os)` |
 | 分支保护 | `main` 禁止直推 / 禁 force-push / 禁删除 |
 
 ## 提交前自检清单（本机即可跑）

@@ -1,4 +1,4 @@
-// while(true) 有 break 出口，不算死循环。
+// while(true) has a break exit, so it is not an infinite loop.
 fn main(IOStream io) void {
     int i = 0;
     while (true) {

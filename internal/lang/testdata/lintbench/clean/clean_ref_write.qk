@@ -1,4 +1,4 @@
-// 刻意不报：引用类型（T& / pointer）的 `p = v` 是**写穿指针目标**，不是重新绑定，谈不上死存储。
+// Deliberately not reported: for reference types (T& / pointer), `p = v` **writes through to the pointee** rather than rebinding, so it is not a dead store.
 fn main(IOStream io) void {
     int& p = new int;
     p = 5;

@@ -1,4 +1,4 @@
-// O：struct 引用语义（赋值/传参别名，与解释器一致）
+// O: struct reference semantics (assignment/argument passing aliases; matches the interpreter)
 type struct { int a; int b; } Point;
 impl {
     fn seta(Point self, int v) void { self.a = v; }

@@ -1,4 +1,4 @@
-// FFI long（i64）与 pointer（i8* 不透明句柄）：malloc/memset/free 往返 + strlen 计长
+// FFI long (i64) and pointer (opaque i8* handle): malloc/memset/free round trip + strlen
 library libc {
     fn malloc(long n) pointer;
     fn free(pointer p) void;

@@ -1,16 +1,16 @@
-// qkdoc：QuarkLang API 文档生成器（工具链成员）
+// qkdoc: QuarkLang API documentation generator (toolchain member)
 //
-// 用法: qkdoc [flags] files...
+// Usage: qkdoc [flags] files...
 //
-//	-o file    写入文件（默认 stdout）
-//	-html      输出自包含 HTML（默认 Markdown）
-//	-all       包含未 pub 的符号（默认只导出 pub；文件无 pub 时导出全部）
-//	-title T   标题（默认取文件名）
-//	--lang       输出语言 zh|en（默认中文；亦可用 QK_LANG）
-//	--version  打印版本
+//	-o file    Write to a file (default stdout)
+//	-html      Emit self-contained HTML (default Markdown)
+//	-all       Include non-pub symbols (default exports pub only; exports everything when the file has no pub)
+//	-title T   Title (defaults to the file name)
+//	--lang       Output language zh|en (default Chinese; QK_LANG also works)
+//	--version  Print version
 //
-// 文档来源：声明上方紧邻的 `//` / `/* */` 注释块；没有上方注释时取同行行尾注释。
-// 退出码：0 = 成功；1 = 解析失败；2 = 用法错误。
+// Documentation source: the `//` / `/* */` comment block immediately above a declaration; when there is none, the trailing comment on the same line is used.
+// Exit codes: 0 = success; 1 = parse failure; 2 = usage error.
 package main
 
 import (
@@ -23,7 +23,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+// version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)
 var version = "dev"
 
 func main() {
@@ -63,7 +63,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case "--lang", "-lang":
 			if i+1 < len(args) {
 				i++
-				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+				i18n.SetLocale(args[i]) // zh | en; unknown values keep the current locale
 			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkdoc", version)

@@ -6,10 +6,10 @@ import (
 	"quarklang/internal/lang"
 )
 
-// 宏展开工程化：编译器复用解释器的 token 级宏系统（一套逻辑，两处使用）。
-// 流程：Lex → SplitMacroDefs → ExpandMacros(mode) → token 重组为源码 → cgen 解析。
+// Macro expansion engineering: the compiler reuses the interpreter's token-level macro system (one logic, two users).
+// Flow: Lex → SplitMacroDefs → ExpandMacros(mode) → tokens rebuilt into source → cgen parses.
 
-// joinTokens 把 token 流重组为源码文本（标识符/数字/字符串间留空格，标点紧贴）。
+// joinTokens rebuilds the token stream into source text (space between identifiers/numbers/strings, punctuation stays tight).
 func joinTokens(toks []lang.Token) string {
 	var sb strings.Builder
 	prevSpace := true
@@ -21,7 +21,7 @@ func joinTokens(toks []lang.Token) string {
 		if text == "" {
 			continue
 		}
-		// 是否需要前导空格：前一个 token 结束不是符号、当前不是符号时
+		// Whether a leading space is needed: the previous token did not end as a symbol and the current one is not a symbol
 		curSym := isSymStart(text)
 		if !prevSpace && !curSym && !strings.HasSuffix(sb.String(), " ") {
 			sb.WriteByte(' ')
@@ -40,15 +40,15 @@ func isSymStart(s string) bool {
 	return !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '"')
 }
 
-// expandMacros 对源码做 token 级宏展开（运行态分支；无宏则原样返回）。
+// expandMacros performs token-level macro expansion on source (runtime branch; returns as-is when there is no macro).
 func expandMacros(src string, mode string) (string, error) {
-	// 快速路径：源码不含 macro 关键字时跳过词法+展开（省 Lex 开销）
+	// Fast path: skip tokenize + expansion when the source has no macro keyword (saves Lex cost)
 	if !strings.Contains(src, "#macro") {
 		return src, nil
 	}
 	toks, err := lang.Lex(src)
 	if err != nil {
-		return src, nil // 词法失败回退原样（让 cgen 报错）
+		return src, nil // Lex failure falls back to as-is (let cgen report the error)
 	}
 	macros, rest, err := lang.SplitMacroDefs(toks)
 	if err != nil {

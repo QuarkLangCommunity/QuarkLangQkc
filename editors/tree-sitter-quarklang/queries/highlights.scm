@@ -1,7 +1,7 @@
-; QuarkLang 语法高亮查询（tree-sitter）
-; 编辑器（Neovim / Helix / Emacs 等）通过本文件取高亮名。
+; QuarkLang syntax highlighting queries (tree-sitter)
+; Editors (Neovim / Helix / Emacs, ...) read highlight names from this file.
 
-; ---- 注释与字面量 ----
+; ---- Comments and literals ----
 (line_comment) @comment
 (block_comment) @comment
 
@@ -11,10 +11,10 @@
 (boolean) @constant.builtin
 (null) @constant.builtin
 
-; ---- 兜底：普通标识符当变量（后续更具体的规则会覆盖它） ----
+; ---- Fallback: plain identifiers as variables (more specific rules below override this) ----
 (identifier) @variable
 
-; ---- 声明 ----
+; ---- Declarations ----
 "fn" @keyword.function
 "type" @keyword.type
 "struct" @keyword.type
@@ -30,14 +30,14 @@
 "copyd" @keyword.modifier
 "expand" @keyword
 
-; ---- 语句关键字 ----
+; ---- Statement keywords ----
 ["if" "else" "while" "for" "break" "return" "log" "delete" "try" "catch" "new"] @keyword.control
 "@" @operator
 
-; ---- 类型 ----
+; ---- Types ----
 (builtin_type) @type.builtin
 
-; ---- 名字（声明点） ----
+; ---- Names (declaration sites) ----
 (function_declaration name: (identifier) @function)
 (method_signature name: (identifier) @function.method)
 (library_method name: (identifier) @function)
@@ -52,8 +52,8 @@
 (member_declaration name: (identifier) @property)
 (struct_field name: (identifier) @property)
 
-; ---- 调用与成员 ----
-; 注意：function 字段是 expression → primary 包装（见 grammar.js 的后缀链形态）
+; ---- Calls and members ----
+; Note: the function field is wrapped as expression → primary (see the suffix-chain shape in grammar.js)
 (call_expression function: (expression (primary (identifier) @function.call)))
 (call_expression function: (expression (primary (member_expression name: (identifier) @function.method))))
 (scope_call scope: (identifier) @namespace)
@@ -62,16 +62,16 @@
 (struct_literal (struct_field name: (identifier) @property))
 
 
-; ---- 宏 ----
+; ---- Macros ----
 (macro_definition name: (identifier) @function.macro)
 (macro_call name: (identifier) @function.macro)
 (directive_statement "#" @keyword.directive)
 (directive_statement (identifier) @keyword.directive)
 
-; ---- 签名调用 @mb() ----
+; ---- Signature calls @mb() ----
 (sign_call name: (identifier) @variable)
 
-; ---- 运算符与标点 ----
+; ---- Operators and punctuation ----
 (binary_expression operator: _ @operator)
 (unary_expression operator: _ @operator)
 ["=" "::" "." "&"] @operator

@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// frame 把消息编成 LSP 帧。
+// frame encodes a message into an LSP frame.
 func frame(t *testing.T, v interface{}) string {
 	t.Helper()
 	data, err := json.Marshal(v)
@@ -37,7 +37,7 @@ func notification(method string, params interface{}) map[string]interface{} {
 	return m
 }
 
-// runSession 跑一次完整会话，返回按顺序的输出消息。
+// runSession runs one full session and returns the output messages in order.
 func runSession(t *testing.T, msgs ...map[string]interface{}) []rpcMessage {
 	t.Helper()
 	var in strings.Builder
@@ -79,7 +79,7 @@ func posParams(uri string, line, char int) map[string]interface{} {
 	}
 }
 
-// resultOf 按请求 id 取响应的 result 字段并解码到 v（id 是唯一可靠的匹配键）。
+// resultOf looks up the result field of the response with the given request id and decodes it into v (the id is the only reliable matching key).
 func resultOf(t *testing.T, msgs []rpcMessage, id int, v interface{}) bool {
 	t.Helper()
 	want := fmt.Sprintf("%d", id)
@@ -236,7 +236,7 @@ func TestLSPDefinitionAndHover(t *testing.T) {
 	msgs := runSession(t,
 		request(1, "initialize", map[string]interface{}{"capabilities": map[string]interface{}{}}),
 		didOpen(uri, src),
-		request(2, "textDocument/definition", posParams(uri, 5, 17)), // 第 6 行 `double(21)` 的 double
+		request(2, "textDocument/definition", posParams(uri, 5, 17)), // the `double` of `double(21)` on line 6
 		request(3, "textDocument/hover", posParams(uri, 5, 17)),
 		request(4, "shutdown", nil),
 		notification("exit", nil),
@@ -248,7 +248,7 @@ func TestLSPDefinitionAndHover(t *testing.T) {
 	if loc.URI != uri {
 		t.Errorf("定义应在同一文件，got %s", loc.URI)
 	}
-	if loc.Range.Start.Line != 1 { // double 声明在第 2 行（0 基 = 1）
+	if loc.Range.Start.Line != 1 { // double is declared on line 2 (0-based = 1)
 		t.Errorf("定义应指向第 2 行，got %+v", loc.Range)
 	}
 	var hov struct {
@@ -268,12 +268,12 @@ func TestLSPDefinitionAndHover(t *testing.T) {
 	}
 }
 
-// UTF-16 列换算：标识符前有中文（多字节）时，跳转位置必须仍然正确。
+// UTF-16 column conversion: when multi-byte Chinese text precedes the identifier, the definition position must still be correct.
 func TestLSPUTF16PositionWithCJK(t *testing.T) {
 	uri := docURI("cjk.qk")
 	src := "fn helper(int n) int {\n    return n;\n}\nfn main(IOStream io) {\n    io.println(\"中文前缀\" , helper(1));\n}\n"
 	line := "    io.println(\"中文前缀\" , helper(1));"
-	char := len([]rune(line[:strings.Index(line, "helper")])) // rune 数 ≠ UTF-16 单位数（中文 1:1，emoji 才 1:2）
+	char := len([]rune(line[:strings.Index(line, "helper")])) // rune count != UTF-16 code unit count (Chinese is 1:1, only emoji is 1:2)
 	msgs := runSession(t,
 		didOpen(uri, src),
 		request(2, "textDocument/definition", posParams(uri, 4, char)),
@@ -375,11 +375,11 @@ func TestLSPUnknownDocument(t *testing.T) {
 	}
 }
 
-// 诊断位置换算：真实的 import 合并坐标 → 本文件行号。
+// Diagnostic position conversion: real import merge coordinates -> this file's line numbers.
 func TestLSPDiagnosticsMapImports(t *testing.T) {
 	dir := t.TempDir()
 	libPath := filepath.Join(dir, "lib.qk")
-	// 用生产代码的 pathToURI：Windows 盘符需要 file:///C:/...（三斜杠），测试自造 URI 曾按 POSIX 写死
+	// use the production pathToURI: a Windows drive needs file:///C:/... (three slashes); a hand-made URI in the test was once hard-coded for POSIX
 	uri := pathToURI(filepath.Join(dir, "app.qk"))
 	src := "import \"lib\";\n\nfn main(IOStream io) {\n    io.println(lib());\n}\n"
 	if err := writeFile(libPath, "program library;\npub fn lib() int {\n    return missingVar;\n}\n"); err != nil {
@@ -403,7 +403,7 @@ func TestLSPDiagnosticsMapImports(t *testing.T) {
 		}
 		if strings.HasSuffix(p.URI, "lib.qk") && len(p.Diagnostics) > 0 {
 			foundLibURI = true
-			if p.Diagnostics[0].Range.Start.Line != 2 { // lib.qk 第 3 行
+			if p.Diagnostics[0].Range.Start.Line != 2 { // line 3 of lib.qk
 				t.Errorf("跨文件诊断应定位到 lib.qk 第 3 行，got %+v", p.Diagnostics[0].Range)
 			}
 		}

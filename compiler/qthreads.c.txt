@@ -1,10 +1,10 @@
-/* QuarkLang 用户态线程运行时（B 方案：用户态 API + 并行载体）
- * channel：mutex+cond FIFO（容量 1024）
- * task：任务对象（fn + arg + 完成标志），由工作线程池执行
- * 跨系统：POSIX pthread（Linux/macOS）；Windows 分支用 _beginthreadex/WaitForSingleObject
+/* QuarkLang user-space thread runtime (plan B: user-space API + parallel backend)
+ * channel: mutex+cond FIFO (capacity 1024)
+ * task: task object (fn + arg + done flag), executed by the worker thread pool
+ * Cross-platform: POSIX pthread (Linux/macOS); the Windows branch uses _beginthreadex/WaitForSingleObject
  */
 #ifdef _WIN32
-/* Windows 载体：_beginthreadex + SRWLOCK + CONDITION_VARIABLE（用户态 API 不变） */
+/* Windows backend: _beginthreadex + SRWLOCK + CONDITION_VARIABLE (user-space API unchanged) */
 #include <process.h>
 #include <windows.h>
 typedef struct { int cap, head, tail, cnt; int* buf; SRWLOCK mu; CONDITION_VARIABLE cv; } ql_channel;
@@ -30,14 +30,14 @@ int ql_recv(ql_channel* c) {
     WakeAllConditionVariable(&c->cv); ReleaseSRWLockExclusive(&c->mu);
     return v;
 }
-/* 线程句柄：pid = 小整数 id（编译器把 thread 变量表示成 i32，与语言 pid 一致） */
+/* Thread handle: pid = small integer id (the compiler represents thread variables as i32, matching the language pid) */
 #define QMAXTASK 4096
 static ql_task* qtasks[QMAXTASK]; static int qtasks_n = 0;
 int ql_spawn(void) {
     if (qtasks_n >= QMAXTASK - 1) return 0;
     ql_task* t = calloc(1, sizeof(ql_task));
     InitializeSRWLock(&t->mu);
-    t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
+    t->done = 1; /* a new thread = idle (the interpreter done semantics) */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
 static unsigned __stdcall runner_w(void* p) { ql_task* t = p; t->fn(t->args[0], t->args[1], t->args[2], t->args[3], t->args[4], t->args[5], t->args[6], t->args[7]); AcquireSRWLockExclusive(&t->mu); t->done = 1; ReleaseSRWLockExclusive(&t->mu); return 0; }
@@ -51,37 +51,37 @@ void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long l
 void ql_block(int id) { if (id <= 0 || id >= QMAXTASK) return; ql_task* t = qtasks[id]; if (!t) return; while (1) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); if (d) break; } }
 int ql_done(int id) { if (id <= 0 || id >= QMAXTASK) return 1; ql_task* t = qtasks[id]; if (!t) return 1; AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); return d; }
 #else
-/* POSIX 实现（原有） */
+/* POSIX implementation (original) */
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 typedef struct { int cap, head, tail, cnt; int* buf; pthread_mutex_t mu; pthread_cond_t cv; } ql_channel;
-/* ---- 线程池（固定 8 工作线程 + 任务队列，amortized 无线程创建开销） ---- */
+/* ---- Thread pool (8 fixed worker threads + task queue; amortized, no per-task thread-creation cost) ---- */
 #define QPOOL_N 8
 #define QCAP 65536
-typedef struct { void (*fn)(long long, long long, long long, long long, long long, long long, long long, long long); long long args[8]; volatile int done; } ql_task;   /* done 原子化：免每任务 mutex */
-/* 无锁 MPSC 环形队列：单调计数器 head/tail（原子），快路径零锁；
-   工人有限自旋后锁+条件睡眠，生产者入队后仅在有睡者时 signal——消除了 8 核互斥乒乓与逐任务 futex 唤醒 */
+typedef struct { void (*fn)(long long, long long, long long, long long, long long, long long, long long, long long); long long args[8]; volatile int done; } ql_task;   /* done made atomic: avoids a per-task mutex */
+/* Lock-free MPSC ring queue: monotonic head/tail counters (atomic), zero locks on the fast path;
+   workers spin briefly then sleep on a lock+condition; a producer signals only when someone is asleep — eliminating 8-core mutex ping-pong and per-task futex wakeups */
 #define QMASK (QCAP - 1)
 static ql_task* qq[QCAP];
-static int qh, qt, qn;                 /* 队列指针/qn 由票号自旋锁保护 */
-static unsigned qlk;                   /* 票号锁：0 空闲，exchange 抢占，pause 自旋（无 futex 系统调用） */
+static int qh, qt, qn;                 /* queue pointers / qn are protected by the ticket spinlock */
+static unsigned qlk;                   /* ticket lock: 0 = free, taken with exchange, spins with pause (no futex syscall) */
 static pthread_mutex_t qsmu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t qscv = PTHREAD_COND_INITIALIZER;
 static pthread_t qpool[QPOOL_N]; static int qpool_started = 0;
 
 static void qlock(void) {
     while (__atomic_exchange_n(&qlk, 1, __ATOMIC_ACQUIRE)) {
-        /* 跨系统：暂停指令按架构分派（arm64 没有 __builtin_ia32_pause，
-           CI 在 macOS(Apple Silicon) 上实测报 unknown builtin） */
+        /* Cross-platform: the pause instruction is dispatched per architecture (arm64 has no __builtin_ia32_pause;
+           CI on macOS (Apple Silicon) reports unknown builtin in practice) */
 #if defined(__x86_64__) || defined(__i386__)
         __builtin_ia32_pause();
 #elif defined(__aarch64__) || defined(__arm__)
         __asm__ __volatile__("yield");
 #else
-        /* 其它架构：不强求 */
+        /* Other architectures: not required */
 #endif
     }
 }
@@ -135,7 +135,7 @@ static void qpool_ensure(void) {
     for (int i = 0; i < QPOOL_N; i++) pthread_create(&qpool[i], 0, qworker, 0);
     qpool_started = 1;
 }
-/* 通道：mutex + cond 有界 FIFO（容量 cap；与 Windows 分支语义一致） */
+/* Channel: mutex + cond bounded FIFO (capacity cap; same semantics as the Windows branch) */
 ql_channel* ql_channel_new(int cap) {
     ql_channel* c = calloc(1, sizeof(ql_channel));
     if (cap <= 0) cap = 1024;
@@ -159,13 +159,13 @@ int ql_recv(ql_channel* c) {
     pthread_mutex_unlock(&c->mu);
     return v;
 }
-/* 线程句柄：pid = 小整数 id（编译器把 thread 变量表示成 i32，与语言 pid 一致） */
+/* Thread handle: pid = small integer id (the compiler represents thread variables as i32, matching the language pid) */
 #define QMAXTASK 4096
 static ql_task* qtasks[QMAXTASK]; static int qtasks_n = 0;
 int ql_spawn(void) {
     if (qtasks_n >= QMAXTASK - 1) return 0;
     ql_task* t = calloc(1, sizeof(ql_task));
-    t->done = 1; /* 新建线程 = 空闲（解释器 done 语义） */
+    t->done = 1; /* a new thread = idle (the interpreter done semantics) */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
 void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3, long long a4, long long a5, long long a6, long long a7) {
@@ -187,7 +187,7 @@ int ql_done(int id) {
     return __atomic_load_n(&t->done, __ATOMIC_ACQUIRE);
 }
 
-/* 字符串拼接：malloc + 拷贝（String 变量 + 运算符） */
+/* String concatenation: malloc + copy (String variables + operator) */
 char* ql_strcat(const char* a, const char* b) {
     size_t la = strlen(a), lb = strlen(b);
     char* r = malloc(la + lb + 1);
@@ -196,9 +196,9 @@ char* ql_strcat(const char* a, const char* b) {
 }
 #endif
 
-/* ================= String 内建方法（与解释器 internal/lang/eval.go 同语义） =================
- * rune（UTF-8）语义：size/charAt/substring 按 rune；contains/startsWith/endsWith/indexOf
- * 按字节（Go strings 包同语义）。越界/解析失败 → 与解释器同文案的运行期错误并退出 1。 */
+/* ================= String built-in methods (same semantics as the interpreter internal/lang/eval.go) =================
+ * rune (UTF-8) semantics: size/charAt/substring are per rune; contains/startsWith/endsWith/indexOf
+ * are per byte (same semantics as the Go strings package). Out-of-range / parse failure → the same runtime error wording as the interpreter, exiting 1. */
 static void ql_err_at(const char* msg, int line) {
     fprintf(stderr, "error: %s at line %d\n", msg, line);
     fflush(stderr);
@@ -216,7 +216,7 @@ int ql_str_size(const char* s) {
     for (const unsigned char* p = (const unsigned char*)s; *p; ) { p += ql_u8seq(*p); n++; }
     return n;
 }
-/* ql_u8_off：第 i 个 rune 的字节偏移（i == rune 数 → strlen；i 超出 → -1） */
+/* ql_u8_off: byte offset of the i-th rune (i == rune count → strlen; i beyond → -1) */
 static int ql_u8_off(const char* s, int i) {
     int b = 0;
     for (int k = 0; k < i; k++) {
@@ -261,7 +261,7 @@ char* ql_str_charat(const char* s, int i, int line) {
     memcpy(r, s + b, sz); r[sz] = 0;
     return r;
 }
-/* Go unicode.IsSpace 的空白集合（含 Zs 类与 U+0085） */
+/* The whitespace set of Go unicode.IsSpace (including the Zs category and U+0085) */
 static int ql_space_at(const char* s, int* sz) {
     unsigned char c = (unsigned char)s[0];
     if (c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r') { *sz = 1; return 1; }
@@ -298,7 +298,7 @@ char* ql_str_trim(const char* s, int mode) { /* 0=both 1=left 2=right */
     memcpy(r, s + b, n); r[n] = 0;
     return r;
 }
-/* ASCII + Latin-1 + 希腊/西里尔基本区的大小写映射（其他脚本保持原样） */
+/* Case mapping for ASCII + Latin-1 + the basic Greek/Cyrillic ranges (other scripts are left as-is) */
 static int ql_lower_rune(int cp) {
     if (cp >= 'A' && cp <= 'Z') return cp + 32;
     if (cp >= 0xC0 && cp <= 0xDE && cp != 0xD7) return cp + 32;
@@ -408,7 +408,7 @@ double ql_str_tofloat(const char* s, int line) {
     return v;
 }
 
-/* ================= List 内建方法辅助（int 元素；与解释器 value.go 同语义） ================= */
+/* ================= List built-in method helpers (int elements; same semantics as the interpreter value.go) ================= */
 static int ql_cmp_int(const void* a, const void* b) {
     int x = *(const int*)a, y = *(const int*)b;
     return x < y ? -1 : (x > y ? 1 : 0);
@@ -416,7 +416,7 @@ static int ql_cmp_int(const void* a, const void* b) {
 void ql_list_int_sort(int* buf, int head, int tail) {
     if (tail - head > 1) qsort(buf + head, tail - head, sizeof(int), ql_cmp_int);
 }
-/* List.toString()：[e0, e1, ...]（只含可见区间 head..tail） */
+/* List.toString(): [e0, e1, ...] (only the visible range head..tail) */
 char* ql_list_int_str(const int* buf, int head, int tail) {
     size_t cap = 16, o = 0;
     char* r = malloc(cap);
@@ -436,9 +436,9 @@ char* ql_list_int_str(const int* buf, int head, int tail) {
     return r;
 }
 
-/* ================= 签名 memorize 运行时（@mb() 记忆化） =================
- * 键 = 实参列表（int 数组），值 = 被包装函数的 int 返回值；
- * 语义与解释器 MemorizeBuffer 一致：命中直接返回，未命中执行并记录。 */
+/* ================= Signature memorize runtime (@mb() memoization) =================
+ * key = the argument list (int array), value = the wrapped function int return value;
+ * semantics match the interpreter MemorizeBuffer: a hit returns directly, a miss executes and records. */
 typedef struct ql_memo_ent { int n; int* keys; int val; struct ql_memo_ent* next; } ql_memo_ent;
 typedef struct { ql_memo_ent** b; int cap; int len; } ql_memo;
 static unsigned ql_memo_hash(const int* keys, int n) {
@@ -472,7 +472,7 @@ int ql_memo_get(void* mp, int n, int* keys, int* found) {
 }
 void ql_memo_put(void* mp, int n, int* keys, int val) {
     ql_memo* m = (ql_memo*)mp;
-    if (ql_memo_find(m, keys, n)) return; /* 已有记录：保持首次结果（解释器 Put 覆盖，但同键同值） */
+    if (ql_memo_find(m, keys, n)) return; /* already recorded: keep the first result (the interpreter Put overwrites, but same key means same value) */
     ql_memo_ent* e = (ql_memo_ent*)calloc(1, sizeof(ql_memo_ent));
     e->n = n; e->val = val;
     e->keys = (int*)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
@@ -481,12 +481,12 @@ void ql_memo_put(void* mp, int n, int* keys, int val) {
     e->next = m->b[h]; m->b[h] = e; m->len++;
 }
 
-/* ================= interface{}（tAny）运行期：RTTI 描述符分派 =================
- * 描述符布局必须与 IR 的 %RT = type { i8* (i8*)*, i8*, i32 } 一致：
+/* ================= interface{} (tAny) runtime: RTTI descriptor dispatch =================
+ * the descriptor layout must match the IR %RT = type { i8* (i8*)*, i8*, i32 }:
  *   { char* (*str)(void*); const char* name; int kind; }
  * kind: 0=int 1=float 2=bool 3=String 4=List<int> 5=struct 6=null */
 typedef struct ql_rt { char* (*str)(void*); void* (*copy)(void*); const char* name; int kind; } ql_rt;
-char* ql_int_to_str(int v);      /* qkc 生成的 IR 助手（复用同一格式化） */
+char* ql_int_to_str(int v);      /* IR helper generated by qkc (reuses the same formatting) */
 char* ql_float_to_str(double v);
 char* ql_long_to_str(long long v) {
     char* b = (char*)malloc(24);
@@ -528,8 +528,8 @@ char* ql_any_string(void* d, void* rt) {
     if (!r || r->kind != 3) ql_any_bad(r, "String");
     return *(char**)d;
 }
-/* 相等语义与解释器 equalValues 对齐：int/float 跨类型数值比较；bool/String 按值；
- * List/struct 按引用（指针身份）；nil == nil。 */
+/* Equality semantics aligned with the interpreter equalValues: int/float compare numerically across types; bool/String by value;
+ * List/struct by reference (pointer identity); nil == nil. */
 int ql_any_eq(void* d1, void* rt1, void* d2, void* rt2) {
     ql_rt* a = (ql_rt*)rt1;
     ql_rt* b = (ql_rt*)rt2;
@@ -548,9 +548,9 @@ int ql_any_eq(void* d1, void* rt1, void* d2, void* rt2) {
     }
     return 0;
 }
-/* ---- interface{} 值的深拷贝（按 RTTI；HashTable.Put 与 copyd 复用） ----
- * 语义对齐解释器 deepCopy：List 复制缓冲区，struct 不复制（共享指针），
- * String/标量按值快照（堆单元复制）。 */
+/* ---- deep copy of interface{} values (per RTTI; reused by HashTable.Put and copyd) ----
+ * semantics aligned with the interpreter deepCopy: List copies the buffer, struct is not copied (pointer shared),
+ * String/scalars are snapshotted by value (heap cell copied). */
 void* ql_any_copy_int(void* d) { int* p = (int*)malloc(4); *p = *(int*)d; return p; }
 void* ql_any_copy_float(void* d) { double* p = (double*)malloc(8); *p = *(double*)d; return p; }
 void* ql_any_copy_bool(void* d) { int* p = (int*)malloc(4); *p = *(int*)d; return p; }
@@ -560,7 +560,7 @@ void* ql_any_copy_nil(void* d) { (void)d; return 0; }
 
 
 
-/* String.split(sep) → List<String>：与 Go strings.Split 一致（sep 空 → 按 UTF-8 字符） */
+/* String.split(sep) → List<String>: same as Go strings.Split (empty sep → per UTF-8 character) */
 static void ql_strlist_push(char*** buf, int* cap, int* n, const char* p, size_t len) {
     if (*n >= *cap) { *cap = *cap ? *cap * 2 : 4; *buf = (char**)realloc(*buf, sizeof(char*) * (size_t)(*cap)); }
     char* e = (char*)malloc(len + 1);
@@ -594,7 +594,7 @@ void* ql_str_split(const char* s, const char* sep) {
     return l;
 }
 
-/* List<String>：与 %ListS { i8** buf, i32 head, i32 tail } 同布局；toString 同解释器 List.String() */
+/* List<String>: same layout as %ListS { i8** buf, i32 head, i32 tail }; toString same as the interpreter List.String() */
 typedef struct { char** buf; int head; int tail; } ql_list_s;
 char* ql_list_str_str(char** buf, int head, int tail) {
     size_t cap = 16, o = 0;
@@ -615,9 +615,9 @@ char* ql_list_str_str(char** buf, int head, int tail) {
     return r;
 }
 
-/* ================= HashTable<K,V> 运行期 =================
- * 键 = 解释器同款结构化字符串 TypeName + ":" + String()（ql_table_key 生成）；
- * 值 = 装箱的 interface{} 值（data + RTTI 描述符），Put 时按 RTTI copy 深拷贝。 */
+/* ================= HashTable<K,V> runtime =================
+ * key = the interpreter-style structured string TypeName + ":" + String() (produced by ql_table_key);
+ * value = the boxed interface{} value (data + RTTI descriptor), deep-copied via RTTI copy on Put. */
 typedef struct ql_tent { char* key; void* data; void* rt; struct ql_tent* next; } ql_tent;
 typedef struct { ql_tent** b; int cap; int len; } ql_table;
 static unsigned ql_tbl_hash(const char* s) {
@@ -636,7 +636,7 @@ static ql_tent* ql_table_find(ql_table* t, const char* key) {
     while (e) { if (strcmp(e->key, key) == 0) return e; e = e->next; }
     return 0;
 }
-/* ql_table_key：把装箱键转成解释器同款键串（TypeName:String()）。 */
+/* ql_table_key: turns a boxed key into the interpreter-style key string (TypeName:String()). */
 char* ql_table_key(void* data, void* rt) {
     ql_rt* r = (ql_rt*)rt;
     const char* tn = r ? r->name : "nil";
@@ -691,7 +691,7 @@ void ql_table_remove(void* tp, char* key) {
     }
 }
 int ql_table_size(void* tp) { return ((ql_table*)tp)->len; }
-/* 键列表（确定性序：strcmp 升序；解释器 keys() 是 Go map 序，本身不确定）。 */
+/* Key list (deterministic order: strcmp ascending; the interpreter keys() uses Go map order, itself nondeterministic). */
 typedef struct { char** buf; int head; int tail; } ql_strlist;
 static int ql_cmp_cstr(const void* a, const void* b) {
     return strcmp(*(char* const*)a, *(char* const*)b);
@@ -703,7 +703,7 @@ void* ql_table_keys(void* tp) {
     int k = 0;
     for (int i = 0; i < t->cap; i++)
         for (ql_tent* e = t->b[i]; e; e = e->next) {
-            /* Keys() 返回键的**原值**：String 键去掉 "String:" 前缀（解释器 Keys 同规则） */
+            /* Keys() returns the **original value** of the key: a String key drops the "String:" prefix (same rule as the interpreter Keys) */
             buf[k++] = (strncmp(e->key, "String:", 7) == 0) ? (e->key + 7) : e->key;
         }
     if (n > 1) qsort(buf, (size_t)n, sizeof(char*), ql_cmp_cstr);
@@ -713,7 +713,7 @@ void* ql_table_keys(void* tp) {
 }
 
 
-/* 具体 V 取值：确认非 nil 后返回对象指针（struct/List 用；缺键 → 明确运行期错误） */
+/* Concrete V lookup: after confirming non-nil, returns the object pointer (for struct/List; missing key → an explicit runtime error) */
 void* ql_any_ptr(void* d, void* rt) {
     if (!rt || !d) {
         fprintf(stderr, "error: TypeError: HashTable.get: missing key (nil value)\n");
@@ -721,7 +721,7 @@ void* ql_any_ptr(void* d, void* rt) {
     }
     return d;
 }
-/* List<int> 的 RTTI 深拷贝（可见区间复制到新缓冲区） */
+/* RTTI deep copy for List<int> (the visible range is copied into a new buffer) */
 typedef struct { int* buf; int head; int tail; } ql_list_c;
 void* ql_any_copy_list(void* d) {
     ql_list_c* src = (ql_list_c*)d;

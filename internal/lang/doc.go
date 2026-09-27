@@ -25,8 +25,8 @@ const (
 // DocField is a struct field / interface method / impl method / library symbol.
 type DocField struct {
 	Name      string
-	Signature string // 方法/符号的完整签名（字段为空）
-	Type      string // 字段类型（方法为空）
+	Signature string // full signature of the method/symbol (empty for a field)
+	Type      string // field type (empty for a method)
 	Doc       string
 	Pos       Pos
 }
@@ -52,7 +52,7 @@ type Doc struct {
 	Types     []*DocItem // struct / interface / alias
 	Impls     []*DocItem // impl / space
 	Libraries []*DocItem
-	Macros    []*DocItem // #macro 命名参数宏（token 级展开，不在 AST）
+	Macros    []*DocItem // #macro named-parameter macros (expanded at token level, not in the AST)
 }
 
 // All returns every item in source order (used by the overview table).
@@ -312,14 +312,14 @@ func (idx *docIndex) leadingDoc(declLine int) string {
 		}
 		var c docComment
 		found := false
-		for _, x := range cs { // 同一行多个注释时取最左的非行尾注释
+		for _, x := range cs { // with several comments on the same line, take the leftmost non-trailing one
 			if !x.trailing {
 				c, found = x, true
 				break
 			}
 		}
 		if !found {
-			break // 上一行只有行尾注释（`... ; // 说明`）→ 不是本声明的文档
+			break // the previous line has only a trailing comment (`... ; // description`) → not documentation for this declaration
 		}
 		blocks = append([]string{cleanComment(c.Comment)}, blocks...)
 		cur = c.Pos.Line - 1
@@ -363,7 +363,7 @@ func (idx *docIndex) fileDoc(firstDeclLine int) string {
 		cur = c.EndLine + 1
 	}
 	if firstDeclLine > 0 && lastEnd == firstDeclLine-1 {
-		return "" // 这段就是首个声明的文档注释
+		return "" // this block is the doc comment of the first declaration
 	}
 	return strings.TrimSpace(strings.Join(blocks, ""))
 }

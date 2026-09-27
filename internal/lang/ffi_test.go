@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// FFI：library 绑定系统库（POSIX: libm+libc；Windows: CRT(msvcrt)），
-// 覆盖 libffi（POSIX）与自研 wrapper（Windows）两条实现。
+// FFI: library binds system libraries (POSIX: libm+libc; Windows: CRT(msvcrt)),
+// covering both implementations: libffi (POSIX) and the in-house wrapper (Windows).
 func TestLibraryFFI(t *testing.T) {
 	var src string
 	if runtime.GOOS == "windows" {
-		// Windows 没有 libm/libc：数学与 C 运行时都在 msvcrt 里（同名库只能声明一次）
+		// Windows has no libm/libc: both the math and the C runtime live in msvcrt (a library with the same name can only be declared once)
 		src = `library msvcrt {
     fn sqrt(double x) double;
     fn pow(double x, double y) double;

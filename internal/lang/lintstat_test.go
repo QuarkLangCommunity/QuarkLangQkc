@@ -1,25 +1,25 @@
 package lang
 
-// qkcheck 误报率 / 漏报率的**统计度量**：随机化用例 × 多轮采样 → P50/P90/P99/最差。
+// qkcheck **statistical measurement** of the false-positive / false-negative rate: randomized test cases × multiple sampling rounds → P50/P90/P99/worst.
 //
-// 为什么需要它：单轮基准（lintbench_test.go）是确定性的，跑一万次结果一样，P99 没有意义。
-// 这里每轮用不同随机种子生成一批「真值已知」的程序（干净骨架 + 注入已知缺陷），
-// 因此轮与轮之间的误报/漏报计数是一个分布，尾部（P99）能暴露「罕见代码形态才触发」的问题。
+// Why this is needed: the single-round benchmark (lintbench_test.go) is deterministic, so running it ten thousand times gives the same result and a P99 is meaningless.
+// Here every round uses a different random seed to generate a batch of programs with known ground truth (clean skeleton + injected known defects),
+// so the false-positive/false-negative counts differ from round to round and form a distribution, and the tail (P99) can expose problems that only rare code shapes trigger.
 //
-// 口径：
-//   - 每条用例的期望是 (诊断码, 行号) 集合；干净用例期望空集。
-//   - FP = 报出但不在期望里；FN = 期望但没报出；TP = 命中。
-//   - 单轮率 = FP/(TP+FP)、FN/(TP+FN)；多轮取分位数。
-//   - 门禁：P99 的 FP、FN 计数必须为 0（尾部也不许出错），最差值一并打印供排查。
+// Conventions:
+//   - Each test case expects a set of (diagnostic code, line number); a clean case expects the empty set.
+//   - FP = reported but not expected; FN = expected but not reported; TP = hit.
+//   - Per-round rate = FP/(TP+FP), FN/(TP+FN); across rounds take quantiles.
+//   - Gate: the P99 FP and FN counts must be 0 (even the tail may not be wrong); the worst values are printed as well, for triage.
 //
-// 跨系统：纯 Go 实现（无 shell、无固定路径，临时目录用 t.TempDir），
-// Windows/macOS/Linux 一致可跑。
+// Cross-system: a pure Go implementation (no shell, no fixed paths, temporary directories from t.TempDir),
+// runs identically on Windows/macOS/Linux.
 //
-// 环境变量：
+// Environment variables:
 //
-//	LINT_ROUNDS=200   轮数（默认 200；CI 可调小）
-//	LINT_SEED=1       随机种子基（默认 1，固定 → 可复现）
-//	LINT_NOFAIL=1     只测量不失败（调参用）
+//	LINT_ROUNDS=200   rounds (default 200; CI may lower it)
+//	LINT_SEED=1       random seed base (default 1, fixed → reproducible)
+//	LINT_NOFAIL=1     measure only, never fail (for parameter tuning)
 
 import (
 	"fmt"
@@ -40,13 +40,13 @@ type statWant struct {
 type statCase struct {
 	name    string
 	src     string
-	libName string // 非空：额外写入同目录依赖文件 <libName>.qk
+	libName string // non-empty: also writes the dependency file <libName>.qk into the same directory
 	libSrc  string
 	params  bool
 	want    []statWant
 }
 
-// ---------- 源码行构造器（注入器据此知道自己的行号 → 期望行号天然正确） ----------
+// ---------- source-line builder (injectors learn their own line number from it → expected line numbers are correct by construction) ----------
 
 type srcBuilder struct {
 	lines []string
@@ -62,10 +62,10 @@ func (b *srcBuilder) blank() { b.lines = append(b.lines, "") }
 
 func (b *srcBuilder) String() string { return strings.Join(b.lines, "\n") + "\n" }
 
-// ---------- 干净积木（保证本身零诊断） ----------
+// ---------- clean building blocks (guaranteed to have zero diagnostics themselves) ----------
 
-// cleanFunc 生成一个 pub 函数：参数都用到、局部都读取、各分支都返回。
-// 形态随机（1–3 个参数、分支/循环混合、返回表达式不同），以扩大随机覆盖面。
+// cleanFunc generates one pub function: every parameter is used, every local is read, every branch returns.
+// The shape is random (1-3 parameters, a mix of branches/loops, different return expressions) to widen the random coverage.
 func cleanFunc(b *srcBuilder, i int) {
 	switch b.rng.Intn(3) {
 	case 0:
@@ -99,7 +99,7 @@ func cleanFunc(b *srcBuilder, i int) {
 	b.blank()
 }
 
-// cleanExtra 随机追加一段干净结构（while+break / for-in / try-catch / space 调用）。
+// cleanExtra randomly appends one clean construct (while+break / for-in / try-catch / space call).
 func cleanExtra(b *srcBuilder, i int) {
 	switch b.rng.Intn(4) {
 	case 0:
@@ -188,7 +188,7 @@ func cleanExtra(b *srcBuilder, i int) {
 	}
 }
 
-// shuffle 打乱声明顺序（缺陷不再总在同一位置）。
+// shuffle shuffles the declaration order (so a defect is no longer always in the same position).
 func shuffle[T any](rng *rand.Rand, xs []T) {
 	for i := len(xs) - 1; i > 0; i-- {
 		j := rng.Intn(i + 1)
@@ -196,7 +196,7 @@ func shuffle[T any](rng *rand.Rand, xs []T) {
 	}
 }
 
-// ---------- 缺陷注入器 ----------
+// ---------- defect injectors ----------
 
 func caseClean(rng *rand.Rand, seq int) statCase {
 	b := &srcBuilder{rng: rng}
@@ -228,7 +228,7 @@ func caseUnusedParam(rng *rand.Rand, seq int) statCase {
 	b := &srcBuilder{rng: rng}
 	b.add("program library;")
 	b.blank()
-	// 未使用形参在**函数声明行**上（Param.Pos = 名字 token）
+	// An unused parameter sits on the **function declaration line** (Param.Pos = the name token)
 	ln := b.add("pub fn withParam%d(int a%d, int spare%d) int {", seq, seq, seq)
 	b.add("    return a%d;", seq)
 	b.add("}")
@@ -406,14 +406,14 @@ func caseUnusedFunc(rng *rand.Rand, seq int) statCase {
 	return statCase{name: "QK115", src: b.String(), want: []statWant{{CodeUnusedFunc, ln}}}
 }
 
-// 缺陷注入器表（每个都返回「真值已知」的用例）。
+// Table of defect injectors (each returns a case with known ground truth).
 var statInjectors = []func(*rand.Rand, int) statCase{
 	caseUnusedVar, caseUnusedParam, caseUnreachable, caseShadow, caseMissingReturn,
 	caseIfaceNearMiss, caseVoidAsValue, caseSelfAssign, caseConstCond, caseDivZero,
 	caseUnusedImport, caseShadowGlobal, caseDeadStore, caseSelfCompare, caseUnusedFunc,
 }
 
-// ---------- 度量与分位数 ----------
+// ---------- metrics and quantiles ----------
 
 func quantile(sorted []int, q float64) int {
 	if len(sorted) == 0 {
@@ -452,12 +452,12 @@ func envIntStat(key string, def int) int {
 	return def
 }
 
-// TestLintStatsP99 多轮随机化度量：误报率/漏报率的 P50/P90/P99 与最差样本。
+// TestLintStatsP99 multi-round randomized measurement: P50/P90/P99 of the false-positive/false-negative rate and the worst samples.
 func TestLintStatsP99(t *testing.T) {
 	rounds := envIntStat("LINT_ROUNDS", 2000)
 	seed := int64(envIntStat("LINT_SEED", 1))
 
-	tmpRoot := t.TempDir() // 跨系统：临时目录由 testing 提供（仅 import 用例需要落盘）
+	tmpRoot := t.TempDir() // cross-system: the temporary directory comes from testing (only the import case needs to write to disk)
 	var fpCounts, fnCounts, tpCounts []int
 	var fpRates, fnRates []float64
 	worstFP, worstFN := 0, 0
@@ -466,8 +466,8 @@ func TestLintStatsP99(t *testing.T) {
 	for r := 0; r < rounds; r++ {
 		rng := rand.New(rand.NewSource(seed + int64(r)))
 		seq := r*1000 + 1
-		// 每轮：干净用例 + 两个随机缺陷用例（缺陷种类轮转 → 覆盖全部 15 种），
-		// 缺陷用例再随机穿插干净函数与注释，模拟真实文件的上下文。
+		// Each round: clean cases + two random defect cases (the defect kind rotates → all 15 kinds are covered),
+		// the defect cases are then interleaved at random with clean functions and comments, mimicking the context of a real file.
 		var cases []statCase
 		cases = append(cases, caseClean(rng, seq), caseClean(rng, seq+1))
 		for k := 0; k < 2; k++ {
@@ -554,11 +554,11 @@ func TestLintStatsP99(t *testing.T) {
 	}
 }
 
-// decorate 在缺陷用例前后插入随机数量的干净函数与注释（保持期望行号正确）。
+// decorate inserts a random number of clean functions and comments before and after a defect case (keeping the expected line numbers correct).
 func decorate(rng *rand.Rand, c statCase) statCase {
 	lines := strings.Split(strings.TrimRight(c.src, "\n"), "\n")
-	// 只有**库**用例可以插入辅助函数：main 程序里未被调用的函数本身就是死代码
-	// （QK115 会如实报出，那是真问题，不该混进"误报"里）。
+	// Only **library** cases may have helper functions inserted: in a main program an uncalled function is dead code by itself
+	// (QK115 reports it faithfully, and that is a real problem, so it must not be mixed into the "false positives").
 	isLib := strings.HasPrefix(c.src, "program library;")
 	var pre []string
 	if n := rng.Intn(3); n > 0 {
@@ -572,7 +572,7 @@ func decorate(rng *rand.Rand, c statCase) statCase {
 			pre = append(pre, "")
 		}
 	}
-	shift := len(pre) // 行号平移 = 实际插入的行数（别手算，容易错）
+	shift := len(pre) // line-number shift = the number of lines actually inserted (do not work it out by hand, that is error-prone)
 	lines = append(pre, lines...)
 	src := strings.Join(lines, "\n") + "\n"
 	for i := range c.want {
@@ -582,8 +582,8 @@ func decorate(rng *rand.Rand, c statCase) statCase {
 	return c
 }
 
-// runStatCase 跑一条统计用例，返回 (命中, 误报, 漏报, 样本说明)。
-// 只有「未使用导入」用例需要真正落盘（其余直接用 AST，避免 8000 次文件写入）。
+// runStatCase runs one statistical case and returns (hits, false positives, false negatives, sample description).
+// Only the "unused import" case needs to actually write to disk (the others use the AST directly, avoiding 8000 file writes).
 func runStatCase(t *testing.T, c statCase, dir string) (int, int, int, string) {
 	t.Helper()
 	file := filepath.Join(dir, "case.qk")
@@ -601,7 +601,7 @@ func runStatCase(t *testing.T, c statCase, dir string) (int, int, int, string) {
 	}
 	prog, err := ParseSource(c.src)
 	if err != nil {
-		// 生成器造出不可解析的代码属于**生成器缺陷**，直接暴露（不是被测工具的锅）
+		// Unparsable code produced by the generator is a **generator defect** and is exposed directly (it is not the fault of the tool under test)
 		return 0, 0, 0, fmt.Sprintf("生成器产出不可解析（%s）：%v", c.name, err)
 	}
 	diags := Lint(prog, LintOptions{Params: c.params, File: file, LibDirs: libDirs})

@@ -1,9 +1,9 @@
 package lang
 
-// 槽位预解析（slots.go）的语义回归：优化把「按名字查找」换成「下标直取」，
-// 一旦推导与实际作用域不符就会静默读错变量。这里用真实执行结果钉住各类边界。
-// 用例覆盖：前缀顶层声明、嵌套块内声明、循环体内声明、for-in 遮蔽、catch 作用域、
-//          参数与局部同名、递归、引用参数写穿。
+// Semantic regression for slot pre-resolution (slots.go): the optimization replaces lookup by name with a direct index read,
+// so any mismatch between the inference and the actual scope silently reads the wrong variable. These tests pin down every edge case with real execution results.
+// Cases covered: declaration at top level in the prefix, declaration in a nested block, declaration in a loop body, for-in shadowing, catch scope,
+//          parameter sharing a name with a local, recursion, write-through of a reference parameter.
 
 import (
 	"bytes"
@@ -191,7 +191,7 @@ fn main(IOStream io) void {
 	}
 }
 
-// 槽位标记本身要能通过名字校验（防止把标记写到错误的变量上）。
+// The slot annotation itself must pass the name check (so the annotation never lands on the wrong variable).
 func TestSlotAnnotationNameMatches(t *testing.T) {
 	src := `fn main(IOStream io) void {
     int alpha = 1;
@@ -204,7 +204,7 @@ func TestSlotAnnotationNameMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	fn := prog.Funcs[0]
-	slots := []string{"io"} // 第 0 槽位是 io 参数
+	slots := []string{"io"} // slot 0 is the io parameter
 	var check func(e Expr, names []string, ok *bool)
 	ok := true
 	check = func(e Expr, names []string, ok *bool) {

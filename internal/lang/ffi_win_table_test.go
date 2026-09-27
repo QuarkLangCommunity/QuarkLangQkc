@@ -2,19 +2,19 @@
 
 package lang
 
-// Windows FFI 派发表（ffi_win.inc）的**本地语义回归**。
+// **Local semantics regression** for the Windows FFI dispatch table (ffi_win.inc).
 //
-// 背景：ffi_win.inc 是「免 libffi」的自研 ABI wrapper 表（4 类型 × 0–4 参数 × 5 种返回类型），
-// 只有 Windows + cgo 才会编译它，出了问题在本机根本跑不到。这里把同一张表在**当前平台**编译
-// （去掉 _WIN32 守卫与 windows.h，加载器换成桩），直接调用 qk_ffi 验证派发逻辑：
-//   - 返回类型覆盖：void / i32 / f32 / f64 / ptr / **i64(long)**
-//   - 参数类型覆盖：int32 / float / double / pointer
-//   - 关键回归点：零参数非 void 返回、4 参数时 code 达 3e9~4e9（C 侧必须是 64 位）
+// Background: ffi_win.inc is the in-house, libffi-free ABI wrapper table (4 types × 0-4 parameters × 5 return types),
+// only Windows + cgo compiles it, so if it breaks the problem cannot be hit locally at all. Here the same table is compiled on the **current platform**
+// (with the _WIN32 guard and windows.h removed and the loader replaced by stubs), calling qk_ffi directly to verify the dispatch logic:
+//   - return type coverage: void / i32 / f32 / f64 / ptr / **i64(long)**
+//   - parameter type coverage: int32 / float / double / pointer
+//   - key regression points: zero-argument non-void return, and code reaching 3e9~4e9 with 4 parameters (the C side must be 64-bit)
 //
-// 曾修复的真实缺陷：表按 64 位 code 生成但 C 侧用 `int code`（≥4 参数不可达）；
-// 且缺少 i64 返回族（任何返回 long 的 C 函数在 Windows 上必然报 “ffi call failed”）。
+// A real defect fixed earlier: the table was generated with a 64-bit code but the C side used `int code` (unreachable with ≥4 parameters);
+// and the i64 return family was missing (any C function returning long necessarily reported "ffi call failed" on Windows).
 //
-// 无 C 编译器时自动跳过（不阻塞其它平台的测试）。
+// Skipped automatically when there is no C compiler (so tests on other platforms are not blocked).
 
 import (
 	"os"
@@ -95,7 +95,7 @@ func TestWindowsFFITableDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := string(raw)
-	// 去掉 Windows 专属部分，使同一张表能在当前平台编译
+	// strip the Windows-specific parts so that the same table compiles on the current platform
 	src = strings.Replace(src, "#ifdef _WIN32\n", "", 1)
 	src = strings.Replace(src, "#include <windows.h>\n", "", 1)
 	src = regexp.MustCompile(`(?s)void\* qk_dlopen\(const char\* n\) \{.*?\n`).ReplaceAllString(src, "void* qk_dlopen(const char* n) { (void)n; return 0; }\n")

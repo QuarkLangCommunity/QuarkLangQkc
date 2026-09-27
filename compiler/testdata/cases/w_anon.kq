@@ -1,5 +1,5 @@
-// w_anon：匿名 struct / 匿名 interface 类型标注（解释器 parser 合成实名类型 __anon_struct_N /
-// __anon_iface_N，编译器按合成名 lower，同一结构复用同一个合成名）。
+// w_anon: anonymous struct / anonymous interface type annotations (the interpreter's parser synthesizes
+// the named types __anon_struct_N / __anon_iface_N; the compiler lowers by synthesized name, and the same structure reuses the same synthesized name).
 type struct { int v; } A;
 impl { fn tag(A self) String { return "A" + self.v.toString(); } } A;
 type struct { int u; } B;
@@ -31,7 +31,7 @@ fn main(IOStream io) {
   io.println(h.a);                // 7
   h.it = b;
   io.println(h.it.tag());         // B2
-  // 结构相同的两处匿名 struct 标注是同一个合成类型（字段可互换赋值）
+  // two anonymous struct annotations with the same structure are the same synthesized type (fields are interchangeable on assignment)
   struct { int a; String s; } q = p;
   io.println(take(q));            // abc/3
 }

@@ -1,26 +1,26 @@
 package lang
 
-// ============ 单文件前端入口（工具共用） ============
+// ============ Single-file frontend entry points (shared by tools) ============
 //
-// 语言本身的正式入口是 Compile / CompileWithImports（含类型检查与 import 合并）。
-// 工具（qkcheck / qkdoc / qkrepl / qklsp）常常需要**单文件、原坐标**的 AST：
-// 这里只做 词法 → 宏展开 → 解析，不做类型检查、不解析 import。
+// The language's own official entry points are Compile / CompileWithImports (they include type checking and import merging).
+// Tools (qkcheck / qkdoc / qkrepl / qklsp) often need an AST of **a single file with original coordinates**:
+// this does only lexing -> macro expansion -> parsing, no type checking and no import resolution.
 
-// ParseSource 只做前端：词法 → 宏展开 → 解析（不解析 import、不做类型检查）。
-// 行号即文件行号（合并 import 后的坐标见 SrcMap）。
+// ParseSource does only the frontend: lexing -> macro expansion -> parsing (no import resolution, no type checking).
+// Line numbers are file line numbers (for coordinates after import merging see SrcMap).
 func ParseSource(src string) (*Program, error) {
 	prog, _, err := ParseSourceWithComments(src)
 	return prog, err
 }
 
-// ParseSourceWithComments 同 ParseSource，另返回源码中的注释（按出现顺序）。
+// ParseSourceWithComments is like ParseSource but also returns the comments in the source (in order of appearance).
 func ParseSourceWithComments(src string) (*Program, []Comment, error) {
 	prog, comments, _, err := ParseSourceAll(src)
 	return prog, comments, err
 }
 
-// ParseSourceAll 在 ParseSourceWithComments 之上再返回**宏定义**。
-// 宏定义在解析前被切出（SplitMacroDefs），因此不在 AST 里；qkdoc 需要它来生成宏文档。
+// ParseSourceAll additionally returns the **macro definitions** on top of ParseSourceWithComments.
+// Macro definitions are cut out before parsing (SplitMacroDefs), so they are not in the AST; qkdoc needs them to generate macro documentation.
 func ParseSourceAll(src string) (*Program, []Comment, []*MacroDef, error) {
 	toks, comments, err := LexWithComments(src)
 	if err != nil {

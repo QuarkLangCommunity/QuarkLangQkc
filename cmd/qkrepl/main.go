@@ -1,22 +1,22 @@
-// qkrepl：QuarkLang 交互式求值（工具链成员）
+// qkrepl: QuarkLang interactive evaluator (toolchain member)
 //
-// 用法: qkrepl [flags]
+// Usage: qkrepl [flags]
 //
-//	-e code    求值一段代码后退出（可重复；失败退出 1）
-//	-q         安静模式（不打印横幅与提示符）
-//	--lang       输出语言 zh|en（默认中文；亦可用 QK_LANG）
-//	--version  打印版本
+//	-e code    Evaluate a snippet and exit (repeatable; exits 1 on failure)
+//	-q         Quiet mode (no banner or prompt)
+//	--lang       Output language zh|en (default Chinese; QK_LANG also works)
+//	--version  Print version
 //
-// 交互模式（stdin 是终端）：`qk> ` 提示符；块未闭合时自动续行（`..> `）。
-// 批处理模式（stdin 被管道/重定向）：不打印提示符，逐行求值，出错继续，结束时若有错退出 1。
+// Interactive mode (stdin is a terminal): `qk> ` prompt; an unfinished block continues automatically (`..> `).
+// Batch mode (stdin is piped/redirected): no prompt, evaluate line by line, keep going after errors, exit 1 if any error occurred.
 //
-// 会话内命令（行首 `:`）：
+// In-session commands (leading `:`):
 //
-//	:help            显示帮助
-//	:quit / :exit    退出
-//	:load <file.qk>  加载文件（登记其中的函数/类型/实现，不自动执行 main）
+//	:help            Show help
+//	:quit / :exit    Quit
+//	:load <file.qk>  Load a file (registers its functions/types/implementations; does not run main automatically)
 //
-// 退出码：0 = 正常；1 = 求值出错；2 = 用法错误。
+// Exit codes: 0 = normal; 1 = evaluation error; 2 = usage error.
 package main
 
 import (
@@ -31,7 +31,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+// version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)
 var version = "dev"
 
 func main() {
@@ -70,7 +70,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		case "--lang", "-lang":
 			if i+1 < len(args) {
 				i++
-				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+				i18n.SetLocale(args[i]) // zh | en; unknown values keep the current locale
 			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkrepl", version)
@@ -91,7 +91,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// -e：一次性求值
+	// -e: evaluate once and exit
 	if len(exprs) > 0 {
 		failed := false
 		for _, code := range exprs {
@@ -154,7 +154,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			break
 		}
 	}
-	if buf.Len() > 0 { // 收尾：未闭合的残留输入仍尝试求值，报错可见
+	if buf.Len() > 0 { // wrap-up: leftover unclosed input is still evaluated so the error is visible
 		if out, err := sess.Eval(buf.String()); err != nil {
 			hadErr = true
 			fmt.Fprintln(stderr, "error:", err)
@@ -168,7 +168,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// command 处理行首 `:` 命令；返回是否退出。
+// command handles a leading `:` command; reports whether to quit.
 func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (bool, error) {
 	fields := strings.Fields(line)
 	switch fields[0] {
@@ -196,7 +196,7 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 	return false, errors.New(i18n.T("未知命令 %s（:help 查看帮助）", fields[0]))
 }
 
-// isTerminal 判断输入是否来自终端（无第三方依赖：字符设备判定）。
+// isTerminal reports whether the input comes from a terminal (no third-party dependencies: character device check).
 func isTerminal(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {

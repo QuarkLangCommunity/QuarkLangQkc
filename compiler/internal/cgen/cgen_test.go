@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// transpile 编译正典语法源码（filename 固定 test.qk，无 import 解析）。
+// transpile compiles canonical-syntax source (filename fixed to test.qk, no import resolution).
 func transpile(t *testing.T, src string) string {
 	t.Helper()
 	ir, err := Transpile(src, "test.qk")
@@ -18,8 +18,8 @@ func transpile(t *testing.T, src string) string {
 	return ir
 }
 
-// testRuntime 是 lli 单测用的最小 ql_strcat 实现（qkc -run 由 qthreads.c 提供；
-// llvm-as/lli 不会链接它，故测试时用 libc 的 strlen/memcpy/malloc 补一个定义）。
+// testRuntime is the minimal ql_strcat impl used by the lli unit tests (qkc -run gets it from qthreads.c;
+// llvm-as/lli does not link it, so the tests add a definition via libc strlen/memcpy/malloc).
 const testRuntime = `declare i64 @strlen(i8*)
 declare i8* @memcpy(i8*, i8*, i64)
 define i8* @ql_strcat(i8* %a, i8* %b) {
@@ -37,13 +37,13 @@ entry:
 }
 `
 
-// withTestRuntime 去掉模块里的 ql_strcat 声明并追加测试运行时定义。
+// withTestRuntime strips the module's ql_strcat declaration and appends the test runtime definition.
 func withTestRuntime(ir string) string {
 	ir = strings.Replace(ir, "declare i8* @ql_strcat(i8*, i8*)\n", "", 1)
 	return ir + "\n" + testRuntime
 }
 
-// lliRun 用 lli 执行 IR 并返回 stdout（无 lli 时跳过测试）。
+// lliRun runs IR with lli and returns stdout (skips the test when lli is missing).
 func lliRun(t *testing.T, ir string) string {
 	t.Helper()
 	lli, err := exec.LookPath("lli")
@@ -85,7 +85,7 @@ func TestHelloIR(t *testing.T) {
 
 func TestArithmeticIR(t *testing.T) {
 	ir := transpile(t, "fn main(IOStream io) {\n    io.println(1 + 2 * 3, \"=\");\n}\n")
-	// 常量折叠：1 + 2 * 3 → 7（编译期算掉，IR 无算术指令）
+	// Constant folding: 1 + 2 * 3 → 7 (computed at compile time, no arithmetic instructions in the IR)
 	if strings.Contains(ir, "mul i32") || strings.Contains(ir, "add i32") {
 		t.Fatalf("constant folding failed:\n%s", ir)
 	}
@@ -94,7 +94,7 @@ func TestArithmeticIR(t *testing.T) {
 	}
 }
 
-// 全链路：QuarkLang → LLVM IR → lli 执行（本机有 LLVM 工具链时）
+// Full pipeline: QuarkLang → LLVM IR → lli execution (when the LLVM toolchain is available)
 func TestLLIPipeline(t *testing.T) {
 	cases := []struct {
 		src  string
@@ -111,7 +111,7 @@ func TestLLIPipeline(t *testing.T) {
 	}
 }
 
-// llvm-as 语法校验：生成的 IR 必须通过 LLVM 官方语法检查
+// llvm-as syntax check: the generated IR must pass LLVM's official syntax check
 func TestIRSyntax(t *testing.T) {
 	llvmAs, err := exec.LookPath("llvm-as")
 	if err != nil {
@@ -122,9 +122,9 @@ func TestIRSyntax(t *testing.T) {
 		"fn main(IOStream io) {\n    io.println(1 + 2 * 3, \"=\");\n}\n",
 		"fn main(IOStream io) {\n    io.println(-5 + 3, 7 % 3);\n}\n",
 		"fn main(IOStream io) {\n    io.println(\"a\\nb\", \"q\\\"q\");\n}\n",
-		// 参数赋值：LLVM SSA 参数寄存器不可写，必须提升为 alloca 槽
+		// Parameter assignment: LLVM SSA parameter registers are not writable, so they must be promoted to alloca slots
 		"fn f(int n) void {\n    while (n > 0) { n = n - 1; }\n}\nfn main(IOStream io) { f(3); io.println(1); }\n",
-		// List 方法/下标：不能对 {i32*, i32}* 误发 load i8*
+		// List methods/indexing: must not emit load i8* for {i32*, i32}*
 		"fn main(IOStream io) {\n    List<int> l = [1, 2, 3];\n    l.append(4);\n    l[0] = 9;\n    io.println(l.size(), l[2]);\n}\n",
 	}
 	for _, src := range progs {
@@ -145,7 +145,7 @@ func TestIRSyntax(t *testing.T) {
 	}
 }
 
-// 一元负号 + 取模（lli 全链路）
+// Unary minus + modulo (full lli pipeline)
 func TestUnaryMinusAndModulo(t *testing.T) {
 	got := lliRun(t, transpile(t, "fn main(IOStream io) {\n    io.println(-5 + 3, 7 % 3);\n}\n"))
 	if got != "-2 1\n" {
@@ -153,7 +153,7 @@ func TestUnaryMinusAndModulo(t *testing.T) {
 	}
 }
 
-// 字符串转义（\n、\"）→ IR 转义 → 运行时还原
+// String escapes (\n, \") → IR escapes → restored at runtime
 func TestStringEscapes(t *testing.T) {
 	got := lliRun(t, transpile(t, "fn main(IOStream io) {\n    io.println(\"a\\nb\", \"q\\\"q\");\n}\n"))
 	if got != "a\nb q\"q\n" {
@@ -161,7 +161,7 @@ func TestStringEscapes(t *testing.T) {
 	}
 }
 
-// 变量 + if/else + while + 比较 + 布尔 + List（lli 全链路，正典语法）
+// Variables + if/else + while + comparison + bool + List (full lli pipeline, canonical syntax)
 func TestVariablesAndControlFlow(t *testing.T) {
 	src := "fn main(IOStream io) {\n" +
 		"    int x = 5;\n" +
@@ -196,7 +196,7 @@ func TestVariablesAndControlFlow(t *testing.T) {
 	}
 }
 
-// 多函数 + 递归调用（lli 全链路：编译路径性能对标 C）
+// Multiple functions + recursion (full lli pipeline: the compiled path targets C-level performance)
 func TestFunctionCallAndRecursion(t *testing.T) {
 	src := "fn fib(int n) int {\n" +
 		"    if (n < 2) {\n" +
@@ -214,7 +214,7 @@ func TestFunctionCallAndRecursion(t *testing.T) {
 	}
 }
 
-// 参数被赋值：必须提升为 alloca，并且行为与解释器一致
+// Assigned parameter: must be promoted to alloca, with behavior matching the interpreter
 func TestParamAssignment(t *testing.T) {
 	src := "fn down(int n) int {\n" +
 		"    int acc = 0;\n" +
@@ -233,7 +233,7 @@ func TestParamAssignment(t *testing.T) {
 	}
 }
 
-// 无初值声明 + 后续赋值（正典 K3：初始化可省略）
+// Declaration without initializer + later assignment (canonical K3: the initializer may be omitted)
 func TestDeclareWithoutInit(t *testing.T) {
 	src := "fn main(IOStream io) {\n" +
 		"    int x;\n" +
@@ -248,11 +248,11 @@ func TestDeclareWithoutInit(t *testing.T) {
 	}
 }
 
-// String 返回函数 + int/bool.toString()：LLVM 侧 i8* 签名/返回、拼接、打印
+// String-returning functions + int/bool.toString(): i8* signature/return, concatenation and printing on the LLVM side
 func TestStringReturnAndToString(t *testing.T) {
 	src := "fn value(int n) String { return n.toString(); }\n" +
 		"fn label(int n) String { return \"x = \" + value(n); }\n" +
-		"fn tail(int n) String { return value(n); }\n" + // String 尾调用
+		"fn tail(int n) String { return value(n); }\n" + // String tail call
 		"fn main(IOStream io) {\n" +
 		"    io.println(label(5));\n" +
 		"    io.println(tail(9));\n" +
@@ -272,7 +272,7 @@ func TestStringReturnAndToString(t *testing.T) {
 	}
 }
 
-// 父任务复现 1)：int.toString() 参与 String 拼接（类型推断必须识别 String 返回内建方法）
+// Parent-task repro 1): int.toString() in String concatenation (type inference must recognize String-returning builtin methods)
 func TestToStringConcatRepro(t *testing.T) {
 	src := "program main;\nfn main(IOStream io) { int x = 5; io.println(\"x = \" + x.toString()); }\n"
 	ir := transpile(t, src)
@@ -284,7 +284,7 @@ func TestToStringConcatRepro(t *testing.T) {
 	}
 }
 
-// import：同目录 .qk（含嵌套 import），与解释器同一套递归合并语义
+// import: same-directory .qk (including nested imports), with the same recursive merge semantics as the interpreter
 func TestImportCompile(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, src string) {
@@ -311,13 +311,13 @@ func TestImportCompile(t *testing.T) {
 	}
 }
 
-// 非正典写法（名字在前）必须报明确错误，而不是被静默接受
+// Non-canonical syntax (name first) must report an explicit error instead of being silently accepted
 func TestRejectsLegacySyntax(t *testing.T) {
 	_, err := Transpile("fn main(io IOStream) {\n    io.println(1);\n}\n", "legacy.qk")
 	if err == nil {
 		t.Fatal("legacy name-first syntax must fail")
 	}
-	// 由语言前端（typecheck）直接拒绝："io" 被当成类型名 → 未知类型 IOStream
+	// Rejected directly by the language frontend (typecheck): "io" is taken as a type name → unknown type IOStream
 	if !strings.Contains(err.Error(), "IOStream") && !strings.Contains(err.Error(), "unknown type") {
 		t.Fatalf("unexpected error: %v", err)
 	}

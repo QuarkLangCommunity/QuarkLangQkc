@@ -17,8 +17,8 @@ import (
 // objects and string references go through unsafe.Pointer (visible to the Go GC, kept alive, no dangling pointers).
 type Value struct {
 	tag uint8
-	i   int64          // 标量内联：int 值 / float 位模式 / bool 0|1
-	ptr unsafe.Pointer // 对象与字符串引用（*strRef / 堆对象）
+	i   int64          // scalar inline: int value / float bit pattern / bool 0|1
+	ptr unsafe.Pointer // object and string reference (*strRef / heap object)
 }
 
 type ValueKind uint8
@@ -45,8 +45,8 @@ const (
 	vStruct
 	vLib
 	vFile
-	vPtr // FFI 原生指针值（不透明句柄；新增在末尾，保持既有枚举序号不变）
-	vRef // 实参引用单元（按引用传递；新增在末尾，保持既有枚举序号不变）
+	vPtr // FFI native pointer value (opaque handle; appended at the end to keep existing enum ordinals unchanged)
+	vRef // argument reference cell (pass by reference; appended at the end to keep existing enum ordinals unchanged)
 )
 
 func FileV(f *FileValue) Value { return Value{tag: byte(vFile), ptr: unsafe.Pointer(f)} }
@@ -117,19 +117,19 @@ func RefV(r *refValue) Value            { return Value{tag: byte(vRef), ptr: uns
 type refKind uint8
 
 const (
-	refIdent  refKind = iota // scope 中的名字（变量/形参槽位）
-	refMember                // struct 字段（obj 是 struct 值，name 是字段名）
-	refIndex                 // List 元素（obj 是 List 值，key 是下标）
+	refIdent  refKind = iota // name in a scope (variable/parameter slot)
+	refMember                // struct field (obj is the struct value, name is the field name)
+	refIndex                 // List element (obj is the List value, key is the index)
 )
 
 // refValue is an argument's reference cell: when a parameter binds by reference, reads/writes go straight through to the caller's lvalue cell.
 // Non-lvalue arguments do not build a reference (they are passed by value and treated as a temporary cell inside the callee).
 type refValue struct {
 	kind refKind
-	sc   *scope // refIdent：名字所在作用域
-	name string // refIdent/refMember：名字
-	obj  Value  // refMember/refIndex：容器
-	key  Value  // refIndex：下标
+	sc   *scope // refIdent: scope holding the name
+	name string // refIdent/refMember: name
+	obj  Value  // refMember/refIndex: container
+	key  Value  // refIndex: index
 }
 
 // load reads the reference cell's current value (it does not follow a dereference chain; deref/store handles chains).
@@ -197,7 +197,7 @@ func (v Value) deref() Value {
 
 func (v Value) derefSlow() Value {
 	for n := 0; v.tag == byte(vRef); n++ {
-		if n > 1<<20 { // 环守卫（构造上不可达，防御兜底）
+		if n > 1<<20 { // cycle guard (unreachable by construction, defensive fallback)
 			return NilV()
 		}
 		r := (*refValue)(v.ptr)
@@ -323,7 +323,7 @@ func (v Value) TypeName() string {
 	case vPtr:
 		return "pointer"
 	case vRef:
-		return v.deref().TypeName() // 引用透明（防御：读路径本应已解引用）
+		return v.deref().TypeName() // reference transparency (defensive: the read path should already have dereferenced)
 	}
 	return "<unknown>"
 }
@@ -377,7 +377,7 @@ func (v Value) String() string {
 	case vPtr:
 		return "0x" + strconv.FormatUint(uint64(uintptr(v.ptr)), 16)
 	case vRef:
-		return v.deref().String() // 引用透明（防御：读路径本应已解引用）
+		return v.deref().String() // reference transparency (defensive: the read path should already have dereferenced)
 	}
 	return "<unknown>"
 }
@@ -593,13 +593,13 @@ func hashKey(v Value) string { return v.TypeName() + ":" + v.String() }
 // value of `return expr;`; otherwise the call yields the whole FuncBuffer.
 type Func struct {
 	Name       string
-	TypeParams []string // 泛型函数 func<T,...>（xmind §函数）
+	TypeParams []string // generic function func<T,...> (xmind §functions)
 	Params     []Param
 	Ret        string
 	Body       *Block
 	Pos        Pos
-	paramNames []string // 参数名缓存（槽位绑定用，共享零分配）
-	paramCopyd []bool   // Copyd 参数标志（惰性缓存，调用热路径免字符串扫描）
+	paramNames []string // parameter-name cache (for slot binding, shared, zero allocation)
+	paramCopyd []bool   // Copyd parameter flags (lazy cache, avoids string scanning on the call hot path)
 }
 
 // ParamNames returns the parameter-name array (lazily cached and shared by every call).
@@ -640,9 +640,9 @@ type execCtx struct {
 	result   Value
 	executed bool
 	pos      Pos
-	sc       scope    // 函数执行作用域（复用，免每次调用堆分配）
-	depth    int      // 调用深度（栈溢出防护，按 ctx 传播，线程安全）
-	link     *execCtx // 空闲链（无锁 LIFO 栈）
+	sc       scope    // function execution scope (reused, avoids a heap allocation per call)
+	depth    int      // call depth (stack overflow protection, propagated per ctx, thread-safe)
+	link     *execCtx // free chain (lock-free LIFO stack)
 
 	// argArena is the reuse area for argument slices (owned by this ctx → no sharing across goroutines).
 	// evalArgs appends at its tail and the call site truncates it back after the call; the capacity is kept for reuse.
@@ -776,7 +776,7 @@ type Task struct {
 	err     error
 	Pid     int
 	BlockID int
-	Busy    bool // 是否有函数占用（done 即 !Busy）
+	Busy    bool // whether a function occupies it (done means !Busy)
 }
 
 // ThreadValue is a thread class instance (xmind: taskm.spawn() returns a thread instance carrying a pid).
@@ -823,7 +823,7 @@ func (s *StructValue) String() string {
 type CopydValue struct{ V Value }
 
 func (c *CopydValue) TypeName() string { return "Copyd" }
-func (c *CopydValue) String() string   { return c.V.String() } // Copyd 透明
+func (c *CopydValue) String() string   { return c.V.String() } // Copyd is transparent
 
 // Channel is the coroutine communication primitive (block-buffered).
 type Channel struct{ ch chan Value }

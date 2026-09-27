@@ -1,6 +1,6 @@
 package main
 
-// 编辑器延迟基准：每次编辑后的重新分析（parse + lint + 类型检查）与查询（补全/跳转/悬停）。
+// Editor latency benchmark: re-analysis after each edit (parse + lint + type check) and queries (completion/definition/hover).
 
 import (
 	"fmt"

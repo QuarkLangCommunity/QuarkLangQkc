@@ -1,23 +1,23 @@
 package main
 
-// preproc.go —— QuarkLang **预处理器**（跨系统的核心工具）
+// preproc.go — QuarkLang **preprocessor** (the core tool for cross-system support)
 //
-// 目的（用户要求）：**不依赖 .so / 平台二进制**，用预处理指令表达平台/架构/特性差异，
-// 在**使用方编译期**解析。这样一份库制品（可移植 IR）可以在任何系统上被合并编译。
+// Purpose (user requirement): **no .so / platform binary dependency**; express platform/arch/feature differences with preprocessor directives,
+// resolved at the **consumer's compile time**. Then one library artifact (portable IR) can be merged and compiled on any system.
 //
-// 支持的指令：
-//   #define NAME                定义特性开关
+// Supported directives:
+//   #define NAME                 define a feature switch
 //   #undef NAME
 //   #ifdef NAME / #ifndef NAME
 //   #if <cond> / #elif <cond> / #else / #endif
-//   #include "path.qk"          相对当前文件
-//   #error <msg>               条件不满足时报错
+//   #include "path.qk"           relative to the current file
+//   #error <msg>                error out when the condition is not met
 //
-// 条件表达式：
+// Conditional expressions:
 //   os("linux"|"darwin"|"windows")   arch("x86_64"|"arm64"|"any")
-//   defined(NAME)  true  false  !  &&  ||  括号
+//   defined(NAME)  true  false  !  &&  ||   parentheses
 //
-// 目标平台默认取宿主，可用 --target-os / --target-arch 指定（交叉预处理）。
+// The target platform defaults to the host; use --target-os / --target-arch to override (cross preprocessing).
 
 import (
 	"errors"
@@ -55,14 +55,14 @@ var (
 	reDefineNm = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
-// Process 预处理源码（返回展开后的源码）
+// Process preprocess source (returns the expanded source)
 func (p *preprocCtx) Process(src, filename string) (string, error) {
 	if p.depth > 16 {
 		return "", errors.New(i18n.T("预处理 #include 层数过深（>16）：%s", filename))
 	}
 	lines := strings.Split(src, "\n")
 	var out []string
-	// active: 当前分支是否输出；taken: 本组是否已有分支命中
+	// active: whether the current branch emits; taken: whether a branch in this group already matched
 	type frame struct{ active, taken, parentActive bool }
 	stack := []frame{}
 	active := true
@@ -140,7 +140,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 				}
 				continue
 			case "macro":
-				// 交给既有宏展开（保持兼容）
+				// Hand off to the existing macro expansion (keeps compatibility)
 				if active {
 					out = append(out, ln)
 				}
@@ -178,7 +178,7 @@ func (p *preprocCtx) Process(src, filename string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-// eval 求值条件表达式
+// eval evaluate a conditional expression
 func (p *preprocCtx) eval(expr string) (bool, error) {
 	v, err := p.evalOr(strings.TrimSpace(expr))
 	return v, err
@@ -246,7 +246,7 @@ func (p *preprocCtx) evalUnary(e string) (bool, error) {
 	return false, errors.New(i18n.T("无法识别的条件表达式：%q", e))
 }
 
-// splitTop 按顶层运算符切分（忽略括号内的）
+// splitTop split on top-level operators (ignoring what is inside parentheses)
 func splitTop(s, op string) []string {
 	var out []string
 	depth, last := 0, 0

@@ -1,7 +1,7 @@
 package lang
 
-// 英文模式（QK_LANG=en / SetLocale(en)）的实际渲染验证：真实场景输出里不得残留中文。
-// 覆盖三条最容易漏的路径：类型检查错误、解析错误、静态检查诊断。
+// Actual-render verification of English mode (QK_LANG=en / SetLocale(en)): no Chinese may remain in the output of real scenarios.
+// Covers the three paths most easily missed: type-check errors, parse errors, static-check diagnostics.
 
 import (
 	"regexp"
@@ -53,7 +53,7 @@ func TestEnglishModeRendersEnglish(t *testing.T) {
 	})
 }
 
-// 默认语言必须是中文（不改变既有行为），且 QK_LANG 只在进程启动时决定一次。
+// The default language must be Chinese (without changing existing behaviour), and QK_LANG is decided only once at process start.
 func TestDefaultLocaleZh(t *testing.T) {
 	if i18n.Locale() != i18n.ZH {
 		t.Fatalf("默认语言应为 zh，实际 %s", i18n.Locale())

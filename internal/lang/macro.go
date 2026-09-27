@@ -44,7 +44,7 @@ func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
 			continue
 		}
 		pos := Pos{Line: t.Line, Col: t.Col}
-		i += 2 // 吃掉 # macro
+		i += 2 // consume '# macro'
 		if i >= len(toks) || toks[i].Kind != TIdent {
 			return nil, nil, errors.New(i18n.T("ParseError: #macro 需要名字，第 %d 行", t.Line))
 		}

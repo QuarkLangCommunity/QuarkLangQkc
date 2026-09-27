@@ -1,10 +1,10 @@
 package cgen
 
-// 泛型单态化（Phase C）：按调用点/类型标注收集实例，为每个具体类型组合生成一份
-// 单态函数（fn<T> → id$int）与单态 struct（Box<int> → %Box_int_）。
+// Generic monomorphization (Phase C): collect instances per call site/type annotation, generate one
+// monomorphic function (fn<T> → id$int) and monomorphic struct (Box<int> → %Box_int_) per concrete type combination.
 //
-// 与解释器一致性：解释器在运行期用动态值执行泛型体；编译器在编译期按类型实参展开，
-// 语义相同（类型检查已由 internal/lang 完成，这里只做实例化与名字修饰）。
+// Interpreter consistency: the interpreter runs generic bodies with dynamic values at runtime; the compiler expands
+// by type arguments at compile time with identical semantics (typecheck is done by internal/lang; here we only instantiate and mangle names).
 
 import (
 	"strings"
@@ -12,7 +12,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// typeArgsKey 生成类型实参键（"int" / "Box<int>" → "int" / "Box_int_"）。
+// typeArgsKey builds the type-argument key ("int" / "Box<int>" → "int" / "Box_int_").
 func typeArgsKey(tps []string, sub map[string]string) string {
 	parts := make([]string, 0, len(tps))
 	for _, tp := range tps {
@@ -21,7 +21,7 @@ func typeArgsKey(tps []string, sub map[string]string) string {
 	return strings.Join(parts, "$")
 }
 
-// instName 生成实例的 IR 名：id + $int → id$int；Box + $int + _get → Box$int_get。
+// instName builds the IR name of an instance: id + $int → id$int; Box + $int + _get → Box$int_get.
 func instName(base string, tps []string, sub map[string]string) string {
 	if len(tps) == 0 {
 		return base
@@ -29,7 +29,7 @@ func instName(base string, tps []string, sub map[string]string) string {
 	return base + "$" + typeArgsKey(tps, sub)
 }
 
-// instantiateFunc 实例化泛型函数（幂等；先登记再 lower 以防递归实例化死循环）。
+// instantiateFunc instantiates a generic function (idempotent; registers before lowering to avoid infinite recursion).
 func (l *lowerer) instantiateFunc(name string, fn *lang.FuncDecl, sub map[string]string) (string, error) {
 	key := "fn:" + name + "$" + typeArgsKey(fn.TypeParams, sub)
 	if ir, ok := l.insts[key]; ok {
@@ -45,7 +45,7 @@ func (l *lowerer) instantiateFunc(name string, fn *lang.FuncDecl, sub map[string
 	return ir, nil
 }
 
-// callGeneric 实例化并调用泛型函数 fn<T,...>（按实参推断类型参数）。
+// callGeneric instantiates and calls a generic function fn<T,...> (infers type parameters from arguments).
 func (fc *funcCtx) callGeneric(name string, c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 	l := fc.l
 	fn := l.generics[name]
@@ -80,7 +80,7 @@ func (fc *funcCtx) callGeneric(name string, c *lang.CallExpr, pos lang.Pos) (*ex
 	return &expr{kind: kCall, typ: ret, line: pos.Line, call: &callExpr{name: ir, args: args}}, nil
 }
 
-// recvSubst 从 receiver 类型取 impl 类型参数的替换表（Box<int> + impl<T> → {T:int}）。
+// recvSubst derives the impl type-parameter substitution from the receiver type (Box<int> + impl<T> → {T:int}).
 func (l *lowerer) recvSubst(mi *methodInfo, recvType string) map[string]string {
 	sub := map[string]string{}
 	if len(mi.impl.TypeParams) == 0 {
@@ -95,7 +95,7 @@ func (l *lowerer) recvSubst(mi *methodInfo, recvType string) map[string]string {
 	return sub
 }
 
-// instSelfType 由 impl 基名 + 类型实参构造 receiver 类型（Box + {T:int} → Box<int>）。
+// instSelfType builds the receiver type from the impl base name + type arguments (Box + {T:int} → Box<int>).
 func (l *lowerer) instSelfType(base string, sub map[string]string) string {
 	sd, ok := l.structs[base]
 	if !ok || len(sd.TypeParams) == 0 {
@@ -108,8 +108,8 @@ func (l *lowerer) instSelfType(base string, sub map[string]string) string {
 	return base + "<" + strings.Join(args, ",") + ">"
 }
 
-// instantiateFor 把 impl 方法按类型实参单态化。实例方法从 receiver 类型取实参，
-// 静态方法从调用实参推断；幂等（结果缓存，先登记再 lower 防递归）。
+// instantiateFor monomorphizes impl methods by type arguments. Instance methods take arguments from the receiver type,
+// static methods infer them from call arguments; idempotent (results cached, registers before lowering to prevent recursion).
 func (l *lowerer) instantiateFor(mi *methodInfo, recvType string, args []lang.Expr, fc *funcCtx, pos lang.Pos) (*methodInfo, error) {
 	if len(mi.impl.TypeParams) == 0 {
 		return mi, nil

@@ -1,15 +1,15 @@
 package main
 
-// lib.go —— 库制品（.qklib）：**可移植 IR 多平台变体**，编译期合并，不使用 .so / dlopen
+// lib.go — library artifact (.qklib): **portable IR multi-platform variants**, merged at compile time, no .so / dlopen
 //
-// 设计（用户要求：不依赖 .so，用预处理命令跨系统）：
-//   ① 语言本体与库分离：这里只做"库制品"的打包/读取/合并，不含任何游戏知识；
-//   ② 库以**可移植 LLVM IR**分发，按目标平台保存**多个变体**（内容由预处理器 #if os()/arch() 决定）；
-//   ③ 使用方 `qkc -L lib.qklib`：按自身目标平台挑变体，**把 IR 合并进自己的模块**，
-//      一次编译出原生二进制 —— 无共享库、无 rpath、无平台二进制依赖，天然跨系统；
-//   ④ 混淆：内部符号改名、去源码路径与目标行；导出名保留（供引用），制品里没有源码。
+// Design (user requirement: no .so dependency, cross-system via preprocessor directives):
+//   ① Language core and libraries separated: here we only pack/read/merge "library artifacts", with no game knowledge;
+//   ② Libraries ship as **portable LLVM IR**, keeping **multiple variants** per target platform (content decided by the preprocessor #if os()/arch());
+//   ③ Consumer runs `qkc -L lib.qklib`: pick the variant for its own target platform, **merge the IR into its own module**,
+//       and compile a native binary in one shot — no shared library, no rpath, no platform binary dependency, cross-system by nature;
+//   ④ Obfuscation: rename internal symbols, strip source paths and target lines; exported names kept (for reference), no source in the artifact.
 //
-// 容器：`QKLB` + JSON{manifest, variants{ "<os>-<arch>": "<IR 文本>" }}
+// Container: `QKLB` + JSON{manifest, variants{ "<os>-<arch>": "<IR text>" }}
 
 import (
 	"crypto/sha256"
@@ -28,7 +28,7 @@ import (
 
 const qklibMagic = "QKLB"
 
-// QKExport 一个导出符号：IR 签名 + QL 级签名（供引用方生成声明）
+// QKExport an exported symbol: IR signature + QL-level signature (for the referrer to generate declarations)
 type QKExport struct {
 	Name   string `json:"name"`
 	Sig    string `json:"sig"`
@@ -37,7 +37,7 @@ type QKExport struct {
 	Ret    string `json:"ret"`
 }
 
-// QKLibManifest 库清单（对外只暴露元数据与导出签名，不含源码）
+// QKLibManifest library manifest (exposes only metadata and export signatures, no source)
 type QKLibManifest struct {
 	Name       string            `json:"name"`
 	Version    string            `json:"version"`
@@ -53,13 +53,13 @@ type QKLibManifest struct {
 
 var (
 	reDefine  = regexp.MustCompile(`(?m)^define\s+([^@]*?)@([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)`)
-	reSymRef  = regexp.MustCompile(`@(\.?[A-Za-z_][A-Za-z0-9_.]*)`) // 允许 .str1 这类私有全局
+	reSymRef  = regexp.MustCompile(`@(\.?[A-Za-z_][A-Za-z0-9_.]*)`) // allow private globals like .str1
 	reSrcLine = regexp.MustCompile(`(?m)^source_filename\s*=.*$`)
 	reTarget  = regexp.MustCompile(`(?m)^target\s+(datalayout|triple)\s*=.*$`)
 	reDbgTail = regexp.MustCompile(`(?m)^![0-9]+\s*=.*$`)
 )
 
-// isRuntimeSym 运行时/内建符号：混淆时**绝不动**
+// isRuntimeSym runtime/builtin symbols: **never touched** during obfuscation
 func isRuntimeSym(name string) bool {
 	for _, p := range []string{"llvm.", "qk_", "ql_", "__", "main", "printf", "malloc", "free", "memcpy",
 		"memmove", "memset", "strlen", "pthread_", "exit", "abort", "puts", "putchar", "calloc",
@@ -71,7 +71,7 @@ func isRuntimeSym(name string) bool {
 	return false
 }
 
-// collectExports 从 IR 解析导出（顶层 define，排除 main 与内部 `_` 前缀）
+// collectExports parse exports from IR (top-level defines, excluding main and the internal `_` prefix)
 func collectExports(ir string) []QKExport {
 	var out []QKExport
 	seen := map[string]bool{}
@@ -100,7 +100,7 @@ func collectExports(ir string) []QKExport {
 
 var qlSigRe = regexp.MustCompile(`(?m)^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]*>)?)?`)
 
-// qlSigs 从源码抓函数的 QL 签名
+// qlSigs grab the QL signatures of functions from source
 func qlSigs(src string) map[string]QKExport {
 	out := map[string]QKExport{}
 	for _, m := range qlSigRe.FindAllStringSubmatch(src, -1) {
@@ -114,14 +114,14 @@ func qlSigs(src string) map[string]QKExport {
 	return out
 }
 
-// reParamPtr 匹配"指针形参"（例如 ` i32* noundef %p0`）
+// reParamPtr matches "pointer parameters" (e.g. ` i32* noundef %p0`)
 var reParamPtr = regexp.MustCompile(`^\s*([A-Za-z0-9_\.]+\*)\s+((?:noundef|nonnull|nocapture|readonly|signext|zeroext|align \d+)\s+)*%([A-Za-z0-9_\.]+)\s*$`)
 
-// normalizeExportedABI —— **导出面 ABI 规范化**（跨系统的值类型边界）
+// normalizeExportedABI — **exported-surface ABI normalization** (cross-system value-type boundary)
 //
-// 语言内部用"按指针传参"，但跨模块调用必须与调用方一致（调用方按值传）。
-// 这里只改**导出函数**：指针形参 → 值形参，并在入口处 alloca+store 复原同名指针，
-// 使函数体原有用法完全不变；返回本就按值，无需处理。
+// The language passes arguments by pointer internally, but a cross-module call must agree with the caller (which passes by value).
+// Here only **exported functions** are rewritten: pointer parameters → value parameters, with alloca+store at the entry to restore a pointer of the same name,
+// so the body's existing usage stays completely unchanged; returns are already by value, nothing to handle.
 func normalizeExportedABI(ir string, exports []QKExport) (string, map[string]string) {
 	keep := map[string]bool{}
 	for _, e := range exports {
@@ -152,7 +152,7 @@ func normalizeExportedABI(ir string, exports []QKExport) (string, map[string]str
 			}
 			ptrType, id := pm[1], pm[3]
 			valType := strings.TrimSuffix(ptrType, "*")
-			val := id + "_val" // 注意：LLVM 参数名**不能带点**（%p0.val 会被误解析）
+			val := id + "_val" // Note: LLVM parameter names **must not contain a dot** (%p0.val would be misparsed)
 			newParts = append(newParts, valType+" %"+val)
 			types = append(types, valType)
 			convs = append(convs, conv{slot: id, typ: valType, val: val})
@@ -180,7 +180,7 @@ func normalizeExportedABI(ir string, exports []QKExport) (string, map[string]str
 	return strings.Join(out, "\n"), sigs
 }
 
-// obfuscateIR 混淆 IR：内部符号改名 + 去源码路径/目标行
+// obfuscateIR obfuscate IR: rename internal symbols + strip source paths/target lines
 func obfuscateIR(ir string, exports []QKExport) string {
 	keep := map[string]bool{"main": true}
 	for _, e := range exports {
@@ -211,23 +211,23 @@ func obfuscateIR(ir string, exports []QKExport) string {
 	return ir
 }
 
-// stripModuleHeader 合并前清掉库 IR 的模块级头部（目标由使用方模块决定）
+// stripModuleHeader clear the library IR's module-level header before merging (the target is decided by the consumer module)
 func stripModuleHeader(ir string) string {
 	ir = reSrcLine.ReplaceAllString(ir, "")
 	ir = reTarget.ReplaceAllString(ir, "")
 	return strings.TrimSpace(ir)
 }
 
-// mergeLibIR 把库 IR 合并进使用方 IR。
+// mergeLibIR merge library IR into the consumer IR.
 //
-// LLVM 模块级对象（命名类型 %T、declare 声明、attributes #N、元数据 !N）在两个模块里会冲突，
-// 因此这里做**去重与清理**，只并入库自己的 define（函数实现）：
+// LLVM module-level objects (named types %T, declare declarations, attributes #N, metadata !N) collide between the two modules,
+// so this does **dedup and cleanup**, merging only the library's own defines (function impls):
 //
-//	· 消费方已定义的同名类型 → 丢弃库里的重复定义
-//	· 消费方已声明/定义的同名符号 → 丢弃库里的 declare
-//	· 丢弃库的 attributes/metadata 行与 define 上的 #N 引用（避免组号错位）
+//	· Type with the same name already defined by the consumer → drop the library's duplicate definition
+//	· Symbol with the same name already declared/defined by the consumer → drop the library's declare
+//	· Drop the library's attributes/metadata lines and #N references on defines (avoid group-number mismatch)
 func mergeLibIR(consumerIR, libIR string) string {
-	// 收集消费方已有的类型与符号
+	// Collect the types and symbols the consumer already has
 	typeRe := regexp.MustCompile(`(?m)^%([A-Za-z0-9_.]+)\s*=\s*type\b`)
 	symRe := regexp.MustCompile(`(?m)^(?:declare|define)[^@]*@([A-Za-z_][A-Za-z0-9_.]*)\s*\(`)
 	haveType := map[string]bool{}
@@ -239,8 +239,8 @@ func mergeLibIR(consumerIR, libIR string) string {
 		haveSym[m[1]] = true
 	}
 
-	// 库将要**定义**的符号：使用方里的同名 declare 必须删掉
-	// （clang 22 起，"declare 后 define 同名函数"会被判为 invalid redefinition，最小复现已验证）
+	// Symbols the library will **define**: same-named declares in the consumer must be deleted
+	// (since clang 22, "declare then define a function of the same name" is rejected as invalid redefinition; minimal repro verified)
 	libDefs := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(?m)^define[^@]*@([A-Za-z_][A-Za-z0-9_.]*)\s*\(`).FindAllStringSubmatch(libIR, -1) {
 		libDefs[m[1]] = true
@@ -265,7 +265,7 @@ func mergeLibIR(consumerIR, libIR string) string {
 		}
 		if m := regexp.MustCompile(`^%([A-Za-z0-9_.]+)\s*=\s*type\b`).FindStringSubmatch(t); m != nil {
 			if haveType[m[1]] {
-				continue // 重复类型：丢弃
+				continue // duplicate type: drop
 			}
 			haveType[m[1]] = true
 			keep = append(keep, ln)
@@ -273,15 +273,15 @@ func mergeLibIR(consumerIR, libIR string) string {
 		}
 		if strings.HasPrefix(t, "declare ") {
 			if m := regexp.MustCompile(`@([A-Za-z_][A-Za-z0-9_.]*)\s*\(`).FindStringSubmatch(t); m != nil && haveSym[m[1]] {
-				continue // 已有同名声明/定义：丢弃
+				continue // already declared/defined under the same name: drop
 			}
 			keep = append(keep, ln)
 			continue
 		}
 		if strings.HasPrefix(t, "attributes ") || strings.HasPrefix(t, "!") {
-			continue // 属性组/元数据：丢弃（避免组号错位）
+			continue // attribute group/metadata: drop (avoid group-number mismatch)
 		}
-		// define 行去掉尾部属性组引用 #N
+		// Strip the trailing attribute-group reference #N from define lines
 		if strings.HasPrefix(t, "define ") {
 			ln = regexp.MustCompile(`\s+#\d+`).ReplaceAllString(ln, "")
 		}
@@ -291,7 +291,7 @@ func mergeLibIR(consumerIR, libIR string) string {
 		strings.Join(keep, "\n") + "\n"
 }
 
-// DeclBlockFor 由清单生成 QL 声明块：library <name> { fn ...; }
+// DeclBlockFor build the QL declaration block from the manifest: library <name> { fn ...; }
 func DeclBlockFor(man QKLibManifest) (string, string) {
 	libName := sanitizeName(man.Name)
 	var b strings.Builder
@@ -307,7 +307,7 @@ func DeclBlockFor(man QKLibManifest) (string, string) {
 	return libName, b.String()
 }
 
-// writeQKLib 打包：清单 + 多平台 IR 变体
+// writeQKLib pack: manifest + multi-platform IR variants
 func writeQKLib(out string, man QKLibManifest, variants map[string]string) error {
 	man.SHA256 = map[string]string{}
 	targets := make([]string, 0, len(variants))
@@ -344,7 +344,7 @@ func writeQKLib(out string, man QKLibManifest, variants map[string]string) error
 	return os.WriteFile(out, append([]byte(qklibMagic), b...), 0o644)
 }
 
-// readQKLib 读取并校验库制品
+// readQKLib read and verify a library artifact
 func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 	var man QKLibManifest
 	b, err := os.ReadFile(path)
@@ -372,7 +372,7 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 	return body.Manifest, body.Variants, nil
 }
 
-// pickVariant 按目标平台挑变体（target 形如 linux-x86_64）
+// pickVariant pick the variant for the target platform (target looks like linux-x86_64)
 func pickVariant(variants map[string]string, target string) (string, string, bool) {
 	if ir, ok := variants[target]; ok {
 		return target, ir, true

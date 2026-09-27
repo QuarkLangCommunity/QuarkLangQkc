@@ -1,7 +1,7 @@
 {
   "name": "quarklang",
   "displayName": "QuarkLang",
-  "description": "QuarkLang 语言支持：语法高亮、诊断、跳转、补全（内置 qklsp 语言服务器，零 npm 依赖）",
+  "description": "QuarkLang language support: syntax highlighting, diagnostics, go-to-definition and completion (built-in qklsp language server client, zero npm dependencies)",
   "version": "0.1.0",
   "publisher": "QuarkLangCommunity",
   "license": "MIT",
@@ -44,18 +44,18 @@
         "quarklang.serverPath": {
           "type": "string",
           "default": "qklsp",
-          "description": "qklsp 可执行文件路径（默认从 PATH 查找；也可指向编译产物，如 ./cmd/qklsp/qklsp）"
+          "description": "Path to the qklsp executable (looked up on PATH by default; may also point at a build artifact such as ./cmd/qklsp/qklsp)"
         },
         "quarklang.libDirs": {
           "type": "array",
           "items": { "type": "string" },
           "default": [],
-          "description": "额外的 import 搜索目录（传给 qklsp -L，可多个）"
+          "description": "Extra import search directories (passed to qklsp -L; may be repeated)"
         },
         "quarklang.trace.server": {
           "type": "boolean",
           "default": false,
-          "description": "把 qklsp 的收发报文打到输出通道（排查用）"
+          "description": "Log qklsp request/response traffic to the output channel (for troubleshooting)"
         }
       }
     }

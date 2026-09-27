@@ -1,7 +1,7 @@
-// t_table：HashTable<K,V>（put/get/contains/remove/size/keys）。
-// 键按解释器规则结构化成 "TypeName:值" 字符串；值装箱成 interface{}，
-// Put 时按 RTTI 深拷贝（List 复制缓冲区、struct 共享指针、标量/String 快照）。
-// keys() 解释器是 Go map 序（自身不确定）→ 编译器用 strcmp 升序；语料只做确定序断言。
+// t_table: HashTable<K,V> (put/get/contains/remove/size/keys).
+// Keys are structured into a "TypeName:value" string following the interpreter's rules; values are boxed into interface{},
+// and Put deep-copies by RTTI (List copies its buffer, struct shares the pointer, scalars/String are snapshotted).
+// keys() follows Go map order in the interpreter (itself nondeterministic) -> the compiler sorts ascending by strcmp; this case only makes deterministic-order assertions.
 type struct { int v; } P;
 fn main(IOStream io) {
     HashTable<String, interface{}> a = HashTable::new();
@@ -13,7 +13,7 @@ fn main(IOStream io) {
     io.println(a.get("s"));
     io.println(a.get("f"));
     io.println(a.get("b"));
-    io.println(a.get("missing"));            // 缺键 → nil
+    io.println(a.get("missing"));            // missing key -> nil
     io.println(a.size(), a.contains("k"), a.contains("zz"));
     a.remove("k");
     io.println(a.size(), a.contains("k"));
@@ -34,8 +34,8 @@ fn main(IOStream io) {
     n.put(8, "eight");
     io.println(n.get(7), n.get(8), n.size());
 
-    // keys() → List<String>：解释器是 Go map 序（每次运行都可能不同）→ 语料只做**确定序断言**
-    // （元素个数；单键表的顺序唯一）。编译器侧固定 strcmp 升序（见报告）。
+    // keys() -> List<String>: the interpreter uses Go map order (may differ between runs) -> this case only makes **deterministic-order assertions**
+    // (element count; the order of a single-key table is unique). The compiler side always sorts ascending by strcmp (see the report).
     io.println(t.keys().size());
     HashTable<String, int> solo = HashTable::new();
     solo.put("only", 1);
@@ -45,7 +45,7 @@ fn main(IOStream io) {
     for (String k : sk) { cnt = cnt + 1; }
     io.println(cnt);
 
-    // 值语义：List 值 Put 时深拷贝（改原列表不影响表内快照）
+    // value semantics: a List value is deep-copied on Put (mutating the original list does not affect the snapshot in the table)
     HashTable<String, List<int>> tl = HashTable::new();
     List<int> l = [1, 2];
     tl.put("k", l);
@@ -53,7 +53,7 @@ fn main(IOStream io) {
     List<int> got = tl.get("k");
     io.println(got.toString(), l.toString());
 
-    // struct 值：解释器 deepCopy 不复制 struct → 表内是同一对象
+    // struct value: the interpreter's deepCopy does not copy structs -> the table holds the same object
     HashTable<String, P> tp = HashTable::new();
     P p; p.v = 1;
     tp.put("k", p);
@@ -61,7 +61,7 @@ fn main(IOStream io) {
     P q = tp.get("k");
     io.println(q.v);
 
-    // 多张表互不影响
+    // multiple tables do not affect each other
     HashTable<String, int> t2 = HashTable::new();
     t2.put("a", 100);
     io.println(t.get("a"), t2.get("a"));

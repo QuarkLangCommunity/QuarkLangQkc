@@ -1,4 +1,4 @@
-// 重载：void 判定必须跳过（否则会误报 void 当值）。
+// Overloads: the void check must skip them (otherwise a void call used as a value is a false positive).
 fn fmt(int n) void {
     if (n > 0) {
         return;

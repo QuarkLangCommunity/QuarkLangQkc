@@ -1,25 +1,25 @@
 #!/bin/bash
-# 解释器 / 编译器输出对比（同一份源码，逐字节）
+# Interpreter vs compiler output comparison (same source, byte for byte)
 #
-# 用法：compiler/testdata/compare.sh [case.qk ...]
-#   默认跑 compiler/testdata/cases/*.kq；先构建两个二进制：
-#     /tmp/quark  ← 仓库根（解释器）
-#     /tmp/qkc    ← compiler/（原生编译器）
-# 任一用例 stdout+stderr 或退出码不一致 → 非零退出。
+# Usage: compiler/testdata/compare.sh [case.qk ...]
+#   By default it runs compiler/testdata/cases/*.kq; build both binaries first:
+#     /tmp/quark  <- repository root (interpreter)
+#     /tmp/qkc    <- compiler/ (native compiler)
+# Any case whose stdout+stderr or exit code differs -> non-zero exit.
 #
-# 注意：每次清空 QUARK_CACHE，避免 IR/二进制缓存掩盖新的 codegen 行为。
+# Note: QUARK_CACHE is cleared every run so IR/binary caches cannot mask new codegen behaviour.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CACHE="$(mktemp -d)"
 trap 'rm -rf "$CACHE"' EXIT
 
-echo "构建解释器 /tmp/quark 与编译器 /tmp/qkc ..."
+echo "building interpreter /tmp/quark and compiler /tmp/qkc ..."
 (cd "$ROOT" && go build -o /tmp/quark .) || exit 1
 (cd "$ROOT/compiler" && go build -o /tmp/qkc .) || exit 1
 
 cases=("$@")
 if [ ${#cases[@]} -eq 0 ]; then
-  # cases/：llvm-as + lli 可跑（go test 也覆盖）；cases_run/：需要 clang 链接（FFI/taskm）
+  # cases/: runnable with llvm-as + lli (go test covers them too); cases_run/: needs clang linking (FFI/taskm)
   cases=("$ROOT"/compiler/testdata/cases/*.kq "$ROOT"/compiler/testdata/cases_run/*.kq)
 fi
 
@@ -36,5 +36,5 @@ for f in "${cases[@]}"; do
     fail=1
   fi
 done
-if [ $fail -eq 0 ]; then echo "全部一致"; else echo "存在不一致"; fi
+if [ $fail -eq 0 ]; then echo "all identical (interpreter == compiler)"; else echo "DIVERGENCE FOUND"; fi
 exit $fail

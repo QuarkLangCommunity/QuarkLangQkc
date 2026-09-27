@@ -1,8 +1,8 @@
 package main
 
-// 编辑器产物校验：VS Code 扩展（package.json / tmLanguage / language-configuration /
-// 片段 / JS 语法）与 tree-sitter 语法（tree-sitter.json / queries / 测试语料）。
-// 这些产物不是 Go 代码，但属于工具链交付物，放进 go test 才能被 CI 看住。
+// Editor artifact validation: the VS Code extension (package.json / tmLanguage / language-configuration /
+// snippets / JS grammar) and the tree-sitter grammar (tree-sitter.json / queries / test corpus).
+// These artifacts are not Go code, but they are toolchain deliverables, so only in go test can CI keep an eye on them.
 
 import (
 	"encoding/json"
@@ -99,8 +99,8 @@ func TestVSCodePackageManifest(t *testing.T) {
 	}
 }
 
-// TestTextMateGrammarRegexes 逐个编译 tmLanguage 里的正则：
-// VS Code 用 Oniguruma，这里用 Go RE2 兜底校验（已避免 lookbehind/lookahead/反向引用）。
+// TestTextMateGrammarRegexes compiles each regex in tmLanguage one by one:
+// VS Code uses Oniguruma; here Go RE2 is the fallback check (lookbehind/lookahead/backreferences are already avoided).
 func TestTextMateGrammarRegexes(t *testing.T) {
 	path := filepath.Join(editorsDir(t), "vscode", "syntaxes", "quarklang.tmLanguage.json")
 	var g map[string]interface{}
@@ -236,7 +236,7 @@ func TestTreeSitterArtifacts(t *testing.T) {
 			t.Errorf("tree-sitter file-types 缺少 %s", ext)
 		}
 	}
-	// 至少一个语料测试文件与一条用例
+	// at least one corpus test file and one case
 	corpus, err := filepath.Glob(filepath.Join(root, "test", "corpus", "*.txt"))
 	if err != nil || len(corpus) == 0 {
 		t.Fatalf("缺少 test/corpus/*.txt：%v", err)
@@ -250,7 +250,7 @@ func TestTreeSitterArtifacts(t *testing.T) {
 	}
 }
 
-// itoa 避免再引入 strconv（本文件其他用途不需要）。
+// itoa avoids pulling in strconv (nothing else in this file needs it).
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

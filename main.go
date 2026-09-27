@@ -9,7 +9,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入。
+// version is the release version: injected at build time with -ldflags "-X main.version=vX.Y.Z".
 var version = "dev"
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: quark <file.qk> [args...] [--bp file:line,...]")
 		os.Exit(2)
 	}
-	// 文件位置任意（flags 可在其前）：第一个非 flag 参数
+	// the file may appear anywhere (flags may precede it): the first non-flag argument
 	file := ""
 	rest := []string{}
 	for i := 1; i < len(os.Args); i++ {
@@ -58,7 +58,7 @@ func main() {
 	}
 }
 
-// runMain 正常或调试模式（--bp "file:line,..." 断点）。
+// runMain runs in normal or debug mode (--bp "file:line,..." breakpoints).
 func runMain(prog *lang.Program, file string, args []string, stdin io.Reader, stdout io.Writer) error {
 	bps := []string{}
 	for i, a := range args {

@@ -1,10 +1,10 @@
-// qklsp：QuarkLang 语言服务器（工具链成员）
+// qklsp: QuarkLang language server (toolchain member)
 //
-// 用法: qklsp [-L dir]...  （stdio 上跑 LSP；由编辑器启动）
+// Usage: qklsp [-L dir]...  (runs LSP over stdio; started by the editor)
 //
-// 能力：诊断（解析/类型/静态检查）、跳转定义、补全、悬停、文档符号。
-// 零第三方依赖：JSON-RPC 帧与协议子集自实现；语言分析复用 internal/lang
-// （与 qkcheck / qkdoc 同一套前端，保证编辑器里的结果与命令行一致）。
+// Capabilities: diagnostics (parse/type/static checks), go-to-definition, completion, hover, document symbols.
+// Zero third-party dependencies: the JSON-RPC framing and protocol subset are self-implemented; language analysis reuses internal/lang
+// (the same front end as qkcheck / qkdoc, so results in the editor match the command line).
 package main
 
 import (
@@ -20,7 +20,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+// version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)
 var version = "dev"
 
 type server struct {
@@ -56,7 +56,7 @@ func parseArgs(args []string) ([]string, error) {
 		case "--lang", "-lang":
 			if i+1 < len(args) {
 				i++
-				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+				i18n.SetLocale(args[i]) // zh | en; unknown values keep the current locale
 			}
 		case "--version", "-V":
 			fmt.Println("qklsp", version)
@@ -71,7 +71,7 @@ func parseArgs(args []string) ([]string, error) {
 	return libDirs, nil
 }
 
-// serve 主循环：读消息 → 分发 → 回包/通知；`exit` 或 EOF 结束。
+// serve is the main loop: read a message -> dispatch -> reply/notify; ends on `exit` or EOF.
 func (s *server) serve() error {
 	for !s.quit {
 		msg, err := s.conn.read()
@@ -95,7 +95,7 @@ func (s *server) handle(msg rpcMessage) error {
 			"capabilities": map[string]interface{}{
 				"textDocumentSync": map[string]interface{}{
 					"openClose": true,
-					"change":    1, // 全量同步
+					"change":    1, // full sync
 				},
 				"definitionProvider":         true,
 				"completionProvider":         map[string]interface{}{"triggerCharacters": []string{".", ":", "<"}},
@@ -145,7 +145,7 @@ func (s *server) handle(msg rpcMessage) error {
 			return nil
 		}
 		if len(p.ContentChanges) > 0 {
-			d.setText(p.ContentChanges[len(p.ContentChanges)-1].Text) // 全量同步
+			d.setText(p.ContentChanges[len(p.ContentChanges)-1].Text) // full sync
 		}
 		return s.publish(p.TextDocument.URI)
 	case "textDocument/didClose":
@@ -169,14 +169,14 @@ func (s *server) handle(msg rpcMessage) error {
 	case "textDocument/documentSymbol":
 		return s.documentSymbol(msg)
 	}
-	// 未实现的方法：请求回 null（错误码 -32601），通知忽略
+	// Unimplemented methods: requests reply null (error code -32601), notifications are ignored
 	if msg.isRequest() {
 		return s.conn.replyErr(msg.ID, -32601, "qklsp: 未实现的方法 %s", msg.Method)
 	}
 	return nil
 }
 
-// textDocParams 解析 {textDocument:{uri}, position:{line,character}}。
+// textDocParams parses {textDocument:{uri}, position:{line,character}}.
 type positionParams struct {
 	TextDocument struct {
 		URI string `json:"uri"`
@@ -326,7 +326,7 @@ func (s *server) documentSymbol(msg rpcMessage) error {
 	return s.conn.reply(msg.ID, items)
 }
 
-// publish 发送 textDocument/publishDiagnostics（本文件 + 受影响的其它文件）。
+// publish sends textDocument/publishDiagnostics (for this file plus the other affected files).
 func (s *server) publish(uri string) error {
 	d, ok := s.docs[uri]
 	if !ok {
@@ -346,11 +346,11 @@ func (s *server) publish(uri string) error {
 	return nil
 }
 
-// ---------- 诊断 ----------
+// ---------- Diagnostics ----------
 
 type lspDiagnostic struct {
 	Range    lspRange `json:"range"`
-	Severity int      `json:"severity"` // 1=错误 2=警告 3=信息
+	Severity int      `json:"severity"` // 1=error 2=warning 3=info
 	Code     string   `json:"code,omitempty"`
 	Source   string   `json:"source"`
 	Message  string   `json:"message"`
@@ -358,7 +358,7 @@ type lspDiagnostic struct {
 
 var lineSuffix = regexp.MustCompile(` at line \d+$`)
 
-// diagnostics 返回「文件 → 诊断」。位置已映射回真实文件（import 合并坐标 → 源文件）。
+// diagnostics returns "file -> diagnostics". Positions are already mapped back to the real file (import merge coordinates -> source file).
 func (d *Document) diagnostics(libDirs []string) map[string][]lspDiagnostic {
 	out := map[string][]lspDiagnostic{}
 	if d.parseErr != nil {
@@ -381,9 +381,9 @@ func (d *Document) diagnostics(libDirs []string) map[string][]lspDiagnostic {
 			Range: d.lineRange(line), Severity: 2, Code: diag.Code, Source: "qkcheck", Message: diag.Msg,
 		})
 	}
-	// 类型检查
-	// 无 import（常见）：直接对已解析的同一份 AST 检查，省掉一次完整 lex+parse；
-	// 有 import：必须合并后编译（库符号来自合并源），错误位置经 SrcMap 映射回真实文件。
+	// Type checking
+	// No imports (the common case): check the same already-parsed AST directly, saving one full lex+parse;
+	// With imports: the merged source must be compiled (library symbols come from the merged source); error positions are mapped back to the real file via SrcMap.
 	if d.prog != nil && len(d.prog.Imports) == 0 {
 		if terr := lang.Typecheck(d.prog); terr != nil {
 			line, _ := errLineCol(terr)
@@ -422,12 +422,12 @@ func (d *Document) diagnostics(libDirs []string) map[string][]lspDiagnostic {
 		out[file] = append(out[file], diag)
 	}
 	if len(out) == 0 {
-		out[d.Path] = []lspDiagnostic{} // 空数组 = 清空旧诊断
+		out[d.Path] = []lspDiagnostic{} // empty array = clear the old diagnostics
 	}
 	return out
 }
 
-// lineText 取 0 基行号的整行文本。
+// lineText returns the whole line text for a 0-based line number.
 func (d *Document) lineText(line0 int) string {
 	if line0 < 0 || line0 >= len(d.Lines) {
 		return ""

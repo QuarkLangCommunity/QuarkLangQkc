@@ -1,6 +1,7 @@
-// v_ptr：T& / pointer T 可空引用（解释器语义：自动解引用读写、== null 比指针身份、
-// 与值比较按解引用值且在 nil 时按解释器 equalValues 语义为 false）。
-// 注：完整用例见 cases_run/v_ptr_full.kq（lli 对某个组合有 JIT 崩溃，用 clang 路径验证）。
+// v_ptr: nullable T& / pointer T references (interpreter semantics: automatic dereference on read/write,
+// == null compares pointer identity, and comparison against a value uses the dereferenced value,
+// yielding false when nil following the interpreter's equalValues semantics).
+// Note: the full case is cases_run/v_ptr_full.kq (lli suffers a JIT crash for one combination, so it is verified via the clang path).
 fn setRef(int& p, int v) void { p = v; }
 fn main(IOStream io) {
     int& p = new int;

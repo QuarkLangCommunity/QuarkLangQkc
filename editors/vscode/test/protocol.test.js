@@ -1,7 +1,7 @@
 'use strict';
-// qklsp 客户端联调测试（Node 直跑，不依赖 vscode）：
+// End-to-end test for the qklsp client (run directly with Node, no vscode dependency):
 //   node test/protocol.test.js
-// 需要先构建语言服务器：go build -o /tmp/qklsp ./cmd/qklsp（或用 QKLSP=... 指定路径）
+// Requires a built language server: go build -o /tmp/qklsp ./cmd/qklsp (or point QKLSP=... at one)
 
 const fs = require('fs');
 const os = require('os');
@@ -22,7 +22,7 @@ function waitFor(fn, timeoutMs, label) {
     const tick = () => {
       const v = fn();
       if (v) return resolve(v);
-      if (Date.now() - t0 > timeoutMs) return reject(new Error('等待超时: ' + label));
+      if (Date.now() - t0 > timeoutMs) return reject(new Error('timed out waiting for: ' + label));
       setTimeout(tick, 20);
     };
     tick();
@@ -31,13 +31,13 @@ function waitFor(fn, timeoutMs, label) {
 
 async function main() {
   if (!fs.existsSync(bin)) {
-    console.log(`跳过：未找到语言服务器 ${bin}（先 go build -o ${bin} ./cmd/qklsp）`);
+    console.log(`Skipped: language server not found at ${bin} (build it first: go build -o ${bin} ./cmd/qklsp)`);
     return;
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qklsp-node-'));
   const file = path.join(dir, 'demo.qk');
   const src = [
-    '// 翻倍。',
+    '// Doubles.',
     'fn double(int n) int {',
     '    return n * 2;',
     '}',
@@ -53,7 +53,7 @@ async function main() {
   let diag = null;
   const client = new LspClient(bin, [], {
     onExit: (err, code) => {
-      if (err || (code && code !== 0)) console.log(`（服务端退出 code=${code} err=${err ? err.message : ''}）`);
+      if (err || (code && code !== 0)) console.log(`(server exited code=${code} err=${err ? err.message : ''})`);
     },
   }).start();
   client.on('textDocument/publishDiagnostics', (p) => {
@@ -61,48 +61,48 @@ async function main() {
   });
 
   const init = await client.initialize('file://' + dir);
-  check('initialize 返回能力', !!(init && init.capabilities && init.capabilities.definitionProvider), JSON.stringify(init).slice(0, 120));
+  check('initialize returns capabilities', !!(init && init.capabilities && init.capabilities.definitionProvider), JSON.stringify(init).slice(0, 120));
 
   client.openDocument(uri, src);
   const diags = await waitFor(() => diag, 5000, 'publishDiagnostics');
   const codes = diags.map((d) => d.code).filter(Boolean);
-  check('didOpen 收到诊断（含 QK101 未使用变量）', codes.includes('QK101'), JSON.stringify(diags));
-  check('诊断带范围与消息', diags.every((d) => d.range && d.message), JSON.stringify(diags));
+  check('didOpen receives diagnostics (including QK101 unused variable)', codes.includes('QK101'), JSON.stringify(diags));
+  check('diagnostics carry a range and a message', diags.every((d) => d.range && d.message), JSON.stringify(diags));
 
   const defRes = await client.request('textDocument/definition', {
     textDocument: { uri },
-    position: { line: 6, character: 18 }, // 第 7 行 `double(21)` 的 double
+    position: { line: 6, character: 18 }, // the `double` in `double(21)` on line 7
   });
-  check('定义跳转到第 2 行', !!defRes && defRes.range && defRes.range.start.line === 1, JSON.stringify(defRes));
+  check('definition jumps to line 2', !!defRes && defRes.range && defRes.range.start.line === 1, JSON.stringify(defRes));
 
   const comp = await client.request('textDocument/completion', {
     textDocument: { uri },
     position: { line: 6, character: 4 },
   });
   const labels = (comp.items || []).map((i) => i.label);
-  check('补全含 double / io / while', ['double', 'io', 'while'].every((l) => labels.includes(l)), labels.slice(0, 12).join(','));
+  check('completion includes double / io / while', ['double', 'io', 'while'].every((l) => labels.includes(l)), labels.slice(0, 12).join(','));
 
   const hover = await client.request('textDocument/hover', {
     textDocument: { uri },
     position: { line: 6, character: 18 },
   });
-  check('悬停显示签名与文档', !!(hover && hover.contents && /fn double\(int n\) int/.test(hover.contents.value) && /翻倍/.test(hover.contents.value)), JSON.stringify(hover).slice(0, 120));
+  check('hover shows signature and doc', !!(hover && hover.contents && /fn double\(int n\) int/.test(hover.contents.value) && /Doubles\./.test(hover.contents.value)), JSON.stringify(hover).slice(0, 120));
 
-  // 修改后诊断应清空
+  // Diagnostics should be cleared after the edit
   diag = undefined;
   const fixed = src.replace('    int unused = 1;\n', '');
   client.changeDocument(uri, fixed, 2);
-  const after = await waitFor(() => diag, 5000, 'didChange 诊断');
-  check('didChange 后诊断清空', after.length === 0, JSON.stringify(after));
+  const after = await waitFor(() => diag, 5000, 'didChange diagnostics');
+  check('diagnostics cleared after didChange', after.length === 0, JSON.stringify(after));
 
   await client.stop();
-  check('服务端优雅退出', !client.running);
+  check('server shuts down gracefully', !client.running);
 
-  console.log(failures === 0 ? '\n全部通过' : `\n${failures} 项失败`);
+  console.log(failures === 0 ? '\nall passed' : `\n${failures} check(s) failed`);
   process.exit(failures === 0 ? 0 : 1);
 }
 
 main().catch((err) => {
-  console.error('测试异常:', err.message);
+  console.error('test error:', err.message);
   process.exit(1);
 });

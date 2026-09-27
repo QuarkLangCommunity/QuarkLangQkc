@@ -25,8 +25,8 @@ type parser struct {
 	toks []Token
 	i    int
 
-	prog      *Program          // 当前程序（匿名 struct/interface 作类型标注时合成实名类型登记）
-	anonByKey map[string]string // 匿名类型结构键 → 合成实名（同一结构复用同一个名字）
+	prog      *Program          // the current program (anonymous struct/interface used as a type annotation is registered as a synthesized named type)
+	anonByKey map[string]string // anonymous type structural key → synthesized name (the same structure reuses the same name)
 	anonSeq   int
 }
 
@@ -147,7 +147,7 @@ func compileSlow(src string) (*Program, error) {
 		return nil, err
 	}
 	if len(macros) > 0 {
-		rest, err = ExpandMacros(rest, macros, "explain") // 解释器 = explain 操作时（xmind §操作时）
+		rest, err = ExpandMacros(rest, macros, "explain") // interpreter = at the explain operation time (xmind §operation time)
 		if err != nil {
 			return nil, err
 		}
@@ -284,7 +284,7 @@ func (p *parser) parseProgram() (*Program, error) {
 			if p.cur().Kind == TIdent {
 				switch p.cur().Text {
 				case "type":
-					// xmind：type interface<T>{...}(Name) / type struct<T>{...}(Name)
+					// xmind: type interface<T>{...}(Name) / type struct<T>{...}(Name)
 					p.advance()
 					switch p.cur().Kind {
 					case TInterface:
@@ -395,7 +395,7 @@ func (p *parser) parseProgram() (*Program, error) {
 						}
 						p.advance() // '}'
 						if p.curIs(TSemi) {
-							p.advance() // ';' 可选
+							p.advance() // ';' is optional
 						}
 					} else {
 						if _, err := p.expect(TSemi, "';'"); err != nil {
@@ -550,7 +550,7 @@ func (p *parser) parseFunc() (*FuncDecl, error) {
 	} else {
 		return nil, p.errf(p.cur(), "函数必须声明返回类型：fn %s(...) 返回类型 { ... }", name.Text)
 	}
-	startTok := p.cur() // parseBlock 前：'{' 之后第一个 token（起始行）
+	startTok := p.cur() // before parseBlock: the first token after '{' (start line)
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -558,7 +558,7 @@ func (p *parser) parseFunc() (*FuncDecl, error) {
 	fn.Body = body
 	fn.BodyStart = Pos{Line: startTok.Line, Col: startTok.Col}
 	if p.i > 0 {
-		fn.BodyEnd = Pos{Line: p.toks[p.i-1].Line, Col: p.toks[p.i-1].Col} // 结束 '}'
+		fn.BodyEnd = Pos{Line: p.toks[p.i-1].Line, Col: p.toks[p.i-1].Col} // closing '}'
 	}
 	return fn, nil
 }
@@ -751,7 +751,7 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 // parseInterfaceBody parses interface[<T,...>] { signatures… } (without the name and ';').
 func (p *parser) parseInterfaceBody(kw Token) (*InterfaceDecl, error) {
 	id := &InterfaceDecl{Pos: Pos{Line: kw.Line, Col: kw.Col}}
-	if p.curIs(TLt) { // 泛型接口：interface<T, ...> { ... } Name;
+	if p.curIs(TLt) { // generic interface: interface<T, ...> { ... } Name;
 		tps, err := p.parseTypeParams()
 		if err != nil {
 			return nil, err
@@ -828,7 +828,7 @@ func (p *parser) parseAnonTypeName() (string, error) {
 		return "", p.errf(kw, "匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）")
 	}
 	if len(id.Methods) == 0 && len(id.Expands) == 0 {
-		return "interface{}", nil // 空接口 = void（既有语义不变）
+		return "interface{}", nil // empty interface = void (existing semantics unchanged)
 	}
 	key := anonIfaceKey(id)
 	if n, ok := p.anonByKey[key]; ok {
@@ -937,7 +937,7 @@ func (p *parser) parseType() (string, error) {
 			return "", err
 		}
 		if name == "interface{}" {
-			return name, nil // 空接口 = void（无后缀可言）
+			return name, nil // empty interface = void (no suffix to speak of)
 		}
 		if p.curIs(TLBracket) && !p.peekIs(TInt) && !p.peekIs(TMinus) {
 			p.advance()
