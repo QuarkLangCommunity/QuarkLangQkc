@@ -1,7 +1,7 @@
 package main
 
-// lib_test.go —— 库制品：导出面 ABI 规范化 / 容器读写 / 清单
-// （这些用例锁住"库与调用方 ABI 一致"这一关键不变量：曾经导致运行时解引用 0x15 段错误）
+// lib_test.go — library artifacts: exported-surface ABI normalization / container read-write / manifest
+// (these cases lock down the key invariant "library and caller share the same ABI": it once caused a runtime dereference segfault at 0x15)
 
 import (
 	"os"
@@ -32,19 +32,19 @@ func TestNormalizeExportedABI(t *testing.T) {
 		t.Fatalf("应识别 2 个顶层函数，得到 %d", len(exports))
 	}
 	out, sigs := normalizeExportedABI(sampleLibIR, []QKExport{{Name: "vfc_room_cap"}})
-	// 导出函数：参数应为**值**
+	// Exported function: parameters must be **values**
 	if !strings.Contains(out, "define i32 @vfc_room_cap(i32 %p0_val)") {
 		t.Fatalf("导出函数参数未转值：\n%s", firstLines(out, 6))
 	}
-	// 入口处应有 alloca + store，保证函数体原有 %p0 用法仍然有效
+	// The entry must have alloca + store, so the body's existing %p0 usage still works
 	if !strings.Contains(out, "%p0 = alloca i32") || !strings.Contains(out, "store i32 %p0_val, i32* %p0") {
 		t.Fatalf("缺少入口桥接（alloca/store）：\n%s", firstLines(out, 10))
 	}
-	// 函数体未被破坏
+	// Body not broken
 	if !strings.Contains(out, "load i32, i32* %p0") {
 		t.Fatal("函数体被破坏")
 	}
-	// 非导出函数保持原样（内部约定不变）
+	// Non-exported functions stay as-is (internal convention unchanged)
 	if !strings.Contains(out, "define i32 @internal_helper(i32* noundef %x)") {
 		t.Fatal("非导出函数不应被改写")
 	}
@@ -85,7 +85,7 @@ func TestQKLibRoundTrip(t *testing.T) {
 	if exact2 || name2 == "" {
 		t.Fatalf("回退逻辑异常：%s exact=%v", name2, exact2)
 	}
-	// 篡改变体 → sha256 校验必须失败
+	// Tamper with a variant → sha256 check must fail
 	raw, _ := readFileBytes(path)
 	raw[len(raw)-3] ^= 0xFF
 	badPath := t.TempDir() + "/bad.qklib"
@@ -116,6 +116,6 @@ func firstLines(s string, n int) string {
 	return strings.Join(parts, "\n")
 }
 
-// 读写辅助：直接用 os（测试文件内自足）
+// read/write helpers: use os directly (self-contained in the test file)
 func readFileBytes(p string) ([]byte, error)  { return os.ReadFile(p) }
 func writeFileBytes(p string, b []byte) error { return os.WriteFile(p, b, 0o644) }

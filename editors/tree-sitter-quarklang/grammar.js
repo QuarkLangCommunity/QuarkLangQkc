@@ -1,9 +1,9 @@
 /**
- * QuarkLang 语法（tree-sitter）
+ * QuarkLang grammar (tree-sitter)
  *
- * 正典语法见仓库 SYNTAX.md：类型在前（`int x`）、`fn name(int a) Ret`、
- * `type struct { ... } Name;`、`impl { ... } Name;`、`space { ... } name;`、
- * `for (int x : l)`、`catch (void e)`、`#macro`、`@签名` 等。
+ * Canonical syntax lives in the repo's SYNTAX.md: type first (`int x`), `fn name(int a) Ret`,
+ * `type struct { ... } Name;`, `impl { ... } Name;`, `space { ... } name;`,
+ * `for (int x : l)`, `catch (void e)`, `#macro`, `@signature` calls, and so on.
  */
 module.exports = grammar({
   name: 'quarklang',
@@ -46,7 +46,7 @@ module.exports = grammar({
     // import "path"; / import path;
     import_declaration: $ => seq('import', choice($.string, $.identifier), ';'),
 
-    // pub fn|type struct|type interface ...：公开下一个符号
+    // pub fn|type struct|type interface ...: makes the next symbol public
     pub_declaration: $ => seq(
       'pub',
       choice($.function_declaration, $.struct_declaration, $.interface_declaration),
@@ -96,7 +96,7 @@ module.exports = grammar({
     ),
 
     method_signature: $ => seq(
-      optional('dynamic'), // dynamic 修饰：接口方法运行时动态分发
+      optional('dynamic'), // dynamic modifier: interface methods are dispatched dynamically at runtime
       'fn',
       field('name', $.identifier),
       seq('(', optional(commaSep1($.parameter)), ')'),
@@ -144,10 +144,10 @@ module.exports = grammar({
       ';',
     ),
 
-    // type <类型> 名字;
+    // type <type> name;
     type_alias: $ => seq('type', field('type', $.type), field('name', $.identifier), ';'),
 
-    // #macro name (a, b) { 主体 }
+    // #macro name (a, b) { body }
     macro_definition: $ => seq(
       '#',
       'macro',
@@ -158,7 +158,7 @@ module.exports = grammar({
       field('body', $.macro_block),
     ),
 
-    // 宏体是 token 级内容（可含 #when/#return/#error 与嵌套块），按宽松规则解析
+    // A macro body is token-level content (may contain #when/#return/#error and nested blocks), parsed permissively
     macro_block: $ => seq('{', repeat(choice($._macro_token, $.macro_block)), '}'),
     _macro_token: $ => choice(
       $.identifier, $.number, $.string, $.raw_string, $.line_comment, $.block_comment,
@@ -166,7 +166,7 @@ module.exports = grammar({
       '<', '>', '!', '&', '|', '?', '@', '#', '::',
     ),
 
-    // ---- 语句 ----
+    // ---- Statements ----
     block: $ => seq('{', repeat($._statement), '}'),
 
     _statement: $ => choice(
@@ -193,8 +193,9 @@ module.exports = grammar({
       ';',
     ),
 
-    // 赋值按表达式处理（C 风格）：x = 1 / p.x = 3 / l[i] = 1 / *p = v
-    // 左值直接用 expression（含 index/member/unary），避免 choice 顺序导致的静态裁决
+    // Assignment is an expression (C style): x = 1 / p.x = 3 / l[i] = 1 / *p = v
+    // The left-hand side uses expression directly (covering index/member/unary) to avoid static
+    // resolution issues caused by choice order
     assignment_expression: $ => prec.right(1, seq(
       field('left', $.expression),
       '=',
@@ -245,9 +246,9 @@ module.exports = grammar({
 
     directive_statement: $ => seq('#', $.identifier, optional(seq('(', optional(commaSep1($.expression)), ')')), ';'),
 
-    // ---- 表达式 ----
-    // 采用「基本式 + 后缀链」形态：`a.b(c)[d].e` 由 _primary 递归承载，
-    // 避免「先归约成 expression 再决定是否吃 `[`」造成的静态裁决错误。
+    // ---- Expressions ----
+    // Uses the "primary + suffix chain" shape: `a.b(c)[d].e` is carried recursively by _primary,
+    // avoiding static resolution errors from "reduce to expression first, then decide whether to consume `[`".
     expression: $ => choice(
       $.assignment_expression,
       $.binary_expression,
@@ -303,9 +304,9 @@ module.exports = grammar({
 
     argument_list: $ => seq('(', optional(commaSep1($.expression)), ')'),
 
-    // 宏调用可用三种分隔符：name(args) / name[args] / name{args}（M1）
-    // 这里只管 [] 与 {} 形式（() 形式由 call_expression 覆盖）。
-    // 只保留 {} 形式：[] 形式会与下标访问冲突（宏调用 name[a, b] 按下标语法解析，高亮无碍）
+    // Macro calls accept three delimiters: name(args) / name[args] / name{args} (M1)
+    // Only the [] and {} forms are handled here (the () form is covered by call_expression).
+    // Only the {} form is kept: the [] form conflicts with index access (a macro call name[a, b] parses as index syntax, which is fine for highlighting)
     macro_call: $ => prec(12, seq(
       field('name', $.identifier), '{', optional(commaSep1($.expression)), '}',
     )),
@@ -315,7 +316,7 @@ module.exports = grammar({
 
     member_expression: $ => prec(11, seq(field('object', $.expression), '.', field('name', $.identifier))),
 
-    // 下标（允许逗号：`m[a, b]` 是宏调用的 [] 形态，与下标同形）
+    // Index (commas allowed: `m[a, b]` is the [] form of a macro call, shaped like an index)
     index_expression: $ => prec(11, seq(field('object', $.expression), '[', commaSep1(field('index', $.expression)), ']')),
 
     // space::fn(args) / T::static(args)
@@ -334,15 +335,15 @@ module.exports = grammar({
 
     // new <type>[size]
     new_expression: $ => choice(
-      // [size] 必须紧贴类型（token.immediate）：把「带长度的堆申请」与下标语法在词法层分开
+      // [size] must stick to the type (token.immediate): separates "sized heap allocation" from index syntax at the lexer level
       seq('new', field('type', $.type), token.immediate('['), field('size', $.expression), ']'),
       seq('new', field('type', $.type)),
     ),
 
-    // ---- 类型 ----
+    // ---- Types ----
     type: $ => prec.right(2, choice(
-      // 裸 pointer（FFI 不透明句柄）与 pointer <内置类型>；
-      // 指向自定义类型的可空引用按语料惯例写 T&（避免与「裸 pointer + 变量名」歧义）
+      // Bare pointer (an opaque FFI handle) and pointer <builtin type>;
+      // a nullable reference to a custom type is written T& by corpus convention (avoids ambiguity with "bare pointer + variable name")
       seq('pointer', $.builtin_type),
       'pointer',
       $.anonymous_struct_type,
@@ -358,10 +359,10 @@ module.exports = grammar({
 
     type_arguments: $ => prec(3, seq('<', commaSep1($.type), '>')),
 
-    // interface{} / interface{ }（空接口 = void）
+    // interface{} / interface{ } (empty interface = void)
     interface_type: _ => seq('interface', '{', '}'),
 
-    // struct { int a; String s; }（匿名结构体作类型标注）
+    // struct { int a; String s; } (anonymous struct as a type annotation)
     anonymous_struct_type: $ => prec(1, seq(
       'struct', '{', repeat($.member_declaration), '}',
     )),
@@ -376,7 +377,7 @@ module.exports = grammar({
       'List', 'HashTable', 'IOStream', 'thread', 'memorize', 'memory', 'function',
     ),
 
-    // ---- 词法 ----
+    // ---- Lexing ----
     identifier: _ => /[A-Za-z_\p{L}][A-Za-z0-9_\p{L}]*/u,
     number: _ => {
       const decimal = /[0-9]+/;

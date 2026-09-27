@@ -1,7 +1,7 @@
 package main
 
-// 工具级基准：单文件检查（lint + 类型检查）耗时分解，供性能回归跟踪。
-// 用合成大文件（约 1500 行 / 120 个函数），避免依赖外部库。
+// Tool-level benchmark: time breakdown of single-file checking (lint + type check), tracked for performance regressions.
+// Uses a synthetic large file (~1500 lines / 120 functions) to avoid depending on external libraries.
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// bigSource 生成 n 个函数的合成源码（含局部变量、循环、分支、字符串、列表）。
+// bigSource generates synthetic source with n functions (local variables, loops, branches, strings, lists).
 func bigSource(n int) string {
 	var b strings.Builder
 	b.WriteString("program library;\n\n")

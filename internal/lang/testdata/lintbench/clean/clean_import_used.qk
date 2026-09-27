@@ -1,7 +1,7 @@
 program library;
 import "helperlib";
 
-// 使用了 helperlib 的 pub 符号，不应报「未使用导入」。
+// Uses a pub symbol of helperlib, so "unused import" must not be reported.
 pub fn four(int n) int {
     return triple(n) + 1;
 }

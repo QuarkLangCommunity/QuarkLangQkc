@@ -14,7 +14,7 @@ func runCase(t *testing.T, body string) string {
 	return out
 }
 
-// 相等/比较语义边界（Value 标签化后的完整回归）
+// Equality/comparison semantics edge cases (full regression after Value was tagged)
 func TestEqualityEdges(t *testing.T) {
 	v := runCase(t, "fn main(IOStream io) {\n"+
 		"    io.println(1 == 2.0);\n"+
@@ -32,7 +32,7 @@ func TestEqualityEdges(t *testing.T) {
 	}
 }
 
-// 浮点除零：按语言设计报错（DivisionByZeroError），错误路径显式验证
+// Floating-point division by zero: an error by language design (DivisionByZeroError); the error path is verified explicitly
 func TestFloatDivZeroErrors(t *testing.T) {
 	_, err := runSrc(t, "fn main(IOStream io) {\n"+
 		"    float x = 0.0 / 0.0;\n"+
@@ -43,7 +43,7 @@ func TestFloatDivZeroErrors(t *testing.T) {
 	}
 }
 
-// 设计语义：List 不支持 ==（类类型无值相等语义，类型检查显式拒绝）
+// Design semantics: List does not support == (class types have no value-equality semantics; the type checker rejects it explicitly)
 func TestListComparisonRejected(t *testing.T) {
 	_, err := runSrc(t, "fn main(IOStream io) {\n"+
 		"    List<int> l = [1, 2];\n"+
@@ -54,7 +54,7 @@ func TestListComparisonRejected(t *testing.T) {
 	}
 }
 
-// 列表别名同引用：l2=l 后 append 共享（与 deepCopy 区分）
+// List aliasing shares the reference: after l2=l, append is shared (which distinguishes it from deepCopy)
 func TestListAliasSharing(t *testing.T) {
 	v := runCase(t, "fn main(IOStream io) {\n"+
 		"    List<int> l = [1, 2, 3];\n"+
@@ -67,7 +67,7 @@ func TestListAliasSharing(t *testing.T) {
 	}
 }
 
-// float 与 int 混比正确性（数字间跨类型比较按数值）
+// Correctness of mixed float and int comparison (cross-type comparison between numbers is by numeric value)
 func TestMixedNumericCmp(t *testing.T) {
 	v := runCase(t, "fn main(IOStream io) {\n"+
 		"    io.println(7 == 7.0);\n"+

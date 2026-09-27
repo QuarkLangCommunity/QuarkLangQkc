@@ -2,17 +2,17 @@ package cgen
 
 import "strings"
 
-// linkedlibs.go —— 由 qkc -L 提供的库（对象文件已参与链接）：
-// 这些 `library <name>` 声明**不应**再生成 -l<name> 链接参数，否则链接器会去找不存在的库。
+// linkedlibs.go — libraries provided via qkc -L (their object files already take part in linking):
+// these `library <name>` declarations must **not** also produce a -l<name> link flag, or the linker will look for a library that does not exist.
 
 var objectProvidedLibs = map[string]bool{}
 
-// SetObjectProvidedLibs 登记"由对象文件提供"的库名（小写比较）
+// SetObjectProvidedLibs records library names "provided by object files" (compared in lowercase)
 func SetObjectProvidedLibs(names []string) {
 	for _, n := range names {
 		objectProvidedLibs[strings.ToLower(n)] = true
 	}
 }
 
-// isObjectProvidedLib 该库是否由对象文件提供
+// isObjectProvidedLib reports whether the library is provided by an object file
 func isObjectProvidedLib(name string) bool { return objectProvidedLibs[strings.ToLower(name)] }

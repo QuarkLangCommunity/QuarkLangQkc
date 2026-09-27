@@ -19,21 +19,21 @@ import (
 
 // Diagnostic codes (stable identifiers for CI / editor filtering).
 const (
-	CodeUnusedVar    = "QK101" // 未使用局部变量（声明后从未读取）
-	CodeUnusedParam  = "QK102" // 未使用形参（-params 开启）
-	CodeUnreachable  = "QK103" // 不可达代码
-	CodeShadow       = "QK104" // 遮蔽外层变量（编译器未拦截的三种作用域）
-	CodeMissingRet   = "QK105" // 缺返回：声明了返回类型，但存在不产生返回值的路径
-	CodeIfaceMissing = "QK106" // 接口未实现（近失配：实现了部分方法，缺其余）
-	CodeVoidAsValue  = "QK107" // void 函数的返回值被当作值使用
-	CodeSelfAssign   = "QK108" // 自赋值：x = x
-	CodeConstCond    = "QK109" // 常量条件 / while(true) 无出口
-	CodeDivZero      = "QK110" // 常量除零（try 之外）
-	CodeUnusedImport = "QK111" // 未使用的 import
-	CodeShadowGlobal = "QK112" // 局部变量遮蔽全局符号（函数/类型/空间/宏）
-	CodeDeadStore    = "QK113" // 死存储：赋值被后续赋值覆盖且其间未读取
-	CodeSelfCompare  = "QK114" // 自身比较：x == x / x != x
-	CodeUnusedFunc   = "QK115" // 未被调用的函数（仅 program main；库文件里的函数是 API）
+	CodeUnusedVar    = "QK101" // unused local variable (declared but never read)
+	CodeUnusedParam  = "QK102" // unused parameter (with -params enabled)
+	CodeUnreachable  = "QK103" // unreachable code
+	CodeShadow       = "QK104" // shadows an outer variable (the three scopes the compiler does not catch)
+	CodeMissingRet   = "QK105" // missing return: a return type is declared but some path produces no value
+	CodeIfaceMissing = "QK106" // interface not implemented (near miss: some methods implemented, the rest missing)
+	CodeVoidAsValue  = "QK107" // the result of a void function is used as a value
+	CodeSelfAssign   = "QK108" // self assignment: x = x
+	CodeConstCond    = "QK109" // constant condition / while(true) with no exit
+	CodeDivZero      = "QK110" // constant division by zero (outside try)
+	CodeUnusedImport = "QK111" // unused import
+	CodeShadowGlobal = "QK112" // a local variable shadows a global symbol (function/type/space/macro)
+	CodeDeadStore    = "QK113" // dead store: an assignment overwritten by a later assignment with no read in between
+	CodeSelfCompare  = "QK114" // self comparison: x == x / x != x
+	CodeUnusedFunc   = "QK115" // uncalled function (program main only; functions in library files are API)
 )
 
 // Diag is one static-analysis diagnostic.
@@ -99,7 +99,7 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 			l.spaces[im.Type][m.Name] = m
 		}
 		if _, isStruct := l.globals[im.Type]; !isStruct {
-			l.globals[im.Type] = "space" // impl 目标未声明为 struct → 视为 space
+			l.globals[im.Type] = "space" // impl target not declared as a struct → treated as a space
 		}
 	}
 
@@ -145,10 +145,10 @@ type lvar struct {
 	name     string
 	pos      Pos
 	kind     string // local | param | forvar | catch
-	typeName string // 声明类型串（引用类型判定用）
+	typeName string // declared type string (used for reference-type detection)
 	reads    int
 	writes   int
-	outer    *lvar // 遮蔽时指向外层同名变量
+	outer    *lvar // points at the outer variable of the same name when shadowing
 }
 
 type lscope struct {
@@ -168,13 +168,13 @@ type linter struct {
 	curFn *FuncDecl
 
 	// State for the newly added checks
-	globals   map[string]string // 全局符号名 → 类别（fn/type/space/library/macro/alias）
-	pending   map[string]Pos    // 变量 → 最近一次「尚未被读取」的赋值位置（QK113）
-	tryDepth  int               // try 块深度（QK110 豁免：try 内的除零是刻意错误处理）
-	inFn      bool              // 是否处于函数体内（QK112 只在函数内报遮蔽全局）
-	usesNames map[string]bool   // 本文件出现过的标识符（QK111 导入使用判定）
-	loopDepth int               // 循环体深度（QK113 豁免：循环体内赋值会被下一轮读取）
-	refVars   map[string]bool   // 引用类型变量（T& / pointer T：`p = v` 是写穿，不是重新绑定）
+	globals   map[string]string // global symbol name → kind (fn/type/space/library/macro/alias)
+	pending   map[string]Pos    // variable → the most recent assignment position not yet read (QK113)
+	tryDepth  int               // try block depth (QK110 exemption: a division by zero inside try is deliberate error handling)
+	inFn      bool              // whether we are inside a function body (QK112 reports shadowing of a global only inside a function)
+	usesNames map[string]bool   // identifiers that appear in this file (QK111 import-usage decision)
+	loopDepth int               // loop body depth (QK113 exemption: an assignment in a loop body is read by the next iteration)
+	refVars   map[string]bool   // reference-type variables (T& / pointer T: `p = v` writes through, it is not a rebinding)
 }
 
 func (l *linter) warn(pos Pos, code, format string, args ...interface{}) {
@@ -215,13 +215,13 @@ func (l *linter) lookupOuter(name string) *lvar {
 // declare registers a declaration. An outer variable with the same name in a nested scope is recorded as shadowing.
 func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) *lvar {
 	if name == "_" || strings.HasPrefix(name, "_") {
-		return nil // _ 前缀 = 显式忽略
+		return nil // _ prefix = explicitly ignored
 	}
 	v := &lvar{name: name, pos: pos, kind: kind}
 	if len(typeName) > 0 {
 		v.typeName = typeName[0]
 	}
-	if _, dup := l.scope.vars[name]; dup { // 当前作用域重名：typecheck 已报 duplicate，不重复报
+	if _, dup := l.scope.vars[name]; dup { // already declared in the current scope: typecheck already reports duplicate, do not report it again
 		return nil
 	}
 	if outer := l.lookupOuter(name); outer != nil {
@@ -325,7 +325,7 @@ func (l *linter) checkBody(f *FuncDecl, body *Block, implType string) {
 			continue
 		}
 		if v.kind == "catch" {
-			continue // catch 变量默认不查：忽略错误对象是惯用法
+			continue // catch variables are not checked by default: ignoring the error object is idiomatic
 		}
 		if v.writes > 0 {
 			l.warn(v.pos, codeForKind(v.kind), "%s %s 只被赋值、从未读取", lintKindName(v.kind), v.name)
@@ -417,9 +417,9 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		return false, false
 	case *LogStmt:
 		l.expr(t.X, true, "")
-		return true, false // log = 记录并结束，但不产生返回值
+		return true, false // log = record and terminate, but produce no return value
 	case *DeleteStmt:
-		l.expr(t.X, true, "") // delete x 视为对 x 的使用（生命周期操作）
+		l.expr(t.X, true, "") // delete x counts as a use of x (a lifetime operation)
 		return false, false
 	case *BreakStmt:
 		return true, false
@@ -432,12 +432,12 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		if t.Init != nil {
 			l.expr(t.Init, true, "")
 		}
-		l.declare(t.Name, t.Pos, "local", t.Type) // 先算初值再登记（与 typecheck 一致）
+		l.declare(t.Name, t.Pos, "local", t.Type) // evaluate the initial value before registering (consistent with typecheck)
 		if isRefType(t.Type) {
-			l.refVars[t.Name] = true // 引用类型：`p = v` 写穿指针目标，不算重新绑定
+			l.refVars[t.Name] = true // reference type: `p = v` writes through to the pointer target, not a rebinding
 		}
 		if t.Init != nil && l.loopDepth == 0 && !l.refVars[t.Name] {
-			l.pending[t.Name] = t.Pos // QK113：初值若被后续赋值覆盖且其间未读取 → 死存储
+			l.pending[t.Name] = t.Pos // QK113: if the initial value is overwritten by a later assignment with no read in between → dead store
 		}
 		return false, false
 	case *AssignStmt:
@@ -492,7 +492,7 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		l.loopDepth++
 		l.block(t.Body)
 		l.loopDepth--
-		return false, false // 循环可能一次都不执行
+		return false, false // the loop may execute zero times
 	case *ForStmt:
 		l.expr(t.Iter, true, "")
 		l.push()
@@ -597,7 +597,7 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 		for _, a := range t.Args {
 			l.expr(a, true, implType)
 		}
-		if t.Sign != nil { // 签名调用 f(args) @mb(args)：签名实例名与额外实参都算使用
+		if t.Sign != nil { // signature call f(args) @mb(args): both the signature instance name and the extra arguments count as uses
 			l.use(t.Sign.Name)
 			for _, a := range t.Sign.Args {
 				l.expr(a, true, implType)
@@ -662,7 +662,7 @@ func (l *linter) checkInterfaces(prog *Program) {
 	typePos := map[string]Pos{}
 	for _, im := range prog.Impls {
 		if !structs[im.Type] {
-			continue // 只对已声明 struct 做推断，避免 space / 外部类型误报
+			continue // infer only for declared structs, to avoid false positives on space / external types
 		}
 		if methodsOf[im.Type] == nil {
 			methodsOf[im.Type] = map[string]bool{}
@@ -823,7 +823,7 @@ func (l *linter) checkConstCond(cond Expr, pos Pos, kw string) {
 		return
 	}
 	if kw == "while" && bl.V {
-		return // 交给 while(true) 的出口分析
+		return // left to the while(true) exit analysis
 	}
 	if bl.V {
 		l.warn(pos, CodeConstCond, "%s (true)：条件恒为真，分支永远执行", kw)
@@ -836,9 +836,9 @@ func (l *linter) checkConstCond(cond Expr, pos Pos, kw string) {
 // a read may happen inside, so clearing conservatively avoids false positives (QK113).
 func (l *linter) branch(b *Block) {
 	if b == nil || len(l.pending) == 0 {
-		return // 已经是空表：无需清（常见情形，省 clear 开销）
+		return // already an empty map: nothing to clear (the common case, saves the clear cost)
 	}
-	clear(l.pending) // 复用同一张表，避免每个分支新建 map
+	clear(l.pending) // reuse the same map instead of allocating a new one per branch
 }
 
 // hasBreak reports whether a block contains a break (it does not descend into nested loops: a break inside them does not escape).

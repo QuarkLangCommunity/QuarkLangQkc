@@ -14,7 +14,7 @@ type TypeAlias struct {
 }
 
 type Program struct {
-	FnList      []*FuncDecl // 函数表（eval 直取索引免 map）
+	FnList      []*FuncDecl // function table (eval indexes it directly, avoiding a map)
 	FnIndex     map[string]int
 	Funcs       []*FuncDecl
 	Structs     []*StructDecl
@@ -22,15 +22,15 @@ type Program struct {
 	Interfaces  []*InterfaceDecl
 	Impls       []*ImplDecl
 	TypeAliases []*TypeAlias
-	Kind        string // "main"（默认）| "library"（program 宏）
+	Kind        string // "main" (default) | "library" (program macro)
 	kindSet     bool
 	Imports     []string
-	ImportPos   []Pos    // 与 Imports 一一对应：import 关键字位置（工具报错定位用）
-	Pub         []string // pub 宏：库中公开的符号名
-	Src         string   // 原始源码（库导出时按函数体行区间切片）
+	ImportPos   []Pos    // one-to-one with Imports: position of the `import` keyword (used by tools to locate errors)
+	Pub         []string // pub macro: names of the symbols exported from the library
+	Src         string   // original source (sliced by function-body line range when exporting a library)
 }
 
-// MacroDef 是 #macro name (参数...) { 主体 } 定义（命名参数宏，参数按名替换）。
+// MacroDef is a `#macro name (params...) { body }` definition (named-parameter macro; parameters are substituted by name).
 type MacroDef struct {
 	Name   string
 	Params []string
@@ -41,32 +41,32 @@ type MacroDef struct {
 // FuncDecl is a top-level function declaration. Ret is the optional return
 // type annotation: functions WITHOUT Ret yield a FuncBuffer (out -> tail),
 // functions WITH Ret yield the value of `return expr;` directly.
-// LibraryDecl 是系统库绑定声明：
+// LibraryDecl is a system library binding declaration:
 //
 //	library gl3 { fn ClearColor(x f32, y f32, z f32, w f32) void; ... }
 //
-// 本质：gl3 ... = library("gl3")——库对象；体内 fn 为导出符号签名（ABI 声明）。
+// Essentially `gl3 ... = library("gl3")` -- a library object; the fn entries in its body are exported symbol signatures (ABI declarations).
 type LibraryDecl struct {
 	Name    string
-	Lib     string // 系统库名（dlopen 用："libGL.so.1" / "opengl32"）
+	Lib     string // system library name (for dlopen: "libGL.so.1" / "opengl32")
 	Methods []*Func
 	Pos     Pos
 }
 
 type FuncDecl struct {
 	Name       string
-	TypeParams []string // 泛型函数 func<T, ...>（xmind §函数）
+	TypeParams []string // generic function func<T, ...> (xmind §functions)
 	Params     []Param
 	Ret        string
 	Body       *Block
-	BodyStart  Pos // 函数体源码行区间（库导出用）
+	BodyStart  Pos // source line range of the function body (used for library export)
 	BodyEnd    Pos
 	Pos        Pos
 }
 
-// Param is a function parameter ("<修饰> <类型> <名字>")。
-// Decor 是声明修饰（"" | "const" | "copyd"，与 DeclStmt.Decor 同一张表）：
-// copyd 形参在绑定时深拷贝（传时复制），const 形参不可在 callee 内赋值。
+// Param is a function parameter ("<modifier> <type> <name>").
+// Decor is the declaration modifier ("" | "const" | "copyd", same table as DeclStmt.Decor):
+// a copyd parameter is deep-copied when bound (copy on pass); a const parameter cannot be assigned inside the callee.
 type Param struct {
 	Name  string
 	Type  string
@@ -94,21 +94,21 @@ type MethodSig struct {
 	Name    string
 	Params  []Param
 	Ret     string
-	Dynamic bool // 接口方法 dynamic 修饰：运行时动态分发（Operation 等协议基于此）
+	Dynamic bool // interface method with the `dynamic` modifier: dispatched dynamically at runtime (protocols such as Operation rely on this)
 	Pos     Pos
 }
 
 // InterfaceDecl is an interface declaration.
 type InterfaceDecl struct {
 	Name       string
-	TypeParams []string // 泛型接口：interface<T, ...> { ... } Name;
+	TypeParams []string // generic interface: interface<T, ...> { ... } Name;
 	Methods    []MethodSig
-	Expands    []string // expand interface 组合接口（xmind §接口）
+	Expands    []string // expand interface composes interfaces (xmind §interfaces)
 	Pos        Pos
 }
 
 // ImplDecl is an impl declaration: "impl<T> [Iface] { funcs } Type;".
-// 规则：struct 有泛型参数时，impl 必须引入同样的参数。
+// Rule: when a struct has generic parameters, the impl must introduce the same parameters.
 type ImplDecl struct {
 	Iface      string
 	Type       string
@@ -136,13 +136,13 @@ type LogStmt struct {
 	Pos Pos
 }
 
-// DeleteStmt：delete variable; —— 回收内存于 __delete__()，本质是给对应 block 的日志加消除记录。
+// DeleteStmt: `delete variable;` -- reclaims the memory in __delete__(); essentially appends an elimination record to that block's log.
 type DeleteStmt struct {
 	X   Expr
 	Pos Pos
 }
 
-// BreakStmt 跳出（仅限 while/for 循环体内）。
+// BreakStmt breaks out (only inside a while/for loop body).
 type BreakStmt struct {
 	Pos Pos
 }
@@ -171,7 +171,7 @@ type WhileStmt struct {
 }
 type ForStmt struct {
 	Var  string
-	Type string // 迭代变量类型（类型在前）：for (<type> <name> : <expr>)
+	Type string // iteration variable type (type first): for (<type> <name> : <expr>)
 	Iter Expr
 	Body *Block
 	Pos  Pos
@@ -179,9 +179,9 @@ type ForStmt struct {
 
 // ForCStmt is a C-style for: for (<init>; <cond>; <step>) { ... }
 type ForCStmt struct {
-	Init Stmt // 声明（类型在前）或赋值/表达式
+	Init Stmt // declaration (type first) or assignment/expression
 	Cond Expr
-	Step Stmt // 赋值/表达式，可为 nil
+	Step Stmt // assignment/expression, may be nil
 	Body *Block
 	Pos  Pos
 }
@@ -189,7 +189,7 @@ type DeclStmt struct {
 	Name  string
 	Type  string
 	Init  Expr   // nil = uninitialized
-	Decor string // "" | "const" | "copyd"（xmind §变量修饰表）
+	Decor string // "" | "const" | "copyd" (xmind §variable modifiers)
 	Pos   Pos
 }
 type AssignStmt struct {
@@ -232,8 +232,8 @@ type NullLit struct{ Pos Pos }
 type Ident struct {
 	Name string
 	Pos  Pos
-	// Slot 是编译期解析出的作用域槽位（0 = 未解析）。
-	// 由 slots.go 在「下标可证明稳定」处写入，运行时还会校验名字后才使用（安全兜底）。
+	// Slot is the scope slot resolved at compile time (0 = unresolved).
+	// Written by slots.go where the index is provably stable; at runtime the name is still verified before use (safety fallback).
 	Slot int32
 }
 type ListLit struct {
@@ -241,14 +241,14 @@ type ListLit struct {
 }
 type StructLit struct {
 	Fields []StructLitField
-	Name   string // 目标有名结构体（typecheck 填充），eval 用它建类型
+	Name   string // target named struct (filled in by typecheck); eval uses it to build the type
 	Pos    Pos
 }
 
-// NewExpr：new <type>[size] —— 在堆上直接申请内存（失败返回 badAlloc）。
+// NewExpr: `new <type>[size]` -- allocates memory directly on the heap (returns badAlloc on failure).
 type NewExpr struct {
 	Typ  string
-	Size Expr // nil = 单元素
+	Size Expr // nil = single element
 	Pos  Pos
 }
 type StructLitField struct {
@@ -270,7 +270,7 @@ type CallExpr struct {
 	Args  []Expr
 	Sign  *SignCall
 	Pos   Pos
-	FnIdx int // 编译期解析的函数索引（-1 = 未解析/变量调用）；eval 直取 FnList 免 map
+	FnIdx int // function index resolved at compile time (-1 = unresolved/variable call); eval indexes FnList directly, avoiding a map
 }
 type SignCall struct {
 	Name string

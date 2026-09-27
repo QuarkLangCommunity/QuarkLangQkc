@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// ============ 性能基准（高计算场景） ============
+// ============ performance benchmarks (compute-heavy scenarios) ============
 
-// 算术密集循环：1e6 次循环
+// Arithmetic-heavy loop: 1e6 iterations
 const loopSrc = `fn main(IOStream io) {
     int n = 0;
     int i = 0;
@@ -22,7 +22,7 @@ const loopSrc = `fn main(IOStream io) {
 }
 `
 
-// 递归计算：fib(24)
+// Recursive computation: fib(24)
 const fibSrc = `fn fib(int n) int {
     if (n < 2) {
         return n;
@@ -35,7 +35,7 @@ fn main(IOStream io) {
 }
 `
 
-// 密集函数调用 + List 操作
+// Dense function calls + List operations
 const callSrc = `fn sq(int n) int {
     return n * n;
 }
@@ -78,8 +78,8 @@ func BenchmarkEvalLoop1M(b *testing.B)    { benchRun(b, loopSrc) }
 func BenchmarkFib24(b *testing.B)         { benchRun(b, fibSrc) }
 func BenchmarkFuncCalls100K(b *testing.B) { benchRun(b, callSrc) }
 
-// ============ 临时数据潮汐场景（大量数据快速创建又丢弃） ============
-// QuarkLang 内存管理器：block 线性复用 + delete 即时归队，无 GC 停顿、无碎片。
+// ============ temporary-data churn scenario (lots of data created and dropped quickly) ============
+// QuarkLang memory manager: linear block reuse + delete returns blocks to the queue at once, no GC pause, no fragmentation.
 
 func BenchmarkMemManagerChurn(b *testing.B) {
 	m := NewMemoryManager()
@@ -95,13 +95,13 @@ func BenchmarkMemManagerChurn(b *testing.B) {
 		}
 	}
 	b.StopTimer()
-	// 复用率：绝大多数分配应命中复用（新 block 只申请一次）
+	// Reuse rate: the vast majority of allocations should hit reuse (a new block is requested only once)
 	b.ReportMetric(float64(m.ReusedCount)/float64(m.AllocCalls), "reuse-rate")
 	b.ReportMetric(float64(m.NewBlocks), "new-blocks")
 }
 
-// 对照：Go 原生 slice 分配 + GC（同潮汐规模）
-// Go 对照：大对象潮汐（强制堆分配，制造真实 GC 压力）
+// Control: native Go slice allocation + GC (same churn scale)
+// Go control: large-object churn (forces heap allocation, creating real GC pressure)
 var goSink [][]interface{}
 
 func BenchmarkGoSliceChurn(b *testing.B) {
@@ -117,7 +117,7 @@ func BenchmarkGoSliceChurn(b *testing.B) {
 			goSink = append(goSink, s)
 			if len(goSink) > 1000 {
 				goSink = goSink[:0]
-			} // 潮汐：批量丢弃
+			} // churn: drop in batches
 		}
 	}
 	b.StopTimer()
@@ -125,7 +125,7 @@ func BenchmarkGoSliceChurn(b *testing.B) {
 	b.ReportMetric(float64(stats.NumGC-gcBefore)/float64(b.N), "gc-count")
 }
 
-// 碎片率：混合大小潮汐后 block 内部碎片率（应趋近 0：占用度最小优先复用）
+// Fragmentation rate: internal block fragmentation after mixed-size churn (should approach 0: the lowest-occupancy block is reused first)
 func BenchmarkFragmentationAfterChurn(b *testing.B) {
 	m := NewMemoryManager()
 	sizes := []int{8, 16, 32, 64}
@@ -135,7 +135,7 @@ func BenchmarkFragmentationAfterChurn(b *testing.B) {
 		for j := 0; j < 1000; j++ {
 			ids = append(ids, m.Alloc(sizes[j%len(sizes)], 0))
 		}
-		// 混合存活：一半 delete 入空闲队列，一半保留（测真实内部碎片）
+		// Mixed survival: half are deleted into the free queue, half are kept (measures real internal fragmentation)
 		for j := 500; j < 1000; j++ {
 			m.Delete(ids[j])
 		}
@@ -144,7 +144,7 @@ func BenchmarkFragmentationAfterChurn(b *testing.B) {
 	b.ReportMetric(m.Fragmentation(), "fragmentation")
 }
 
-// Go 对照（大样本触发 GC）
+// Go control (large sample triggers GC)
 func BenchmarkGoSliceChurnGC(b *testing.B) {
 	var sink [][]int
 	for i := 0; i < b.N; i++ {
@@ -157,7 +157,7 @@ func BenchmarkGoSliceChurnGC(b *testing.B) {
 	}
 }
 
-// String 文本处理基准（1M 次）
+// String text-processing benchmark (1M iterations)
 func BenchmarkStringProcessing1M(b *testing.B) {
 	srcs := []string{
 		`fn main(IOStream io) {

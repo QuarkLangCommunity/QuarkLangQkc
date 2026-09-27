@@ -1,4 +1,4 @@
-// 接口 Self 返回（运算符协议）+ 接口变量互赋
+// interface Self returns (operator protocols) + mutual assignment of interface variables
 type interface { fn __add__(Self self, Self o) Self; fn show(Self self) String; } Addable;
 type struct { int v; } N;
 impl {

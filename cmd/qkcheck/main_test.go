@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// runCapture 执行 CLI 并捕获 stdout/stderr。
+// runCapture runs the CLI and captures stdout/stderr.
 func runCapture(t *testing.T, args ...string) (string, string, int) {
 	t.Helper()
 	var out, errb bytes.Buffer
@@ -130,8 +130,8 @@ func TestCLIUsageErrors(t *testing.T) {
 	}
 }
 
-// TestCLIImportPath 验证 -L：跨目录 import 在给定搜索目录后可解析；
-// 且错误位置能映射回导入语句所在行。
+// TestCLIImportPath verifies -L: a cross-directory import resolves once the search directory is given;
+// and the error position maps back to the line of the import statement.
 func TestCLIImportPath(t *testing.T) {
 	root := t.TempDir()
 	libDir := filepath.Join(root, "libs")
@@ -159,9 +159,9 @@ func TestCLIImportPath(t *testing.T) {
 	}
 }
 
-// TestCLICorpusNoFalsePositives 全仓语料门禁：
-//   - 不允许任何 error（语法/类型/import 全部通过）；
-//   - 警告必须与已人工复核的快照逐条一致（新增警告 = 新误报，需要复核）。
+// TestCLICorpusNoFalsePositives is the whole-repo corpus gate:
+//   - no error of any kind is allowed (syntax/type/import all pass);
+//   - warnings must match the manually reviewed snapshot entry by entry (a new warning = new false positive, needs review).
 func TestCLICorpusNoFalsePositives(t *testing.T) {
 	root := filepath.Join("..", "..")
 	var files []string
@@ -174,8 +174,8 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 			case ".git", "dist", "dist-ci":
 				return filepath.SkipDir
 			case "lintbench", "bench":
-				// 基准集/性能夹具：lintbench 由 TestLintBenchmark 以自身清单门禁；
-				// bench/tools 是性能基准的输入文件（含第三方库副本），不参与语料复核。
+				// Benchmark/performance fixtures: lintbench is gated by TestLintBenchmark against its own manifest;
+				// bench/tools holds benchmark inputs (including third-party library copies) and is not part of corpus review.
 				return filepath.SkipDir
 			}
 			return nil
@@ -202,29 +202,29 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 		t.Fatalf("JSON 解析失败: %v", err)
 	}
 
-	// 1) 不允许 error
+	// 1) no errors allowed
 	for _, f := range got {
 		if f.Sev == "error" {
 			t.Errorf("语料出现错误级诊断（不应存在）：%s", f)
 		}
 	}
 
-	// 2) 警告快照：均为人工复核过的真问题（见 README「实测」一节）
+	// 2) warning snapshot: all are manually reviewed true findings (see the "measurements" section of the README)
 	wantWarnings := map[string]bool{
-		"compiler/testdata/cases/a_for_break.kq:2:1 QK105":  true, // log n; 结束函数，声明 int 返回却给 nil
-		"compiler/testdata/cases/a_for_break.kq:4:5 QK103":  true, // log 之后的 return 不可达
-		"compiler/testdata/cases_run/t_table.kq:45:5 QK101": true, // for (String k : sk) 循环变量未使用
-		"compiler/testdata/demo.qk:28:13 QK101":             true, // int bad = 10 / 0; 只用于触发异常
-		"examples/trycatch.qk:3:13 QK101":                   true, // int a = 10 / 0; 同上
-		// 以下 6 条为 QK108–QK114 加强后在**测试夹具**上的命中，逐条复核为真：
-		// 夹具刻意演示这些形态（与 qkc 双路径对齐用），不是误报。
-		"compiler/testdata/cases/a_scalars.kq:13:34 QK114":    true, // b == b 自身比较（演示 == 语义）
-		"compiler/testdata/cases/b_struct.kq:42:26 QK114":     true, // a == a（结构体值比较）
-		"compiler/testdata/cases/b_struct_ref.kq:21:36 QK114": true, // w == w（引用比较）
-		"compiler/testdata/cases/y_edge.kq:7:23 QK108":        true, // x = x 自赋值（边界用例）
-		"compiler/testdata/cases/y_edge.kq:19:13 QK113":       true, // List 字面量覆盖初值（演示赋值语义）
-		"compiler/testdata/cases_run/z_any.kq:22:5 QK113":     true, // void 变量连赋两次，首次为死存储
-		"compiler/testdata/cases_run/v_sign.kq:12:1 QK115":    true, // fn mix 全文件未被调用（夹具里的死函数）
+		"compiler/testdata/cases/a_for_break.kq:2:1 QK105":  true, // log n; ends a function that declares an int return but yields nil
+		"compiler/testdata/cases/a_for_break.kq:4:5 QK103":  true, // the return after log is unreachable
+		"compiler/testdata/cases_run/t_table.kq:45:5 QK101": true, // the loop variable of for (String k : sk) is unused
+		"compiler/testdata/demo.qk:28:13 QK101":             true, // int bad = 10 / 0; only there to trigger an exception
+		"examples/trycatch.qk:3:13 QK101":                   true, // int a = 10 / 0; same as above
+		// The next 6 entries are hits on **test fixtures** after QK108-QK114 were strengthened, each reviewed as a true finding:
+		// the fixtures deliberately demonstrate these shapes (used to align with the qkc dual path), so they are not false positives.
+		"compiler/testdata/cases/a_scalars.kq:13:34 QK114":    true, // b == b compares a value with itself (demonstrates == semantics)
+		"compiler/testdata/cases/b_struct.kq:42:26 QK114":     true, // a == a (struct value comparison)
+		"compiler/testdata/cases/b_struct_ref.kq:21:36 QK114": true, // w == w (reference comparison)
+		"compiler/testdata/cases/y_edge.kq:7:23 QK108":        true, // x = x self-assignment (edge case)
+		"compiler/testdata/cases/y_edge.kq:19:13 QK113":       true, // a List literal overwrites the initial value (demonstrates assignment semantics)
+		"compiler/testdata/cases_run/z_any.kq:22:5 QK113":     true, // a void variable assigned twice; the first assignment is a dead store
+		"compiler/testdata/cases_run/v_sign.kq:12:1 QK115":    true, // fn mix is never called anywhere in the file (dead function in the fixture)
 	}
 	gotWarnings := map[string]bool{}
 	for _, f := range got {
@@ -232,7 +232,7 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 		if err != nil {
 			rel = f.File
 		}
-		// 快照表用 / 书写：Windows 上 filepath.Rel 返回 \，统一后再比对（跨系统一致）
+		// The snapshot table uses /: on Windows filepath.Rel returns \, so normalize before comparing (consistent across systems)
 		rel = filepath.ToSlash(rel)
 		gotWarnings[rel+":"+itoa(f.Line)+":"+itoa(f.Col)+" "+f.Code] = true
 	}

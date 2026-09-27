@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""生成 README 用的演示 GIF（终端风格），帧内容全部来自**真实命令输出**。
+"""Generate the demo GIF used by the README (terminal style); every frame comes from **real command output**.
 
-用法：
-    python3 scripts/make-demo-gif.py [输出路径，默认 assets/demo.gif]
+Usage:
+    python3 scripts/make-demo-gif.py [output path, default assets/demo.gif]
 
-设计：
-  - 画布 = 深色终端窗口（标题栏 + 圆角），等宽字体渲染；
-  - 每个命令逐字"打字"，随后逐行出现真实输出；
-  - 帧图用 PIL 渲染 → ffmpeg 统一调色板编码（体积可控）。
+Design:
+  - canvas = a dark terminal window (title bar + rounded corners), rendered with a monospace font;
+  - each command is "typed" character by character, then the real output appears line by line;
+  - frames are rendered with PIL -> encoded by ffmpeg with a shared palette (keeps the size in check).
 
-依赖：python3-Pillow、ffmpeg、任一等宽字体（默认 Noto Sans Mono）。
-重新生成后请肉眼检查（帧尺寸 1000×560、体积 < 1.5 MB）。
+Dependencies: python3-Pillow, ffmpeg, any monospace font (Noto Sans Mono by default).
+After regenerating, check the result by eye (frame size 1000x560, size < 1.5 MB).
 """
 
 import os
@@ -47,7 +47,7 @@ def load_font(size):
     for p in FONT_CANDIDATES:
         if os.path.exists(p):
             return ImageFont.truetype(p, size)
-    raise SystemExit("未找到等宽字体，请安装 Noto Sans Mono 或 DejaVu Sans Mono")
+    raise SystemExit("no monospace font found; please install Noto Sans Mono or DejaVu Sans Mono")
 
 
 F = load_font(19)
@@ -67,7 +67,7 @@ def base_frame(title="quarklang — ~/QuarkLang"):
 
 
 class Term:
-    """按行累积的终端画面；每步生成一帧。"""
+    """Terminal screen accumulated line by line; every step produces one frame."""
 
     def __init__(self):
         self.lines = []  # (text, color)
@@ -89,7 +89,7 @@ class Term:
             self.frames.append(img.copy())
 
     def type_cmd(self, cmd, prompt_color=GREEN, step=3):
-        """逐字打字（每帧 step 个字符）。"""
+        """Type character by character (step characters per frame)."""
         for i in range(0, len(cmd) + 1, step):
             self.lines.append(("$ " + cmd[:i], BOLD))
             self.snap()
@@ -108,7 +108,7 @@ class Term:
     def save(self, path):
         fd, tmp = tempfile.mkstemp(suffix=".gif")
         os.close(fd)
-        # 单帧先出 PNG，再用 ffmpeg 统一调色板（体积小、颜色稳）
+        # Write single frames as PNG first, then let ffmpeg build a shared palette (small size, stable colors)
         pngdir = tempfile.mkdtemp()
         for i, fr in enumerate(self.frames):
             fr.save(os.path.join(pngdir, f"f{i:04d}.png"))
@@ -122,7 +122,7 @@ class Term:
         shutil.move(tmp, path)
         shutil.rmtree(pngdir, ignore_errors=True)
         size = os.path.getsize(path) / 1024
-        print(f"✓ 生成 {path}：{len(self.frames)} 帧，{size:.0f} KB")
+        print(f"✓ wrote {path}: {len(self.frames)} frames, {size:.0f} KB")
 
 
 def main():
@@ -131,7 +131,7 @@ def main():
     t = Term()
     t.snap(8)
 
-    # 1) 看一眼语言：hello.qk
+    # 1) a first look at the language: hello.qk
     t.type_cmd("cat hello.qk")
     t.out_lines([
         'fn main(IOStream io) {',
@@ -139,15 +139,15 @@ def main():
         '}',
     ], CYAN, pause=6)
 
-    # 2) 解释器直接跑
+    # 2) run it straight through the interpreter
     t.type_cmd("quark hello.qk")
     t.out("Hello World!", FG, pause=6)
 
-    # 3) 编译后跑（qkc -run）
+    # 3) compile it and run (qkc -run)
     t.type_cmd("qkc -run hello.qk")
     t.out("Hello World!", GREEN, pause=6)
 
-    # 4) 静态检查（真实输出；英文模式，英文 README 用）
+    # 4) static check (real output; English mode, used by the English README)
     t.type_cmd("QK_LANG=en qkcheck examples/")
     t.out("examples/trycatch.qk:3:13: warning: variable a is declared but never used [QK101]", AMBER, pause=6)
     t.out("qkcheck: 1 issue(s) (0 error(s) / 1 warning(s))", DIM, pause=16)

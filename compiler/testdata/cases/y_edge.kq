@@ -1,4 +1,4 @@
-// y_edge：边角语义（泛型函数作 sum 生成器、尾调用、List 字面量赋值/实参、函数重载）。
+// y_edge: edge-case semantics (generic function as a sum generator, tail calls, List literal assignment/arguments, function overloading).
 fn<T> ident(T x) T { return x; }
 fn add(int a, int b) int { return a + b; }
 fn add(String a, String b) String { return a + "<" + b; }
@@ -12,25 +12,25 @@ type struct<T> { T v; } Box;
 impl<T> { fn get(Box<T> self) T { return self.v; } } Box;
 
 fn main(IOStream io) {
-  io.println(sum(ident, 1, 5));        // 10（泛型生成器按 T=int 单态化）
+  io.println(sum(ident, 1, 5));        // 10 (the generic generator is monomorphized with T=int)
   io.println(sum(ident, 1, 6, 2));     // 9
-  io.println(tailSum(5, 0));           // 15（尾调用：实参是形参槽 → 地址稳定）
+  io.println(tailSum(5, 0));           // 15 (tail call: the argument is a parameter slot -> stable address)
   io.println(tailSum(1000, 0));        // 500500
   List<int> l = [1, 2, 3];
-  l = [4, 5];                          // 列表字面量赋值
+  l = [4, 5];                          // list literal assignment
   io.println(sumList(l));              // 9
-  io.println(sumList([6, 7]));         // 13（列表字面量作实参）
+  io.println(sumList([6, 7]));         // 13 (list literal as an argument)
   io.println(add(1, 2));               // 3
   io.println(add("a", "b"));           // a<b
   io.println(add(1, 2, 3));            // 6
   io.println(add(add(1, 2), 4));       // 7
-  // 运算符重载的实参按值（解释器 BinOp 求值 → 非引用）：重绑定操作数不回写
+  // operator-overload arguments are by value (the interpreter evaluates BinOp -> not a reference): rebinding an operand does not write back
   V a; a.v = 1;
   V b; b.v = 2;
   V c = a + b;
   io.println(c.v);                     // 3
   io.println(b.v);                     // 2
-  // 泛型函数形参同样按引用（T 单态化为 int）
+  // generic function parameters are by reference too (T monomorphized to int)
   int n = 5;
   io.println(bump(n));                 // 5
   io.println(n);                       // 5

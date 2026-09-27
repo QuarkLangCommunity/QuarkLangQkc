@@ -14,7 +14,7 @@ func lintSrc(t *testing.T, src string, opts LintOptions) []Diag {
 	return Lint(prog, opts)
 }
 
-// wantCodes 断言诊断码集合（顺序无关，含出现次数）。
+// wantCodes asserts the set of diagnostic codes (order-independent, including occurrence counts).
 func wantCodes(t *testing.T, diags []Diag, want map[string]int) {
 	t.Helper()
 	got := map[string]int{}
@@ -58,7 +58,7 @@ func TestLintUnusedVarAssignOnly(t *testing.T) {
 }
 `
 	d := lintSrc(t, src, LintOptions{})
-	// 声明初值 0 从未被读取、随后被 5 覆盖 → QK101（未使用）+ QK113（死存储）各一条
+	// the declaration's initial value 0 is never read and is then overwritten by 5 → one QK101 (unused) + one QK113 (dead store)
 	wantCodes(t, d, map[string]int{CodeUnusedVar: 1, CodeDeadStore: 1})
 	var sawAssignOnly, sawDeadStore bool
 	for _, x := range d {
@@ -114,9 +114,9 @@ fn main(IOStream io) {
     io.println(helper(1, 2));
 }
 `
-	// 默认不查形参
+	// parameters are not checked by default
 	wantCodes(t, lintSrc(t, src, LintOptions{}), map[string]int{})
-	// -params 打开后报 b
+	// -params turns it on and then reports b
 	wantCodes(t, lintSrc(t, src, LintOptions{Params: true}), map[string]int{CodeUnusedParam: 1})
 }
 
@@ -206,8 +206,8 @@ func TestLintShadowCatch(t *testing.T) {
 	wantCodes(t, lintSrc(t, src, LintOptions{}), map[string]int{CodeShadow: 1})
 }
 
-// if/while 体与函数体共用作用域（typecheck 语义）→ 内层重名是 duplicate 硬错误，
-// qkcheck 不重复报遮蔽（避免与编译器文案冲突）。
+// if/while bodies share the function-body scope (typecheck semantics) → a redefinition in the inner block is a duplicate hard error,
+// so qkcheck does not report shadowing a second time (to avoid clashing with the compiler's wording).
 func TestLintNoShadowForFlatScope(t *testing.T) {
 	src := `fn f(int x) int {
     if (x > 0) {

@@ -1,4 +1,4 @@
-// try 内的除零是刻意的错误处理，不应报「常量除零」。
+// Division by zero inside try is deliberate error handling and must not be reported.
 fn main(IOStream io) void {
     try {
         int a = 10 / 0;

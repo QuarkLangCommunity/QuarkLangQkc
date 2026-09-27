@@ -1,5 +1,5 @@
 ==================
-语句
+Statements
 ==================
 
 fn main(IOStream io) void {

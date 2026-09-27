@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// .qlib 库往返：pub 函数序列化必须用 fn 头（func 拼写回归守卫），
-// 导入后再编译可运行（LoadImport → CompileWithImports 路径）。
+// .qlib library round trip: serializing a pub function must use the fn header (regression guard for the func spelling),
+// after import it can be compiled and run (the LoadImport → CompileWithImports path).
 func TestLibraryRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	libSrc := "program library;\n\npub fn add(int a, int b) int {\n    return a + b;\n}\n"

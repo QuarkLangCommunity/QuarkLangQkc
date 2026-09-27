@@ -45,9 +45,9 @@ type Type struct {
 	Elem   *Type
 	Key    *Type
 	Val    *Type
-	FName  string           // tFunc: 函数名（"" = 未知）；tStruct: 结构体名
-	Args   []*Type          // tStruct: 泛型实例实参
-	Fields map[string]*Type // tStruct 匿名（FName="."）：字段类型表
+	FName  string           // tFunc: function name ("" = unknown); tStruct: struct name
+	Args   []*Type          // tStruct: generic instance arguments
+	Fields map[string]*Type // tStruct anonymous (FName="."): field type table
 }
 
 func mk(k tKind) *Type         { return &Type{Kind: k} }
@@ -129,7 +129,7 @@ func assignable(from, to *Type) bool {
 		return true
 	}
 	if from.Kind == tAny {
-		return true // any 可赋给任意具体类型（运行时值兼容；json.loads 等动态解析场景）
+		return true // any is assignable to any concrete type (runtime value compatible; dynamic parse cases such as json.loads)
 	}
 	if from.Kind == tNil {
 		return false
@@ -142,7 +142,7 @@ func assignable(from, to *Type) bool {
 		if from.Kind == tNull {
 			return true
 		}
-		if to.Elem == nil { // 不透明句柄：只接受 pointer / null
+		if to.Elem == nil { // opaque handle: accepts only pointer / null
 			return from.Kind == tPtr
 		}
 		if from.Kind == tPtr {
@@ -232,7 +232,7 @@ func parseTypeStr(s string) (*Type, error) {
 		return parseTypeStr(inner)
 	}
 	switch base {
-	case "int", "long", "char": // long/char v0.1 按 int 处理（宽度见 §3.1 状态）
+	case "int", "long", "char": // long/char are treated as int in v0.1 (width: see §3.1 status)
 		if suffix != "" || strings.HasSuffix(s, "[]") {
 			e, err := elem()
 			if err != nil {
@@ -248,7 +248,7 @@ func parseTypeStr(s string) (*Type, error) {
 	case "String":
 		return tStringV, nil
 	case "void":
-		return tAnyV, nil // v2：void = 空接口 interface{} 的默认名字
+		return tAnyV, nil // v2: void = the default name of the empty interface interface{}
 	case "FuncBuffer":
 		return tFuncBufferV, nil
 	case "IOStream":
@@ -258,7 +258,7 @@ func parseTypeStr(s string) (*Type, error) {
 	case "OutputStream", "ostream", "ofstream":
 		return tOutputStreamV, nil
 	case "iofstream":
-		return tInputStreamV, nil // v1：双向文件流按输入流类型（对象兼具读写）
+		return tInputStreamV, nil // v1: a bidirectional file stream has the input-stream type (the object both reads and writes)
 	case "Channel":
 		return tChannelV, nil
 	case "Task", "thread":
@@ -280,7 +280,7 @@ func parseTypeStr(s string) (*Type, error) {
 		if err != nil {
 			return nil, err
 		}
-		return e, nil // Copyd<T> 语义上就是 T（复制在传递时发生）
+		return e, nil // Copyd<T> is semantically just T (the copy happens on passing)
 	case "HashTable":
 		k, v, err := splitTopComma(inner)
 		if err != nil {
@@ -382,16 +382,16 @@ func (s *cScope) lookup(name string) *cVar {
 type checker struct {
 	fns        map[string]*Func
 	overloads  map[string][]*Func
-	sigs       map[string]int // 签名名 → <Prefix> 参数个数（memorize:1, async:0）
+	sigs       map[string]int // signature name → <Prefix> parameter count (memorize:1, async:0)
 	structs    map[string]*StructDef
 	interfaces map[string]*InterfaceDef
 	impls      map[string]*ImplDef
-	aliases    map[string]string       // type <类型> 名字; 类型别名
-	libs       map[string]*LibraryDecl // library 系统库绑定
+	aliases    map[string]string       // type <type> name; type alias
+	libs       map[string]*LibraryDecl // library: system library binding
 	curRet     *Type
 	loopDepth  int
-	curSubst   map[string]*Type // 泛型方法体/调用点的类型参数替换
-	typeVars   map[string]bool  // 泛型函数当前作用域的类型参数（fn<T,...>）
+	curSubst   map[string]*Type // type-parameter substitution for a generic method body / call site
+	typeVars   map[string]bool  // type parameters of the current scope in a generic function (fn<T,...>)
 }
 
 // Typecheck performs all of the compile-time strict checks of §11.1.
@@ -524,7 +524,7 @@ func registerBuiltinIfaces(intfs map[string]*InterfaceDef) {
 	for name, def := range builtinOperationIfaces() {
 		if _, ok := intfs[name]; !ok {
 			if strings.HasPrefix(name, "Cleg") {
-				def.Partial = true // 事件接口族：可选实现
+				def.Partial = true // event interface family: optional implementation
 			}
 			intfs[name] = def
 		}
@@ -610,7 +610,7 @@ func Typecheck(prog *Program) error {
 		for _, m := range im.Methods {
 			recv := false
 			if len(m.Params) > 0 {
-				recv = isRecvParam(im.Type, &m.Params[0]) // 按类型判定接收者（与形参名无关）
+				recv = isRecvParam(im.Type, &m.Params[0]) // receiver determined by type (independent of the parameter name)
 			}
 			fn := &Func{Name: m.Name, TypeParams: m.TypeParams, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
 			if recv {
@@ -663,7 +663,7 @@ func Typecheck(prog *Program) error {
 			if fn == nil {
 				return &CheckError{Msg: fmt.Sprintf("CompileError: impl %s for %s: missing method %q", im.Type, im.Iface, sig.Name), Pos: im.Pos}
 			}
-			want := len(sig.Params) // 接口签名含 self
+			want := len(sig.Params) // the interface signature includes self
 			got := len(fn.Params)
 			if got != want {
 				return &CheckError{Msg: fmt.Sprintf("CompileError: impl %s for %s: method %q takes %d params, interface requires %d", im.Type, im.Iface, sig.Name, got, want), Pos: im.Pos}
@@ -681,9 +681,9 @@ func Typecheck(prog *Program) error {
 	for _, im := range prog.Impls {
 		subst := map[string]*Type{}
 		for _, tp := range im.TypeParams {
-			subst[tp] = tAnyV // 泛型方法体：参数按 interface{} 宽松检查
+			subst[tp] = tAnyV // generic method body: parameters checked loosely as interface{}
 		}
-		subst["Self"] = &Type{Kind: tStruct, FName: im.Type} // impl 内 Self = 该类型（与接口的 Self 一致）
+		subst["Self"] = &Type{Kind: tStruct, FName: im.Type} // within impl, Self = this type (consistent with the interface's Self)
 		prev := c.curSubst
 		c.curSubst = subst
 		for _, m := range im.Methods {
@@ -704,22 +704,22 @@ func (c *checker) resolveType(s string, pos Pos) (*Type, error) {
 
 // substType resolves a type annotation and substitutes generic type parameters (subst: parameter name → concrete type).
 // Supported: T (a parameter name), T& (pointer), node<T> (generic instantiation), List<T>/HashTable<K,V>,
-// Copyd<T>、int[Copyd]/int[]（≈Copyd<Array>/Array）、null。
+// Copyd<T>, int[Copyd]/int[] (≈Copyd<Array>/Array), null.
 func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, error) {
 	s = strings.TrimSpace(s)
 	if s == "null" {
 		return &Type{Kind: tNull}, nil
 	}
 	if s == "interface{}" || s == "any" {
-		return tAnyV, nil // any 与 void 都用空接口实现（xmind §接口）
+		return tAnyV, nil // both any and void are implemented as the empty interface (xmind §interfaces)
 	}
 	if s == "Self" {
 		if subst != nil {
 			if t, ok := subst["Self"]; ok {
-				return t, nil // impl 场景：Self = 该 impl 的类型
+				return t, nil // impl case: Self = the impl's type
 			}
 		}
-		return &Type{Kind: tTypeVar, FName: "Self"}, nil // 接口场景：Self = 所指类型（xmind §接口）
+		return &Type{Kind: tTypeVar, FName: "Self"}, nil // interface case: Self = the referenced type (xmind §interfaces)
 	}
 	if s == "" {
 		return nil, &CheckError{Msg: "CompileError: empty type annotation", Pos: pos}
@@ -774,7 +774,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	case "bool":
 		return tBoolV, nil
 	case "void":
-		return tAnyV, nil // v2：void = 空接口 interface{} 的默认名字
+		return tAnyV, nil // v2: void = the default name of the empty interface interface{}
 	case "FuncBuffer":
 		return tFuncBufferV, nil
 	case "file":
@@ -786,7 +786,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	case "OutputStream", "ostream", "ofstream":
 		return tOutputStreamV, nil
 	case "iofstream":
-		return tInputStreamV, nil // v1：双向文件流按输入流类型（对象兼具读写）
+		return tInputStreamV, nil // v1: a bidirectional file stream has the input-stream type (the object both reads and writes)
 	case "Channel":
 		return tChannelV, nil
 	case "Task", "thread":
@@ -857,7 +857,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		return &Type{Kind: tStruct, FName: base, Args: args}, nil
 	}
 	if _, ok := c.interfaces[base]; ok {
-		return &Type{Kind: tInterface, FName: base}, nil // 具名接口：动态派发协议类型
+		return &Type{Kind: tInterface, FName: base}, nil // named interface: dynamic-dispatch protocol type
 	}
 	// Function type function<ret, p1, ...>: tFunc (signature string)
 	if base == "function" {
@@ -1052,7 +1052,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		if err := inner.declare(s.Var, &cVar{typ: it.Elem, init: true}, s.Pos); err != nil {
 			return err
 		}
-		if s.Type != "" { // 迭代变量类型在前声明：for (<type> <name> : <list>)
+		if s.Type != "" { // loop variable type declared first: for (<type> <name> : <list>)
 			dt, err := c.substType(s.Type, c.curSubst, s.Pos)
 			if err != nil {
 				return err
@@ -1150,7 +1150,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				v.init = true
 			}
 		} else if typ.Kind == tStruct || typ.Kind == tPtr {
-			v.init = true // 结构体零值实例 / 指针零值（null）可用
+			v.init = true // struct zero-value instance / pointer zero value (null) is usable
 		}
 		return sc.declare(s.Name, v, s.Pos)
 	case *AssignStmt:
@@ -1345,7 +1345,7 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 	case *Ident:
 		if c.libs != nil {
 			if lb, ok := c.libs[x.Name]; ok {
-				return &Type{Kind: tLib, FName: lb.Name}, nil // 系统库对象（library X 绑定）
+				return &Type{Kind: tLib, FName: lb.Name}, nil // system library object (library X binding)
 			}
 		}
 		if x.Name == "true" || x.Name == "false" {
@@ -1358,7 +1358,7 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			return tTaskmV, nil
 		}
 		if x.Name == "DynamicStackAndHeap" {
-			return tStringV, nil // 实验内存模式常量（xmind §内存）
+			return tStringV, nil // experimental memory-mode constant (xmind §memory)
 		}
 		if v := sc.lookup(x.Name); v != nil {
 			if !v.init {
@@ -1370,7 +1370,7 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			return mkFunc(x.Name), nil
 		}
 		if isBuiltinFuncName(x.Name) {
-			return mkFunc(x.Name), nil // 内置函数作为函数引用（sum(rand, ...)）
+			return mkFunc(x.Name), nil // builtin function as a function reference (sum(rand, ...))
 		}
 		return nil, c.errf(x.Pos, "CompileError: undeclared identifier %q", x.Name)
 	case *ListLit:
@@ -1609,7 +1609,7 @@ func (c *checker) memberType(recv *Type, name string, pos Pos) (*Type, error) {
 			}
 		}
 	case tPtr:
-		if recv.Elem == nil { // 不透明句柄（FFI void*）：无成员
+		if recv.Elem == nil { // opaque handle (FFI void*): no members
 			return nil, c.errf(pos, "TypeError: no member %q on pointer", name)
 		}
 		// Pointer member access dereferences automatically
@@ -1663,7 +1663,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				if want > 0 {
 					p0 := sig.Params[0]
 					if isRecvParam(recv.FName, &p0) {
-						want-- // 接口签名的接收者按**类型**识别（Self 或接口自身类型），与形参名无关
+						want-- // the interface signature's receiver is identified by **type** (Self or the interface's own type), independent of the parameter name
 					}
 				}
 				if len(args) != want {
@@ -1674,7 +1674,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 					return tNilV, nil
 				}
 				if ret == "Self" {
-					return tAnyV, nil // Self 返回：运行时具体值
+					return tAnyV, nil // Self return: the concrete runtime value
 				}
 				return c.resolveType(ret, pos)
 			}
@@ -2021,7 +2021,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			if err := c.checkArity(name, 0, len(args), pos); err != nil {
 				return nil, err
 			}
-			return tNilV, nil // compact() 根本不返回
+			return tNilV, nil // compact() does not return at all
 		case "setBlock":
 			if err := c.checkArity(name, 1, len(args), pos); err != nil {
 				return nil, err
@@ -2040,7 +2040,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			return tTaskV, nil
 		case "merge":
-			// v2：taskm.merge(pid, fn, args...)
+			// v2: taskm.merge(pid, fn, args...)
 			if len(args) < 2 {
 				return nil, c.errf(pos, "CompileError: taskm.merge(pid, fn, args...) requires at least 2 args, got %d", len(args))
 			}
@@ -2126,7 +2126,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			return nil, c.errf(pos, "TypeError: %s is a static method; call it via %s::%s(...)", name, recv.FName, name)
 		}
 	case tPtr:
-		if recv.Elem == nil { // 不透明句柄（FFI void*）：支持 toString（十六进制呈现），无其它方法
+		if recv.Elem == nil { // opaque handle (FFI void*): supports toString (hex rendering), no other methods
 			if name == "toString" {
 				if err := c.checkArity(name, 0, len(args), pos); err != nil {
 					return nil, err
@@ -2142,7 +2142,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			if err := c.checkArity(name, 0, len(args), pos); err != nil {
 				return nil, err
 			}
-			return recv.Elem, nil // .ptr() 取出 Copyd 包装的地址
+			return recv.Elem, nil // .ptr() extracts the address wrapped by Copyd
 		}
 		return c.methodType(recv.Elem, name, args, pos)
 	}
@@ -2592,7 +2592,7 @@ func (c *checker) checkImplements(typ, iface string) error {
 		return errors.New(i18n.T("未知接口 %s", iface))
 	}
 	if def.Partial {
-		return nil // 可选实现：不做全量要求
+		return nil // optional implementation: no full coverage required
 	}
 	methods := append([]MethodSig{}, def.Methods...)
 	for _, ex := range def.Expands {

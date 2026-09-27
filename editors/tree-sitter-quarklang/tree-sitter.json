@@ -20,7 +20,7 @@
   "metadata": {
     "version": "0.1.0",
     "license": "MIT",
-    "description": "QuarkLang grammar for tree-sitter（正典语法见仓库 SYNTAX.md）",
+    "description": "QuarkLang grammar for tree-sitter (canonical syntax in the repo's SYNTAX.md)",
     "authors": [
       {
         "name": "QuarkLang Community"

@@ -1,4 +1,4 @@
-// M5/§9：library FFI（LLVM declare + C ABI 直调；qkc 读 ; qkc-link 追加 -lm/-lc）
+// M5/§9: library FFI (LLVM declare + direct C ABI calls; qkc reads ; qkc-link appends -lm/-lc)
 library m {
     fn sqrt(double x) double;
     fn pow(double x, double y) double;

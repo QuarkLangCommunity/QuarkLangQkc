@@ -1,4 +1,4 @@
-// K7/K8/K9/K11：C 风格 for、迭代 for、break、log、io.print
+// K7/K8/K9/K11: C-style for, iteration for, break, log, io.print
 fn sink(int n) int {
     log n;
     return n;

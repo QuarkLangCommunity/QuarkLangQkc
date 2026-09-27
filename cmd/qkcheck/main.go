@@ -1,16 +1,16 @@
-// qkcheck：QuarkLang 静态检查器（工具链成员）
+// qkcheck: QuarkLang static checker (toolchain member)
 //
-// 用法: qkcheck [flags] files...
+// Usage: qkcheck [flags] files...
 //
-//	-json          以 JSON 输出诊断（CI / 编辑器消费）
-//	-params        同时检查未使用形参（默认关闭：接口实现常有忽略的形参）
-//	-no-typecheck  只做语法 + 静态检查，不做类型检查
-//	-L dir         追加 import 搜索目录（可重复；同目录优先）
-//	-exit0         有诊断也退出 0（只报告，不阻断）
-//	--lang           输出语言 zh|en（默认中文；亦可用 QK_LANG）
-//	--version      打印版本
+//	-json          Emit diagnostics as JSON (consumed by CI / editors)
+//	-params        Also check unused parameters (off by default: interface implementations often have ignored parameters)
+//	-no-typecheck  Syntax + static checks only, no type checking
+//	-L dir         Append an import search directory (repeatable; same directory takes priority)
+//	-exit0         Exit 0 even with diagnostics (report only, never blocks)
+//	--lang           Output language zh|en (default Chinese; QK_LANG also works)
+//	--version      Print version
 //
-// 退出码：0 = 无诊断；1 = 有错误或警告；2 = 用法错误。
+// Exit codes: 0 = no diagnostics; 1 = errors or warnings; 2 = usage error.
 package main
 
 import (
@@ -28,7 +28,7 @@ import (
 	"quarklang/internal/lang"
 )
 
-// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入（见 scripts/build-release.sh）
+// version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)
 var version = "dev"
 
 type finding struct {
@@ -82,7 +82,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case "--lang", "-lang":
 			if i+1 < len(args) {
 				i++
-				i18n.SetLocale(args[i]) // zh | en；未知值保持当前语言
+				i18n.SetLocale(args[i]) // zh | en; unknown values keep the current locale
 			}
 		case "--version", "-V":
 			fmt.Fprintln(stdout, "qkcheck", version)
@@ -181,18 +181,18 @@ func checkFile(path string, opts checkOptions, stderr io.Writer) ([]finding, int
 	src := string(data)
 	var out []finding
 
-	// 1) 单文件前端：位置即文件行号，静态检查在此坐标下进行
+	// 1) Single-file front end: positions are file line numbers, static checks run in that coordinate space
 	prog, perr := lang.ParseSource(src)
 	if perr != nil {
 		return append(out, compileFinding(path, perr)), 0
 	}
 	out = append(out, lintFindings(path, lang.Lint(prog, lang.LintOptions{Params: opts.params}))...)
 
-	// 2) 类型检查
+	// 2) Type checking
 	//
-	// 无 import（绝大多数文件）：直接对**已解析的同一份 AST** 做类型检查——
-	// 位置天然就是文件坐标，且省掉一次完整 lex+parse（实测占单文件检查 ~30%）。
-	// 有 import：必须文本合并后编译（库符号来自合并源），再用 SrcMap 把位置还原。
+	// No imports (the vast majority of files): type-check the **same already-parsed AST** directly --
+	// positions are already file coordinates, and one full lex+parse is saved (measured at ~30% of single-file checking).
+	// With imports: the text must be merged and compiled (library symbols come from the merged source), then SrcMap restores the positions.
 	if opts.typecheck {
 		if len(prog.Imports) == 0 {
 			if terr := lang.Typecheck(prog); terr != nil {
@@ -216,7 +216,7 @@ func lintFindings(file string, diags []lang.Diag) []finding {
 	return out
 }
 
-// compileFinding 把单文件前端错误转成诊断（位置已是文件行号；消息里的「at line N」由位置字段承载）。
+// compileFinding turns a single-file front-end error into a diagnostic (the position is already a file line; "at line N" in the message is carried by the position field).
 func compileFinding(file string, err error) finding {
 	return finding{
 		File: file, Line: errLine(err), Col: errCol(err), Sev: "error",
@@ -226,7 +226,7 @@ func compileFinding(file string, err error) finding {
 
 var lineSuffix = regexp.MustCompile(` at line \d+$`)
 
-// mappedCompileFinding 把合并编译错误映射回原文件行号。
+// mappedCompileFinding maps merged-compilation errors back to original file lines.
 func mappedCompileFinding(mainFile string, sm *lang.SrcMap, err error) finding {
 	line, col := errLine(err), errCol(err)
 	file, fline := mainFile, line
@@ -239,7 +239,7 @@ func mappedCompileFinding(mainFile string, sm *lang.SrcMap, err error) finding {
 	return finding{File: file, Line: fline, Col: col, Sev: "error", Msg: msg}
 }
 
-// errLine/errCol 提取各类前端错误的行号列号（0 = 未知）。
+// errLine/errCol extract the line and column of each kind of front-end error (0 = unknown).
 func errLine(err error) int {
 	switch e := err.(type) {
 	case *lang.LexError:
@@ -272,7 +272,7 @@ func errCol(err error) int {
 	return 0
 }
 
-// expandArgs 展开目录参数为其中的 .qk 文件（按路径排序），其余原样返回。
+// expandArgs expands directory arguments into the .qk files they contain (sorted by path); other arguments pass through unchanged.
 func expandArgs(args []string) ([]string, error) {
 	var out []string
 	for _, a := range args {

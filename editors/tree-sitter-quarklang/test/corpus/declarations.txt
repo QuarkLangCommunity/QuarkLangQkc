@@ -1,8 +1,8 @@
 ==================
-顶层声明
+Top-level declarations
 ==================
 
-/* 文件头 */
+/* file header */
 program library;
 import "helper";
 pub fn double(int n) int {

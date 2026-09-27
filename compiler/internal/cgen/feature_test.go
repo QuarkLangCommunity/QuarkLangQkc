@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// lowerErr 编译正典语法源码并返回错误（用于「必须明确报错」的用例）。
+// lowerErr compiles canonical-syntax source and returns the error (for "must fail explicitly" cases).
 func lowerErr(t *testing.T, src string) error {
 	t.Helper()
 	_, err := Transpile(src, "test.qk")
@@ -39,14 +39,14 @@ func TestStringConcatCompile(t *testing.T) {
 	if !strings.Contains(ir, "call i8* @ql_strcat") {
 		t.Fatalf("missing strcat call:\n%s", ir)
 	}
-	// 拼接走运行时 ql_strcat（lli 无该符号，端到端由 qkc -run + qthreads.c 覆盖）
+	// Concatenation goes through the runtime ql_strcat (lli lacks that symbol; end-to-end is covered by qkc -run + qthreads.c)
 	if strings.Contains(ir, "memory(none)") {
 		t.Fatalf("函数带 IO/strcat 副作用，不应标 memory(none):\n%s", ir)
 	}
 }
 
-// Phase A 端到端：for/break/log/float/bool/io.print/String 比较/String 形参。
-// want 全部取自解释器（compiler/testdata/compare.sh 会复核两条路径逐字节一致）。
+// Phase A end-to-end: for/break/log/float/bool/io.print/String comparison/String parameters.
+// All want values come from the interpreter (compiler/testdata/compare.sh rechecks that both paths agree byte for byte).
 func TestPhaseACompile(t *testing.T) {
 	cases := []struct {
 		name string
@@ -158,7 +158,7 @@ func TestPhaseACompile(t *testing.T) {
 	}
 }
 
-// Phase B 端到端：struct / impl / space / 运算符重载（引用语义与解释器一致）。
+// Phase B end-to-end: struct / impl / space / operator overloading (reference semantics match the interpreter).
 func TestPhaseBStructCompile(t *testing.T) {
 	cases := []struct {
 		name string
@@ -253,7 +253,7 @@ func TestPhaseBStructCompile(t *testing.T) {
 	}
 }
 
-// Phase C：泛型函数 / 泛型 struct / 泛型 impl 的按调用点单态化。
+// Phase C: per-call-site monomorphization of generic functions / generic structs / generic impls.
 func TestPhaseCGenerics(t *testing.T) {
 	cases := []struct {
 		name string
@@ -352,9 +352,9 @@ func TestPhaseCGenerics(t *testing.T) {
 	}
 }
 
-// String / List 内建方法：语义运行时在 qthreads.c（UTF-8 感知），lli 无法解析，
-// 这里校验 IR 里确实调用了对应助手；端到端字节对齐由 compare.sh 的
-// cases_run/s_string_methods.kq、t_list_methods.kq 覆盖。
+// String / List builtin methods: the semantic runtime lives in qthreads.c (UTF-8 aware), which lli cannot resolve,
+// so here we check that the IR really calls the matching helpers; end-to-end byte alignment is covered by
+// cases_run/s_string_methods.kq and t_list_methods.kq in compare.sh.
 func TestBuiltinMethodsIR(t *testing.T) {
 	str := transpile(t, "fn main(IOStream io) {\n"+
 		"    String s = \"abc\";\n"+
@@ -391,24 +391,24 @@ func TestBuiltinMethodsIR(t *testing.T) {
 			t.Fatalf("List method IR missing %q:\n%s", want, lst)
 		}
 	}
-	// split → List<String>（已 lower；只读子集 size/get/toString/for-in）
+	// split → List<String> (already lowered; read-only subset size/get/toString/for-in)
 	sp := transpile(t, "fn main(IOStream io) { String s = \"a,b\"; List<String> l = s.split(\",\"); io.println(l.size(), l.get(0), l.toString()); }\n")
 	for _, want := range []string{"call %ListS* @ql_str_split(", "declare i8* @ql_list_str_str("} {
 		if !strings.Contains(sp, want) {
 			t.Fatalf("String.split IR missing %q:\n%s", want, sp)
 		}
 	}
-	// List<String> 未 lower 的操作：明确报错
+	// List<String> operations that are not lowered: must fail explicitly
 	if _, err := Transpile("fn main(IOStream io) { String s = \"a,b\"; List<String> l = s.split(\",\"); l.append(\"c\"); io.println(1); }\n", "test.qk"); err == nil {
 		t.Fatal("List<String>.append must report unsupported")
 	}
-	// keys() 只支持 String 键
+	// keys() supports String keys only
 	if _, err := Transpile("fn main(IOStream io) { HashTable<int, int> t = HashTable::new(); t.put(1, 2); List<String> k = t.keys(); io.println(k.size()); }\n", "test.qk"); err == nil {
 		t.Fatal("keys() on int-keyed table must report unsupported")
 	}
 }
 
-// 函数重载：按参数个数+类型解析（bestMatch 语义：同 kind +10 / 可赋值 +5）。
+// Function overloading: resolved by argument count + types (bestMatch semantics: same kind +10 / assignable +5).
 func TestOverloads(t *testing.T) {
 	src := "fn add(int a, int b) int { return a + b; }\n" +
 		"fn add(String a, String b) String { return a + \"<\" + b; }\n" +
@@ -438,13 +438,13 @@ func TestOverloads(t *testing.T) {
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
-	// 没有匹配重载 → 明确报错
+	// No matching overload → explicit error
 	if _, err := Transpile("fn f(int a) int { return a; }\nfn main(IOStream io) { io.println(f(\"s\")); }\n", "test.qk"); err == nil {
 		t.Fatal("mismatched overload call must fail")
 	}
 }
 
-// 形参按引用传递：callee 写形参穿透到调用方；copyd 传时深拷贝；非左值实参是临时单元。
+// Parameters are passed by reference: callee writes to a parameter reach the caller; copyd deep-copies on pass; non-lvalue arguments are temporary cells.
 func TestByRefParams(t *testing.T) {
 	src := "type struct { int v; } S;\n" +
 		"fn bump(int a) int { a = a + 1; return a; }\n" +
@@ -453,14 +453,14 @@ func TestByRefParams(t *testing.T) {
 		"fn chain(int a) int { return bump(a); }\n" +
 		"fn main(IOStream io) {\n" +
 		"    int x = 5;\n" +
-		"    io.println(bump(x), x);\n" + // 6 6（写回）
+		"    io.println(bump(x), x);\n" + // 6 6 (write back)
 		"    chain(x);\n" +
-		"    io.println(x);\n" + // 7（引用链）
-		"    io.println(bump(x + 1), x);\n" + // 9 7（非左值不回写）
+		"    io.println(x);\n" + // 7 (reference chain)
+		"    io.println(bump(x + 1), x);\n" + // 9 7 (no write back for a non-lvalue)
 		"    S s; s.v = 1;\n" +
-		"    io.println(rebind(s), s.v);\n" + // 99 99（形参重绑定写回）
+		"    io.println(rebind(s), s.v);\n" + // 99 99 (parameter rebind written back)
 		"    S c; c.v = 7;\n" +
-		"    io.println(deep(c), c.v);\n" + // 100 7（copyd 深拷贝）
+		"    io.println(deep(c), c.v);\n" + // 100 7 (copyd deep copy)
 		"}\n"
 	ir := transpile(t, src)
 	for _, want := range []string{"define i32 @bump(i32* noundef %p0)", "define i32 @rebind(%S** noundef %p0)", "call %S* @ql_copyd_struct_S"} {
@@ -473,8 +473,8 @@ func TestByRefParams(t *testing.T) {
 	}
 }
 
-// 签名 memorize（f(args) @mb()）：IR 必须包含初始化、查表、调用与写回（端到端由
-// testdata/cases_run/v_sign.kq 的 compare.sh 对比覆盖：需要 clang 链接 qthreads 运行时）。
+// Signature memorize (f(args) @mb()): the IR must contain initialization, table lookup, call and write back (end-to-end
+// is covered by compare.sh on testdata/cases_run/v_sign.kq: requires clang to link the qthreads runtime).
 func TestMemoizeSignatureIR(t *testing.T) {
 	ir := transpile(t, "fn sq(int n) int { return n * n; }\n"+
 		"fn main(IOStream io) {\n"+
@@ -494,7 +494,7 @@ func TestMemoizeSignatureIR(t *testing.T) {
 			t.Fatalf("memory IR missing %q:\n%s", want, ir)
 		}
 	}
-	// 非 int 键 / 返回值：明确报错
+	// Non-int keys / return values: must fail explicitly
 	if _, err := Transpile("fn f(String s) String { return s; }\nfn main(IOStream io) { memorize mb = memorize::new(); io.println(f(\"a\") @mb()); }\n", "test.qk"); err == nil {
 		t.Fatal("memorize with String keys must report unsupported")
 	}
@@ -503,7 +503,7 @@ func TestMemoizeSignatureIR(t *testing.T) {
 	}
 }
 
-// interface{}（tAny）：装箱 + RTTI 描述符 + 打印/相等/拆箱 IR 形状；拆箱到 struct/List 明确报错。
+// interface{} (tAny): boxing + RTTI descriptor + IR shape for print/equality/unboxing; unboxing to struct/List fails explicitly.
 func TestAnyInterfaceIR(t *testing.T) {
 	ir := transpile(t, "fn main(IOStream io) {\n"+
 		"    interface{} a = 7;\n"+
@@ -539,9 +539,9 @@ func TestAnyInterfaceIR(t *testing.T) {
 	}
 }
 
-// Phase D：library FFI（LLVM declare + C ABI 直调）与 taskm（qthreads 运行时）。
-// 这两类需要 clang 链接（-lm / qthreads.c），lli 单测只校验 IR 形状；
-// 端到端输出对齐由 compiler/testdata/compare.sh 覆盖（cases_run/e_ffi、f_taskm）。
+// Phase D: library FFI (LLVM declare + direct C ABI calls) and taskm (qthreads runtime).
+// Both need clang linking (-lm / qthreads.c); the lli unit tests only check IR shape;
+// end-to-end output alignment is covered by compiler/testdata/compare.sh (cases_run/e_ffi, f_taskm).
 func TestPhaseDFFIAndTaskm(t *testing.T) {
 	ffi := transpile(t, "library m {\n"+
 		"    fn sqrt(double x) double;\n"+
@@ -559,7 +559,7 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 			t.Fatalf("FFI IR missing %q:\n%s", want, ffi)
 		}
 	}
-	// 链接名映射：libc 默认已链接（-lc），m → -lm；IR 里以「库名 => 候选参数」标记
+	// Link-name mapping: libc is linked by default (-lc), m → -lm; the IR marks it as "library name => candidate flags"
 	links := transpile(t, "library libc {\n"+
 		"    fn abs(int v) int;\n"+
 		"}\n"+
@@ -580,7 +580,7 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 	if strings.Contains(links, "-llibc") {
 		t.Fatalf("libc 不应映射为 -llibc:\n%s", links)
 	}
-	// long（i64）与 pointer（i8* 不透明句柄，可空、可往返）
+	// long (i64) and pointer (i8* opaque handle, nullable, round-trippable)
 	lp := transpile(t, "library libc {\n"+
 		"    fn malloc(long n) pointer;\n"+
 		"    fn free(pointer p) void;\n"+
@@ -602,8 +602,8 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 		"call i8* @malloc(i64",
 		"call i64 @strlen(",
 		"icmp eq i8*",
-		"sext i32", // int → long（malloc 实参）
-		"%lld",     // long 打印
+		"sext i32", // int → long (malloc argument)
+		"%lld",     // long printing
 	} {
 		if !strings.Contains(lp, want) {
 			t.Fatalf("long/pointer IR missing %q:\n%s", want, lp)
@@ -634,8 +634,8 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 	}
 }
 
-// 后端暂未 lower 的构造必须给出带位置的明确「暂未支持」错误，
-// 而不是 parse 错误，更不允许静默错编。
+// Constructs the backend does not lower yet must produce an explicit, position-carrying "not yet supported" error,
+// not a parse error, and must never silently miscompile.
 func TestUnsupportedConstructs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -655,8 +655,8 @@ func TestUnsupportedConstructs(t *testing.T) {
 				"fn main(IOStream io) { f(1, io); }\n",
 			want: "暂未支持 IOStream",
 		},
-		// String 内建方法已 lower（见 testdata/cases_run/s_string_methods.kq 的解析器/编译器对比）
-		// List.toString 已 lower（见 testdata/cases_run/t_list_methods.kq）
+		// String builtin methods are already lowered (see the interpreter/compiler comparison in testdata/cases_run/s_string_methods.kq)
+		// List.toString is already lowered (see testdata/cases_run/t_list_methods.kq)
 		{
 			name: "非标量返回类型",
 			src: "fn f(int n) List<String> {\n" +
@@ -688,7 +688,7 @@ func TestUnsupportedConstructs(t *testing.T) {
 				"fn main(IOStream io) { P p; io.println(p); }\n",
 			want: "暂未支持打印",
 		},
-		// float 取模已 lower
+		// float modulo is already lowered
 		{
 			name: "含 log 的函数返回值被使用",
 			src: "fn f(int n) int { log n; return n; }\n" +
@@ -705,7 +705,7 @@ func TestUnsupportedConstructs(t *testing.T) {
 			if strings.Contains(err.Error(), "ParseError") {
 				t.Fatalf("expected unsupported-construct error, got parse error: %v", err)
 			}
-			// 必须带位置（--> file:line:col）
+			// must carry a position (--> file:line:col)
 			if !strings.Contains(err.Error(), "test.qk:") {
 				t.Fatalf("error lacks source position: %v", err)
 			}

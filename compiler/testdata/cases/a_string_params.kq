@@ -1,4 +1,4 @@
-// S1：String 形参（含拼接、返回、递归）
+// S1: String parameters (including concatenation, return, recursion)
 fn greet(String s) String {
     return "hi " + s;
 }

@@ -1,5 +1,5 @@
 // qkc -run compiler/testdata/demo.qk
-// 正典语法端到端示例：import + 函数/递归 + 变量 + List + if/while + try/catch。
+// End-to-end canonical-syntax example: import + functions/recursion + variables + List + if/while + try/catch.
 import "mathlib";
 
 fn fact(int n) int {

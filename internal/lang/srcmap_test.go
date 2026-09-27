@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestSrcMapImports 验证：合并 import 后的编译错误/诊断能回到真实文件与行号。
+// TestSrcMapImports verifies: after imports are merged, compile errors/diagnostics can be traced back to the real file and line number.
 func TestSrcMapImports(t *testing.T) {
 	dir := t.TempDir()
 	libSrc := `program library;
@@ -51,7 +51,7 @@ fn main(IOStream io) {
 			if file != libPath {
 				t.Errorf("double 应映射到 %s，got %q", libPath, file)
 			}
-			if line != 3 { // lib.qk 第 3 行：pub fn double(...)
+			if line != 3 { // lib.qk line 3: pub fn double(...)
 				t.Errorf("double 应映射到 mathlib.qk:3，got 第 %d 行", line)
 			}
 		case "main":
@@ -59,7 +59,7 @@ fn main(IOStream io) {
 			if file != mainPath {
 				t.Errorf("main 应映射到 %s，got %q", mainPath, file)
 			}
-			if line != 4 { // main.qk 第 4 行：fn main(IOStream io) {
+			if line != 4 { // main.qk line 4: fn main(IOStream io) {
 				t.Errorf("main 应映射到 main.qk:4，got 第 %d 行", line)
 			}
 		}
@@ -68,7 +68,7 @@ fn main(IOStream io) {
 		t.Fatalf("未覆盖两个文件：sawLib=%v sawMain=%v", sawLib, sawMain)
 	}
 
-	// 越界与非法的行号必须安全返回零值
+	// out-of-range and invalid line numbers must safely return the zero value
 	for _, bad := range []int{0, -1, 100000} {
 		if file, line := sm.Map(bad); file != "" || line != 0 {
 			t.Errorf("Map(%d) 应为空，got (%q,%d)", bad, file, line)
@@ -76,7 +76,7 @@ fn main(IOStream io) {
 	}
 }
 
-// TestSrcMapParserErrorPosition 验证带 import 的文件里，错误行号可映射回原文件。
+// TestSrcMapParserErrorPosition verifies that in a file with imports, an error line number can be mapped back to the original file.
 func TestSrcMapParserErrorPosition(t *testing.T) {
 	dir := t.TempDir()
 	libSrc := `program library;

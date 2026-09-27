@@ -1,4 +1,4 @@
-// 接口完整实现：不应报「接口未实现」。
+// Fully implemented interface: must not be reported as "interface not implemented".
 type interface { fn get(Self self) int; fn put(Self self, int v) void; } Store;
 type struct { int v; } Box;
 impl {

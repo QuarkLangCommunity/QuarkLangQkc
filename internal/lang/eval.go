@@ -37,10 +37,10 @@ var errReturn = errors.New("__return__")
 
 type scope struct {
 	vars       map[string]Value
-	slots      []Value // 参数槽位（前 len(paramNames) 个为参数，线性访问免哈希）
+	slots      []Value // parameter slots (the first len(paramNames) are parameters; linear access avoids hashing)
 	paramNames []string
-	nParams    int                  // 参数个数：paramNames 中前 nParams 个是参数（declare 不覆盖），其后为局部变量
-	refCache   map[string]*refValue // refIdent 句柄缓存：句柄无状态（只记 作用域+名字）→ 可复用
+	nParams    int                  // parameter count: the first nParams entries of paramNames are parameters (declare does not overwrite them), the rest are local variables
+	refCache   map[string]*refValue // refIdent handle cache: a handle is stateless (it records only scope + name) → reusable
 	outer      *scope
 }
 
@@ -174,7 +174,7 @@ func (s *scope) set(name string, v Value, pos Pos) error {
 func (s *scope) get(name string, pos Pos) (Value, error) {
 	for sc := s; sc != nil; sc = sc.outer {
 		if pn := sc.paramNames; len(pn) > 0 && pn[0] == name {
-			return sc.slots[0].deref(), nil // 引用传递：读路径统一解引用
+			return sc.slots[0].deref(), nil // pass by reference: the read path dereferences uniformly
 		}
 		if i := sc.paramIndex(name); i >= 0 {
 			return sc.slots[i].deref(), nil
@@ -201,10 +201,10 @@ type builtinFn func(args []Value, pos Pos, ctx *execCtx) (Value, error)
 type MemBlock struct {
 	ID          int
 	Size        int
-	Used        int  // 已用空间（占用度 = Used/Size，<1 表示内部有空闲）
-	Dirty       bool // 区块被更改会记录（脏标记）
-	OwnerPID    int  // 所属协程（0 = 全局）
-	Reclaimable bool // 无人占用，可回收
+	Used        int  // used space (occupancy = Used/Size; <1 means internal free space)
+	Dirty       bool // records that the block was modified (dirty flag)
+	OwnerPID    int  // owning thread (0 = global)
+	Reclaimable bool // nobody occupies it, reclaimable
 }
 
 // memHeap keeps blocks in a min-heap by occupancy (ascending Used): the least-occupied block comes first.
@@ -229,10 +229,10 @@ type MemoryManager struct {
 	mu          sync.Mutex
 	nextID      int
 	blocks      map[int]*MemBlock
-	minHeap     memHeap // 按占用度（Used/Size）升序的最小堆
-	AllocCalls  int64   // 分配调用总数
-	ReusedCount int64   // 复用次数（命中空闲 block 内部空间）
-	NewBlocks   int64   // 新申请 block 数
+	minHeap     memHeap // min-heap ordered ascending by occupancy (Used/Size)
+	AllocCalls  int64   // total allocation calls
+	ReusedCount int64   // reuse count (hits free space inside a block)
+	NewBlocks   int64   // number of newly requested blocks
 }
 
 func NewMemoryManager() *MemoryManager {
@@ -358,16 +358,16 @@ func (m *MemoryManager) Clear() {
 type StructDef struct {
 	Name       string
 	TypeParams []string
-	Types      map[string]string // 成员名 → 类型注解
-	TypesOrder []string          // 字段声明顺序（位置 .{} 绑定用）
+	Types      map[string]string // member name → type annotation
+	TypesOrder []string          // field declaration order (used for positional .{} binding)
 }
 
 // InterfaceDef is a registered interface declaration.
 type InterfaceDef struct {
 	Name    string
 	Methods []MethodSig
-	Expands []string // expand interface 组合接口
-	Partial bool     // 可选实现接口（事件族）：缺少方法不报错（emit 运行时忽略）
+	Expands []string // expand interface composes interfaces
+	Partial bool     // optionally implemented interface (event family): a missing method is not an error (emit ignores it at runtime)
 }
 
 // ImplDef is a registered impl block: Methods are static (no self), SelfMethods
@@ -384,8 +384,8 @@ type interp struct {
 	ctxHead     atomic.Pointer[execCtx]
 	fns         map[string]*Func
 	overloads   map[string][]*Func
-	libObjs     map[string]*libObj // library 系统库绑定对象（懒加载句柄）
-	dbg         *dbgState          // --debug 断点状态（nil = 零开销）
+	libObjs     map[string]*libObj // library: system library binding object (lazily loaded handle)
+	dbg         *dbgState          // --debug breakpoint state (nil = zero overhead)
 	sigs        map[string]*signDef
 	builtins    map[string]builtinFn
 	structs     map[string]*StructDef
@@ -395,9 +395,9 @@ type interp struct {
 	taskMu      sync.Mutex
 	nextPid     int
 	mem         *MemoryManager
-	randState   uint64  // rand() LCG 状态（确定性伪随机）
-	globalScope *scope  // 全局作用域（常量预声明一次）
-	fnList      []*Func // 函数表（CallExpr.FnIdx 直取，免 map）
+	randState   uint64  // rand() LCG state (deterministic pseudo-random)
+	globalScope *scope  // global scope (constants pre-declared once)
+	fnList      []*Func // function table (fetched directly via CallExpr.FnIdx, no map lookup)
 }
 
 // Run executes prog. args are command-line arguments for main(); stdin/stdout
@@ -539,7 +539,7 @@ func (in *interp) registerProgramMode(prog *Program, replace bool) error {
 		for _, m := range im.Methods {
 			recv := false
 			if len(m.Params) > 0 {
-				recv = isRecvParam(im.Type, &m.Params[0]) // 按类型判定接收者（与形参名无关）
+				recv = isRecvParam(im.Type, &m.Params[0]) // receiver determined by type (independent of the parameter name)
 			}
 			fn := &Func{Name: m.Name, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
 			if recv {
@@ -589,7 +589,7 @@ func baseTypeName(typ string) string {
 // zeroValue produces the zero value for a type annotation.
 func (in *interp) zeroValue(typ string) Value {
 	if strings.HasSuffix(typ, "&") {
-		return NilV() // 指针零值 = null
+		return NilV() // pointer zero value = null
 	}
 	if d, ok := in.structs[baseTypeName(typ)]; ok {
 		return StructV(in.zeroInstance(d))
@@ -631,8 +631,8 @@ func (in *interp) execute(ctx *execCtx) error {
 	}
 	ctx.executed = true
 
-	sc := &ctx.sc             // 复用 ctx 内嵌作用域（免每次调用堆分配）
-	sc.outer = in.globalScope // 全局作用域（DynamicStackAndHeap 等预声明一次，outer 链可见）
+	sc := &ctx.sc             // reuse the scope embedded in ctx (avoids a heap allocation per call)
+	sc.outer = in.globalScope // global scope (DynamicStackAndHeap and the like pre-declared once, visible through the outer chain)
 	fn := ctx.Fn
 	// Parameters are bound into linear slots: parameter names are shared/cached (zero allocation) and values reuse ctx.Args directly
 	args := ctx.Args
@@ -642,11 +642,11 @@ func (in *interp) execute(ctx *execCtx) error {
 				continue
 			}
 			v := args[i]
-			if v.IsRef() { // 直接构造 ctx 的调用方（taskm 线程等）：copyd 不引用
+			if v.IsRef() { // callers that build the ctx directly (taskm threads etc.): copyd does not reference
 				v = v.deref()
 				args[i] = v
 			}
-			if v.IsCopyd() { // callFunc 已包装并深拷贝
+			if v.IsCopyd() { // callFunc has already wrapped and deep-copied it
 				continue
 			}
 			args[i] = copydCopy(v)
@@ -748,7 +748,7 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 				return err
 			}
 			inner := newScope(sc)
-			_ = inner.declare(s.CatchVar, StrV(err.Error()), s.Pos) // 错误装入声明类型（interface{} 等），自由系统
+			_ = inner.declare(s.CatchVar, StrV(err.Error()), s.Pos) // the error is bound into the declared type (interface{} etc.), free-form system
 			if cerr := in.execBlock(s.Catch, inner, ctx); cerr != nil {
 				return cerr
 			}
@@ -886,7 +886,7 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 		case *Ident:
 			if t.Slot > 0 {
 				if i := int(t.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == t.Name {
-					if cur := sc.slots[i]; cur.IsRef() { // 引用传递：写穿到目标（与 scope.set 一致）
+					if cur := sc.slots[i]; cur.IsRef() { // pass by reference: write through to the target (consistent with scope.set)
 						if cur.Ref().store(v) {
 							return nil
 						}
@@ -1231,7 +1231,7 @@ func evalMember(obj Value, name string, pos Pos, ctx *execCtx) (Value, error) {
 	}
 	if obj.IsCopyd() {
 		c := obj.Copyd()
-		return evalMember(c.V, name, pos, ctx) // Copyd 透传
+		return evalMember(c.V, name, pos, ctx) // Copyd pass-through
 	}
 	if obj.IsStruct() {
 		o := obj.Struct()
@@ -1328,7 +1328,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		if err != nil {
 			return NilV(), err
 		}
-		argVals = derefArgs(argVals) // 签名机制按值记录 in 列表
+		argVals = derefArgs(argVals) // the signature mechanism records the in list by value
 		fn := in.bestMatchV(in.allDefs(id.Name), argVals)
 		if fn == nil {
 			return NilV(), &RunError{Msg: overloadErr(in.allDefs(id.Name), id.Name, len(argVals)), Pos: id.Pos, Ctx: ctx}
@@ -1389,7 +1389,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		return NilV(), err
 	}
 	res, err := in.dispatchPlainCall(c, id, argVals, sc, ctx)
-	ctx.argArena = ctx.argArena[:mark] // 归还实参复用区（值已绑定进被调方槽位）
+	ctx.argArena = ctx.argArena[:mark] // return the argument reuse area (the values are already bound into the callee's slots)
 	return res, err
 }
 
@@ -1414,7 +1414,7 @@ func (in *interp) dispatchPlainCall(c *CallExpr, id *Ident, argVals []Value, sc 
 		}
 	}
 	if b, ok := in.builtins[id.Name]; ok {
-		return b(derefArgs(argVals), id.Pos, ctx) // 内建只接受值
+		return b(derefArgs(argVals), id.Pos, ctx) // builtins accept values only
 	}
 	return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: undeclared function %q", id.Name), Pos: id.Pos, Ctx: ctx}
 }
@@ -1424,7 +1424,7 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	// Builtin function references (such as sum's generator rand): only for pseudo functions (no Body) — a user method with the same name is not hijacked
 	if fn.Body == nil {
 		if b, ok := in.builtins[fn.Name]; ok {
-			return b(derefArgs(args), pos, nil) // 内建只接受值
+			return b(derefArgs(args), pos, nil) // builtins accept values only
 		}
 	}
 	if len(args) != len(fn.Params) {
@@ -1442,13 +1442,13 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	flags := fn.CopydFlags()
 	for i := range args {
 		flagged := flags != nil && i < len(flags) && flags[i]
-		if args[i].IsCopyd() { // 引用透明：引用到 Copyd 值时按 Copyd 值处理
+		if args[i].IsCopyd() { // reference transparency: a reference to a Copyd value is handled as a Copyd value
 			cv := args[i]
 			if cv.IsRef() {
 				cv = cv.deref()
 			}
 			if flagged {
-				args[i] = cv // 已是 Copyd 值：原样绑定（不再复制）
+				args[i] = cv // already a Copyd value: bind as is (no further copy)
 			} else {
 				args[i] = deepCopy(cv.Copyd().V)
 			}
@@ -1457,7 +1457,7 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 		if flagged {
 			v := args[i]
 			if v.IsRef() {
-				v = v.deref() // copyd 形参不解引用/不引用：取实参当前值
+				v = v.deref() // a copyd parameter is not dereferenced/referenced: take the argument's current value
 			}
 			if fn.paramWrapCopyd(i) {
 				args[i] = CopydV(&CopydValue{V: copydCopy(v)})
@@ -1473,7 +1473,7 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 		return NilV(), err
 	}
 	if ctx.result.IsNil() {
-		return NilV(), nil // 未 return 的路径（log 结束等）返回 nil
+		return NilV(), nil // a path without return (log ends etc.) yields nil
 	}
 	return ctx.result, nil
 }
@@ -1501,7 +1501,7 @@ func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
 	switch x := a.(type) {
 	case *Ident:
 		// Declared variable → reference cell (an undeclared name may be a function reference; fall back to by-value)
-		if x.Slot > 0 { // 槽位已解析：宿主作用域就是当前作用域，免 findScope 链式扫描
+		if x.Slot > 0 { // slot already resolved: the owning scope is the current scope, so no chained findScope scan is needed
 			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
 				return RefV(sc.refHandle(x.Name)), nil
 			}
@@ -1515,7 +1515,7 @@ func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
 			return NilV(), err
 		}
 		if obj.IsCopyd() {
-			obj = obj.Copyd().V // Copyd 透传（与 evalMember 一致）
+			obj = obj.Copyd().V // Copyd pass-through (consistent with evalMember)
 		}
 		if obj.IsStruct() {
 			if _, ok := obj.Struct().Fields[x.Name]; ok {
@@ -1554,7 +1554,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
 				return NilV(), err
 			}
-			return obj.Copyd().V, nil // .ptr() 取出 Copyd 包装的地址
+			return obj.Copyd().V, nil // .ptr() extracts the address wrapped by Copyd
 		}
 		return in.callMethod(obj.Copyd().V, name, args, ctx, pos)
 	}
@@ -1566,7 +1566,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 	if obj.IsLib() {
 		return in.callLibMethod(obj.Lib(), name, args, pos, ctx)
 	}
-	if obj.IsPtr() { // FFI 不透明句柄：仅支持 toString（十六进制）
+	if obj.IsPtr() { // FFI opaque handle: only toString is supported (hexadecimal)
 		if name == "toString" {
 			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
 				return NilV(), err
@@ -1696,7 +1696,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			return IntV(int64(o.Size())), nil
 		}
 	} else if obj.IsTaskm() {
-		_ = obj.Taskm() // taskm 是全局单例；方法走 in
+		_ = obj.Taskm() // taskm is a global singleton; its methods go through in
 		switch name {
 		case "spawn":
 			// v2: taskm.spawn() takes no arguments; it creates a thread and returns its pid
@@ -1749,7 +1749,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if t.err != nil {
 				return NilV(), t.err
 			}
-			return NilV(), nil // block 返回 void
+			return NilV(), nil // block returns void
 		case "done":
 			// done(pid): is that task's thread idle (no function occupying it)? v0.1 = has the task finished?
 			if len(args) != 1 {
@@ -1766,9 +1766,9 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			in.taskMu.Lock()
 			idle := !t.Busy
 			in.taskMu.Unlock()
-			return BoolV(idle), nil // done = 线程是否空闲（没有函数占用）
+			return BoolV(idle), nil // done = whether the thread is idle (no function occupying it)
 		case "channel":
-			cap := 1024 // 默认容量（spec §14.2）
+			cap := 1024 // default capacity (spec §14.2)
 			if len(args) == 1 {
 				if !args[0].IsInt() || args[0].Int() < 1 || args[0].Int() > 1<<20 {
 					return NilV(), &RunError{Msg: "TypeError: taskm.channel(n) requires 0 < n <= 1048576", Pos: pos, Ctx: ctx}
@@ -1886,7 +1886,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if !args[0].IsStr() {
 				return NilV(), &RunError{Msg: i18n.T("TypeError: indexOf 需要 String 参数"), Pos: pos, Ctx: ctx}
 			}
-			return IntV(int64(strings.Index(o, args[0].Str()))), nil // -1 = 不存在
+			return IntV(int64(strings.Index(o, args[0].Str()))), nil // -1 = not found
 		case "substring":
 			if len(args) < 1 || len(args) > 2 || !args[0].IsInt() {
 				return NilV(), &RunError{Msg: i18n.T("TypeError: substring(start, end?) 需要 int 参数"), Pos: pos, Ctx: ctx}
@@ -2026,7 +2026,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
 				return NilV(), err
 			}
-			in.mem.Clear() // globalMemory.clear()：按修改日志直接清理
+			in.mem.Clear() // globalMemory.clear(): cleans directly from the modification log
 			return NilV(), nil
 		case "mode":
 			// Experimental: GlobalMemory.mode(DynamicStackAndHeap) allocates the stack and heap dynamically
@@ -2048,7 +2048,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if !args[0].IsInt() || args[0].Int() < 1 || args[0].Int() > 1<<20 {
 				return NilV(), &RunError{Msg: "TypeError: setBlock(n) requires a positive int block size", Pos: pos, Ctx: ctx}
 			}
-			o.BlockSize = int(args[0].Int()) // 动态调整 block 脏标记粒度
+			o.BlockSize = int(args[0].Int()) // dynamically adjust the block dirty-flag granularity
 			return NilV(), nil
 		}
 	} else if obj.IsTask() {
@@ -2443,7 +2443,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 			{
 				n := stop - begin
 				if n > 0 {
-					return wrapI32(n << 30), nil // n × 2^30（[0,2^31-1] 均匀的期望）
+					return wrapI32(n << 30), nil // n × 2^30 (the uniform expectation over [0,2^31-1])
 				}
 				return IntV(0), nil
 			}
@@ -2487,7 +2487,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 			// Verify the last term: a periodic function (such as n%3) can coincidentally match at three points; if the last term disagrees it is non-linear
 			last := g0 + d1*(n-1)
 			if actual, err := g(begin + (n-1)*step); err == nil && actual == last {
-				return wrapI32(n * (g0 + last) / 2), nil // 乘加闭式（int=32 位，wrap）
+				return wrapI32(n * (g0 + last) / 2), nil // multiply-add closed form (int = 32-bit, wrap)
 			}
 		}
 	}
@@ -2521,7 +2521,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 				}
 				sum += v
 			}
-			return wrapI32(sum), nil // 周期位级置换闭式：int=32 位 wrap
+			return wrapI32(sum), nil // periodic bit-level permutation closed form: int = 32-bit wrap
 		}
 	}
 	// No short period (e.g. a full-period 32-bit random number): add term by term (faster than per-bit counting)
@@ -2533,7 +2533,7 @@ func (in *interp) sumBuiltin(args []Value, pos Pos, ctx *execCtx) (Value, error)
 		}
 		total += v
 	}
-	return wrapI32(total), nil // 退化循环/周期兜底：int=32 位 wrap
+	return wrapI32(total), nil // degenerate loop / period fallback: int = 32-bit wrap
 }
 
 // detectPeriod detects the generator sequence's period (probes at most 65536 terms with the given step).
@@ -2571,7 +2571,7 @@ func (in *interp) registerIOBuiltins() {
 		if len(args) != 0 {
 			return NilV(), wantArity("clock", 0, len(args), pos, ctx)
 		}
-		return IntV(int64(int32(time.Now().UnixMicro()))), nil // 微秒
+		return IntV(int64(int32(time.Now().UnixMicro()))), nil // microseconds
 	}
 	in.builtins["rand"] = func(args []Value, pos Pos, ctx *execCtx) (Value, error) {
 		if len(args) != 0 {
@@ -2621,7 +2621,7 @@ func (in *interp) registerIOBuiltins() {
 		var code int64
 		for attempt := 0; attempt <= retries; attempt++ {
 			if attempt > 0 {
-				time.Sleep(time.Duration(200*(1<<uint(attempt-1))) * time.Millisecond) // 指数退避
+				time.Sleep(time.Duration(200*(1<<uint(attempt-1))) * time.Millisecond) // exponential backoff
 			}
 			cmd := exec.Command("sh", "-c", args[0].Str())
 			cmd.Stdout = os.Stdout
@@ -2705,7 +2705,7 @@ func (in *interp) registerIOBuiltins() {
 			return NilV(), &RunError{Msg: i18n.T("IOError: qkpopen 输出超过 8MB 上限"), Pos: pos, Ctx: ctx}
 		}
 		return InV(&InputStream{R: bytes.NewReader(out)}), nil
-	} // [actions 库原语] 网络层：qkhttp_get(url) -> String（10s 超时，8MiB 响应上限）
+	} // [actions library primitive] network layer: qkhttp_get(url) -> String (10s timeout, 8MiB response cap)
 	in.builtins["qkhttp_get"] = func(args []Value, pos Pos, ctx *execCtx) (Value, error) {
 		if len(args) < 1 || len(args) > 2 || !args[0].IsStr() {
 			return NilV(), &RunError{Msg: "TypeError: qkhttp_get(url String[, retries int])", Pos: pos, Ctx: ctx}
@@ -2889,7 +2889,7 @@ func qkjsonFromGo(raw interface{}) (Value, error) {
 			if err != nil {
 				return NilV(), err
 			}
-			h.m[hashKey(StrV(k))] = v // 键规整为 hashKey 格式（与 Put 一致，get/contains 可查）
+			h.m[hashKey(StrV(k))] = v // keys normalized to the hashKey format (consistent with Put, so get/contains can find them)
 		}
 		return TableV(h), nil
 	}
@@ -2940,7 +2940,7 @@ func qkjsonV(v Value) (interface{}, error) {
 		}
 		return out, nil
 	default:
-		return v.String(), nil // 其它类型 JSON 化字符串
+		return v.String(), nil // other types are turned into a string for JSON
 	}
 }
 
@@ -3002,7 +3002,7 @@ func (in *interp) runOnThread(t *Task, fn *Func, args []Value, pos Pos) error {
 	// The memory block belongs to that thread; it is marked reclaimable when the task ends
 	blockID := in.mem.Alloc(globalMemory.BlockSize, t.Pid)
 	t.BlockID = blockID
-	ctx := in.newCtx(fn, args, pos) // 直接分配版本身无共享，taskm 线程安全
+	ctx := in.newCtx(fn, args, pos) // the direct-allocation version shares nothing, so it is safe for taskm threads
 	lg := ctx.ensureLog()
 	lg.mem = in.mem
 	lg.blockID = blockID
@@ -3115,7 +3115,7 @@ func binOp(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 		if op == "<<" {
 			return IntV(int64(int32(li) << uint(sh&31))), nil
 		}
-		return IntV(int64(int32(li) >> uint(sh&31))), nil // 算术右移（符号扩展）
+		return IntV(int64(int32(li) >> uint(sh&31))), nil // arithmetic right shift (sign extension)
 	case "==", "!=", "<", "<=", ">", ">=":
 		return cmp(op, l, r, pos, ctx)
 	}

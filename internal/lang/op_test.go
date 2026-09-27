@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Operation 接口族：内置 dynamic 协议；impl 方法聚合 + 运算符重载
+// The Operation interface family: built-in dynamic protocol; impl method aggregation + operator overloading
 func TestOperationOverload(t *testing.T) {
 	out, err := runSrc(t, `type struct {
     int x;
@@ -50,7 +50,7 @@ fn main(IOStream io) {
 	}
 }
 
-// dynamic expand 组合接口解析
+// dynamic expand composed-interface parsing
 func TestDynamicExpandParse(t *testing.T) {
 	_, err := Compile(`type interface {
     dynamic expand interface Operation;
@@ -66,7 +66,7 @@ fn main(IOStream io) { io.println(1); }`)
 	}
 }
 
-// 函数重载：同名多签名（参数数据/品种）按实参最优匹配
+// Function overloading: several signatures under one name (parameter data type/kind) resolved by best match on the arguments
 func TestFunctionOverload(t *testing.T) {
 	out, err := runSrc(t, `fn add(int a, int b) int { return a + b; }
 fn add(float a, float b) float { return a + b; }
@@ -87,7 +87,7 @@ fn main(IOStream io) {
 	}
 }
 
-// 反引号原始字符串（Go 语义）
+// Backtick raw strings (Go semantics)
 func TestRawString(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
     String s = `+"`"+`line1
@@ -103,7 +103,7 @@ line2 "q" \n raw`+"`"+`;
 	}
 }
 
-// expand interface X; 是接口体内的语句（而非常规声明）；dynamic 前缀；组合递归 + 结构化满足接口
+// expand interface X; is a statement inside the interface body (not a regular declaration); dynamic prefix; compositional recursion + structural interface satisfaction
 func TestExpandStatementSyntax(t *testing.T) {
 	out, err := runSrc(t, `type interface {
     dynamic expand interface AddOperation;
@@ -143,7 +143,7 @@ fn main(IOStream io) {
 	}
 }
 
-// break 语句：while/for 循环内跳出；循环外编译报错
+// break statement: exits while/for loop bodies; outside a loop it is a compile error
 func TestBreakStatement(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
     int i = 0;
@@ -170,7 +170,7 @@ func TestBreakStatement(t *testing.T) {
 	}
 }
 
-// 字符串纯文本语义：双引号内字面（算式不解析）；\W 等未知转义保留字面；反引号含换行
+// String plain-text semantics: literal inside double quotes (expressions not parsed); unknown escapes such as \W stay literal; backticks may contain newlines
 func TestStringLiteralSemantics(t *testing.T) {
 	out, err := runSrc(t, "fn main(IOStream io) {\n"+
 		"    String a = \"1 + 2\";\n"+

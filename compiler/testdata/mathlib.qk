@@ -1,4 +1,4 @@
-// 同目录库：pub 函数供 import "mathlib"; 使用（正典语法）。
+// Same-directory library: pub functions consumed via import "mathlib"; (canonical syntax).
 pub fn double(int n) int {
     return n * 2;
 }

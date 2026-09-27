@@ -1,10 +1,10 @@
 package i18n
 
-// 文案国际化的两道门禁：
-//  1. TestTableCoversWiredTemplates：源码里所有「已接线」的中文模板都必须在表里有英文
-//     （新增中文文案却忘了登记译文 → 这里直接失败并列出缺哪些）；
-//   （英文模式的实际渲染由 internal/lang 的 TestEnglishModeRendersEnglish 覆盖——
-//     i18n 包不能反向导入 lang，否则成环。）
+// The two gates for message internationalization:
+//  1. TestTableCoversWiredTemplates: every "wired" Chinese template in the source must have English in the table
+//     (adding Chinese text but forgetting to register the translation -> this fails immediately and lists what is missing);
+//   (the actual rendering in English mode is covered by TestEnglishModeRendersEnglish in internal/lang --
+//     the i18n package cannot import lang back, that would be an import cycle.)
 
 import (
 	"os"
@@ -16,8 +16,8 @@ import (
 
 var cjkRe = regexp.MustCompile(`[\p{Han}]`)
 
-// wiredTemplates 扫描仓库源码，返回「已接线的中文模板」集合。
-// 覆盖三类接线点：i18n.T("…")、中心助手的格式串（errf/warn/errAt/replyErr）、Msg: "…" 字段。
+// wiredTemplates scans the repository source and returns the set of "wired Chinese templates".
+// It covers three kinds of wiring sites: i18n.T("…"), the central helpers' format strings (errf/warn/errAt/replyErr), and Msg: "…" fields.
 func wiredTemplates(t *testing.T) map[string][]string {
 	t.Helper()
 	root := filepath.Join("..", "..")
@@ -34,7 +34,7 @@ func wiredTemplates(t *testing.T) map[string][]string {
 		if rerr != nil {
 			return nil
 		}
-		// Windows 检出可能是 CRLF：归一化，否则多行模板的键与表不匹配
+		// a Windows checkout may be CRLF: normalize it, otherwise multi-line template keys do not match the table
 		src := strings.ReplaceAll(string(data), "\r\n", "\n")
 		rel, _ := filepath.Rel(root, path)
 		add := func(lit string) {
@@ -42,7 +42,7 @@ func wiredTemplates(t *testing.T) map[string][]string {
 				out[lit] = append(out[lit], rel)
 			}
 		}
-		// i18n.T("…") 与 i18n.T(`…`)
+		// i18n.T("…") and i18n.T(`…`)
 		for _, m := range regexp.MustCompile("i18n\\.T\\(\"").FindAllStringIndex(src, -1) {
 			i := m[1]
 			j := i
@@ -65,7 +65,7 @@ func wiredTemplates(t *testing.T) map[string][]string {
 				add(src[i : i+j])
 			}
 		}
-		// 中心助手格式串 + Msg: "…"
+		// central helper format strings + Msg: "…"
 		for _, re := range []string{
 			`\.(?:errf|warn|errAt|replyErr)\([^,()]*,\s*"((?:[^"\\]|\\.)*)"`,
 			`Msg:\s*"((?:[^"\\]|\\.)*)"`,

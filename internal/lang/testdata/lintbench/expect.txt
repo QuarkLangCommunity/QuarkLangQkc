@@ -1,5 +1,5 @@
-# qkcheck 基准集期望（人工标注；格式：<相对路径> [flags] <期望诊断，逗号分隔；- 表示零诊断>）
-# 码含义见 README「静态检查 qkcheck」；flags 传给 LintOptions（params=检查未使用形参）
+# qkcheck benchmark expectations (hand-labelled; format: <relative path> [flags] <expected diagnostics, comma-separated; - means no diagnostics>)
+# Codes are documented in the README section "Static analysis: qkcheck"; flags are passed to LintOptions (params = also check unused parameters)
 defects/unused_var.qk QK101@2
 defects/unused_param.qk params QK102@1
 defects/unreachable.qk QK103@7

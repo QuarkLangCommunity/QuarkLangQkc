@@ -1,4 +1,4 @@
-; 作用域与定义/引用（Neovim 的 locals 支持，用于高亮变量与重命名）
+; Scopes and definitions/references (Neovim locals support: variable highlighting and renaming)
 (function_declaration) @local.scope
 (block) @local.scope
 

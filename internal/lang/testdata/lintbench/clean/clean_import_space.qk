@@ -1,5 +1,5 @@
-// 刻意不报：导入的库**只用 space 形式**（api::twice），也属于「已使用」。
-// （只记录 `scope::name` 而漏记 scope / 方法名会导致误报——本用例锁住该行为。）
+// Deliberately not reported: the imported library is used **only in space form** (api::twice), which still counts as "used".
+// (Recording only `scope::name` and missing the scope / method name would cause a false positive — this case pins that behaviour.)
 program library;
 import "helperapi";
 

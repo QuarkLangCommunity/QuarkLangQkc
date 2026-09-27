@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 构建发布产物：三平台 × 双架构 × 全部工具（零第三方依赖，无 cgo 依赖 → 直接交叉编译）。
+# Build release artifacts: three platforms x two architectures x all tools (zero third-party deps, no cgo -> straight cross-compilation).
 #
-# 用法：scripts/build-release.sh [版本号] [输出目录]
-#   VERSION 文件 / git describe 是默认版本来源；版本经 -ldflags -X main.version 注入二进制。
-# 环境变量：QUARK_TARGETS 覆盖目标矩阵（默认 linux/darwin/windows × amd64/arm64）
+# Usage: scripts/build-release.sh [version] [output dir]
+#   The VERSION file / git describe are the default version sources; the version is injected into the binaries with -ldflags -X main.version.
+# Environment: QUARK_TARGETS overrides the target matrix (default linux/darwin/windows x amd64/arm64)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -11,7 +11,7 @@ VERSION="${1:-$(cat VERSION 2>/dev/null || echo 0.0.0-dev)}"
 OUT="${2:-dist}"
 TARGETS="${QUARK_TARGETS:-linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64}"
 
-# 工具清单：名字 → 构建路径（主模块 / 编译器子模块）
+# Tool list: name -> build path (main module / compiler submodule)
 TOOLS=(
   "quark:."
   "qkcheck:./cmd/qkcheck"
@@ -25,11 +25,11 @@ LDFLAGS="-s -w -X main.version=${VERSION}"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
-# 归一为绝对路径：编译器子模块用 (cd compiler && go build -o ...) 构建，
-# 相对路径会被解释成 repo/tmp/... 之类的错误位置（绝对路径 + ../ 拼接的坑）。
+# Normalize to an absolute path: the compiler submodule is built with (cd compiler && go build -o ...),
+# where a relative path would be resolved to the wrong place such as repo/tmp/... (the absolute path + ../ pitfall).
 OUT="$(cd "$OUT" && pwd)"
 
-echo "→ 版本 ${VERSION}；目标：${TARGETS}"
+echo "→ version ${VERSION}; targets: ${TARGETS}"
 for target in $TARGETS; do
   GOOS="${target%%/*}"
   GOARCH="${target##*/}"
@@ -51,18 +51,18 @@ for target in $TARGETS; do
   done
 done
 
-# 清单：文件、大小、sha256（发布校验用）
+# Manifest: file, size, sha256 (used to verify a release)
 MANIFEST="$OUT/MANIFEST-${VERSION}.txt"
 {
-  echo "# QuarkLang ${VERSION} 发布产物"
-  echo "# 生成时间: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  echo "# 构建: CGO_ENABLED=0（纯 Go，无系统依赖）"
-  printf '%-44s %12s  %s\n' "文件" "字节" "sha256"
+  echo "# QuarkLang ${VERSION} release artifacts"
+  echo "# Generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "# Build: CGO_ENABLED=0 (pure Go, no system dependencies)"
+  printf '%-44s %12s  %s\n' "file" "bytes" "sha256"
   for f in "$OUT"/*; do
     [ "$(basename "$f")" = "$(basename "$MANIFEST")" ] && continue
     printf '%-44s %12s  %s\n' "$(basename "$f")" "$(stat -c%s "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"
   done
 } > "$MANIFEST"
 
-echo "✓ 产物目录: $OUT（$(ls "$OUT" | grep -vc MANIFEST) 个二进制）"
-echo "✓ 清单: $MANIFEST"
+echo "✓ artifact directory: $OUT ($(ls "$OUT" | grep -vc MANIFEST) binaries)"
+echo "✓ manifest: $MANIFEST"

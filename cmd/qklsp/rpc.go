@@ -1,8 +1,8 @@
 package main
 
-// JSON-RPC 2.0 over stdio（LSP 传输层，自实现零依赖）。
+// JSON-RPC 2.0 over stdio (LSP transport layer, self-implemented with zero dependencies).
 //
-// 帧格式：`Content-Length: N\r\n\r\n<JSON>`（长度按字节计，UTF-8）。
+// Frame format: `Content-Length: N\r\n\r\n<JSON>` (length counted in bytes, UTF-8).
 
 import (
 	"bufio"
@@ -29,7 +29,7 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-// isRequest 判断是否是需要回包的请求（有 id）。
+// isRequest reports whether this is a request that needs a reply (it has an id).
 func (m rpcMessage) isRequest() bool { return m.ID != nil }
 
 type rpcConn struct {
@@ -41,7 +41,7 @@ func newRPCConn(r io.Reader, w io.Writer) *rpcConn {
 	return &rpcConn{r: bufio.NewReader(r), w: w}
 }
 
-// read 读取一条消息；EOF 时返回 io.EOF。
+// read reads one message; returns io.EOF at end of input.
 func (c *rpcConn) read() (rpcMessage, error) {
 	var msg rpcMessage
 	length := -1
@@ -54,7 +54,7 @@ func (c *rpcConn) read() (rpcMessage, error) {
 		}
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
-			break // 头部结束
+			break // end of headers
 		}
 		if k, v, ok := strings.Cut(line, ":"); ok {
 			if strings.EqualFold(strings.TrimSpace(k), "Content-Length") {
@@ -94,7 +94,7 @@ func (c *rpcConn) write(v interface{}) error {
 	return err
 }
 
-// reply 回包（请求）。
+// reply sends a reply (to a request).
 func (c *rpcConn) reply(id *json.RawMessage, result interface{}) error {
 	if id == nil {
 		return nil
@@ -102,7 +102,7 @@ func (c *rpcConn) reply(id *json.RawMessage, result interface{}) error {
 	return c.write(rpcMessage{JSONRPC: "2.0", ID: id, Result: result})
 }
 
-// replyErr 回错误。
+// replyErr sends an error reply.
 func (c *rpcConn) replyErr(id *json.RawMessage, code int, format string, args ...interface{}) error {
 	if id == nil {
 		return nil
@@ -110,7 +110,7 @@ func (c *rpcConn) replyErr(id *json.RawMessage, code int, format string, args ..
 	return c.write(rpcMessage{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: i18n.T(format, args...)}})
 }
 
-// notify 发送通知（无 id）。
+// notify sends a notification (no id).
 func (c *rpcConn) notify(method string, params interface{}) error {
 	raw, err := json.Marshal(params)
 	if err != nil {

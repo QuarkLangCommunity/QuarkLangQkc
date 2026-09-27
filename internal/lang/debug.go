@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// pendingDebug 包级预置调试器（execute 前安装；--debug 模式单程序运行）。
+// pendingDebug is a package-level preinstalled debugger (installed before execute; single-program run in --debug mode).
 var pendingDebug func(in *interp)
 
 type dbgState struct {
@@ -20,7 +20,7 @@ type dbgState struct {
 	w        io.Writer
 }
 
-// RunDebug 调试模式运行（编译产物/源码带 --bp "file:line,..."）。
+// RunDebug runs in debug mode (compiled artifact/source carries --bp "file:line,...").
 func RunDebug(prog *Program, filename string, args []string, stdin io.Reader, stdout io.Writer, breakpoints []string) error {
 	if len(breakpoints) == 0 {
 		_, err := runWithInterp(prog, filename, args, stdin, stdout)
@@ -40,7 +40,7 @@ func RunDebug(prog *Program, filename string, args []string, stdin io.Reader, st
 	return err
 }
 
-// stPos 语句位置（断点行提取）。
+// stPos returns the statement position (used to extract breakpoint lines).
 func stPos(st Stmt) Pos {
 	switch t := st.(type) {
 	case *ExprStmt:
@@ -99,7 +99,7 @@ func posOfExpr(e Expr) Pos {
 	return Pos{}
 }
 
-// hitBreak 断点检查（每语句一次判定；无调试器零开销）。
+// hitBreak checks breakpoints (one test per statement; zero overhead when no debugger is attached).
 func (in *interp) hitBreak(pos Pos, sc *scope) bool {
 	d := in.dbg
 	if d == nil {

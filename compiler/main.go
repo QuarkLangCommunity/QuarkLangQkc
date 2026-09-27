@@ -1,7 +1,7 @@
-// qkc：QuarkLang → LLVM IR 编译器（compiler 分支，v0.2）。
-// 用法：qkc file.qk           输出 LLVM IR 到 stdout（增量：IR 缓存命中跳过全编译）
+// qkc: QuarkLang → LLVM IR compiler (compiler branch, v0.2).
+// Usage: qkc file.qk           write LLVM IR to stdout (incremental: an IR cache hit skips the full compile)
 //
-//	qkc -run file.qk      用 clang 编译 IR 为原生二进制并执行（增量：二进制缓存命中跳过 clang）
+//	qkc -run file.qk      compile the IR to a native binary with clang and run it (incremental: a binary cache hit skips clang)
 package main
 
 import (
@@ -19,12 +19,12 @@ import (
 	"quarklang/compiler/internal/cgen"
 )
 
-// 增量编译：按源文件内容哈希缓存 IR 与原生二进制。
-// 缓存目录可用 QUARK_CACHE 覆盖，默认 <tmp>/quarklang-cache。
-// runtimeSrc 把嵌入的线程运行时写入临时文件并返回路径（并行载体：POSIX pthread；Windows 分支待补）。
+// Incremental compilation: cache the IR and native binary keyed by source file content hash.
+// The cache dir can be overridden with QUARK_CACHE; default <tmp>/quarklang-cache.
+// runtimeSrc writes the embedded thread runtime to a temp file and returns its path (parallelism carrier: POSIX pthread; Windows branch still to be added).
 func runtimeSrc() string {
 	if runtime.GOOS == "windows" {
-		return "" // Windows 运行时待补（CreateThread 版）
+		return "" // Windows runtime still to be added (CreateThread version)
 	}
 	f, err := os.CreateTemp("", "qthreads-*.c")
 	if err != nil {
@@ -47,30 +47,30 @@ func cacheDir() string {
 	return dir
 }
 
-// engineVersion 编译器/运行时代次：任何 cgen/宏展开行为变化都必须递增，
-// 避免 IR/二进制缓存返回旧引擎产物（本次踩坑：宏展开模式与 done-bool 修复被缓存吞掉）。
+// engineVersion is the compiler/runtime generation: it must be bumped on any cgen/macro-expansion behavior change,
+// to keep the IR/binary cache from returning artifacts of an old engine (a past trap: the macro-expansion mode and the done-bool fix were swallowed by the cache).
 const engineVersion = "13"
 
-// version 发布版本：构建时用 -ldflags "-X main.version=vX.Y.Z" 注入。
-var version = "dev" // 13：T&/pointer T 可空引用（new T + 自动解引用 + nil 语义）
+// version is the release version: injected at build time via -ldflags "-X main.version=vX.Y.Z".
+var version = "dev" // 13: T&/pointer T nullable references (new T + auto-dereference + nil semantics)
 
-// engineFingerprint 缓存键前缀：引擎代次 + 线程运行时指纹（运行时任何改动自动失效）。
+// engineFingerprint is the cache-key prefix: engine generation + thread-runtime fingerprint (any runtime change invalidates it automatically).
 func engineFingerprint() string {
 	h := sha256.Sum256([]byte(qthreadsC))
 	return engineVersion + "-" + hex.EncodeToString(h[:8])
 }
 
-// linkLib 是一个 library 的链接候选（按优先级，每组是一串 clang 参数）。
+// linkLib is one library's link candidate (in priority order; each group is a list of clang arguments).
 type linkLib struct {
 	name   string
 	groups [][]string
 }
 
-// parseLinkLibs 解析 IR 里的链接标记：
+// parseLinkLibs parses the link markers in the IR:
 //
-//	; qkc-link: <库名> => <候选参数> => <候选参数>
+//	; qkc-link: <lib name> => <candidate args> => <candidate args>
 //
-// 兼容旧格式（"; qkc-link: -lm"）。
+// Compatible with the old format ("; qkc-link: -lm").
 func parseLinkLibs(ir string) []linkLib {
 	var out []linkLib
 	for _, line := range strings.Split(ir, "\n") {
@@ -101,7 +101,7 @@ func parseLinkLibs(ir string) []linkLib {
 	return out
 }
 
-// linkCombos 展开候选组合（每个库取一组，上限 8 组避免组合爆炸）。
+// linkCombos expands candidate combinations (one group per library, capped at 8 to avoid a combinatorial explosion).
 func linkCombos(libs []linkLib) [][]string {
 	combos := [][]string{{}}
 	for _, l := range libs {
@@ -123,7 +123,7 @@ func linkCombos(libs []linkLib) [][]string {
 	return combos
 }
 
-// linkDiag 生成链接失败的明确诊断（库名 + 尝试过的链接参数）。
+// linkDiag builds an explicit diagnostic for a link failure (library name + the link arguments tried).
 func linkDiag(libs []linkLib) string {
 	if len(libs) == 0 {
 		return ""
@@ -222,11 +222,11 @@ func main() {
 			libVer = args[1]
 			args = args[2:]
 		case "--emit-ir":
-			args = args[1:] // 默认行为，显式写法
+			args = args[1:] // default behavior, explicit form
 		case "--lang", "-lang":
-			// 该循环用「切掉首元素」推进，没有下标变量
+			// This loop advances by chopping off the first element; there is no index variable
 			if len(args) >= 2 {
-				i18n.SetLocale(args[1]) // zh | en；未知值保持当前语言
+				i18n.SetLocale(args[1]) // zh | en; an unknown value keeps the current language
 				args = args[2:]
 			} else {
 				args = args[1:]
@@ -253,7 +253,7 @@ parsed:
 		qkcUsage()
 		os.Exit(2)
 	}
-	// 预处理器上下文（跨系统）：目标平台影响预处理结果 → **必须进缓存键**
+	// Preprocessor context (cross-platform): the target platform affects preprocessing results → it **must go into the cache key**
 	pp := newPreprocCtx()
 	if targetOS != "" {
 		pp.os = targetOS
@@ -275,9 +275,9 @@ parsed:
 	if emitLib {
 		irSuffix = "-lib.ll"
 	}
-	irPath := filepath.Join(cacheDir(), hash+"-"+ppTag+irSuffix) // 目标平台进键
+	irPath := filepath.Join(cacheDir(), hash+"-"+ppTag+irSuffix) // the target platform goes into the key
 
-	// ── 库模式：逐目标平台生成 IR 变体并打包（不进入程序流程）──
+	// ── Library mode: generate an IR variant per target platform and package it (does not enter the program flow) ──
 	if emitLib {
 		out := outPath
 		if out == "" {
@@ -318,7 +318,7 @@ parsed:
 				fmt.Fprintln(os.Stderr, "error:", xerr)
 				os.Exit(1)
 			}
-			cgen.SetLibMode(true) // 库：豁免 main，且不发射 main
+			cgen.SetLibMode(true) // library: main is exempt and main is not emitted
 			libIR, terr := cgen.Transpile(ex, args[0])
 			cgen.SetLibMode(false)
 			if terr != nil {
@@ -334,7 +334,7 @@ parsed:
 					}
 				}
 			}
-			// 导出面 ABI 规范化（值类型边界）：必须在混淆前做
+			// Exported-surface ABI normalization (value-type boundaries): must happen before obfuscation
 			libIR, normSigs := normalizeExportedABI(libIR, exports)
 			for k := range exports {
 				if sig, ok := normSigs[exports[k].Name]; ok {
@@ -364,7 +364,7 @@ parsed:
 		return
 	}
 
-	// ── 引用库：按目标平台挑变体（编译期合并进使用方模块；无 .so / 无 dlopen）──
+	// ── Referenced libraries: pick a variant per target platform (merged into the consumer module at compile time; no .so / no dlopen) ──
 	var libIRs []string
 	libFP := ""
 	decls := []string{}
@@ -392,19 +392,19 @@ parsed:
 		provided = append(provided, dn)
 	}
 	if len(provided) > 0 {
-		cgen.SetObjectProvidedLibs(provided) // 这些库由合并进来的 IR 提供，不生成 -l
-		cgen.SetForceRuntimeHelpers(true)    // 使用方提供运行时辅助函数
+		cgen.SetObjectProvidedLibs(provided) // these libraries are provided by the merged-in IR; no -l is generated
+		cgen.SetForceRuntimeHelpers(true)    // the consumer provides the runtime helper functions
 	}
 
-	// 缓存键补入库指纹：命中的一定是"同一组库、已合并"的 IR，避免重复合并
+	// Add the library fingerprint to the cache key: a hit is always the "same set of libraries, already merged" IR, avoiding repeated merging
 	if libFP != "" {
 		sum := sha256.Sum256([]byte(libFP))
 		irPath = filepath.Join(cacheDir(), hash+"-"+ppTag+"-lib"+hex.EncodeToString(sum[:6])+irSuffix)
 	}
-	// ── 读缓存 IR 或编译 ──
+	// ── Read the cached IR or compile ──
 	ir := ""
 	if b, rerr := os.ReadFile(irPath); rerr == nil {
-		ir = string(b) // 已合并过：不再合并
+		ir = string(b) // already merged: do not merge again
 	}
 	if ir == "" {
 		src, rerr := os.ReadFile(args[0])
@@ -417,7 +417,7 @@ parsed:
 			fmt.Fprintln(os.Stderr, "error:", perr)
 			os.Exit(1)
 		}
-		if len(decls) > 0 { // 注入 library 声明（引用库的写法）
+		if len(decls) > 0 { // inject library declarations (the way a referenced library is written)
 			pre = strings.Join(decls, "\n") + pre
 		}
 		expanded, xerr := expandMacros(pre, "compile")
@@ -431,7 +431,7 @@ parsed:
 			os.Exit(1)
 		}
 		for _, lIR := range libIRs {
-			ir = mergeLibIR(ir, lIR) // 库 IR 合并（编译期，跨系统一致）
+			ir = mergeLibIR(ir, lIR) // library IR merge (compile time, consistent across platforms)
 		}
 		_ = os.WriteFile(irPath, []byte(ir), 0o644)
 	}
@@ -448,13 +448,13 @@ parsed:
 		return
 	}
 
-	// ── 构建原生二进制（-c / -run）──
+	// ── Build the native binary (-c / -run) ──
 	cflags := os.Getenv("QUARK_CFLAGS")
 	if cflags == "" {
 		cflags = "-O3 -flto=thin"
 	}
-	// 缓存文件名必须**跨系统合法**：Windows 名称不能含 `|` 与空格
-	// （CI 实测：clang LNK1104 cannot open file '…|windows-x86_64|-O3 -flto=thin.bin'）
+	// The cache file name must be **legal across platforms**: Windows names cannot contain `|` or spaces
+	// (measured in CI: clang LNK1104 cannot open file '…|windows-x86_64|-O3 -flto=thin.bin')
 	rawKey := hash + "|" + ppTag + "|" + cflags + libFP
 	ksum := sha256.Sum256([]byte(rawKey))
 	binKey := hash[:12] + "-" + ppTag + "-" + hex.EncodeToString(ksum[:8])
@@ -536,7 +536,7 @@ parsed:
 	}
 }
 
-// qkcUsage 打印命令行用法。
+// qkcUsage prints the command-line usage.
 func qkcUsage() {
 	fmt.Fprintln(os.Stderr, i18n.T(`usage: qkc [options] <file.qk>
 

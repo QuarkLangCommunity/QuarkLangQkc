@@ -1,27 +1,26 @@
 program main;
 
-/* Language tour / 语言巡礼
+/* Language tour
  * Type-first syntax: struct/impl, generics, try/catch, List — runnable as-is.
- * 类型在前：struct/impl、泛型、try/catch、List —— 可直接运行。
- * Identical output on both backends / 解释器与编译器两条路径输出一致。 */
+ * Identical output on both backends. */
 
-type struct { int x; int y; } Point;            // struct / 结构体
+type struct { int x; int y; } Point;            // struct
 
 impl {
-    fn new(int x, int y) Point {                // static method / 静态方法（无 self）
-        Point p = .{x: x, y: y};                // struct literal / 结构体字面量（字段名: 值）
+    fn new(int x, int y) Point {                // static method (no self)
+        Point p = .{x: x, y: y};                // struct literal (field name: value)
         return p;
     }
-    fn sum(Point self) int {                    // instance method / 实例方法（首参 self）
+    fn sum(Point self) int {                    // instance method (first param is self)
         return self.x + self.y;
     }
-} Point;                                         // name after the block / 实现名写在块后
+} Point;                                         // name after the block
 
-fn<T> twice(T v) T { return v; }                // generics, type-erased / 泛型（类型擦除）
+fn<T> twice(T v) T { return v; }                // generics, type-erased
 
 fn main(IOStream io) {
-    Point p = Point::new(3, 4);                 // static call with :: / 静态调用 ::
-    io.println("point sum =", p.sum());         // instance call with . / 实例调用 .
+    Point p = Point::new(3, 4);                 // static call with ::
+    io.println("point sum =", p.sum());         // instance call with .
 
     List<int> l = [1, 2, 3];
     int total = 0;
@@ -30,9 +29,9 @@ fn main(IOStream io) {
 
     try {
         io.println(1 / 0);
-    } catch (void e) {                          // catchable error / 可捕获的错误
+    } catch (void e) {                          // catchable error
         // Using `e` inside catch is not supported on the compiler path yet.
-        // 编译器路径暂不支持在 catch 体内读取 e；两条路径都只做"已捕获"提示。
+        // Both backends only print a "caught" notice.
         io.println("caught: division by zero");
     }
     io.println("twice =", twice(21));

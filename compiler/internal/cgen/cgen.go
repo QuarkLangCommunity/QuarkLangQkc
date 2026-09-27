@@ -1,20 +1,20 @@
-// Package cgen 将 QuarkLang 编译为 LLVM IR（跨系统编译器，LLVM 后端）。
+// Package cgen compiles QuarkLang to LLVM IR (cross-platform compiler, LLVM backend).
 //
-// 前端只有一套语法源：internal/lang 的正典 AST（与解释器同源）。本包不再自带
-// 词法/语法分析，流程为：
+// The frontend has exactly one syntax source: the canonical AST of internal/lang (shared with the
+// interpreter). This package carries no lexer/parser of its own; the pipeline is:
 //
-//	lang.CompileWithImports(src, filename)  // 词法/语法/类型检查 + import 递归合并
-//	  → lowerProgram（lower.go）            // 正典 AST → cgen IR（不支持即报错）
-//	  → emitter（本文件）                    // cgen IR → LLVM IR
+//	lang.CompileWithImports(src, filename)  // lexing/parsing/typecheck + recursive import merge
+//	  → lowerProgram (lower.go)            // canonical AST → cgen IR (error if unsupported)
+//	  → emitter (this file)                // cgen IR → LLVM IR
 //
-// 支持与不支持的构造清单见 lower.go 顶部说明；后端未 lower 的构造会返回带
-// 源码位置的明确错误，绝不静默错编。
+// The list of supported and unsupported constructs is in the header of lower.go; a construct the
+// backend has not lowered returns an explicit error with source location — never a silent miscompile.
 //
-// 值模型（与解释器语义对齐）：
-//   - int → i32，bool → i1，float → double，String → i8*
-//   - List<T> / struct 都是**引用**（堆对象指针），与解释器的 *List / *Struct
-//     别名语义一致：赋值/传参复制的是引用，字段/元素修改对所有别名可见
-//   - 结构体字段按声明顺序布局（LLVM 字面/命名结构体），零值 = calloc 清零
+// Value model (aligned with interpreter semantics):
+//   - int → i32, bool → i1, float → double, String → i8*
+//   - List<T> / struct are both **references** (heap object pointers), matching the interpreter's
+//     *List / *Struct aliasing: assignment and argument passing copy the reference, so all aliases see field/element writes
+//   - struct fields are laid out in declaration order (LLVM literal/named structs), zero value = calloc zeroing
 package cgen
 
 import (
@@ -26,11 +26,11 @@ import (
 	"quarklang/internal/lang"
 )
 
-// Transpile 把 QuarkLang 源码编译为 LLVM IR。
+// Transpile compiles QuarkLang source to LLVM IR.
 //
-// src 需已完成编译器侧宏展开（见 compiler/main.go 的 expandMacros）；
-// filename 用于 import 解析（同目录 .qk/.qlib，与解释器同一套递归合并语义）
-// 与诊断定位，可为 ""。
+// src must already have gone through compiler-side macro expansion (see expandMacros in compiler/main.go);
+// filename is used for import resolution (same-directory .qk/.qlib, the same recursive merge semantics as
+// the interpreter) and for diagnostics; it may be "".
 func Transpile(src, filename string) (string, error) {
 	prog, err := lang.CompileWithImports(src, filename)
 	if err != nil {
@@ -64,15 +64,15 @@ const (
 	kStructLit
 	kField
 	kToString
-	kRunner   // taskm.merge 的 runner 函数引用（i8* 函数指针）
-	kNull     // null 字面量（指针零值）
-	kMemoCall // 签名调用：f(args) @memorize（记忆化包装）
-	kMerge    // taskm.merge / t.merge：i64 槽携带 0..4 个实参
-	kTable    // HashTable 方法调用（put/get/contains/remove/size/keys）
-	kNewRef   // new T：分配单元素存储，返回 T& 指针
+	kRunner   // runner function reference for taskm.merge (an i8* function pointer)
+	kNull     // null literal (zero value of a pointer)
+	kMemoCall // signature call: f(args) @memorize (memoization wrapper)
+	kMerge    // taskm.merge / t.merge: an i64 slot carries 0..4 arguments
+	kTable    // HashTable method call (put/get/contains/remove/size/keys)
+	kNewRef   // new T: allocate a single-element cell and return a T& pointer
 )
 
-// expr 是 cgen IR 表达式。typ 由 lowering 填入语言类型（"?" = 未判定）。
+// expr is a cgen IR expression. typ is filled in by lowering with the language type ("?" = undecided).
 type expr struct {
 	kind exprKind
 	i    int64
@@ -92,41 +92,41 @@ type expr struct {
 	sl     *structLit  // kStructLit
 	field  *fieldExpr  // kField
 
-	sc     strConst // 预注册的字符串常量（kString）
-	strcat bool     // kBin "+" 且为 String 拼接（有 ql_strcat 副作用）
-	line   int      // 运行期错误定位（除零等）
+	sc     strConst // pre-registered string constant (kString)
+	strcat bool     // kBin "+" and it is String concatenation (has a ql_strcat side effect)
+	line   int      // runtime error location (division by zero etc.)
 
-	ifaceBox string // 非空：把具体 struct 值装箱成接口值（值为 vtable 符号）
-	anyBox   string // 非空：把该具体类型的值装箱成 interface{}（RTTI 描述符按类型发射）
-	noDeref  bool   // kIdent 指向 T& 变量：取指针本身而非解引用值（指针比较/重绑定）
+	ifaceBox string // non-empty: box a concrete struct value into an interface value (the value is the vtable symbol)
+	anyBox   string // non-empty: box a value of this concrete type into interface{} (the RTTI descriptor is emitted per type)
+	noDeref  bool   // kIdent points at a T& variable: take the pointer itself instead of the dereferenced value (pointer comparison/rebinding)
 }
 
 type indexExpr struct {
-	recv *expr // List 表达式（变量/struct 字段/…）
+	recv *expr // List expression (variable/struct field/…)
 	i    *expr
 }
 
 type methodExpr struct {
 	recv   *expr
-	name   string // 方法名
+	name   string // method name
 	args   []*expr
-	sig    string // IR 函数名（lowering 解析后填入）
-	isSelf bool   // 实例方法（需要 receiver 实参）
-	byVal  bool   // 实参按值传递（运算符重载：解释器按值传入操作数）
+	sig    string // IR function name (filled in after lowering resolves it)
+	isSelf bool   // instance method (needs a receiver argument)
+	byVal  bool   // argument passed by value (operator overload: the interpreter passes operands by value)
 
-	iface    string   // 非空：接口方法调用（vtable 分发）
-	idx      int      // 方法在接口派发表中的槽位
-	ifaceSig *funcSig // 调用签名（Self 形参以 "Self" 标记）
+	iface    string   // non-empty: interface method call (vtable dispatch)
+	idx      int      // method's slot in the interface dispatch table
+	ifaceSig *funcSig // call signature (the Self parameter is marked "Self")
 }
 
 type fieldExpr struct {
 	recv *expr
 	name string
-	typ  string // 接收者的 struct 类型名
+	typ  string // receiver's struct type name
 }
 
 type structLit struct {
-	typ    string // 目标 struct 类型名
+	typ    string // target struct type name
 	values []*expr
 }
 
@@ -146,11 +146,11 @@ type declStmt struct {
 type assignStmt struct {
 	name string
 	x    *expr
-	thru bool // 目标是 T& 变量且 RHS 是 T 值：写穿指针指向的单元
+	thru bool // target is a T& variable and the RHS is a T value: write through to the cell the pointer points at
 }
 
 type indexAssignStmt struct {
-	recv *expr // List 表达式（变量/struct 字段/…）
+	recv *expr // List expression (variable/struct field/…)
 	idx  *expr
 	x    *expr
 }
@@ -202,42 +202,42 @@ type listLit struct {
 }
 
 type callExpr struct {
-	name      string // IR 函数名
+	name      string // IR function name
 	args      []*expr
-	byValArgs bool // 实参按值传递（签名 memorize 包装：解释器 derefArgs 后调用）
+	byValArgs bool // arguments passed by value (signature memorize wrapper: the interpreter calls after derefArgs)
 }
 
-// tableExpr 是 HashTable 方法调用（kTable）的上下文。
+// tableExpr is the context of a HashTable method call (kTable).
 type tableExpr struct {
-	recv *expr   // 表句柄（i8*）
+	recv *expr   // table handle (i8*)
 	name string  // put/get/contains/remove/size/keys
-	args []*expr // put: [key, value]；其余: [key]（size/keys 无参）
-	keyT string  // 键静态类型
-	valT string  // 值静态类型
+	args []*expr // put: [key, value]; others: [key] (size/keys take no argument)
+	keyT string  // key static type
+	valT string  // value static type
 }
 
-// isTableT 判断语言类型是否 HashTable<...>。
+// isTableT reports whether a language type is HashTable<...>.
 func isTableT(t string) bool { return strings.HasPrefix(strings.TrimSpace(t), "HashTable<") }
 
-// memoExpr 是签名 memorize 调用（kMemoCall）的上下文。
+// memoExpr is the context of a signature memorize call (kMemoCall).
 type memoExpr struct {
-	handle *expr   // memorize 实例（i8* 句柄）
-	skips  []*expr // @ 显式 prefix 实参：求值丢弃（解释器放入 prefix 记录）
+	handle *expr   // memorize instance (i8* handle)
+	skips  []*expr // explicit @ prefix arguments: evaluated and discarded (the interpreter puts them into the prefix record)
 }
 
 type funcParam struct {
 	name  string
 	typ   string
-	copyd bool // copyd 形参：绑定时深拷贝到 callee 本地单元（不回写调用方）
+	copyd bool // copyd parameter: deep-copied into a local callee cell on binding (no write back to the caller)
 }
 
 type funcDef struct {
-	name      string // IR 函数名（已修饰：Point_sum / math_max / …）
+	name      string // IR function name (already mangled: Point_sum / math_max / …)
 	params    []funcParam
 	ret       string
 	body      []stmt
-	selfTyp   string // impl 方法 receiver 的 struct 类型名
-	selfParam string // receiver 参数名（self）
+	selfTyp   string // struct type name of the impl method receiver
+	selfParam string // receiver parameter name (self)
 }
 
 type structDef struct {
@@ -246,10 +246,10 @@ type structDef struct {
 	fieldTypes []string
 }
 
-// lowered 是正典 AST 降到 cgen IR 后的程序。
+// lowered is the program after the canonical AST was lowered to cgen IR.
 type lowered struct {
-	funcs     []*funcDef // 非 main 函数
-	mainStmts []stmt     // fn main 的函数体
+	funcs     []*funcDef // non-main functions
+	mainStmts []stmt     // body of fn main
 	structs   []structDef
 	vtables   []*vtableDef
 	ifaces    []string
@@ -257,19 +257,19 @@ type lowered struct {
 	runners   []runnerDef
 }
 
-// sortVTables 让 vtable 发射顺序稳定（便于回归对比）。
+// sortVTables keeps vtable emission order stable (for regression comparison).
 func (lp *lowered) sortVTables() {
 	sort.Slice(lp.vtables, func(i, j int) bool { return lp.vtables[i].sym < lp.vtables[j].sym })
 }
 
-// runnerDef 是 taskm.merge 的执行器（qthreads.c 以 void (*)(long long ×4) 调用）。
+// runnerDef is the executor for taskm.merge (qthreads.c calls it as void (*)(long long ×4)).
 type runnerDef struct {
-	fn     string   // 目标函数 IR 名
-	params []string // 目标函数形参类型（≤4；运行时以 i64 槽携带）
+	fn     string   // target function IR name
+	params []string // target function parameter types (≤4; carried at runtime in i64 slots)
 }
 
-// emitRunners 生成 taskm.merge 的执行器：把运行时 i64 槽还原成目标函数形参单元，
-// 再按引用调用目标函数（返回值丢弃）。支持 0..4 个任意可 lower 类型的形参。
+// emitRunners generates the taskm.merge executors: restore the runtime i64 slots into the target
+// function's parameter cells, then call it by reference (return value discarded). Supports 0..4 parameters of any lowerable type.
 func (e *emitter) emitRunners(rs []runnerDef) string {
 	if len(rs) == 0 {
 		return ""
@@ -313,15 +313,15 @@ func (e *emitter) emitRunners(rs []runnerDef) string {
 	return sb.String()
 }
 
-// externDef 是 library FFI 外部符号声明（LLVM declare + C ABI 调用）。
+// externDef is a library FFI external symbol declaration (LLVM declare + C ABI call).
 type externDef struct {
-	name   string // C 符号名
+	name   string // C symbol name
 	params []funcParam
-	ret    string // cgen 类型（cbool/f32/double/…）
-	lib    string // 链接库名（qkc-link 标记）
+	ret    string // cgen type (cbool/f32/double/…)
+	lib    string // link library name (qkc-link marker)
 }
 
-// vtableDef 是 (具体类型, 接口) 的派发表。
+// vtableDef is the dispatch table for (concrete type, interface).
 type vtableDef struct {
 	sym    string // @vt$A$Iface
 	iface  string
@@ -329,33 +329,33 @@ type vtableDef struct {
 	thunks []*ifaceThunk
 }
 
-// ifaceThunk 把接口调用还原为具体类型方法调用。
+// ifaceThunk lowers an interface call back to a concrete-type method call.
 type ifaceThunk struct {
 	iface   string
 	typ     string
 	method  string
-	irName  string   // 具体方法 IR 名
-	ret     string   // 具体返回类型（"void" = 无返回）
-	params  []string // 具体参数类型（不含 self）
-	selfIdx []int    // 接口声明为 Self 的参数下标（thunk 收 i8*）
-	boxRet  bool     // 接口返回 Self → thunk 装箱后返回 %Iface
-	vtSym   string   // 装箱用的 vtable 符号
+	irName  string   // concrete method IR name
+	ret     string   // concrete return type ("void" = no return)
+	params  []string // concrete parameter types (excluding self)
+	selfIdx []int    // indices of parameters the interface declares as Self (the thunk receives i8*)
+	boxRet  bool     // interface returns Self → the thunk boxes the result and returns %Iface
+	vtSym   string   // vtable symbol used for boxing
 }
 
-// ---------- LLVM IR 发射器 ----------
+// ---------- LLVM IR emitter ----------
 
 type strConst struct {
 	name string
 	size int
 }
 
-// varSlot 是变量的存储：alloca 槽（reg 是槽指针）或 SSA 直通/参数（reg 是值）。
+// varSlot is a variable's storage: an alloca slot (reg is the slot pointer) or an SSA passthrough/parameter (reg is the value).
 type varSlot struct {
 	reg    string
-	typ    string // 语言类型
-	param  bool   // 函数参数：值寄存器（历史形态，by-ref 后不再产生）
-	direct bool   // SSA 直通（单赋值标量）
-	ref    bool   // reg 指向调用方的存储（按引用形参）：写入穿透到调用方
+	typ    string // language type
+	param  bool   // function parameter: value register (legacy form, no longer produced after by-ref)
+	direct bool   // SSA passthrough (single-assignment scalar)
+	ref    bool   // reg points at the caller's storage (by-reference parameter): writes go through to the caller
 }
 
 type structField struct {
@@ -367,19 +367,19 @@ type funcSig struct {
 	name   string
 	params []funcParam
 	ret    string
-	byRef  bool // 用户函数：形参按引用传递（LLVM 层形参类型是「值类型*」）
+	byRef  bool // user function: parameters passed by reference (the LLVM-level parameter type is "value type*")
 }
 
 type emitter struct {
 	fnMeta map[string]*fnMeta
 
 	types   strings.Builder // %Point = type { ... } / %List = type { ... }
-	globals strings.Builder // 字符串常量
-	decls   strings.Builder // declare（外部符号）
-	helpers strings.Builder // 运行期助手（按需）
-	bodies  strings.Builder // 函数定义
+	globals strings.Builder // string constants
+	decls   strings.Builder // declare (external symbols)
+	helpers strings.Builder // runtime helpers (on demand)
+	bodies  strings.Builder // function definitions
 
-	body strings.Builder // 当前函数体
+	body strings.Builder // current function body
 	cur  string
 
 	blockCount int
@@ -395,13 +395,13 @@ type emitter struct {
 	breaks  []string
 
 	funcReturned bool
-	term         bool // 当前基本块已由 br/ret/unreachable 封闭
+	term         bool // the current basic block is already closed by br/ret/unreachable
 	assigned     map[string]bool
 
 	emitted        map[string]bool
-	deepCopied     map[string]bool // 已发射的深拷贝助手（按需）
-	rtti           map[string]bool // 已发射的 interface{} 类型描述符（按需）
-	rttiFns        map[string]bool // 已发射的 struct 打印助手（按需）
+	deepCopied     map[string]bool // deep-copy helpers already emitted (on demand)
+	rtti           map[string]bool // interface{} type descriptors already emitted (on demand)
+	rttiFns        map[string]bool // struct printing helpers already emitted (on demand)
 	hasList        bool
 	hasListS       bool
 	hasEmpty       bool
@@ -439,10 +439,10 @@ func newEmitter(lp *lowered) *emitter {
 		e.structs[sd.name] = fs
 	}
 	for _, fd := range lp.funcs {
-		// 用户函数：形参一律按引用传递（语言语义），LLVM 层形参类型 = 值类型*
+		// User functions: parameters are always passed by reference (language semantics), LLVM-level parameter type = value type*
 		e.sigs[fd.name] = &funcSig{name: fd.name, params: fd.params, ret: fd.ret, byRef: true}
 	}
-	e.ifaces = map[string]bool{"interface{}": true} // tAny：%Iface 值 + RTTI 描述符
+	e.ifaces = map[string]bool{"interface{}": true} // tAny: %Iface value + RTTI descriptor
 	for _, n := range lp.ifaces {
 		e.ifaces[n] = true
 	}
@@ -450,7 +450,7 @@ func newEmitter(lp *lowered) *emitter {
 	for _, ed := range lp.externs {
 		e.sigs[ed.name] = &funcSig{name: ed.name, params: ed.params, ret: ed.ret}
 	}
-	// taskm 运行时（qthreads.c）：pid = 小整数句柄
+	// taskm runtime (qthreads.c): pid = small integer handle
 	e.sigs["ql_spawn"] = &funcSig{name: "ql_spawn", ret: "int"}
 	e.sigs["ql_channel_new"] = &funcSig{name: "ql_channel_new", params: []funcParam{{typ: "int"}}, ret: "Channel"}
 	e.sigs["ql_block"] = &funcSig{name: "ql_block", params: []funcParam{{typ: "int"}}, ret: "void"}
@@ -460,12 +460,12 @@ func newEmitter(lp *lowered) *emitter {
 		{typ: "long"}, {typ: "long"}, {typ: "long"}, {typ: "long"}}, ret: "void"}
 	e.sigs["ql_send"] = &funcSig{name: "ql_send", params: []funcParam{{typ: "Channel"}, {typ: "int"}}, ret: "int"}
 	e.sigs["ql_recv"] = &funcSig{name: "ql_recv", params: []funcParam{{typ: "Channel"}}, ret: "int"}
-	// 签名 memorize（builtin，非用户函数：按值调用）
+	// signature memorize (builtin, not a user function: called by value)
 	e.sigs["ql_memo_new"] = &funcSig{name: "ql_memo_new", ret: "memorize"}
-	// HashTable 构造/键列表（其余方法由 compileTable 直接发射）
+	// HashTable construction/key list (the other methods are emitted directly by compileTable)
 	e.sigs["ql_table_new"] = &funcSig{name: "ql_table_new", ret: "HashTable"}
 	e.sigs["ql_table_keys"] = &funcSig{name: "ql_table_keys", params: []funcParam{{typ: "HashTable"}}, ret: "List<String>"}
-	// String 内建方法
+	// String builtin methods
 	str := func(name, ret string, params ...string) {
 		ps := make([]funcParam, 0, len(params))
 		for _, p := range params {
@@ -492,47 +492,47 @@ func newEmitter(lp *lowered) *emitter {
 	return e
 }
 
-// builtinDecls 是发射器固定声明的符号（FFI 重复声明会报 invalid redefinition）。
+// builtinDecls are the symbols the emitter always declares (a duplicate FFI declaration reports invalid redefinition).
 var builtinDecls = map[string]bool{
 	"printf": true, "malloc": true, "calloc": true, "free": true, "realloc": true,
 	"gettimeofday": true, "ql_strcat": true, "snprintf": true, "strcmp": true,
 	"strtod": true, "write": true, "exit": true,
 }
 
-// linkCandidates 把 library 名映射为**候选链接参数组**（按优先级）。
-// qkc 逐组尝试，全部失败时给出「库名 + 尝试过的参数」诊断（不透传 clang 原文了事）。
+// linkCandidates maps a library name to **candidate link-argument groups** (in priority order).
+// qkc tries each group in turn and, if all fail, diagnoses with "library name + attempted arguments" (instead of just passing raw clang output through).
 func linkCandidates(lib string) []string {
 	name := strings.TrimSpace(lib)
-	// 由 -L 的对象文件提供的库：不生成 -l 参数（符号由对象直接提供）
+	// Libraries provided by -L object files: no -l argument is generated (symbols come directly from the object)
 	if isObjectProvidedLib(name) {
 		return nil
 	}
-	// 路径 / 带扩展名：按文件链接
+	// Path / with extension: link by file
 	if strings.ContainsAny(name, "/.") {
 		return []string{name}
 	}
 	base := strings.TrimPrefix(name, "lib")
 	switch strings.ToLower(base) {
 	case "c":
-		// libc 默认已链接；显式 -lc 无害（且 libc.so 一定存在）
+		// libc is linked by default; an explicit -lc is harmless (and libc.so always exists)
 		return []string{"-lc"}
 	case "m":
 		return []string{"-lm"}
 	case "dl", "rt", "pthread", "stdc++", "gcc_s", "z", "curl", "sqlite3", "png", "jpeg":
 		return []string{"-l" + base}
 	case "gl":
-		// 解释器会试 libGL.so.1 / libgl.so.1；链接侧同样给大小写与 soname 兜底
+		// The interpreter tries libGL.so.1 / libgl.so.1; the link side likewise falls back on case and soname
 		return []string{"-lGL", "-l:libGL.so.1", "-lgl"}
 	case "vulkan":
 		return []string{"-lvulkan", "-l:libvulkan.so.1"}
 	case "clegrt":
-		// 项目本地运行时优先（产物树/assets），再退回系统路径
+		// Project-local runtime first (artifact tree/assets), then fall back to the system path
 		return []string{"-L. -l" + base, "-l" + base}
 	}
 	return []string{"-l" + base, "-L. -l" + base}
 }
 
-// ensureIface 发射接口值类型：{ i8* data, i8** vt }。
+// ensureIface emits the interface value type: { i8* data, i8** vt }.
 func (e *emitter) ensureIface() {
 	if e.hasIface {
 		return
@@ -544,8 +544,8 @@ func (e *emitter) ensureIface() {
 func (e *emitter) emitInstr(f string, args ...interface{}) {
 	s := fmt.Sprintf(f, args...)
 	e.body.WriteString("  " + s + "\n")
-	// 终结指令（br/ret/unreachable）后当前基本块已封闭：后续语句不可达，
-	// 且同一块内不得再出现第二条终结指令（否则 LLVM 会插入匿名块，SSA 编号错乱）。
+	// After a terminator (br/ret/unreachable) the current basic block is closed: the following statements
+	// are unreachable, and a second terminator must not appear in the same block (LLVM would insert an anonymous block and scramble SSA numbering).
 	if strings.HasPrefix(s, "br ") || strings.HasPrefix(s, "ret ") || s == "unreachable" {
 		e.term = true
 	}
@@ -557,7 +557,7 @@ func (e *emitter) newBlock() string {
 	return "b" + string(b)
 }
 
-// setBlock 切换到命名基本块（首次切换写出块标签）。
+// setBlock switches to a named basic block (the block label is written on the first switch).
 func (e *emitter) setBlock(name string) {
 	if e.cur != name {
 		e.body.WriteString("\n" + name + ":\n")
@@ -594,7 +594,7 @@ func (e *emitter) i8Ptr(c strConst) string {
 	return r
 }
 
-// llvmEscape 把字节序列转义为 LLVM IR 字符串体（可打印字符原样，其余 \XX，含结尾 NUL）。
+// llvmEscape escapes a byte sequence into an LLVM IR string body (printable characters as-is, everything else \XX, including the trailing NUL).
 func llvmEscape(b []byte) string {
 	var sb strings.Builder
 	for _, x := range append(b, 0) {
@@ -608,9 +608,9 @@ func llvmEscape(b []byte) string {
 	return sb.String()
 }
 
-// ---------- 类型映射 ----------
+// ---------- Type mapping ----------
 
-// tyName 把语言类型名转成 LLVM 标识符安全的类型名（泛型实例：Box<int> → Box_int_）。
+// tyName turns a language type name into an LLVM-identifier-safe type name (generic instance: Box<int> → Box_int_).
 func tyName(t string) string {
 	var sb strings.Builder
 	for _, r := range t {
@@ -624,7 +624,7 @@ func tyName(t string) string {
 	return sb.String()
 }
 
-// ensureStruct 保证 struct 类型的 LLVM 定义已发射（按需、幂等）。
+// ensureStruct makes sure the LLVM definition of a struct type is emitted (on demand, idempotent).
 func (e *emitter) ensureStruct(name string) {
 	fields, ok := e.structs[name]
 	if !ok || e.emitted[name] {
@@ -643,7 +643,7 @@ func (e *emitter) ensureStruct(name string) {
 	e.types.WriteString(sb.String())
 }
 
-// ensureList 保证 List 类型的 LLVM 定义已发射。
+// ensureList makes sure the LLVM definition of a List type is emitted.
 func (e *emitter) ensureList() {
 	if e.hasList {
 		return
@@ -652,7 +652,7 @@ func (e *emitter) ensureList() {
 	e.types.WriteString("%List = type { i32*, i32, i32 }\n") // buf, head, tail
 }
 
-// ensureListS 保证 List<String> 的 LLVM 定义已发射（元素是 i8* 指针）。
+// ensureListS makes sure the LLVM definition of List<String> is emitted (elements are i8* pointers).
 func (e *emitter) ensureListS() {
 	if e.hasListS {
 		return
@@ -661,7 +661,7 @@ func (e *emitter) ensureListS() {
 	e.types.WriteString("%ListS = type { i8**, i32, i32 }\n") // buf, head, tail
 }
 
-// irElem 返回聚合类型的元素类型（GEP 的源类型）：%Point* → %Point；标量原样。
+// irElem returns the element type of an aggregate type (the GEP source type): %Point* → %Point; scalars as-is.
 func (e *emitter) irElem(t string) string {
 	p := e.ir(t)
 	if strings.HasPrefix(p, "%") {
@@ -670,7 +670,7 @@ func (e *emitter) irElem(t string) string {
 	return p
 }
 
-// ir 返回语言类型的 LLVM 表示。
+// ir returns the LLVM representation of a language type.
 func (e *emitter) ir(t string) string {
 	switch t {
 	case "int":
@@ -686,10 +686,10 @@ func (e *emitter) ir(t string) string {
 	}
 	if e.ifaces[t] {
 		e.ensureIface()
-		return "%Iface" // 接口是值类型（data + vtable 两个指针）
+		return "%Iface" // an interface is a value type (two pointers: data + vtable)
 	}
-	// library FFI 的 C ABI 类型（f32 = 单精度 float；double = 双精度；cbool = C int；long = i64）
-	// 以及 taskm 运行时类型（thread = pid 句柄 i32；Channel = i8*；runner = 函数指针 i8*）
+	// C ABI types for library FFI (f32 = single-precision float; double = double precision; cbool = C int; long = i64)
+	// plus taskm runtime types (thread = pid handle i32; Channel = i8*; runner = function pointer i8*)
 	switch t {
 	case "f32":
 		return "float"
@@ -708,9 +708,9 @@ func (e *emitter) ir(t string) string {
 	case "runner":
 		return "i8*"
 	case "memorize":
-		return "i8*" // 签名实例句柄（ql_memo_new）
+		return "i8*" // signature instance handle (ql_memo_new)
 	case "HashTable":
-		return "i8*" // HashTable<K,V> 句柄（上面已判过 HasPrefix）
+		return "i8*" // HashTable<K,V> handle (HasPrefix was already checked above)
 	case "intptr":
 		return "i32*"
 	}
@@ -735,7 +735,7 @@ func (e *emitter) ir(t string) string {
 	return "i32"
 }
 
-// alignOf 返回类型的对齐字节数。
+// alignOf returns the alignment of a type in bytes.
 func (e *emitter) alignOf(t string) int {
 	switch t {
 	case "bool":
@@ -754,8 +754,8 @@ func (e *emitter) alignOf(t string) int {
 	return 4
 }
 
-// emptyString 返回空串指针（String 的零值：解释器零值 String 打印为 ""，
-// 不能是 null —— printf("%s", NULL) 会打印 "(null)"，strcmp 会崩溃）。
+// emptyString returns the empty-string pointer (the zero value of String: the interpreter prints a zero String as "",
+// it cannot be null — printf("%s", NULL) prints "(null)" and strcmp would crash).
 func (e *emitter) emptyString() string {
 	if !e.hasEmpty {
 		e.hasEmpty = true
@@ -766,7 +766,7 @@ func (e *emitter) emptyString() string {
 	return r
 }
 
-// zeroOf 返回语言类型的零值（按 LLVM 类型）。
+// zeroOf returns the zero value of a language type (as an LLVM type).
 func (e *emitter) zeroOf(t string) string {
 	switch t {
 	case "int", "thread", "long":
@@ -791,11 +791,11 @@ func (e *emitter) zeroOf(t string) string {
 	if e.ifaces[t] {
 		return "zeroinitializer"
 	}
-	return "null" // List / struct / pointer：引用零值 = null
+	return "null" // List / struct / pointer: reference zero value = null
 }
 
-// zeroStructFields 把刚分配（calloc 清零）的 struct 的引用型字段初始化为零值对象：
-// String → 空串；嵌套 struct → 递归分配零值实例（解释器零值 struct 的字段是有效对象）。
+// zeroStructFields initializes the reference-typed fields of a freshly allocated (calloc-zeroed) struct to zero-value objects:
+// String → empty string; nested struct → recursively allocate a zero-value instance (the fields of an interpreter zero-value struct are valid objects).
 func (e *emitter) zeroStructFields(ptr, typ string, depth int) {
 	if depth > 16 {
 		return
@@ -820,7 +820,7 @@ func (e *emitter) zeroStructFields(ptr, typ string, depth int) {
 	}
 }
 
-// ---------- 程序组装 ----------
+// ---------- Program assembly ----------
 
 func (e *emitter) emitProgram(lp *lowered) string {
 	e.emitted = map[string]bool{}
@@ -843,7 +843,7 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_channel_new(i32)\n")
 	e.decls.WriteString("declare i32 @ql_send(i8*, i32)\n")
 	e.decls.WriteString("declare i32 @ql_recv(i8*)\n")
-	// String 内建方法运行时（qthreads.c：UTF-8 感知，与解释器同语义）
+	// String builtin method runtime (qthreads.c: UTF-8 aware, same semantics as the interpreter)
 	e.decls.WriteString("declare i32 @ql_str_size(i8*)\n")
 	e.decls.WriteString("declare i32 @ql_str_contains(i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @ql_str_startswith(i8*, i8*)\n")
@@ -857,7 +857,7 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_str_replace(i8*, i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @ql_str_toint(i8*, i32)\n")
 	e.decls.WriteString("declare double @ql_str_tofloat(i8*, i32)\n")
-	// interface{}（tAny）运行期：RTTI 描述符分派 / 装箱值拆箱与相等
+	// interface{} (tAny) runtime: RTTI descriptor dispatch / unboxing and equality of boxed values
 	e.decls.WriteString("declare i8* @ql_any_str(i8*, i8**)\n")
 	e.decls.WriteString("declare i32 @ql_any_eq(i8*, i8**, i8*, i8**)\n")
 	e.decls.WriteString("declare i32 @ql_any_int(i8*, i8**)\n")
@@ -870,7 +870,7 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_any_str_string(i8*)\n")
 	e.decls.WriteString("declare i8* @ql_any_str_list(i8*)\n")
 	e.decls.WriteString("declare i8* @ql_long_to_str(i64)\n")
-	// HashTable<K,V> 运行期
+	// HashTable<K,V> runtime
 	e.decls.WriteString("declare i8* @ql_table_new()\n")
 	e.decls.WriteString("declare i8* @ql_table_key(i8*, i8**)\n")
 	e.decls.WriteString("declare void @ql_table_put(i8*, i8*, i8*, i8**)\n")
@@ -888,17 +888,17 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_any_copy_nil(i8*)\n")
 	e.decls.WriteString("declare i8* @ql_any_ptr(i8*, i8**)\n")
 	e.decls.WriteString("declare i8* @ql_list_str_str(i8**, i32, i32)\n")
-	e.ensureListS() // declare 引用了 %ListS，类型定义必须先于声明发射
+	e.ensureListS() // declare references %ListS, so the type definition must be emitted before the declaration
 	e.decls.WriteString("declare %ListS* @ql_str_split(i8*, i8*)\n")
-	// 签名 memorize 运行时（@mb() 记忆化：int 键 → int 值）
+	// signature memorize runtime (@mb() memoization: int key → int value)
 	e.decls.WriteString("declare i8* @ql_memo_new()\n")
 	e.decls.WriteString("declare i32 @ql_memo_get(i8*, i32, i32*, i32*)\n")
 	e.decls.WriteString("declare void @ql_memo_put(i8*, i32, i32*, i32)\n")
-	// List 内建方法运行时（int 元素；可见区间 head..tail）
+	// List builtin method runtime (int elements; visible range head..tail)
 	e.decls.WriteString("declare void @ql_list_int_sort(i32*, i32, i32)\n")
 	e.decls.WriteString("declare i8* @ql_list_int_str(i32*, i32, i32)\n\n")
 
-	// library FFI：外部符号声明 + 链接库标记（main.go 解析 ; qkc-link:）
+	// library FFI: external symbol declarations + link-library marker (main.go parses ; qkc-link:)
 	seenExt := map[string]bool{}
 	for _, ed := range lp.externs {
 		if seenExt[ed.name] || builtinDecls[ed.name] {
@@ -921,12 +921,12 @@ func (e *emitter) emitProgram(lp *lowered) string {
 			continue
 		}
 		libs[ed.lib] = true
-		// 由 qkc -L 提供的库（.so 已在输出目录，运行时 dlopen）：
-		// **不生成 qkc-link 标记**，避免链接期去找不存在的系统库。
+		// Libraries provided by qkc -L (the .so is already in the output directory, dlopen at runtime):
+		// **no qkc-link marker is generated**, to avoid looking for a nonexistent system library at link time.
 		if isObjectProvidedLib(ed.lib) {
 			continue
 		}
-		// 格式：; qkc-link: <库名> => <候选参数> => <候选参数>
+		// Format: ; qkc-link: <library name> => <candidate argument> => <candidate argument>
 		link.WriteString("; qkc-link: " + ed.lib)
 		for _, cand := range linkCandidates(ed.lib) {
 			link.WriteString(" => " + cand)
@@ -935,11 +935,11 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	}
 
 	e.vars = map[string]varSlot{}
-	// 按依赖顺序预发射全部 struct 类型定义（lower 已保证被依赖者在前）
+	// Pre-emit all struct type definitions in dependency order (lower guarantees dependencies come first)
 	for _, sd := range lp.structs {
 		e.ensureStruct(sd.name)
 	}
-	// 预注册全部字符串常量
+	// Pre-register all string constants
 	e.strConst("true")
 	e.strConst("false")
 	for _, fd := range lp.funcs {
@@ -950,8 +950,8 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	for _, s := range lp.mainStmts {
 		e.preRegisterStmt(s)
 	}
-	// 预扫描被赋值变量（决定 SSA 直通）；按引用传递的实参必须有自己的存储
-	// （否则 callee 的写入无法回写），因此与「被赋值」同等对待。
+	// Pre-scan assigned variables (decides SSA passthrough); an argument passed by reference must have its own storage
+	// (otherwise the callee's writes cannot be written back), so it is treated the same as "assigned".
 	e.assigned = map[string]bool{}
 	for _, fd := range lp.funcs {
 		scanAssigned(fd.body, e.assigned)
@@ -960,14 +960,14 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	scanAssigned(lp.mainStmts, e.assigned)
 	scanByRefArgs(lp.mainStmts, e.sigs, e.assigned)
 
-	// 先生成全部函数体（期间动态追加字符串常量/类型定义），最后统一组装
+	// First generate all function bodies (string constants/type definitions are appended dynamically), then assemble at the end
 	for _, fd := range lp.funcs {
 		if fd.name != "main" {
 			e.bodies.WriteString(e.emitFunc(fd))
 		}
 	}
 	e.cur = "entry"
-	e.curRet = "int" // main 的 LLVM 返回类型是 i32（log/末尾统一 ret i32 0）
+	e.curRet = "int" // main's LLVM return type is i32 (log/uniform ret i32 0 at the end)
 	e.body.Reset()
 	e.funcReturned = false
 	e.term = false
@@ -978,15 +978,15 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	if !e.term {
 		e.emitInstr("ret i32 0")
 	}
-	// 库模式：**不发射 main**（库有 main 会在动态链接时顶替宿主入口，且破坏符号解析）
+	// Lib mode: **main is not emitted** (a library with main would displace the host entry point at dynamic link time and break symbol resolution)
 	if !libMode {
 		e.bodies.WriteString("define i32 @main()" + fnAttrs("main", e.fnMeta) + " {\n" + e.body.String() + "}\n")
 	}
 
 	helpers := ""
 	if libMode {
-		// 库模式（**链接期动态链接**，不依赖 dlopen、跨系统一致）：
-		// 运行时辅助函数**只声明不定义**，由宿主程序提供 —— 依赖方向为「程序(含运行时) ← 库」。
+		// Lib mode (**link-time dynamic linking**, no dlopen, consistent across systems):
+		// runtime helper functions are **declared but not defined**, provided by the host program — the dependency direction is "program (incl. runtime) ← library".
 		if e.needIntToStr {
 			helpers += "declare i8* @ql_int_to_str(i32)\n"
 		}
@@ -1013,15 +1013,15 @@ func (e *emitter) emitProgram(lp *lowered) string {
 			helpers += panicHelper
 		}
 	}
-	// runner 的形参类型可能按需发射 struct 定义，必须在读 e.types 之前生成
+	// The runner's parameter types may emit struct definitions on demand, so this must happen before reading e.types
 	runners := e.emitRunners(lp.runners)
 	return link.String() + e.types.String() + e.globals.String() + e.decls.String() +
 		helpers + e.helpers.String() + e.bodies.String() + e.emitVtables(e.vtables) + runners
 }
 
-// emitFunc 生成单个非 main 函数的定义。
+// emitFunc generates the definition of a single non-main function.
 func (e *emitter) emitFunc(fd *funcDef) string {
-	// 注意：regCount 不重置——LLVM 寄存器编号是模块全局递增的
+	// Note: regCount is not reset — LLVM register numbering increases globally across the module
 	e.blockCount = 0
 	e.body.Reset()
 	e.vars = map[string]varSlot{}
@@ -1039,8 +1039,8 @@ func (e *emitter) emitFunc(fd *funcDef) string {
 		first = false
 		sig.WriteString(typ + " noundef " + reg)
 	}
-	// 形参一律按引用传递：LLVM 形参是「指向调用方实参单元」的指针，callee 读写
-	// 直接 load/store 穿透（写回调用方）。copyd 形参在入口深拷贝到本地单元。
+	// Parameters are always passed by reference: an LLVM parameter is a pointer to "the caller's argument cell", and the callee's loads/stores
+	// go straight through (writing back to the caller). copyd parameters are deep-copied into a local cell at entry.
 	if fd.selfTyp != "" {
 		addParam(e.ir(fd.selfTyp)+"*", "%self")
 		e.vars[fd.selfParam] = varSlot{reg: "%self", typ: fd.selfTyp, ref: true}
@@ -1080,16 +1080,16 @@ func (e *emitter) emitFunc(fd *funcDef) string {
 	return sig.String() + "{\n" + e.body.String() + "}\n"
 }
 
-// ---------- 按引用形参（call-by-reference） ----------
+// ---------- By-reference parameters (call-by-reference) ----------
 
-// isListType 判断语言类型是否 List<...>（当前后端只 lower List<int>）。
+// isListType reports whether a language type is List<...> (the current backend only lowers List<int>).
 func isListType(t string) bool { return strings.HasPrefix(t, "List<") }
 
-// isIfaceTypeE 判断类型是否接口（发射器侧的接口名表）。
+// isIfaceTypeE reports whether a type is an interface (the emitter-side interface name table).
 func (e *emitter) isIfaceTypeE(t string) bool { return e.ifaces[t] }
 
-// bindCopydParam 绑定 copyd 形参：把调用方单元的值深拷贝到 callee 本地单元，
-// callee 内的写入只影响副本（解释器：声明写法绑裸值、类型写法绑 Copyd 包装值）。
+// bindCopydParam binds a copyd parameter: deep-copy the caller cell's value into a local callee cell,
+// so writes inside the callee only affect the copy (interpreter: the declaration form binds the bare value, the type form binds a Copyd wrapper).
 func (e *emitter) bindCopydParam(p funcParam, src string) {
 	typ := p.typ
 	llt := e.ir(typ)
@@ -1119,9 +1119,9 @@ func (e *emitter) bindCopydParam(p funcParam, src string) {
 	e.vars[p.name] = varSlot{reg: slot, typ: typ}
 }
 
-// emitDeepCopyStruct 发射 struct 深拷贝助手并返回符号名（按需、幂等）。
-// 语义与解释器 copydCopy 一致：字段递归复制（struct 递归、List 深拷贝、
-// String/标量/接口按值）；空指针字段保持 null。
+// emitDeepCopyStruct emits a struct deep-copy helper and returns its symbol name (on demand, idempotent).
+// Semantics match the interpreter's copydCopy: fields are copied recursively (struct recursion, deep-copied List,
+// String/scalar/interface by value); null pointer fields stay null.
 func (e *emitter) emitDeepCopyStruct(typ string) string {
 	sym := "ql_copyd_struct_" + tyName(typ)
 	if e.deepCopied == nil {
@@ -1174,7 +1174,7 @@ func (e *emitter) emitDeepCopyStruct(typ string) string {
 			e.emitInstr("br label %%%s", endB)
 			e.setBlock(endB)
 		default:
-			// 标量 / String / 接口：按值复制（String 不可变；接口字段在 lower 阶段已拦截）
+			// Scalar / String / interface: copy by value (String is immutable; interface fields were already rejected in the lower stage)
 			e.emitInstr("store %s %s, %s* %s", llt, sv, llt, dg)
 		}
 	}
@@ -1185,7 +1185,7 @@ func (e *emitter) emitDeepCopyStruct(typ string) string {
 	return sym
 }
 
-// emitDeepCopyStructCall 调用 struct 深拷贝助手。
+// emitDeepCopyStructCall calls the struct deep-copy helper.
 func (e *emitter) emitDeepCopyStructCall(src, typ string) string {
 	sym := e.emitDeepCopyStruct(typ)
 	r := e.newReg()
@@ -1193,8 +1193,8 @@ func (e *emitter) emitDeepCopyStructCall(src, typ string) string {
 	return r
 }
 
-// emitDeepCopyList 发射 List 深拷贝助手（在 helper 函数里完成），返回新 List 指针。
-// 可见区间 head..tail 复制到新缓冲区（head=0, tail=size），解释器 copyDeep 语义。
+// emitDeepCopyList emits a List deep-copy helper (completed inside the helper function) and returns the new List pointer.
+// The visible range head..tail is copied into a new buffer (head=0, tail=size), the interpreter's copyDeep semantics.
 func (e *emitter) emitDeepCopyList(src string) string {
 	e.ensureDeepCopyList()
 	r := e.newReg()
@@ -1202,7 +1202,7 @@ func (e *emitter) emitDeepCopyList(src string) string {
 	return r
 }
 
-// ensureDeepCopyList 按需发射 @ql_copyd_list。
+// ensureDeepCopyList emits @ql_copyd_list on demand.
 func (e *emitter) ensureDeepCopyList() {
 	if e.deepCopied["ql_copyd_list"] {
 		return
@@ -1227,7 +1227,7 @@ func (e *emitter) ensureDeepCopyList() {
 	e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
 	head, size := e.listHeadSize("%src")
 	srcBuf := e.listBuf("%src")
-	// 新缓冲区：至少 1 个元素（与 List 字面量/append 的容量假设一致）
+	// New buffer: at least 1 element (consistent with the capacity assumption of List literals/append)
 	cap0 := e.newReg()
 	e.emitInstr("%s = icmp slt i32 %s, 1", cap0, size)
 	capv := e.newReg()
@@ -1240,7 +1240,7 @@ func (e *emitter) ensureDeepCopyList() {
 	e.emitInstr("%s = call i8* @malloc(i64 %s)", buf, sz)
 	np := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to i32*", np, buf)
-	// 循环复制可见元素
+	// Copy the visible elements in a loop
 	iv := e.newReg()
 	e.emitInstr("%s = alloca i32, align 4", iv)
 	e.emitInstr("store i32 0, i32* %s", iv)
@@ -1286,7 +1286,7 @@ func (e *emitter) ensureDeepCopyList() {
 	e.helpers.WriteString("define %List* @ql_copyd_list(%List* noundef %src) {\n" + body + "}\n")
 }
 
-// ---------- 语句 ----------
+// ---------- Statements ----------
 
 func (e *emitter) preRegisterStmt(s stmt) {
 	switch st := s.(type) {
@@ -1406,7 +1406,7 @@ func (e *emitter) preRegister(x *expr) {
 func (e *emitter) emitBlock(stmts []stmt) {
 	for _, s := range stmts {
 		if e.funcReturned || e.term {
-			return // 终结指令之后的语句不可达，跳过
+			return // statements after a terminator are unreachable, skip
 		}
 		e.emitStmt(s)
 	}
@@ -1415,7 +1415,7 @@ func (e *emitter) emitBlock(stmts []stmt) {
 func (e *emitter) emitStmt(s stmt) {
 	switch st := s.(type) {
 	case *exprStmt:
-		e.compileExpr(st.x) // 副作用求值，结果丢弃
+		e.compileExpr(st.x) // evaluate for side effects, discard the result
 	case *returnStmt:
 		e.emitReturn(st)
 	case *printlnStmt:
@@ -1447,12 +1447,12 @@ func (e *emitter) emitStmt(s stmt) {
 			e.emitInstr("br label %%%s", e.breaks[len(e.breaks)-1])
 		}
 	case *logStmt:
-		e.compileExpr(st.x) // 求值（副作用），结果只进日志
-		e.emitRetZero()     // log 记录后立即结束函数（解释器返回 nil）
+		e.compileExpr(st.x) // evaluate (side effects), the result only goes to the log
+		e.emitRetZero()     // end the function right after the log record (the interpreter returns nil)
 	}
 }
 
-// emitRetZero 发射当前函数返回类型的零值返回（log 用）。
+// emitRetZero emits a zero-value return of the current function's return type (used by log).
 func (e *emitter) emitRetZero() {
 	switch e.curRet {
 	case "int":
@@ -1474,9 +1474,9 @@ func (e *emitter) emitReturn(st *returnStmt) {
 		e.emitRetZero()
 		return
 	}
-	// 尾调用优化：return f(args) → tail call（尾递归栈 O(1)）。
-	// 按引用传递后只有「实参地址在调用期间稳定」时才能尾调用：若某个实参是当前帧的
-	// 临时 alloca，尾调用会让指针失效（LLVM tail call 规则），此时退回普通调用。
+	// Tail call optimization: return f(args) → tail call (tail-recursive stack O(1)).
+	// With by-reference passing a tail call is only possible when "the argument address is stable for the duration of the call": if an argument is a
+	// temporary alloca in the current frame, the tail call would invalidate the pointer (LLVM tail call rules), so we fall back to a normal call.
 	if st.x.kind == kCall && st.x.call != nil && st.x.call.name != "sum" && st.x.call.name != "clock" {
 		c := st.x.call
 		argRegs, tailSafe := e.compileArgs(c)
@@ -1496,9 +1496,9 @@ func (e *emitter) emitReturn(st *returnStmt) {
 	e.funcReturned = true
 }
 
-// compileArgs 编译调用实参，并按被调函数签名做隐式转换（int → float）。
-// 返回 "类型 寄存器" 形式的列表；第二返回值表示全部实参是否 tail-call 安全
-// （按引用传递且实参单元在调用方帧内时，尾调用会让指针失效，必须禁用 TCO）。
+// compileArgs compiles call arguments and applies implicit conversions per the callee signature (int → float).
+// Returns a list of "type register" strings; the second return value reports whether all arguments are tail-call safe
+// (with by-reference passing and an argument cell inside the caller's frame, a tail call would invalidate the pointer, so TCO must be disabled).
 func (e *emitter) compileArgs(c *callExpr) ([]string, bool) {
 	sig := e.sigs[c.name]
 	out := make([]string, 0, len(c.args))
@@ -1521,19 +1521,19 @@ func (e *emitter) compileArgs(c *callExpr) ([]string, bool) {
 			want = vt
 		}
 		v = e.coerce(v, vt, want)
-		// 变参（printf 风格）不在此列，本 IR 全部为定参
+		// Variadic (printf style) is not covered here; every IR function in this backend has fixed arity
 		out = append(out, e.ir(want)+" "+v)
 	}
 	return out, tailSafe
 }
 
-// compileArgAddr 为按引用传递的实参准备存储，返回（地址、语言类型、tail 安全性）。
-//   - 左值实参（变量/字段/List 下标）且类型完全匹配 → 直接用其自身存储（写回调用方）；
-//   - 其余（字面量、算术结果、需要 int→float 转换、需要装箱）→ 调用方临时单元，
-//     callee 的写入不回写（与解释器「非左值实参是临时单元」一致）。
+// compileArgAddr prepares storage for an argument passed by reference; returns (address, language type, tail safety).
+//   - lvalue argument (variable/field/List index) with an exactly matching type → use its own storage (writes back to the caller);
+//   - everything else (literal, arithmetic result, needs an int→float conversion, needs boxing) → a caller temporary cell,
+//     where the callee's writes are not written back (consistent with the interpreter's "non-lvalue arguments are temporary cells").
 //
-// tailSafe 表示该地址是否在整个调用期间稳定（堆对象/调用方存储 = 安全；
-// 当前帧的 alloca 临时单元 = 尾调用会失效）。
+// tailSafe reports whether that address is stable for the whole call (heap object/caller storage = safe;
+// an alloca temporary cell in the current frame = invalidated by a tail call).
 func (e *emitter) compileArgAddr(x *expr, want string) (string, string, bool) {
 	if x != nil && x.ifaceBox == "" {
 		if p, t, safe, ok := e.lvalueAddr(x); ok && (want == "" || want == "?" || t == want) {
@@ -1552,16 +1552,16 @@ func (e *emitter) compileArgAddr(x *expr, want string) (string, string, bool) {
 	return slot, want, false
 }
 
-// lvalueAddr 尝试取表达式的左值地址（返回地址、语言类型、是否 tail-call 安全）。
-// 只支持后端已有的三种左值：变量、struct 字段、List 下标（与解释器 evalArg 同集）。
+// lvalueAddr tries to take the lvalue address of an expression (returns address, language type, tail-call safety).
+// Only the three lvalue kinds the backend already has are supported: variable, struct field, List index (the same set as the interpreter's evalArg).
 func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
 	switch x.kind {
 	case kIdent:
 		info, ok := e.vars[x.s]
 		if !ok || info.param || info.direct {
-			return "", "", false, false // SSA 直通/寄存器变量没有可变存储
+			return "", "", false, false // SSA passthrough/register variables have no mutable storage
 		}
-		// ref=true：存储属于调用方（或堆），尾调用安全；本地 alloca 不安全
+		// ref=true: the storage belongs to the caller (or the heap), tail-call safe; a local alloca is not
 		return info.reg, info.typ, info.ref, true
 	case kField:
 		if x.field == nil || x.field.recv == nil {
@@ -1575,7 +1575,7 @@ func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
 			if f.name == x.field.name {
 				g := e.newReg()
 				e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(otyp), e.irElem(otyp), obj, i)
-				// struct 实例要么在堆上，要么是调用方的对象 → 地址稳定
+				// A struct instance is either on the heap or belongs to the caller → the address is stable
 				return g, f.typ, true, true
 			}
 		}
@@ -1610,12 +1610,12 @@ func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
 		i64 := e.toI64(idx)
 		g2 := e.newReg()
 		e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, p, i64)
-		return g2, "int", true, true // 缓冲区在堆上
+		return g2, "int", true, true // the buffer is on the heap
 	}
 	return "", "", false, false
 }
 
-// sigRet 返回被调函数的返回类型（无签名时按 i32 假定）。
+// sigRet returns the return type of the callee (assumed i32 when there is no signature).
 func (e *emitter) sigRet(name string) string {
 	if s, ok := e.sigs[name]; ok {
 		return s.ret
@@ -1623,13 +1623,13 @@ func (e *emitter) sigRet(name string) string {
 	return "int"
 }
 
-// coerce 在类型间做隐式转换：语言层 int → float（double），以及 FFI 的
-// f32 ↔ double / bool ↔ C int 边界转换。
+// coerce performs implicit conversions between types: language-level int → float (double), plus FFI's
+// f32 ↔ double / bool ↔ C int boundary conversions.
 func (e *emitter) coerce(reg, from, to string) string {
 	if from == to || to == "" || to == "?" {
 		return reg
 	}
-	// interface{} → 具体标量/String：运行期按 RTTI kind 校验后拆箱（不匹配则明确运行期错误）
+	// interface{} → concrete scalar/String: unbox at runtime after checking the RTTI kind (an explicit runtime error on mismatch)
 	if from == "interface{}" {
 		e.ensureIface()
 		d := e.newReg()
@@ -1706,10 +1706,10 @@ func (e *emitter) coerce(reg, from, to string) string {
 	return reg
 }
 
-// ---------- 声明 / 赋值 ----------
+// ---------- Declaration / assignment ----------
 
 func (e *emitter) emitDecl(st *declStmt) {
-	// T& / pointer T：槽里放指针；new T 分配单元，无初值 → null
+	// T& / pointer T: the slot holds a pointer; new T allocates a cell, no initial value → null
 	if _, _, isRef := ptrRefBase(st.typ); isRef {
 		slot := e.newReg()
 		llt := e.ir(st.typ)
@@ -1722,7 +1722,7 @@ func (e *emitter) emitDecl(st *declStmt) {
 		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
 		return
 	}
-	// HashTable<K,V>：i8* 句柄（构造已由 HashTable::new() 发射）
+	// HashTable<K,V>: an i8* handle (construction is already emitted by HashTable::new())
 	if isTableT(st.typ) {
 		slot := e.newReg()
 		e.emitInstr("%s = alloca i8*, align 8", slot)
@@ -1736,7 +1736,7 @@ func (e *emitter) emitDecl(st *declStmt) {
 	}
 	switch st.typ {
 	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel", "memorize":
-		// SSA 直通：单赋值标量直接用寄存器（免 alloca/load/store）
+		// SSA passthrough: a single-assignment scalar uses a register directly (no alloca/load/store)
 		if !e.assigned[st.name] && st.init != nil && !e.funcReturned {
 			v, vt := e.compileExpr(st.init)
 			e.vars[st.name] = varSlot{reg: e.coerce(v, vt, st.typ), typ: st.typ, direct: true}
@@ -1765,7 +1765,7 @@ func (e *emitter) emitDecl(st *declStmt) {
 	case "List<int>":
 		e.ensureList()
 		if st.init != nil && st.init.kind != kList {
-			// List 变量 / 调用结果：引用语义，直接存指针
+			// List variable / call result: reference semantics, store the pointer directly
 			slot := e.newReg()
 			e.emitInstr("%s = alloca %%List*, align 8", slot)
 			v, _ := e.compileExpr(st.init)
@@ -1815,7 +1815,7 @@ func (e *emitter) emitDecl(st *declStmt) {
 			e.vars[st.name] = varSlot{reg: reg, typ: st.typ}
 			return
 		}
-		// struct 类型：引用语义（calloc 零值 + 可选字面量字段写入）
+		// struct type: reference semantics (calloc zero value + optional literal field writes)
 		reg := e.newReg()
 		ptrTy := e.ir(st.typ)
 		e.emitInstr("%s = alloca %s, align 8", reg, ptrTy)
@@ -1833,7 +1833,7 @@ func (e *emitter) emitDecl(st *declStmt) {
 	}
 }
 
-// listSObj 取 List<String> 变量的对象指针。
+// listSObj returns the object pointer of a List<String> variable.
 func (e *emitter) listSObj(name string) string {
 	e.ensureListS()
 	info, ok := e.vars[name]
@@ -1848,7 +1848,7 @@ func (e *emitter) listSObj(name string) string {
 	return r
 }
 
-// listSRange 取 List<String> 的可见区间与缓冲区。
+// listSRange returns the visible range and buffer of a List<String>.
 func (e *emitter) listSRange(obj string) (buf, head, size string) {
 	e.ensureListS()
 	hf := e.newReg()
@@ -1868,7 +1868,7 @@ func (e *emitter) listSRange(obj string) (buf, head, size string) {
 	return p, h, sz
 }
 
-// listSSlot 把 List<String> 对象指针存进 alloca 槽（变量引用语义）。
+// listSSlot stores a List<String> object pointer into an alloca slot (variable reference semantics).
 func (e *emitter) listSSlot(objPtr string) string {
 	e.ensureListS()
 	slot := e.newReg()
@@ -1877,7 +1877,7 @@ func (e *emitter) listSSlot(objPtr string) string {
 	return slot
 }
 
-// listSlot 把 List 对象指针存进 alloca 槽（变量引用语义：槽里放指针）。
+// listSlot stores a List object pointer into an alloca slot (variable reference semantics: the slot holds a pointer).
 func (e *emitter) listSlot(objPtr string) string {
 	slot := e.newReg()
 	e.emitInstr("%s = alloca %%List*, align 8", slot)
@@ -1885,8 +1885,8 @@ func (e *emitter) listSlot(objPtr string) string {
 	return slot
 }
 
-// structAlloc 分配一个清零的 struct 实例（LLVM 布局：GEP null,1 → 真实大小，
-// 避免手算字段对齐导致越界写）。
+// structAlloc allocates a calloc-zeroed struct instance (LLVM layout: GEP null,1 → real size,
+// avoiding out-of-bounds writes from hand-computed field alignment).
 func (e *emitter) structAlloc(typ string) string {
 	elem := e.irElem(typ)
 	g := e.newReg()
@@ -1905,8 +1905,8 @@ func (e *emitter) emitAssign(st *assignStmt) {
 		return
 	}
 	if st.thru {
-		// T& 变量：写穿指针指向的单元；指针为 null（未初始化）时惰性分配单元
-		// （解释器语义：int& q; q = 7 → q 自己持有该值）
+		// T& variable: write through the cell the pointer points at; when the pointer is null (uninitialized), allocate the cell lazily
+		// (interpreter semantics: int& q; q = 7 → q itself holds that value)
 		_, base, _ := ptrRefBase(info.typ)
 		ptr := e.newReg()
 		pllt := e.ir(info.typ)
@@ -1929,7 +1929,7 @@ func (e *emitter) emitAssign(st *assignStmt) {
 	v, vt := e.compileExpr(st.x)
 	v = e.coerce(v, vt, info.typ)
 	if info.param || info.direct {
-		// 参数/直通变量本不该被赋值（lowering 的 assigned 分析保证）
+		// Parameters/passthrough variables should never be assigned (guaranteed by lowering's assigned analysis)
 		e.emitInstr("; assignment to register variable %s", st.name)
 		return
 	}
@@ -1938,7 +1938,7 @@ func (e *emitter) emitAssign(st *assignStmt) {
 }
 
 func (e *emitter) emitIndexAssign(st *indexAssignStmt) {
-	// l[i] = v（接收者可以是任意 List<int>/List<String> 表达式）
+	// l[i] = v (the receiver may be any List<int>/List<String> expression)
 	lo, lt := e.compileExpr(st.recv)
 	if lt == "List<String>" {
 		p, head, size := e.listSRange(lo)
@@ -1991,7 +1991,7 @@ func (e *emitter) emitFieldAssign(st *fieldAssignStmt) {
 	e.emitInstr("store %s %s, %s* %s", e.ir(ftyp), v, e.ir(ftyp), g)
 }
 
-// listObj 取 List 变量的对象指针。
+// listObj returns the object pointer of a List variable.
 func (e *emitter) listObj(name string) string {
 	e.ensureList()
 	info, ok := e.vars[name]
@@ -2006,7 +2006,7 @@ func (e *emitter) listObj(name string) string {
 	return r
 }
 
-// listBuf 取 List 的缓冲区指针。
+// listBuf returns the buffer pointer of a List.
 func (e *emitter) listBuf(obj string) string {
 	bf := e.newReg()
 	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, obj)
@@ -2015,7 +2015,7 @@ func (e *emitter) listBuf(obj string) string {
 	return p
 }
 
-// listHeadSize 取 List 的 head 游标与可见元素个数（tail-head）。
+// listHeadSize returns a List's head cursor and the number of visible elements (tail-head).
 func (e *emitter) listHeadSize(lo string) (string, string) {
 	hf := e.newReg()
 	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 1", hf, lo)
@@ -2030,8 +2030,8 @@ func (e *emitter) listHeadSize(lo string) (string, string) {
 	return h, sz
 }
 
-// emitBoundsCheck 对 List 下标（已求值的可见下标 int 寄存器）做运行期检查：
-// 0 <= i < size；越界 → try 内跳 catch，否则运行期错误（与解释器同一文案）。
+// emitBoundsCheck performs a runtime check on a List index (an already-evaluated visible-index int register):
+// 0 <= i < size; out of bounds → jump to catch inside try, otherwise a runtime error (the same message as the interpreter).
 func (e *emitter) emitBoundsCheck(i, size string, line int) {
 	lo := e.newReg()
 	e.emitInstr("%s = icmp slt i32 %s, 0", lo, i)
@@ -2047,7 +2047,7 @@ func (e *emitter) emitBoundsCheck(i, size string, line int) {
 	e.setBlock(okB)
 }
 
-// emitIndexPanic 发射 List 越界运行期错误。
+// emitIndexPanic emits the List out-of-bounds runtime error.
 func (e *emitter) emitIndexPanic(i, size string, line int) {
 	if e.curTry != "" {
 		e.emitInstr("br label %%%s", e.curTry)
@@ -2068,7 +2068,7 @@ func (e *emitter) emitTry(st *tryStmt) {
 		e.emitStmt(s)
 	}
 	if !e.funcReturned && !e.term {
-		e.emitInstr("br label %%%s", afterL) // 正常路径跳过 catch
+		e.emitInstr("br label %%%s", afterL) // the normal path skips catch
 	}
 	e.curTry = oldTry
 	e.setBlock(catchL)
@@ -2087,7 +2087,7 @@ func (e *emitter) emitDelete(st *deleteStmt) {
 		return
 	}
 	if info.ref {
-		return // 按引用形参：存储属于调用方，不能在这里释放
+		return // by-reference parameter: the storage belongs to the caller and must not be freed here
 	}
 	if info.typ == "List<int>" {
 		lo := e.listObj(st.name)
@@ -2161,7 +2161,7 @@ func (e *emitter) emitWhile(st *whileStmt) {
 	e.setBlock(endB)
 }
 
-// emitFor 发射 C 风格 for：init; cond; step。
+// emitFor emits a C-style for: init; cond; step.
 func (e *emitter) emitFor(st *forStmt) {
 	if st.init != nil {
 		e.emitStmt(st.init)
@@ -2192,8 +2192,8 @@ func (e *emitter) emitFor(st *forStmt) {
 	e.setBlock(endB)
 }
 
-// emitForIn 发射迭代 for：for (T x : list) —— 与解释器一致，按滚动游标消费
-// （head 前进；循环结束后元素已消耗，size() 归零）。
+// emitForIn emits an iteration for: for (T x : list) — consistent with the interpreter, consuming via a rolling cursor
+// (head advances; after the loop the elements are consumed and size() is zero).
 func (e *emitter) emitForIn(st *forInStmt) {
 	slot := e.newReg()
 	llt := e.ir(st.typ)
@@ -2201,7 +2201,7 @@ func (e *emitter) emitForIn(st *forInStmt) {
 	e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
 	condB, bodyB, endB := e.newBlock(), e.newBlock(), e.newBlock()
 	if st.typ == "String" {
-		// List<String>：元素是 i8*（滑动的 head 游标语义与 List<int> 一致）
+		// List<String>: elements are i8* (the sliding head cursor semantics match List<int>)
 		lo := e.listSObj(st.list)
 		_, _, _ = lo, condB, bodyB
 		p, _, _ := e.listSRange(lo)
@@ -2286,7 +2286,7 @@ func (e *emitter) emitForIn(st *forInStmt) {
 	e.setBlock(endB)
 }
 
-// emitPrint 发射 io.println / io.print（newline 决定是否换行）。
+// emitPrint emits io.println / io.print (newline decides whether a newline is printed).
 func (e *emitter) emitPrint(args []*expr, newline bool) {
 	type av struct {
 		val string
@@ -2296,7 +2296,7 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 	fmts := make([]string, 0, len(args))
 	for _, a := range args {
 		v, t := e.compileExpr(a)
-		// T& 实参：null → "nil"（解释器 nil 值打印为 nil）；统一转 String 后 select
+		// T& argument: null → "nil" (the interpreter prints the nil value as nil); convert to String uniformly, then select
 		ptrNil := ""
 		if _, _, isRef := ptrRefBase(a.typ); isRef && a.kind == kIdent {
 			ptr, pt := e.loadVar(a.s, true)
@@ -2334,7 +2334,7 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 			vals[len(vals)-1].typ = "String"
 			fmts = append(fmts, "%s")
 		case "interface{}":
-			// 运行期按 RTTI kind 分派到具体类型的字符串化（null → "nil"）
+			// Runtime dispatch by RTTI kind to the concrete type's stringification (null → "nil")
 			d := e.newReg()
 			e.emitInstr("%s = extractvalue %%Iface %s, 0", d, v)
 			rt := e.newReg()
@@ -2399,8 +2399,8 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 	e.body.WriteString(sb.String())
 }
 
-// llvmFloat 把 float64 格式化为 LLVM 浮点字面量（必须含小数点/指数，
-// 否则 "2" 会被当成整数常量：fadd double 1.5, 2 非法）。
+// llvmFloat formats a float64 as an LLVM floating-point literal (it must contain a decimal point/exponent,
+// otherwise "2" is taken as an integer constant: fadd double 1.5, 2 is illegal).
 func llvmFloat(f float64) string {
 	s := strconv.FormatFloat(f, 'g', -1, 64)
 	if !strings.ContainsAny(s, ".eEnN") {
@@ -2409,7 +2409,7 @@ func llvmFloat(f float64) string {
 	return s
 }
 
-// toI1 把值转成 i1（bool 直接用；int 判零）。
+// toI1 converts a value to i1 (bool used directly; int tested against zero).
 func (e *emitter) toI1(reg string) string {
 	if reg == "true" || reg == "false" {
 		return reg
@@ -2417,7 +2417,7 @@ func (e *emitter) toI1(reg string) string {
 	return reg
 }
 
-// toI64 把 i32 寄存器扩展为 i64（字面量直接可用）。
+// toI64 extends an i32 register to i64 (literals can be used directly).
 func (e *emitter) toI64(reg string) string {
 	if strings.HasPrefix(reg, "%") {
 		r := e.newReg()
@@ -2427,9 +2427,9 @@ func (e *emitter) toI64(reg string) string {
 	return reg
 }
 
-// ---------- 表达式 ----------
+// ---------- Expressions ----------
 
-// compileExpr 编译表达式，返回 (寄存器, 语言类型)（含接口装箱）。
+// compileExpr compiles an expression and returns (register, language type) (including interface boxing).
 func (e *emitter) compileExpr(x *expr) (string, string) {
 	v, t := e.compileExprRaw(x)
 	if x.ifaceBox != "" && t != x.typ {
@@ -2443,18 +2443,18 @@ func (e *emitter) compileExpr(x *expr) (string, string) {
 	return v, t
 }
 
-// ---------- interface{}（tAny）：装箱 + 运行期类型描述符（RTTI） ----------
+// ---------- interface{} (tAny): boxing + runtime type descriptor (RTTI) ----------
 //
-// 值表示沿用 %Iface { i8* data, i8** rt }：rt 指向类型描述符
+// The value representation keeps %Iface { i8* data, i8** rt }: rt points to the type descriptor
 //
 //	%RT = type { i8* (i8*)* str, i8* name, i32 kind }   kind: 0=int 1=float 2=bool
 //	                                                           3=String 4=List<int> 5=struct 6=null
 //
-// data 约定：标量/String 指向调用期分配的堆单元（按值语义，装箱即快照）；List/struct 直接是
-// 对象指针（引用语义，与解释器 *List/*Struct 一致）；null 为零值。
-// 打印/相等/拆箱都由运行期按 kind 分派（qthreads.c 的 ql_any_*；struct 的 str 由编译器生成）。
+// data convention: a scalar/String points to a heap cell allocated for the call (value semantics, boxing is a snapshot); List/struct are directly
+// the object pointer (reference semantics, consistent with the interpreter's *List/*Struct); null is the zero value.
+// Printing/equality/unboxing are all dispatched at runtime by kind (qthreads.c's ql_any_*; a struct's str is generated by the compiler).
 
-// anyKindOf 返回类型的 RTTI kind。
+// anyKindOf returns the RTTI kind of a type.
 func anyKindOf(t string) int {
 	switch t {
 	case "int", "thread", "cbool":
@@ -2474,8 +2474,8 @@ func anyKindOf(t string) int {
 	return 5 // struct
 }
 
-// anyTypeName 返回与解释器 Value.TypeName() 一致的类型名（HashTable 键规则、
-// interface{} 拆箱诊断都依赖它）。
+// anyTypeName returns the type name consistent with the interpreter's Value.TypeName() (the HashTable key rule and
+// interface{} unboxing diagnostics both depend on it).
 func anyTypeName(t string) string {
 	switch t {
 	case "int", "float", "bool", "String":
@@ -2486,11 +2486,11 @@ func anyTypeName(t string) string {
 	if isListType(t) {
 		return "List"
 	}
-	return t // struct：SType
+	return t // struct: SType
 }
 
-// anyCopyFn 返回该类型的 RTTI 深拷贝函数（语义对齐解释器 deepCopy：
-// List 复制缓冲区、struct 共享指针、标量/String 堆单元复制）。
+// anyCopyFn returns the RTTI deep-copy function of the type (semantics aligned with the interpreter's deepCopy:
+// List copies the buffer, struct shares the pointer, scalar/String copies the heap cell).
 func anyCopyFn(t string) string {
 	switch anyKindOf(t) {
 	case 0:
@@ -2509,7 +2509,7 @@ func anyCopyFn(t string) string {
 	return "@ql_any_copy_identity"
 }
 
-// ensureRT 发射类型描述符的 LLVM 结构定义。
+// ensureRT emits the LLVM struct definition of a type descriptor.
 func (e *emitter) ensureRT() {
 	if e.hasRT {
 		return
@@ -2518,7 +2518,7 @@ func (e *emitter) ensureRT() {
 	e.types.WriteString("%RT = type { i8* (i8*)*, i8* (i8*)*, i8*, i32 }\n")
 }
 
-// rttiSym 返回（按需发射）类型描述符符号。
+// rttiSym returns (emitting on demand) a type descriptor symbol.
 func (e *emitter) rttiSym(typ string) string {
 	sym := "@rt$" + tyName(typ)
 	if e.rtti[sym] {
@@ -2530,10 +2530,10 @@ func (e *emitter) rttiSym(typ string) string {
 	strFn := ""
 	switch kind {
 	case 0:
-		e.needIntToStr = true // 复用同一 int→String 格式化
+		e.needIntToStr = true // reuse the same int→String formatting
 		strFn = "@ql_any_str_int"
 	case 1:
-		e.needFloatToStr = true // 复用同一 float→String 格式化
+		e.needFloatToStr = true // reuse the same float→String formatting
 		strFn = "@ql_any_str_float"
 	case 2:
 		strFn = "@ql_any_str_bool"
@@ -2551,7 +2551,7 @@ func (e *emitter) rttiSym(typ string) string {
 	return sym
 }
 
-// boxAny 把具体值装箱成 interface{} 值。
+// boxAny boxes a concrete value into an interface{} value.
 func (e *emitter) boxAny(v, from string) string {
 	e.ensureIface()
 	sym := e.rttiSym(from)
@@ -2590,7 +2590,7 @@ func (e *emitter) boxAny(v, from string) string {
 	case "null":
 		data = "null"
 	default:
-		// struct / List<int>：值本身就是对象指针（引用语义）
+		// struct / List<int>: the value itself is an object pointer (reference semantics)
 		data = e.newReg()
 		e.emitInstr("%s = bitcast %s %s to i8*", data, e.ir(from), v)
 	}
@@ -2603,8 +2603,8 @@ func (e *emitter) boxAny(v, from string) string {
 	return i1
 }
 
-// emitStructAnyStr 生成 struct 的 interface{} 打印函数（解释器 StructValue.String 格式：
-// <T {字段=值, ...}>，字段按声明顺序）。
+// emitStructAnyStr generates the interface{} printing function of a struct (the interpreter's StructValue.String format:
+// <T {field=value, ...}>, fields in declaration order).
 func (e *emitter) emitStructAnyStr(typ string) string {
 	sym := "ql_any_str_struct_" + tyName(typ)
 	if e.rttiFns == nil {
@@ -2646,7 +2646,7 @@ func (e *emitter) emitStructAnyStr(typ string) string {
 	return sym
 }
 
-// anyValueStr 取任意字段值的字符串形式（struct 打印用；与解释器 Value.String 对齐）。
+// anyValueStr returns the string form of an arbitrary field value (used by struct printing; aligned with the interpreter's Value.String).
 func (e *emitter) anyValueStr(v, typ string) string {
 	switch {
 	case typ == "int" || typ == "thread" || typ == "cbool":
@@ -2734,14 +2734,14 @@ func (e *emitter) anyValueStr(v, typ string) string {
 	return e.i8Ptr(e.strConst("nil"))
 }
 
-// strcat2 拼接两个 String 寄存器（ql_strcat）。
+// strcat2 concatenates two String registers (ql_strcat).
 func (e *emitter) strcat2(a, b string) string {
 	r := e.newReg()
 	e.emitInstr("%s = call i8* @ql_strcat(i8* %s, i8* %s)", r, a, b)
 	return r
 }
 
-// boxIface 把具体 struct 指针装箱为接口值 { data, vtable }。
+// boxIface boxes a concrete struct pointer into an interface value { data, vtable }.
 func (e *emitter) boxIface(reg, from, sym string) string {
 	e.ensureIface()
 	ptr := e.newReg()
@@ -2753,7 +2753,7 @@ func (e *emitter) boxIface(reg, from, sym string) string {
 	return i1
 }
 
-// compileExprRaw 编译表达式（不含装箱包装）。
+// compileExprRaw compiles an expression (without the boxing wrapper).
 func (e *emitter) compileExprRaw(x *expr) (string, string) {
 	switch x.kind {
 	case kInt:
@@ -2836,12 +2836,12 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 	return "0", "int"
 }
 
-// loadVar 读取变量（槽 → load；参数/直通 → 直接用）。
-// T& / pointer T 变量默认自动解引用（解释器语义）；noDeref 时取指针本身。
+// loadVar reads a variable (slot → load; parameter/passthrough → used directly).
+// T& / pointer T variables are dereferenced automatically by default (interpreter semantics); with noDeref the pointer itself is taken.
 func (e *emitter) loadVar(name string, noDeref bool) (string, string) {
 	info, ok := e.vars[name]
 	if !ok {
-		return name, "int" // 未声明变量：让生成的 IR 报错（llvm-as 校验会拦截）
+		return name, "int" // undeclared variable: let the generated IR fail (llvm-as verification catches it)
 	}
 	pt := info.typ
 	if _, base, isRef := ptrRefBase(pt); isRef {
@@ -2856,7 +2856,7 @@ func (e *emitter) loadVar(name string, noDeref bool) (string, string) {
 		if noDeref {
 			return ptr, pt
 		}
-		// 可空引用：null 时读临时单元（不崩；打印/比较由调用点按 nil 语义处理）
+		// Nullable reference: when null, read a temporary cell (no crash; printing/comparison are handled with nil semantics at the call site)
 		blt := e.ir(base)
 		isnull := e.newReg()
 		e.emitInstr("%s = icmp eq %s %s, null", isnull, e.ir(pt), ptr)
@@ -2971,7 +2971,7 @@ func (e *emitter) compileListLit(x *expr) (string, string) {
 	return lo, "List<int>"
 }
 
-// compileCall 编译普通函数调用与内建（sum/clock）。
+// compileCall compiles ordinary function calls and builtins (sum/clock).
 func (e *emitter) compileCall(x *expr) (string, string) {
 	c := x.call
 	if c.name == "sum" && len(c.args) >= 3 && c.args[0].kind == kIdent {
@@ -2998,18 +2998,18 @@ func (e *emitter) compileCall(x *expr) (string, string) {
 		e.emitInstr("%s = fpext float %s to double", d, r)
 		return d, "float"
 	case "double":
-		return r, "float" // FFI double → 语言 float
+		return r, "float" // FFI double → language float
 	case "long", "pointer":
-		return r, ret // FFI long → i64；pointer → i8* 不透明句柄
+		return r, ret // FFI long → i64; pointer → i8* opaque handle
 	}
 	return r, ret
 }
 
-// compileMemoCall 编译签名 memorize 调用 f(args) @mb()：
-// 按键（int 实参数组）查表，未命中则调用被包装函数并记录。
+// compileMemoCall compiles a signature memorize call f(args) @mb():
+// look up the table by key (the int argument array); on a miss, call the wrapped function and record the result.
 func (e *emitter) compileMemoCall(x *expr) string {
 	c := x.call
-	// @ 显式 prefix 实参：求值丢弃（解释器同样只把它们放进 prefix 记录）
+	// explicit @ prefix arguments: evaluated and discarded (the interpreter likewise only puts them into the prefix record)
 	if x.memo != nil {
 		for _, s := range x.memo.skips {
 			e.compileExpr(s)
@@ -3017,14 +3017,14 @@ func (e *emitter) compileMemoCall(x *expr) string {
 	}
 	handle, _ := e.compileExpr(x.memo.handle)
 	n := len(c.args)
-	// 实参单元（按值：解释器 derefArgs 后调用）
+	// argument cells (by value: the interpreter calls after derefArgs)
 	cells := make([]string, 0, n)
 	for _, a := range c.args {
 		v, vt := e.compileExpr(a)
 		v = e.coerce(v, vt, "int")
 		cells = append(cells, e.valueOfCell(v, "int"))
 	}
-	// 键数组 [n x i32]
+	// key array [n x i32]
 	keys := e.newReg()
 	e.emitInstr("%s = alloca [%d x i32], align 4", keys, n)
 	for i, cell := range cells {
@@ -3062,8 +3062,8 @@ func (e *emitter) compileMemoCall(x *expr) string {
 	return phi
 }
 
-// compileMerge 编译 taskm.merge(pid, runner, args...)：实参打进 i64 槽交给运行时，
-// 由 runner 还原成目标函数的形参单元（引用传递）。
+// compileMerge compiles taskm.merge(pid, runner, args...): arguments are packed into i64 slots handed to the runtime,
+// and the runner restores them into the target function's parameter cells (by-reference passing).
 func (e *emitter) compileMerge(x *expr) string {
 	c := x.call
 	pid, _ := e.compileExpr(c.args[0])
@@ -3081,7 +3081,7 @@ func (e *emitter) compileMerge(x *expr) string {
 	return "0"
 }
 
-// packI64 把实参值打包进 i64 槽（运行时 ql_task.args 是 4 个 long long）。
+// packI64 packs an argument value into an i64 slot (the runtime's ql_task.args is 4 long longs).
 func (e *emitter) packI64(v, typ string) string {
 	r := e.newReg()
 	switch typ {
@@ -3096,17 +3096,17 @@ func (e *emitter) packI64(v, typ string) string {
 	case "thread":
 		e.emitInstr("%s = sext i32 %s to i64", r, v)
 	default:
-		// String / pointer / struct / List / Channel / memorize：指针值
+		// String / pointer / struct / List / Channel / memorize: pointer value
 		e.emitInstr("%s = ptrtoint %s %s to i64", r, e.ir(typ), v)
 	}
 	return r
 }
 
-// compileNewRef 编译 new T：分配一个清零的 T 单元，返回 T& 指针。
+// compileNewRef compiles new T: allocate a zeroed T cell and return a T& pointer.
 func (e *emitter) compileNewRef(x *expr) (string, string) {
 	base := x.s
-	ptlt := e.ir(x.typ) // T& 的指针类型（i32* / %P* / i8** …）
-	// 大小：标量按 LLVM 类型大小，struct 用 GEP null,1
+	ptlt := e.ir(x.typ) // pointer type of T& (i32* / %P* / i8** …)
+	// size: scalars use the LLVM type size, struct uses GEP null,1
 	var sz string
 	if e.isStruct(base) {
 		elem := e.irElem(base)
@@ -3127,7 +3127,7 @@ func (e *emitter) compileNewRef(x *expr) (string, string) {
 	return p, base + "&"
 }
 
-// nilSelect 按 null 判定选择 "nil" 或给定字符串（可空引用解引用的 nil 语义）。
+// nilSelect chooses "nil" or the given string based on null (the nil semantics of dereferencing a nullable reference).
 func (e *emitter) nilSelect(isnull, s string) string {
 	nilp := e.i8Ptr(e.strConst("nil"))
 	r := e.newReg()
@@ -3135,7 +3135,7 @@ func (e *emitter) nilSelect(isnull, s string) string {
 	return r
 }
 
-// sizeOf 返回标量类型的字节大小（struct 走 GEP 计算）。
+// sizeOf returns the byte size of a scalar type (struct goes through GEP computation).
 func (e *emitter) sizeOf(t string) int {
 	switch t {
 	case "bool", "char":
@@ -3151,8 +3151,8 @@ func (e *emitter) sizeOf(t string) int {
 	return 8
 }
 
-// compileTable 编译 HashTable 方法调用：键按解释器规则结构化成字符串
-// （TypeName:String()），值装箱成 interface{}（Put 时按 RTTI 深拷贝）。
+// compileTable compiles a HashTable method call: keys are structured into strings by the interpreter's rule
+// (TypeName:String()), and values are boxed into interface{} (deep-copied per RTTI on Put).
 func (e *emitter) compileTable(x *expr) (string, string) {
 	t := x.tbl
 	h, _ := e.compileExpr(t.recv)
@@ -3186,14 +3186,14 @@ func (e *emitter) compileTable(x *expr) (string, string) {
 		rt := e.newReg()
 		e.emitInstr("%s = load i8**, i8** %s", rt, slot)
 		if isAnyType(t.valT) {
-			// 缺键 → (null, null) = nil（与解释器 get 返回 NilV 一致）
+			// missing key → (null, null) = nil (consistent with the interpreter's get returning NilV)
 			i0 := e.newReg()
 			e.emitInstr("%s = insertvalue %%Iface undef, i8* %s, 0", i0, d)
 			i1 := e.newReg()
 			e.emitInstr("%s = insertvalue %%Iface %s, i8** %s, 1", i1, i0, rt)
 			return i1, "interface{}"
 		}
-		// 具体 V：按 RTTI 拆箱；缺键/类型不符 → 明确运行期错误（nil 无法用静态类型承载）
+		// concrete V: unbox per RTTI; a missing key/type mismatch → an explicit runtime error (nil cannot be carried by a static type)
 		switch anyKindOf(t.valT) {
 		case 0:
 			r := e.newReg()
@@ -3214,7 +3214,7 @@ func (e *emitter) compileTable(x *expr) (string, string) {
 			e.emitInstr("%s = call i8* @ql_any_string(i8* %s, i8** %s)", r, d, rt)
 			return r, "String"
 		default:
-			// struct / List：存的就是对象指针（Put 时 struct 共享、List 深拷贝）
+			// struct / List: what is stored is the object pointer (struct shared and List deep-copied on Put)
 			p := e.newReg()
 			e.emitInstr("%s = call i8* @ql_any_ptr(i8* %s, i8** %s)", p, d, rt)
 			ir := e.newReg()
@@ -3229,7 +3229,7 @@ func (e *emitter) compileTable(x *expr) (string, string) {
 	return "0", "void"
 }
 
-// tableKey 把键表达式装箱后转成解释器同款键串（TypeName:String()）。
+// tableKey boxes the key expression and converts it into the interpreter's key string (TypeName:String()).
 func (e *emitter) tableKey(k *expr) string {
 	d, rt := e.anyPair(k)
 	r := e.newReg()
@@ -3237,7 +3237,7 @@ func (e *emitter) tableKey(k *expr) string {
 	return r
 }
 
-// anyPair 取表达式的 packed interface{} 值 (data, rt)。
+// anyPair takes the packed interface{} value (data, rt) of an expression.
 func (e *emitter) anyPair(x *expr) (string, string) {
 	v, typ := e.compileExpr(x)
 	if !isAnyType(typ) {
@@ -3250,15 +3250,15 @@ func (e *emitter) anyPair(x *expr) (string, string) {
 	return d, rt
 }
 
-// isAnyType 判断是否是空接口 interface{}。
+// isAnyType reports whether the type is the empty interface interface{}.
 func isAnyType(t string) bool { return strings.TrimSpace(t) == "interface{}" }
 
-// ptrRefBase 判断语言类型是否 T& / pointer T（可空引用）：
-// 返回 (完整类型, 指向的类型, 是否)。
+// ptrRefBase reports whether a language type is T& / pointer T (a nullable reference):
+// returns (full type, pointee type, whether).
 func ptrRefBase(t string) (string, string, bool) {
 	t = strings.TrimSpace(t)
 	if t == "pointer" || t == "" {
-		return "", "", false // 裸 pointer = FFI 不透明句柄（i8*），不是 T&
+		return "", "", false // bare pointer = FFI opaque handle (i8*), not T&
 	}
 	if strings.HasPrefix(t, "pointer ") {
 		inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(t[len("pointer "):]), "&"))
@@ -3277,14 +3277,14 @@ func ptrRefBase(t string) (string, string, bool) {
 	return "", "", false
 }
 
-// compileMethod 编译实例方法调用与内建方法。
+// compileMethod compiles instance method calls and builtin methods.
 func (e *emitter) compileMethod(x *expr) (string, string) {
 	m := x.method
 	if m.iface != "" {
 		return e.compileIfaceCall(x)
 	}
 	recv, rtyp := e.compileExpr(m.recv)
-	// List<String> 内建方法（keys() 结果等；只 lower 只读子集）
+	// List<String> builtin methods (keys() results etc.; only the read-only subset is lowered)
 	if rtyp == "List<String>" {
 		switch m.name {
 		case "size":
@@ -3312,7 +3312,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			return r, "String"
 		}
 	}
-	// List 内建方法
+	// List builtin methods
 	if rtyp == "List<int>" {
 		switch m.name {
 		case "size":
@@ -3429,7 +3429,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", sp, otherBuf, li64)
 			val := e.newReg()
 			e.emitInstr("%s = load i32, i32* %s", val, sp)
-			// 追加到 self 尾部（realloc 扩容，同 append）
+			// append to self's tail (realloc growth, same as append)
 			t1 := e.newReg()
 			e.emitInstr("%s = load i32, i32* %s", t1, tf)
 			n1 := e.newReg()
@@ -3523,9 +3523,9 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			return "0", "void"
 		}
 	}
-	// struct 实例方法：call @Type_method(self*, args...)
-	// 接收者按值绑定（解释器：self = ... 不回写调用方）→ 临时单元；
-	// 其余实参按引用传递（解释器 evalArgs：左值实参写回调用方）。
+	// struct instance method: call @Type_method(self*, args...)
+	// the receiver is bound by value (interpreter: self = ... does not write back to the caller) → temporary cell;
+	// the remaining arguments are passed by reference (interpreter evalArgs: lvalue arguments write back to the caller).
 	if m.sig != "" {
 		args := []string{e.ir(rtyp) + "* " + e.valueOfCell(recv, rtyp)}
 		sig := e.sigs[m.sig]
@@ -3558,7 +3558,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 	return "0", "int"
 }
 
-// compileIfaceCall 编译接口方法调用：从 vtable 取函数指针，经 thunk 调具体方法。
+// compileIfaceCall compiles an interface method call: fetch the function pointer from the vtable and call the concrete method through a thunk.
 func (e *emitter) compileIfaceCall(x *expr) (string, string) {
 	m := x.method
 	e.ensureIface()
@@ -3579,7 +3579,7 @@ func (e *emitter) compileIfaceCall(x *expr) (string, string) {
 			want = m.ifaceSig.params[i].typ
 		}
 		if want == "Self" {
-			// Self 形参：接口值 → 取 data（具体实例指针），放进临时单元按引用传递
+			// Self parameter: interface value → take data (the concrete instance pointer) and put it into a temporary cell passed by reference
 			av, _ := e.compileExpr(a)
 			d := e.newReg()
 			e.emitInstr("%s = extractvalue %%Iface %s, 0", d, av)
@@ -3587,7 +3587,7 @@ func (e *emitter) compileIfaceCall(x *expr) (string, string) {
 			callArgs = append(callArgs, "i8* "+d)
 			continue
 		}
-		// 其余实参：语言层按引用传递 → 传值单元地址（thunk 原样转发给具体方法）
+		// remaining arguments: the language level passes by reference → pass the value cell address (the thunk forwards it unchanged to the concrete method)
 		p, pt, _ := e.compileArgAddr(a, want)
 		pty = append(pty, e.ir(pt)+"*")
 		callArgs = append(callArgs, e.ir(pt)+"* "+p)
@@ -3612,12 +3612,12 @@ func (e *emitter) compileIfaceCall(x *expr) (string, string) {
 	return r, ret
 }
 
-// thunkName 是 (具体类型, 接口, 方法) 的 thunk 名。
+// thunkName is the thunk name for (concrete type, interface, method).
 func thunkName(th *ifaceThunk) string {
 	return "thunk$" + tyName(th.typ) + "$" + tyName(th.iface) + "$" + th.method
 }
 
-// thunkSig 返回 thunk 的 LLVM 函数签名 "ret (params)"（self data 恒为 i8*）。
+// thunkSig returns the thunk's LLVM function signature "ret (params)" (self data is always i8*).
 func (e *emitter) thunkSig(th *ifaceThunk) string {
 	ps := []string{"i8*"}
 	for i, p := range th.params {
@@ -3625,12 +3625,12 @@ func (e *emitter) thunkSig(th *ifaceThunk) string {
 			ps = append(ps, "i8*")
 			continue
 		}
-		ps = append(ps, e.ir(p)+"*") // 按引用传递
+		ps = append(ps, e.ir(p)+"*") // pass by reference
 	}
 	retIR := e.ir(th.ret)
 	if th.boxRet {
 		e.ensureIface()
-		retIR = "%Iface" // Self 返回：装箱后以接口值返回
+		retIR = "%Iface" // Self return: boxed and returned as an interface value
 	}
 	return retIR + " (" + strings.Join(ps, ", ") + ")"
 }
@@ -3644,7 +3644,7 @@ func isSelfIdx(idx []int, i int) bool {
 	return false
 }
 
-// emitVtables 发射全部 vtable 常量与 thunk 函数（模块尾部；前向引用合法）。
+// emitVtables emits all vtable constants and thunk functions (at the end of the module; forward references are legal).
 func (e *emitter) emitVtables(vts []*vtableDef) string {
 	if len(vts) == 0 {
 		return ""
@@ -3669,7 +3669,7 @@ func (e *emitter) emitVtables(vts []*vtableDef) string {
 	return sb.String()
 }
 
-// emitThunk 生成一个 thunk：i8* data → 具体类型指针 → 调具体方法（Self 返回再装箱）。
+// emitThunk generates one thunk: i8* data → concrete type pointer → call the concrete method (a Self return is boxed again).
 func (e *emitter) emitThunk(th *ifaceThunk) string {
 	savedBody := e.body
 	e.body = strings.Builder{}
@@ -3698,16 +3698,16 @@ func (e *emitter) emitThunk(th *ifaceThunk) string {
 	callArgs := []string{ptrTy + "* " + e.valueOfCell(self, th.typ)}
 	for i, p := range th.params {
 		if isSelfIdx(th.selfIdx, i) {
-			// Self 形参：接口 data（i8*）→ 具体类型指针 → 临时单元（按引用传递）
+			// Self parameter: interface data (i8*) → concrete type pointer → temporary cell (passed by reference)
 			c := e.newReg()
 			e.emitInstr("%s = bitcast i8* %s to %s", c, regs[i], e.ir(p))
 			callArgs = append(callArgs, e.ir(p)+"* "+e.valueOfCell(c, p))
 			continue
 		}
-		// 其余形参：thunk 直接转发调用方的单元地址
+		// remaining parameters: the thunk forwards the caller's cell address directly
 		callArgs = append(callArgs, e.ir(p)+"* "+regs[i])
 	}
-	callRet := e.ir(th.ret) // 具体方法的真实返回类型（装箱前）
+	callRet := e.ir(th.ret) // the concrete method's real return type (before boxing)
 	if callRet == "void" {
 		e.body.WriteString("  call void @" + th.irName + "(" + strings.Join(callArgs, ", ") + ")\n")
 		e.body.WriteString("  ret void\n")
@@ -3726,7 +3726,7 @@ func (e *emitter) emitThunk(th *ifaceThunk) string {
 	return out
 }
 
-// emitClock 发射 clock()（gettimeofday 微秒）。
+// emitClock emits clock() (gettimeofday microseconds).
 func (e *emitter) emitClock() string {
 	tv := e.newReg()
 	e.emitInstr("%s = alloca { i64, i64 }, align 8", tv)
@@ -3749,7 +3749,7 @@ func (e *emitter) emitClock() string {
 	return v
 }
 
-// valueOfCell 把值放进当前帧的临时单元，返回单元地址（按引用传递的值实参）。
+// valueOfCell puts a value into a temporary cell of the current frame and returns the cell address (a value argument passed by reference).
 func (e *emitter) valueOfCell(v, typ string) string {
 	llt := e.ir(typ)
 	slot := e.newReg()
@@ -3758,7 +3758,7 @@ func (e *emitter) valueOfCell(v, typ string) string {
 	return slot
 }
 
-// emitSum 把 sum(g, begin, stop[, step]) 内联展开为循环。
+// emitSum expands sum(g, begin, stop[, step]) inline into a loop.
 func (e *emitter) emitSum(c *callExpr) string {
 	b, _ := e.compileExpr(c.args[1])
 	s, _ := e.compileExpr(c.args[2])
@@ -3804,7 +3804,7 @@ func (e *emitter) emitSum(c *callExpr) string {
 	return tf
 }
 
-// compileBin 编译二元运算（算术/比较/逻辑/String 拼接/运算符重载）。
+// compileBin compiles binary operations (arithmetic/comparison/logic/String concatenation/operator overload).
 func (e *emitter) compileBin(x *expr) (string, string) {
 	if x.op == "&&" || x.op == "||" {
 		return e.compileLogic(x)
@@ -3819,7 +3819,7 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 		e.emitInstr("%s = call i8* @ql_strcat(i8* %s, i8* %s)", rc, lv, rv)
 		return rc, "String"
 	}
-	// 运算符重载：struct 操作数 → 调用 __add__ 等方法
+	// operator overload: struct operand → call __add__ and friends
 	if sig, ok := e.sigs["__op__"+x.op+"|"+lt]; ok && lt == rt {
 		r := e.newReg()
 		e.body.WriteString(r + " = call " + e.ir(sig.ret) + " @" + sig.name + "(" + e.ir(lt) + " " + lv + ", " + e.ir(rt) + " " + rv + ")\n")
@@ -3832,9 +3832,9 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 			e.emitZeroCheckF(rv, "DivisionByZeroError: float division by zero", x.line)
 		}
 		if x.op == "%" {
-			// 解释器语义：float 取模在运行期报 TypeError
+			// interpreter semantics: float modulo reports a TypeError at runtime
 			e.emitAbortF("TypeError: '%' requires int operands", x.line)
-			return "0.0", "float" // 之后的死代码
+			return "0.0", "float" // dead code after this
 		}
 		op := map[string]string{"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}[x.op]
 		reg := e.newReg()
@@ -3844,7 +3844,7 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 	if v, ok := constEval(x); ok {
 		return fmt.Sprintf("%d", int32(v)), "int"
 	}
-	// long 参与算术：解释器按 32 位截断（wrapI32），这里同样先截断
+	// long in arithmetic: the interpreter truncates to 32 bits (wrapI32), so we truncate first here as well
 	lv = e.coerce(lv, lt, "int")
 	rv = e.coerce(rv, rt, "int")
 	if x.op == "/" || x.op == "%" {
@@ -3856,7 +3856,7 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 	return reg, "int"
 }
 
-// emitZeroCheckI 整数除零检查（try 内跳 catch，否则运行期错误）。
+// emitZeroCheckI integer division-by-zero check (jump to catch inside try, otherwise a runtime error).
 func (e *emitter) emitZeroCheckI(rv, op string, line int) {
 	cz := e.newReg()
 	e.emitInstr("%s = icmp eq i32 %s, 0", cz, rv)
@@ -3883,8 +3883,8 @@ func (e *emitter) emitZeroCheckI(rv, op string, line int) {
 	e.setBlock(okB)
 }
 
-// emitAbortF 发射「一定失败」的浮点运算路径（解释器在此报运行期错误）：
-// try 内跳 catch，否则打印同文案错误并退出。
+// emitAbortF emits a floating-point path that "always fails" (the interpreter reports a runtime error here):
+// jump to catch inside try, otherwise print the same message and exit.
 func (e *emitter) emitAbortF(msg string, line int) {
 	okB := e.newBlock()
 	tgt := e.curTry
@@ -3926,7 +3926,7 @@ func (e *emitter) emitZeroCheckF(rv string, msg string, line int) {
 	e.setBlock(okB)
 }
 
-// compileLogic 短路求值 && / ||（解释器语义：右侧仅在必要时求值）。
+// compileLogic short-circuit evaluation of && / || (interpreter semantics: the right side is evaluated only when needed).
 func (e *emitter) compileLogic(x *expr) (string, string) {
 	if x.op == "!" {
 		v, _ := e.compileExpr(x.l)
@@ -3957,11 +3957,11 @@ func (e *emitter) compileLogic(x *expr) (string, string) {
 	return r, "bool"
 }
 
-// compileCmp 编译比较运算（int/float/bool/String/struct）。
+// compileCmp compiles comparison operations (int/float/bool/String/struct).
 func (e *emitter) compileCmp(x *expr) (string, string) {
 	lv, lt := e.compileExpr(x.l)
 	rv, rt := e.compileExpr(x.r)
-	// interface{} 相等：运行期按 RTTI 比较（数值跨 int/float、String 按内容、struct/List 按引用）
+	// interface{} equality: compared at runtime per RTTI (numbers across int/float, String by content, struct/List by reference)
 	if lt == "interface{}" || rt == "interface{}" {
 		if lt != "interface{}" {
 			lv = e.boxAny(lv, lt)
@@ -3990,7 +3990,7 @@ func (e *emitter) compileCmp(x *expr) (string, string) {
 		e.emitInstr("%s = icmp %s i32 %s, 0", r, op, cv)
 		return r, "bool"
 	}
-	// struct：__eq__/__ne__ 方法或引用比较
+	// struct: __eq__/__ne__ method or reference comparison
 	if lt == rt && e.isStruct(lt) {
 		if sig, ok := e.sigs["__op__"+x.op+"|"+lt]; ok {
 			r := e.newReg()
@@ -4006,17 +4006,17 @@ func (e *emitter) compileCmp(x *expr) (string, string) {
 		e.emitInstr("%s = icmp %s i1 %s, %s", r, cmpOps[x.op], lv, rv)
 		return r, "bool"
 	}
-	// 指针 / null：引用比较（解释器 Value 语义：同一指针相等）
+	// pointer / null: reference comparison (interpreter Value semantics: the same pointer is equal)
 	if isPtrLike(lt) || isPtrLike(rt) {
 		op := cmpOps[x.op]
 		if x.op != "==" && x.op != "!=" {
-			op = "eq" // 指针不支持顺序比较（typecheck 已拦截）
+			op = "eq" // pointers do not support ordered comparison (typecheck already rejects it)
 		}
 		r := e.newReg()
 		e.emitInstr("%s = icmp %s i8* %s, %s", r, op, lv, rv)
 		return r, "bool"
 	}
-	// long 参与比较：解释器按 32 位截断比较
+	// long in comparisons: the interpreter compares after truncating to 32 bits
 	lv = e.coerce(lv, lt, "int")
 	rv = e.coerce(rv, rt, "int")
 	if lt == "String" && rt == "String" {
@@ -4046,7 +4046,7 @@ func (e *emitter) isStruct(t string) bool {
 	return ok
 }
 
-// isPtrLike 判断是否是 FFI 不透明指针 / null（i8* 引用比较）。
+// isPtrLike reports whether the type is an FFI opaque pointer / null (i8* reference comparison).
 func isPtrLike(t string) bool {
 	if t == "pointer" || t == "null" {
 		return true
@@ -4057,14 +4057,14 @@ func isPtrLike(t string) bool {
 
 var cmpOps = map[string]string{"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
 
-// ---------- 函数属性分析（LLVM norecurse/mustprogress 安全判定） ----------
+// ---------- Function attribute analysis (safe determination of LLVM norecurse/mustprogress) ----------
 
-// fnMeta 收集单个函数的调用关系与循环标志。
+// fnMeta collects a single function's call relations and loop flag.
 type fnMeta struct {
 	callees []string
 	hasLoop bool
-	hasMeth bool // 方法调用/函数引用（无法静态解析，保守不标 norecurse）
-	impure  bool // 调用/方法/列表/结构体/下标等可能有外界副作用（禁止 memory(none)）
+	hasMeth bool // method call/function reference (cannot be resolved statically, conservatively no norecurse)
+	impure  bool // calls/methods/lists/structs/indexing may have external side effects (memory(none) forbidden)
 }
 
 func analyzeExpr(e *expr, m *fnMeta) {
@@ -4072,11 +4072,11 @@ func analyzeExpr(e *expr, m *fnMeta) {
 		return
 	}
 	if e.anyBox != "" {
-		m.impure = true // 装箱调用 malloc（标量堆单元），不是纯函数
+		m.impure = true // boxing calls malloc (scalar heap cell), not a pure function
 	}
 	switch e.kind {
 	case kTable:
-		m.impure = true // ql_table_*：堆表读写
+		m.impure = true // ql_table_*: heap table reads/writes
 		if e.tbl != nil {
 			analyzeExpr(e.tbl.recv, m)
 			for _, a := range e.tbl.args {
@@ -4084,7 +4084,7 @@ func analyzeExpr(e *expr, m *fnMeta) {
 			}
 		}
 	case kMerge:
-		m.impure = true // ql_merge：启动线程
+		m.impure = true // ql_merge: starts a thread
 		if e.call != nil {
 			for _, a := range e.call.args {
 				analyzeExpr(a, m)
@@ -4117,11 +4117,11 @@ func analyzeExpr(e *expr, m *fnMeta) {
 			analyzeExpr(a, m)
 		}
 	case kToString:
-		m.impure = true // ql_int_to_str：malloc/snprintf 调用
+		m.impure = true // ql_int_to_str: malloc/snprintf calls
 		analyzeExpr(e.l, m)
 	case kBin:
 		if e.strcat {
-			m.impure = true // ql_strcat 调用：有副作用，禁止 memory(none)
+			m.impure = true // ql_strcat call: has side effects, memory(none) forbidden
 		}
 		analyzeExpr(e.l, m)
 		analyzeExpr(e.r, m)
@@ -4140,7 +4140,7 @@ func analyzeExpr(e *expr, m *fnMeta) {
 			analyzeExpr(v, m)
 		}
 	case kField:
-		m.impure = true // 通过指针读 struct 字段：不是纯函数（禁止 memory(none)）
+		m.impure = true // reads a struct field through a pointer: not a pure function (memory(none) forbidden)
 		analyzeExpr(e.field.recv, m)
 	case kAndOr:
 		analyzeExpr(e.l, m)
@@ -4158,7 +4158,7 @@ func analyzeStmt(s stmt, m *fnMeta) {
 	case *assignStmt:
 		analyzeExpr(st.x, m)
 	case *printlnStmt:
-		m.impure = true // printf：IO 副作用，禁止 memory(none)
+		m.impure = true // printf: IO side effect, memory(none) forbidden
 		for _, a := range st.args {
 			analyzeExpr(a, m)
 		}
@@ -4207,7 +4207,7 @@ func analyzeStmt(s stmt, m *fnMeta) {
 	case *deleteStmt:
 		m.impure = true // free
 	case *indexAssignStmt:
-		m.impure = true // 堆数组写入
+		m.impure = true // heap array write
 		analyzeExpr(st.idx, m)
 		analyzeExpr(st.x, m)
 	case *fieldAssignStmt:
@@ -4224,7 +4224,7 @@ func analyzeStmt(s stmt, m *fnMeta) {
 	}
 }
 
-// programMeta 建立函数元信息表（含 main）。
+// programMeta builds the function metadata table (including main).
 func programMeta(funcs []*funcDef, mainStmts []stmt) map[string]*fnMeta {
 	meta := make(map[string]*fnMeta, len(funcs)+1)
 	for _, fd := range funcs {
@@ -4232,8 +4232,8 @@ func programMeta(funcs []*funcDef, mainStmts []stmt) map[string]*fnMeta {
 		for _, s := range fd.body {
 			analyzeStmt(s, m)
 		}
-		// 形参按引用传递：形参是指向调用方存储的指针，callee 的 load/store 对调用方
-		// 可见 → 有形参的函数不能标 memory(none)（否则 LLVM 会消除参数写入）。
+		// Parameters are passed by reference: a parameter is a pointer to the caller's storage, and the callee's loads/stores are
+		// visible to the caller → a function with parameters cannot be marked memory(none) (otherwise LLVM would eliminate parameter writes).
 		if len(fd.params) > 0 || fd.selfTyp != "" {
 			m.impure = true
 		}
@@ -4247,7 +4247,7 @@ func programMeta(funcs []*funcDef, mainStmts []stmt) map[string]*fnMeta {
 	return meta
 }
 
-// reachesSelf 判断调用图是否形成含 name 的环（DFS，仅在已定义函数间走）。
+// reachesSelf reports whether the call graph forms a cycle containing name (DFS, only across already-defined functions).
 func reachesSelf(name string, meta map[string]*fnMeta) bool {
 	for _, c := range meta[name].callees {
 		if _, isFn := meta[c]; !isFn {
@@ -4277,7 +4277,7 @@ func reachesSelf(name string, meta map[string]*fnMeta) bool {
 	return false
 }
 
-// fnAttrs 返回函数定义属性串（mustprogress/norecurse/memory(none)）。
+// fnAttrs returns the attribute string for a function definition (mustprogress/norecurse/memory(none)).
 func fnAttrs(name string, meta map[string]*fnMeta) string {
 	m := meta[name]
 	if m == nil {
@@ -4291,13 +4291,13 @@ func fnAttrs(name string, meta map[string]*fnMeta) string {
 		attrs += " norecurse"
 	}
 	if len(m.callees) == 0 && !m.impure {
-		// 纯算术函数（无调用、无 IO、无堆访问）：仅操作局部与参数——LLVM 可跨调用消除/内联
+		// pure arithmetic function (no calls, no IO, no heap access): only touches locals and parameters — LLVM may eliminate/inline across calls
 		attrs += " memory(none)"
 	}
 	return attrs
 }
 
-// scanAssigned 收集语句中所有被赋值（assignStmt）的变量名 —— 决定哪些 decl 可 SSA 直通。
+// scanAssigned collects the names of all variables assigned (assignStmt) in the statements — it decides which decls can use SSA passthrough.
 func scanAssigned(stmts []stmt, out map[string]bool) {
 	for _, s := range stmts {
 		switch st := s.(type) {
@@ -4317,7 +4317,7 @@ func scanAssigned(stmts []stmt, out map[string]bool) {
 			}
 			scanAssigned(st.body, out)
 		case *forInStmt:
-			out[st.name] = true // 循环变量每次迭代被写入
+			out[st.name] = true // the loop variable is written on every iteration
 			scanAssigned(st.body, out)
 		case *tryStmt:
 			scanAssigned(st.then, out)
@@ -4326,8 +4326,8 @@ func scanAssigned(stmts []stmt, out map[string]bool) {
 	}
 }
 
-// scanByRefArgs 收集「作为按引用实参出现的变量名」：这些变量必须有 alloca 存储，
-// 否则 compileArgAddr 只能退化成临时单元，callee 的写入无法回写调用方。
+// scanByRefArgs collects "variable names that appear as by-reference arguments": these variables must have alloca storage,
+// otherwise compileArgAddr can only degrade to a temporary cell and the callee's writes cannot be written back to the caller.
 func scanByRefArgs(stmts []stmt, sigs map[string]*funcSig, out map[string]bool) {
 	mark := func(x *expr) {
 		if x != nil && x.kind == kIdent {
@@ -4378,7 +4378,7 @@ func scanByRefArgs(stmts []stmt, sigs map[string]*funcSig, out map[string]bool) 
 			}
 		case kMethod:
 			if x.method != nil {
-				// 用户方法：实参按引用；接口方法（vtable 分发）：同样按引用（解释器 evalArgs）
+				// user method: arguments by reference; interface method (vtable dispatch): likewise by reference (interpreter evalArgs)
 				byRefCall := x.method.iface != ""
 				if s := sigs[x.method.sig]; s != nil && s.byRef {
 					byRefCall = true
@@ -4469,7 +4469,7 @@ func scanByRefArgs(stmts []stmt, sigs map[string]*funcSig, out map[string]bool) 
 	walk(stmts)
 }
 
-// constEval 递归求值常量表达式（字面量算术折叠）。
+// constEval recursively evaluates a constant expression (literal arithmetic folding).
 func constEval(x *expr) (int64, bool) {
 	if x == nil {
 		return 0, false
@@ -4507,10 +4507,10 @@ func constEval(x *expr) (int64, bool) {
 	return 0, false
 }
 
-// ---------- 运行期助手（按需追加到模块尾部） ----------
+// ---------- Runtime helpers (appended to the end of the module on demand) ----------
 
-// intToStrHelper 是 int.toString() 的运行时助手：malloc(12) + snprintf("%d")；
-// 12 字节足够 int32 极值（-2147483648 + NUL）。
+// intToStrHelper is the runtime helper for int.toString(): malloc(12) + snprintf("%d");
+// 12 bytes is enough for the int32 extremes (-2147483648 + NUL).
 const intToStrHelper = `@.ql.fmt.d = private unnamed_addr constant [3 x i8] c"%d\00", align 1
 define i8* @ql_int_to_str(i32 %v) {
 entry:
@@ -4521,9 +4521,9 @@ entry:
 }
 `
 
-// floatToStrHelper 是 float.toString()/打印的运行时助手：与解释器
-// strconv.FormatFloat(v,'f',-1,64) 一致 —— 取最短可回读（round-trip）的定点小数。
-// 实现：%.0f..%.17f 逐个 snprintf，用 strtod 回读校验，取首个能精确还原的精度。
+// floatToStrHelper is the runtime helper for float.toString()/printing: consistent with the interpreter's
+// strconv.FormatFloat(v,'f',-1,64) — take the shortest fixed-point decimal that round-trips.
+// implementation: snprintf %.0f..%.17f one by one, verify by reading back with strtod, and take the first precision that restores the value exactly.
 const floatToStrHelper = `@.ql.fmt.f = private unnamed_addr constant [5 x i8] c"%.*f\00", align 1
 define i8* @ql_float_to_str(double %v) {
 entry:
@@ -4545,8 +4545,8 @@ done:
 }
 `
 
-// ptrToStrHelper 是 pointer 打印助手：null → "nil"，否则 "0x%llx"
-// （与解释器 Value.String() 的 0x+十六进制 呈现一致）。
+// ptrToStrHelper is the pointer printing helper: null → "nil", otherwise "0x%llx"
+// (consistent with the interpreter's Value.String() 0x+hex rendering).
 const ptrToStrHelper = `@.ql.nil = private unnamed_addr constant [4 x i8] c"nil\00", align 1
 @.ql.fmt.p = private unnamed_addr constant [7 x i8] c"0x%llx\00", align 1
 define i8* @ql_ptr_to_str(i8* %p) {
@@ -4565,7 +4565,7 @@ hex:
 }
 `
 
-// panicHelper 是运行期错误的打印与退出（与解释器 ReportError 的 "error: ..." 一致）。
+// panicHelper prints and exits on a runtime error (consistent with the interpreter's ReportError "error: ...").
 const panicHelper = `@.ql.panic.fmt = private unnamed_addr constant [22 x i8] c"error: %s at line %d\0A\00", align 1
 @.ql.panic.idx = private unnamed_addr constant [71 x i8] c"error: IndexOutOfBoundsError: index %d out of range [0,%d) at line %d\0A\00", align 1
 define void @ql_panic(i8* %msg, i32 %line) {

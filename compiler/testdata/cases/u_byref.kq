@@ -1,6 +1,6 @@
-// u_byref：形参按引用传递（含 int/float/bool/String 标量）+ copyd 传时拷贝。
-// 语义基准 = 解释器（compiler/testdata/cases 下与 .out 逐字节对比）。
-// 注：不用 List.toString()（需要 clang 链接 qthreads 运行时），改用 size()/下标。
+// u_byref: parameters are passed by reference (including int/float/bool/String scalars) + copyd copies on pass.
+// Semantic baseline = interpreter (byte-for-byte comparison with .out under compiler/testdata/cases).
+// Note: List.toString() is not used (it needs clang to link the qthreads runtime); size()/indexing are used instead.
 type struct { int v; } S;
 type struct { S inner; List<int> l; int tag; } Outer;
 type interface { fn touch(Self self, int a) int; } I;
@@ -32,22 +32,22 @@ impl {
 fn main(IOStream io) {
     S s; s.v = 1;
     S t; t.v = 1;
-    io.println(s.bumpSelf(5).toString() + " s.v=" + s.v.toString());   // 6 / s.v=6（字段写穿透）
-    io.println(t.rebindSelf().toString() + " t.v=" + t.v.toString());  // 77 / t.v=1（self 按值绑定）
+    io.println(s.bumpSelf(5).toString() + " s.v=" + s.v.toString());   // 6 / s.v=6 (field write-through)
+    io.println(t.rebindSelf().toString() + " t.v=" + t.v.toString());  // 77 / t.v=1 (self is bound by value)
     int x = 5;
     io.println(bumpInt(x).toString() + " x=" + x.toString());          // 6 / x=6
-    chain(x);                                                          // 引用链：x=7
+    chain(x);                                                          // reference chain: x=7
     io.println("x=" + x.toString());
-    io.println(recur(x, 3).toString() + " x=" + x.toString());          // 37 / x=37（递归改形参）
+    io.println(recur(x, 3).toString() + " x=" + x.toString());          // 37 / x=37 (recursion mutates the parameter)
     bool b = true; setBool(b); io.println(b.toString());                // false
     float f = 1.5; setFloat(f); io.println(f.toString());               // 2
     String str = "hi"; setStr(str); io.println(str);                    // hi!
     S u; u.v = 10;
     io.println(setStruct(u).toString() + " u.v=" + u.v.toString());     // 11 / u.v=11
-    io.println(rebindStruct(u).toString() + " u.v=" + u.v.toString());  // 99 / u.v=99（形参重绑定写回）
-    S w; w.v = 3; int r = bumpInt(w.v);                                 // 字段实参写回
+    io.println(rebindStruct(u).toString() + " u.v=" + u.v.toString());  // 99 / u.v=99 (rebinding the parameter writes back)
+    S w; w.v = 3; int r = bumpInt(w.v);                                 // field argument writes back
     io.println(r.toString() + " w.v=" + w.v.toString());                // 4 / w.v=4
-    int q = 1; int qr = bumpInt(q + 1);                                 // 非左值：不回写
+    int q = 1; int qr = bumpInt(q + 1);                                 // non-lvalue: no write-back
     io.println(qr.toString() + " q=" + q.toString());                   // 3 / q=1
     List<int> l = [1, 2]; int n1 = appendList(l);
     io.println(n1.toString() + " " + l.size().toString() + " " + l[2].toString());   // 3 3 9
@@ -58,7 +58,7 @@ fn main(IOStream io) {
     List<int> l4 = [1, 2, 3]; int er = bumpInt(l4[1]);
     io.println(er.toString() + " " + l4[0].toString() + " " + l4[1].toString()
         + " " + l4[2].toString());                                      // 3 1 3 3
-    // copyd：传时拷贝，callee 内修改不影响调用方
+    // copyd: copied on pass, so mutations inside the callee do not affect the caller
     io.println(bumpCopy(x).toString() + " x=" + x.toString());          // 38 / x=37
     S c; c.v = 9;
     io.println(copyStruct(c).toString() + " c.v=" + c.v.toString());    // 100 / c.v=9
@@ -68,12 +68,12 @@ fn main(IOStream io) {
     List<int> cl = [1, 2];
     io.println(copyList(cl).toString() + " " + cl.size().toString()
         + " " + cl[0].toString());                                      // 3 2 1
-    // 方法实参按引用；接口方法同样
+    // method arguments are by reference; the same holds for interface methods
     S m; m.v = 1; int ma = 7;
     io.println(m.touch(ma).toString() + " ma=" + ma.toString());        // 200 / ma=200
     I mi = m; int ia = 7;
     io.println(mi.touch(ia).toString() + " ia=" + ia.toString());       // 200 / ia=200
-    io.println(tailSum(5, 0).toString());                               // 15（尾调用）
+    io.println(tailSum(5, 0).toString());                               // 15 (tail call)
 }
 
 fn tailSum(int n, int acc) int { if (n == 0) { return acc; } return tailSum(n - 1, acc + n); }

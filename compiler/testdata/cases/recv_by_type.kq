@@ -1,20 +1,22 @@
-// recv_by_type：接收者识别**按类型**（首参类型 == Self，或基名等于 impl/接口类型，
-// 忽略 <...> 与 & 后缀），与形参名无关；首参无类型标注时按接收者补全
-// （当前 parser 不接受完全无类型形参，故该分支只在类型标注缺省化路径上生效）。
-// 语义基准 = 解释器（/tmp/quark 与 /tmp/qkc -run 逐字节一致）。
+// recv_by_type: receiver detection is **by type** (first param type == Self, or its base name
+// equals the impl/interface type, ignoring <...> and & suffixes) and is independent of the
+// parameter name; a first param with no type annotation is completed as the receiver
+// (the current parser does not accept fully untyped params, so that branch only takes effect
+// on the type-annotation-defaulting path).
+// Semantic baseline = interpreter (/tmp/quark and /tmp/qkc -run byte-for-byte identical).
 type struct { int a; int b; } P;
 impl {
-    fn new(int a, int b) P { P p; p.a = a; p.b = b; return p; }   // 静态方法（首参不是接收者）
-    fn sum(P me) int { return me.a + me.b; }                      // 实例：类型是 impl 类型，名字不叫 self
-    fn sum2(Self other) int { return other.a * other.b; }         // 实例：Self
-    fn twice(int self) int { return self * 2; }                   // 静态：名字叫 self 但类型不是 P
+    fn new(int a, int b) P { P p; p.a = a; p.b = b; return p; }   // static method (first param is not a receiver)
+    fn sum(P me) int { return me.a + me.b; }                      // instance: the type is the impl type, the name is not self
+    fn sum2(Self other) int { return other.a * other.b; }         // instance: Self
+    fn twice(int self) int { return self * 2; }                   // static: named self but the type is not P
 } P;
-type interface { fn sum(Self s) int; } C;                         // 接口接收者写 Self、名字任意
+type interface { fn sum(Self s) int; } C;                         // interface receiver is written Self, name arbitrary
 
 type struct<T> { T v; } Box;
 impl<T> {
-    fn get(Box<T> b) T { return b.v; }                            // 实例：泛型基名 Box<T> → Box
-    fn set(Box<T> me, T d) T { me.v = d; return me.v; }           // 实例：名字任意 + 形参按引用
+    fn get(Box<T> b) T { return b.v; }                            // instance: generic base name Box<T> -> Box
+    fn set(Box<T> me, T d) T { me.v = d; return me.v; }           // instance: arbitrary name + params by reference
 } Box;
 
 fn main(IOStream io) {
@@ -22,12 +24,12 @@ fn main(IOStream io) {
     io.println(p.sum());     // 7
     io.println(p.sum2());    // 12
     C c = p;
-    io.println(c.sum());     // 7（接口 vtable 分发到同一实例方法）
-    io.println(P::twice(21)); // 42（静态：名字 self 不构成接收者）
+    io.println(c.sum());     // 7 (interface vtable dispatches to the same instance method)
+    io.println(P::twice(21)); // 42 (static: the name self does not make it a receiver)
     Box<int> b; b.v = 9;
     io.println(b.get());     // 9
     int d = 5;
-    io.println(b.set(d));    // 5（形参按引用：d 仍是 5）
+    io.println(b.set(d));    // 5 (params by reference: d is still 5)
     io.println(b.v);         // 5
     io.println(d);           // 5
 }

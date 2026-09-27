@@ -1,4 +1,4 @@
-// 刻意不报：库文件里的函数是对外 API，从未被本文件调用也不算死代码。
+// Deliberately not reported: functions in a library file are the public API, so never being called from this file is not dead code.
 program library;
 
 pub fn api(int n) int {

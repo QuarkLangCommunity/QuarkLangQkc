@@ -1,6 +1,6 @@
 program library;
 
-// 库类型 + 方法（调用方可能只用到类型）。
+// Library type + method (a caller may only use the type).
 pub type struct {
     int v;
 } LibBox;

@@ -1,15 +1,15 @@
 package cgen
 
-// 接口 / dynamic 分发（Phase C）：vtable + thunk 方案。
+// Interface / dynamic dispatch (Phase C): vtable + thunk scheme.
 //
-// 值表示：%Iface = type { i8* data, i8** vt }
-//   - data：具体 struct 实例指针（与解释器的 *StructValue 引用语义一致）
-//   - vt：具体类型对该接口的 vtable（每个 (类型, 接口) 对生成一份常量表）
+// Value representation: %Iface = type { i8* data, i8** vt }
+//   - data: pointer to a concrete struct instance (same reference semantics as the interpreter's *StructValue)
+//   - vt: the concrete type's vtable for this interface (one constant table per (type, interface) pair)
 //
-// 装箱发生在「具体 struct 值 → 接口槽位」的赋值/传参/返回处（此时具体类型已知）；
-// 调用 iface.m(args) 时从 vtable 第 idx 槽取函数指针，经 thunk 还原具体类型后调用。
-// 结构化满足（S14）由 internal/lang 的 Typecheck 在赋值/传参处校验，编译器只按
-// 已通过的检查生成派发表；缺方法时给出明确诊断（绝不静默错编）。
+// Boxing happens at the assignment/argument passing/return of "concrete struct value → interface slot" (the concrete type is known there);
+// calling iface.m(args) fetches the function pointer from vtable slot idx and calls it after the thunk restores the concrete type.
+// Structural satisfaction (S14) is checked by internal/lang's Typecheck at assignment/argument passing; the compiler only
+// generates dispatch tables for checks already passed; a missing method yields an explicit diagnostic (never a silent miscompile).
 
 import (
 	"strings"
@@ -17,15 +17,15 @@ import (
 	"quarklang/internal/lang"
 )
 
-// ifaceM 是接口方法在派发表中的槽位。
+// ifaceM is an interface method's slot in the dispatch table.
 type ifaceM struct {
 	name   string
 	idx    int
-	params []string // 不含 self；"Self" 保留原样
+	params []string // excludes self; "Self" kept as-is
 	ret    string
 }
 
-// ifaceMethodList 返回接口方法表（含 expand interface 组合，按声明顺序，缓存）。
+// ifaceMethodList returns the interface method table (including expand interface composition, in declaration order, cached).
 func (l *lowerer) ifaceMethodList(name string) []ifaceM {
 	if t, ok := l.ifaceTbl[name]; ok {
 		return t
@@ -46,7 +46,7 @@ func (l *lowerer) ifaceMethodList(name string) []ifaceM {
 			var params []string
 			for i := range m.Params {
 				if i == 0 && isRecvParam(n, &m.Params[0]) {
-					continue // 接收者：按类型判定（Self / 接口类型基名），与形参名无关
+					continue // receiver: determined by type (Self / interface type base name), independent of the parameter name
 				}
 				params = append(params, m.Params[i].Type)
 			}
@@ -61,7 +61,7 @@ func (l *lowerer) ifaceMethodList(name string) []ifaceM {
 	return out
 }
 
-// vtableFor 构造/复用 (typ, iface) 的 vtable（含各方法 thunk）。
+// vtableFor builds/reuses the vtable for (typ, iface) (with a thunk per method).
 func (l *lowerer) vtableFor(typ, iface string, fc *funcCtx, pos lang.Pos) (*vtableDef, error) {
 	sym := "@vt$" + tyName(typ) + "$" + tyName(iface)
 	if v, ok := l.vtables[sym]; ok {
@@ -93,7 +93,7 @@ func (l *lowerer) vtableFor(typ, iface string, fc *funcCtx, pos lang.Pos) (*vtab
 		if len(th.params) != len(m.params) {
 			return nil, l.errf(pos, "接口 %s 的方法 %s 与 %s 的实现参数个数不一致（类型检查本应拦截）", iface, m.name, typ)
 		}
-		// 接口声明为 Self 的参数：thunk 接收 i8*（接口 data），调用前还原具体类型
+		// Interface parameters declared as Self: the thunk takes an i8* (interface data) and restores the concrete type before the call
 		for i, pt := range m.params {
 			if strings.TrimSpace(pt) == "Self" || pt == iface {
 				th.selfIdx = append(th.selfIdx, i)
@@ -106,9 +106,9 @@ func (l *lowerer) vtableFor(typ, iface string, fc *funcCtx, pos lang.Pos) (*vtab
 	return v, nil
 }
 
-// boxTo 把具体值装箱成接口值：
-//   - want == interface{}（tAny）→ 装箱任意可 lower 值（标量/String 堆单元 + RTTI 描述符）；
-//   - want 是具名接口 → vtable 方案（需要 struct 实现）。
+// boxTo boxes a concrete value into an interface value:
+//   - want == interface{} (tAny) → box any lowerable value (scalar/String heap cell + RTTI descriptor);
+//   - want is a named interface → vtable scheme (requires a struct impl).
 func (fc *funcCtx) boxTo(e *expr, want string, pos lang.Pos) (*expr, error) {
 	if e == nil || e.typ == want {
 		return e, nil
@@ -140,7 +140,7 @@ func (fc *funcCtx) boxTo(e *expr, want string, pos lang.Pos) (*expr, error) {
 	return e, nil
 }
 
-// ifaceCall lower 接口方法调用（vtable 分发）。
+// ifaceCall lowers an interface method call (vtable dispatch).
 func (fc *funcCtx) ifaceCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (*expr, error) {
 	l := fc.l
 	tbl := l.ifaceMethodList(rt)
@@ -173,7 +173,7 @@ func (fc *funcCtx) ifaceCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		want := m.params[i]
 		at := fc.typeOf(a)
 		if strings.TrimSpace(want) == "Self" || want == rt {
-			// Self 形参：装箱成接口值，调用点取 data（i8*）
+			// Self parameter: boxed into an interface value; the call site takes data (i8*)
 			x, err := fc.exprAs(a, rt)
 			if err != nil {
 				return nil, err

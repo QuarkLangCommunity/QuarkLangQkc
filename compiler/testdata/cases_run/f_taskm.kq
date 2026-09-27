@@ -1,4 +1,4 @@
-// taskm：线程（spawn/merge/block/done）与通道（channel/send/recv）
+// taskm: threads (spawn/merge/block/done) and channels (channel/send/recv)
 fn work(int n) int {
     int s = 0;
     int i = 0;

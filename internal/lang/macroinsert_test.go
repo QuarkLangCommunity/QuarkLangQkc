@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// #insert(#ast(参数)) 与 #execute 恢复：显式直插/标识符拼接
+// #insert(#ast(parameter)) and #execute restored: explicit direct insertion / identifier splicing
 func TestMacroInsertDirectives(t *testing.T) {
 	out, err := runSrc(t, `#macro pair (a, b) {
     #when (run) {
@@ -23,7 +23,7 @@ fn main(IOStream io) {
 	}
 }
 
-// #insert(#ast(...)) 按声明顺序直插全部参数（转发用法）
+// #insert(#ast(...)) directly inserts every parameter in declaration order (forwarding use)
 func TestMacroInsertAll(t *testing.T) {
 	out, err := runSrc(t, `fn add2(int a, int b) int {
     return a + b;
@@ -45,7 +45,7 @@ fn main(IOStream io) {
 	}
 }
 
-// #execute(name) 直插标识符 token：拼接出可调用名
+// #execute(name) directly inserts an identifier token: splices together a callable name
 func TestMacroExecuteSplice(t *testing.T) {
 	out, err := runSrc(t, `fn give() int {
     return 7;

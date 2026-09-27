@@ -1,4 +1,4 @@
-// FFI 链接名映射：libc → -lc（默认已链接），m → -lm
+// FFI link-name mapping: libc -> -lc (linked by default), m -> -lm
 library libc {
     fn abs(int v) int;
 }

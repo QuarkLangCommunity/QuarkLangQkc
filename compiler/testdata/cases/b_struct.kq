@@ -1,4 +1,4 @@
-// S3/S8/S10/S11/S12：struct 字段/方法/静态方法/space/运算符重载
+// S3/S8/S10/S11/S12: struct fields/methods/static methods/space/operator overloading
 type struct { int a; String name; float f; bool ok; } Rec;
 impl {
     fn new(int a, String n) Rec {

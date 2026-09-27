@@ -1,5 +1,5 @@
-// u_strlist：String.split → List<String>（解释器同款 Go strings.Split 语义）+ 只读子集。
-// 编译器 lower 的 List<String> 操作：size()/get(i)/toString()/for-in/下标读取/io.println。
+// u_strlist: String.split -> List<String> (same Go strings.Split semantics as the interpreter) + read-only subset.
+// List<String> operations lowered by the compiler: size()/get(i)/toString()/for-in/index reads/io.println.
 fn main(IOStream io) {
     String csv = "a,b,,c";
     List<String> l = csv.split(",");
@@ -15,7 +15,7 @@ fn main(IOStream io) {
     io.println(w.size());
     io.println(w.get(1));
     io.println(w.get(0) + "|" + w.get(2));
-    // for-in 按滚动游标消费（解释器语义：循环后 head 前进、size 归零）→ 放最后
+    // for-in consumes via a rolling cursor (interpreter semantics: after the loop the head has advanced and size is zero) -> placed last
     List<String> w2 = "one two three".split(" ");
     int n = 0;
     for (String s : w2) { n = n + s.size(); }

@@ -27,7 +27,7 @@ func ExportLibrary(prog *Program, outPath string) error {
 		body := extractBody(prog.Src, fn)
 		params := make([]string, 0, len(fn.Params))
 		for _, p := range fn.Params {
-			params = append(params, p.Type+" "+p.Name) // 正典：类型在前
+			params = append(params, p.Type+" "+p.Name) // canonical form: type first
 		}
 		var sb strings.Builder
 		sb.WriteString("fn ")
@@ -143,8 +143,8 @@ type SrcMap struct {
 }
 
 type srcLoc struct {
-	file string // 源文件路径（主文件为传入的 filename）
-	line int    // 该行在源文件中的行号（1 基）
+	file string // source file path (for the main file, the filename passed in)
+	line int    // line number of this line in the source file (1-based)
 }
 
 // Map maps a merged-source line number back to (file, line inside that file). Invalid line numbers return ("", 0).
@@ -160,7 +160,7 @@ func (m *SrcMap) Map(line int) (string, int) {
 type mapBuilder struct {
 	b    strings.Builder
 	segs []srcLoc
-	idx  map[string]int // (文件\x00行号) → 合并源码行号（1 基）
+	idx  map[string]int // (file\x00line number) → merged source line number (1-based)
 }
 
 // append appends a chunk of source (the caller guarantees the trailing newline matches the old behaviour).
@@ -177,7 +177,7 @@ func (m *mapBuilder) appendMapped(text, file string, srcLines []int) {
 	lines := strings.Split(text, "\n")
 	for i, ln := range lines {
 		if i == len(lines)-1 && ln == "" {
-			break // 末尾换行不产生新行
+			break // the trailing newline does not produce a new line
 		}
 		srcLine := i + 1
 		if srcLines != nil && i < len(srcLines) {
@@ -185,7 +185,7 @@ func (m *mapBuilder) appendMapped(text, file string, srcLines []int) {
 		}
 		m.segs = append(m.segs, srcLoc{file: file, line: srcLine})
 		key := file + "\x00" + strconv.Itoa(srcLine)
-		if _, ok := m.idx[key]; !ok { // 同名文件重复导入时保留首次
+		if _, ok := m.idx[key]; !ok { // keep the first occurrence when the same file is imported repeatedly
 			m.idx[key] = len(m.segs)
 		}
 	}
@@ -263,7 +263,7 @@ func CompileWithImportPaths(src, filename string, extraPaths []string) (*Program
 				pos := Pos{}
 				if i < len(prog.ImportPos) {
 					pos = prog.ImportPos[i]
-					pos.Line = merged.mergedLine(file, pos.Line) // 换算到合并源码坐标，供 CLI 反查真实文件
+					pos.Line = merged.mergedLine(file, pos.Line) // convert to merged-source coordinates, so the CLI can map back to the real file
 				}
 				return &CheckError{Msg: err.Error(), Pos: pos}
 			}

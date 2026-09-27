@@ -1,13 +1,13 @@
 package lang
 
-// qkcheck 语料扰动不变性：对**真实源文件**做「不改变语义」的改写，诊断集合必须保持一致。
+// qkcheck corpus perturbation invariance: after semantics-preserving rewrites of **real source files**, the diagnostic set must stay identical.
 //
-// 覆盖两类真实风险：
-//  1. 位置稳健性：插入注释/空行后，诊断行号必须精确平移（编辑器与 CI 都靠这个定位）；
-//  2. 跨系统：CRLF（Windows 换行）与行尾空白不应改变任何诊断——这是跨平台一致性的核心用例。
+// Two real risks are covered:
+//  1. Position robustness: after inserting comments/blank lines the diagnostic line numbers must shift exactly (both editors and CI rely on this to locate them);
+//  2. Cross-system: CRLF (Windows line endings) and trailing whitespace must not change any diagnostic - the core test case for cross-platform consistency.
 //
-// 与 lintbench（人工标注）互补：那边验证「该报的报、不该报的不报」，
-// 这边验证「同样的代码换个写法结论不变」。
+// Complementary to lintbench (hand-labelled): that side checks that what should be reported is reported and what should not be reported is not,
+// this side checks that the same code written differently gives the same verdict.
 
 import (
 	"os"
@@ -64,8 +64,8 @@ func corpusFiles(t *testing.T) []string {
 		if fi.IsDir() {
 			switch fi.Name() {
 			case ".git", "dist", "dist-ci", "node_modules", "lintbench", "bench":
-				// lintbench 是人工标注基准（由 lintstat/lintbench 两个测试负责）；
-				// bench/tools 是性能夹具（含第三方库副本）
+				// lintbench is the hand-labelled benchmark (covered by the lintstat/lintbench tests);
+				// bench/tools is the performance fixture (contains copies of third-party libraries)
 				return filepath.SkipDir
 			}
 			return nil
@@ -100,11 +100,11 @@ func TestLintCorpusPerturbationInvariance(t *testing.T) {
 		}
 		base := diagSet(t, src)
 
-		// ① CRLF（Windows 换行）：诊断必须逐条相同
+		// 1) CRLF (Windows line endings): diagnostics must be identical item by item
 		if got := diagSet(t, strings.ReplaceAll(src, "\n", "\r\n")); !sameDiags(got, base) {
 			t.Errorf("%s：CRLF 后诊断变化\n base=%v\n  crlf=%v", f, base, got)
 		}
-		// ② 行尾注释：不改变任何诊断（注释由词法层剥离，位置不动）
+		// 2) Trailing comments: change no diagnostic (comments are stripped by the lexer, positions unmoved)
 		var withComments []string
 		for _, ln := range strings.Split(strings.TrimRight(src, "\n"), "\n") {
 			if strings.TrimSpace(ln) == "" || strings.Contains(ln, "//") || strings.Contains(ln, "/*") {
@@ -116,7 +116,7 @@ func TestLintCorpusPerturbationInvariance(t *testing.T) {
 		if got := diagSet(t, strings.Join(withComments, "\n")+"\n"); !sameDiags(got, base) {
 			t.Errorf("%s：加行尾注释后诊断变化\n base=%v\n  pert=%v", f, base, got)
 		}
-		// ③ 头部插入 3 行注释：诊断行号整体 +3
+		// 3) Inserting 3 comment lines at the head: every diagnostic line number shifts by +3
 		head := "// 扰动头部 1\n// 扰动头部 2\n// 扰动头部 3\n" + src
 		want := make([]diagKey, len(base))
 		for i, d := range base {
@@ -125,7 +125,7 @@ func TestLintCorpusPerturbationInvariance(t *testing.T) {
 		if got := diagSet(t, head); !sameDiags(got, want) {
 			t.Errorf("%s：头部插注释后行号未按预期平移\n want=%v\n  got=%v", f, want, got)
 		}
-		// ④ 行尾空白 + 文件末尾空行：诊断不变
+		// 4) Trailing whitespace + blank lines at the end of the file: diagnostics unchanged
 		var padded []string
 		for _, ln := range strings.Split(strings.TrimRight(src, "\n"), "\n") {
 			padded = append(padded, ln+"   \t")
@@ -141,7 +141,7 @@ func TestLintCorpusPerturbationInvariance(t *testing.T) {
 	}
 }
 
-// TestLintCRLFPositions 单点核对：CRLF 下 token 行列号与 LF 完全一致（跨系统一致性）。
+// TestLintCRLFPositions single-point check: under CRLF the token line/column numbers are exactly the same as under LF (cross-system consistency).
 func TestLintCRLFPositions(t *testing.T) {
 	src := "program library;\n\npub fn f(int a) int {\n    int unused = 1;\n    return a;\n}\n"
 	lf := diagSet(t, src)
@@ -152,7 +152,7 @@ func TestLintCRLFPositions(t *testing.T) {
 	if len(lf) != 1 || lf[0].code != CodeUnusedVar || lf[0].line != 4 {
 		t.Fatalf("期望 QK101 在第 4 行，got %v", lf)
 	}
-	// 顺带核对词法层：CRLF 不产生额外 token、行列号一致
+	// Also check the lexer layer: CRLF produces no extra tokens and line/column numbers match
 	toksLF, err := Lex(src)
 	if err != nil {
 		t.Fatal(err)

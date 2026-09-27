@@ -1,6 +1,6 @@
 package main
 
-// qkdoc 生成链路基准：解析 + 文档模型 + Markdown 渲染。
+// qkdoc generation pipeline benchmark: parsing + doc model + Markdown rendering.
 
 import (
 	"strings"

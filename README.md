@@ -524,6 +524,24 @@ PRs and issues are welcome. The three lowest-friction ways to get involved:
 The v2 syntax surface is complete (interpreter and compiler agree); compiled performance is on par with C.
 See `docs/benchmarks.md` (docs branch) for methodology.
 
+## Known gaps
+
+Written down on purpose — a young language is better judged by what it admits than by what it advertises.
+
+- **Compiler parity is per-construct, not per-program.** The interpreter and `qkc` are held to byte-identical output
+  on the checked-in corpus (`compiler/testdata/compare.sh`, enforced in CI). Constructs the compiler cannot lower yet
+  produce a hard "not supported yet" diagnostic instead of a silent behavioural difference — e.g. reading the error
+  value inside a `catch` body.
+- **Known bug**: `return .{...};` fails with `return type is Point, got .` because the typechecker does not propagate
+  an expected type into the literal yet ([issue #7](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/7)).
+- **Thin standard library**: six official libraries (json, regex, cleg, gl, vulkan, actions). There is no package
+  registry — `qkm` and `qkc -L` resolve dependencies locally.
+- **Macro system**: token-level macros are shared by both engines, but compile-time symbol insertion (`#ast`) and
+  import resolution are still in progress.
+- **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
+- **Test coverage is 65.1%** (root module); the linter's statistical gates cover its generated corpus, not all code.
+- **Source comments** are mid-translation to English (README, docs, `SYNTAX.md` and tool output are already English).
+
 ## License
 
 [MIT](LICENSE) © 2026 Enoch-199811

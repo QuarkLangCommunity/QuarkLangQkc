@@ -15,7 +15,7 @@ import (
 	"unsafe"
 )
 
-// Windows FFI：LoadLibrary/GetProcAddress + 自研 ABI wrapper（4 型 x <=4 参数组合）。
+// Windows FFI: LoadLibrary/GetProcAddress + a hand-written ABI wrapper (4 types x <=4 argument combinations).
 
 const (
 	ffiVoid = 0

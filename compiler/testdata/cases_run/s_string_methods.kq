@@ -1,4 +1,4 @@
-// E4：String 内建方法（rune 语义：size/charAt/substring；字节语义：contains/indexOf…）
+// E4: String built-in methods (rune semantics: size/charAt/substring; byte semantics: contains/indexOf...)
 fn main(IOStream io) {
     String s = "Hello, World";
     io.println(s.size());

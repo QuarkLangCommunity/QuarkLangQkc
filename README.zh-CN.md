@@ -324,7 +324,7 @@ go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
 ```sh
 ./scripts/build-release.sh 2.1.0     # 3 平台 × 2 架构 × 6 工具 → dist/（版本注入 + sha256 清单）
 ./scripts/changelog.sh 2.1.0         # 自上个 tag 以来，按类型分组的变更日志
-./scripts/changelog.sh --all > CHANGELOG.md
+./scripts/changelog.sh --all > CHANGELOG.zh-CN.md
 git tag v2.1.0 && git push origin v2.1.0   # 触发 release 工作流：三平台原生构建 → GitHub Release
 ```
 
@@ -511,6 +511,21 @@ go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释�
 - **维护者**：[@Enoch-199811](https://github.com/Enoch-199811)（Issue / PR 里 @ 即可）。
 
 v2 语法面完整（解释器 + 编译器一致），性能 = C 级（编译路径）。见 `docs/benchmarks.md` 与宣传视频（`/home/jack/quarklang-promo/`）。
+
+## 已知不足
+
+故意写出来——年轻的语言，看它承认什么比看它宣传什么更可靠。
+
+- **编译器对等是"按构造"而非"按程序"**：解释器与 `qkc` 在仓库语料上被要求逐字节一致（`compiler/testdata/compare.sh`，CI 强制）；
+  编译器尚未 lower 的构造会报"暂未支持"的硬错误，而不是悄悄产生行为差异——例如在 `catch` 体内读取错误值。
+- **已知 bug**：`return .{...};` 会报 `return type is Point, got .`，因为类型检查尚未把期望类型传入字面量
+  （[issue #7](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/7)）。
+- **标准库偏薄**：6 个官方库（json、regex、cleg、gl、vulkan、actions）；没有包仓库，
+  `qkm` 与 `qkc -L` 只做本地依赖解析。
+- **宏系统**：token 级宏已供两条后端共用，但编译期符号插入（`#ast`）与 import 解析仍在推进。
+- **Windows FFI** 使用自研 ABI 垫片，最多 4 个参数。
+- **测试覆盖率 65.1%**（主模块）；linter 的统计门禁覆盖的是生成语料，不是全部代码。
+- **源码注释**正在翻成英文（README、docs、`SYNTAX.md` 与工具输出已是英文）。
 
 ## 许可证
 

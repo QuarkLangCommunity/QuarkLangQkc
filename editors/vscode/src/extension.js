@@ -1,8 +1,8 @@
 'use strict';
-// QuarkLang VS Code 扩展：语法高亮（TextMate，见 syntaxes/）+ qklsp 语言服务
-// （诊断 / 跳转定义 / 补全 / 悬停 / 文档符号）。
+// QuarkLang VS Code extension: syntax highlighting (TextMate, see syntaxes/) + the qklsp language server
+// (diagnostics / go-to-definition / completion / hover / document symbols).
 //
-// 依赖只有 vscode 与 Node 内置模块——不引入 vscode-languageclient，免 npm 安装。
+// The only dependencies are vscode and Node built-in modules — no vscode-languageclient, no npm install.
 
 const vscode = require('vscode');
 const path = require('path');
@@ -61,8 +61,8 @@ function activate(context) {
     trace: cfg.get('trace.server') === true,
     onTrace: (line) => output.appendLine(line),
     onExit: (err, code, signal) => {
-      if (err) output.appendLine(`qklsp 启动失败: ${err.message}`);
-      else if (code) output.appendLine(`qklsp 退出: code=${code} signal=${signal || ''}`);
+      if (err) output.appendLine(`failed to start qklsp: ${err.message}`);
+      else if (code) output.appendLine(`qklsp exited: code=${code} signal=${signal || ''}`);
     },
   }).start();
 
@@ -74,12 +74,12 @@ function activate(context) {
 
   client.initialize(rootUri).catch((err) => {
     vscode.window.showWarningMessage(
-      `QuarkLang 语言服务未就绪（${err.message}）。请先构建 qklsp：go build -o qklsp ./cmd/qklsp，` +
-      '并在设置 quarklang.serverPath 里指向它。'
+      `QuarkLang language service is not ready (${err.message}). Build qklsp first: go build -o qklsp ./cmd/qklsp, ` +
+      'then point the quarklang.serverPath setting at it.'
     );
   });
 
-  // 已打开的文档同步给服务端
+  // Sync already-open documents to the server
   for (const doc of vscode.workspace.textDocuments) {
     if (doc.languageId === 'quarklang') client.openDocument(toUri(doc), doc.getText());
   }

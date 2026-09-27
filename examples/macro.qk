@@ -5,6 +5,6 @@
 }
 
 fn main(IOStream io) {
-    io.println(add(10, 32));   // () 调用
-    io.println(add[20, 22]);   // [] 调用
+    io.println(add(10, 32));   // () call
+    io.println(add[20, 22]);   // [] call
 }

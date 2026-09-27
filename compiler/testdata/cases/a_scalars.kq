@@ -1,4 +1,4 @@
-// T1/E3/E4：float / bool 变量与运算、String/bool 比较、io.print、float.toString
+// T1/E3/E4: float / bool variables and operators, String/bool comparisons, io.print, float.toString
 fn main(IOStream io) {
     float x = 1.5;
     float y = 2.0;
