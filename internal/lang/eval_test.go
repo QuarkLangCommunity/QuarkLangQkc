@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"quarklang/internal/i18n"
 	"strings"
 	"testing"
 )
@@ -231,6 +232,8 @@ fn main(IOStream io) {
 }
 
 func TestImplConformanceError(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // 本用例断言中文文案；英文渲染由 internal/i18n 的测试覆盖
 	src := `
 type interface {
     fn call(void prefix, void rec) void;
@@ -376,6 +379,8 @@ fn main(IOStream io) {
 // ============ 严格检查 ============
 
 func TestTypeCheckErrors(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // 本用例断言中文文案；英文渲染由 internal/i18n 的测试覆盖
 	cases := []struct {
 		name string
 		src  string
@@ -659,6 +664,8 @@ pub type struct {
 
 // 参数列表与调用分隔符 () [] {} 可互换；参数个数不限但调用必须匹配
 func TestMacroDelimitersAndArity(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // 本用例断言中文文案
 	out, err := runSrc(t, `#macro add [a, b] {
     #when (run) {
         #return a + b

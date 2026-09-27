@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"quarklang/internal/i18n"
 	"strings"
 	"testing"
 )
@@ -161,6 +162,8 @@ func TestDocModelExtraction(t *testing.T) {
 }
 
 func TestDocMarkdownPubFilter(t *testing.T) {
+	defer i18n.SetLocale(i18n.Locale())
+	i18n.SetLocale(i18n.ZH) // 本用例断言中文文案；英文渲染由 internal/i18n 的测试覆盖
 	d, _ := buildFixtureDoc(t)
 	md := d.Markdown(DocOptions{Path: "mathlib.qk"})
 	if !strings.Contains(md, "# mathlib.qk") {
