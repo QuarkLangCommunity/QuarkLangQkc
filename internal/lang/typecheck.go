@@ -3,7 +3,6 @@ package lang
 import (
 	"errors"
 	"fmt"
-	"quarklang/internal/i18n"
 	"strings"
 )
 
@@ -444,7 +443,7 @@ func overloadErrT(defs []*Func, name string, n int) string {
 			return fmt.Sprintf("CompileError: %s expects %d args, got %d", name, len(d.Params), n)
 		}
 	}
-	return fmt.Sprintf(i18n.T("CompileError: 未找到匹配重载 %q（参数类型不匹配）"), name)
+	return fmt.Sprintf(msg("CompileError: 未找到匹配重载 %q（参数类型不匹配）"), name)
 }
 
 // opMethodFor maps an operator → the Operation protocol method name (xmind §interfaces: operator methods such as __add__; dynamic interface dispatch).
@@ -554,7 +553,7 @@ func Typecheck(prog *Program) error {
 			// Function overloads: same name appends (different signatures are fine; an identical one is an error)
 			for _, od := range c.overloads[f.Name] {
 				if sameSig(od, nfn) {
-					return &CheckError{Msg: fmt.Sprintf(i18n.T("CompileError: duplicate overload %q (与已有签名相同)"), f.Name), Pos: f.Pos}
+					return &CheckError{Msg: fmt.Sprintf(msg("CompileError: duplicate overload %q (与已有签名相同)"), f.Name), Pos: f.Pos}
 				}
 			}
 			c.overloads[f.Name] = append(c.overloads[f.Name], nfn)
@@ -920,7 +919,7 @@ func splitTopCommas(s string) []string {
 }
 
 func (c *checker) errf(pos Pos, format string, args ...interface{}) error {
-	return &CheckError{Msg: i18n.T(format, args...), Pos: pos}
+	return &CheckError{Msg: msg(format, args...), Pos: pos}
 }
 
 func (c *checker) paramType(p Param, pos Pos) (*Type, error) {
@@ -2554,11 +2553,11 @@ func (c *checker) checkIfaceCovers(fromIface, toIface string) error {
 	for _, n := range c.ifaceMethodNames(toIface, map[string]bool{}) {
 		fsig, ok := c.methodSigOf(fromIface, n)
 		if !ok {
-			return errors.New(i18n.T("接口 %s 缺少 %s 的方法 %q", fromIface, toIface, n))
+			return errors.New(msg("接口 %s 缺少 %s 的方法 %q", fromIface, toIface, n))
 		}
 		tsig, _ := c.methodSigOf(toIface, n)
 		if !sigCompatible(fsig, tsig) {
-			return errors.New(i18n.T("接口 %s 的方法 %q 与 %s 的签名不兼容（按类型严格）", fromIface, n, toIface))
+			return errors.New(msg("接口 %s 的方法 %q 与 %s 的签名不兼容（按类型严格）", fromIface, n, toIface))
 		}
 	}
 	return nil
@@ -2589,7 +2588,7 @@ func (c *checker) checkIfaceStrict(from, to *Type, pos Pos, what string) error {
 func (c *checker) checkImplements(typ, iface string) error {
 	def, ok := c.interfaces[iface]
 	if !ok {
-		return errors.New(i18n.T("未知接口 %s", iface))
+		return errors.New(msg("未知接口 %s", iface))
 	}
 	if def.Partial {
 		return nil // optional implementation: no full coverage required
@@ -2602,7 +2601,7 @@ func (c *checker) checkImplements(typ, iface string) error {
 	}
 	for _, sig := range methods {
 		if c.selfMeth(typ, sig.Name) == nil {
-			return errors.New(i18n.T("类型 %s 未实现接口方法 %q", typ, sig.Name))
+			return errors.New(msg("类型 %s 未实现接口方法 %q", typ, sig.Name))
 		}
 	}
 	return nil

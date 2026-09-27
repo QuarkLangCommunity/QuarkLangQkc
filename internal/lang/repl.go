@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"quarklang/internal/i18n"
 	"strings"
 )
 
@@ -57,7 +56,7 @@ func NewREPLSession(stdin io.Reader, stdout io.Writer) (*REPLSession, error) {
 func (s *REPLSession) Eval(src string) (out string, err error) {
 	defer func() { // the interpreter does not guarantee a lack of panics (FFI / external objects); the REPL must survive
 		if r := recover(); r != nil {
-			out, err = "", errors.New(i18n.T("REPL: 内部错误（已恢复）: %v", r))
+			out, err = "", errors.New(msg("REPL: 内部错误（已恢复）: %v", r))
 		}
 	}()
 	if strings.TrimSpace(src) == "" {
@@ -195,26 +194,26 @@ func hasTopDecls(prog *Program) bool {
 func declSummary(prog *Program) string {
 	var b strings.Builder
 	for _, f := range prog.Funcs {
-		fmt.Fprintf(&b, i18n.T("已定义 %s\n"), funcSignature(f))
+		fmt.Fprintf(&b, msg("已定义 %s\n"), funcSignature(f))
 	}
 	for _, sd := range prog.Structs {
 		if sd.Name != "" && !strings.HasPrefix(sd.Name, "__anon_") {
-			fmt.Fprintf(&b, i18n.T("已定义 type struct%s %s;\n"), typeParams(sd.TypeParams), sd.Name)
+			fmt.Fprintf(&b, msg("已定义 type struct%s %s;\n"), typeParams(sd.TypeParams), sd.Name)
 		}
 	}
 	for _, id := range prog.Interfaces {
 		if id.Name != "" && !strings.HasPrefix(id.Name, "__anon_") {
-			fmt.Fprintf(&b, i18n.T("已定义 type interface%s %s;\n"), typeParams(id.TypeParams), id.Name)
+			fmt.Fprintf(&b, msg("已定义 type interface%s %s;\n"), typeParams(id.TypeParams), id.Name)
 		}
 	}
 	for _, im := range prog.Impls {
-		fmt.Fprintf(&b, i18n.T("已定义 impl%s %s;（%d 个方法）\n"), typeParams(im.TypeParams), im.Type, len(im.Methods))
+		fmt.Fprintf(&b, msg("已定义 impl%s %s;（%d 个方法）\n"), typeParams(im.TypeParams), im.Type, len(im.Methods))
 	}
 	for _, lb := range prog.Libraries {
-		fmt.Fprintf(&b, i18n.T("已定义 library %s;（%d 个符号）\n"), lb.Name, len(lb.Methods))
+		fmt.Fprintf(&b, msg("已定义 library %s;（%d 个符号）\n"), lb.Name, len(lb.Methods))
 	}
 	for _, ta := range prog.TypeAliases {
-		fmt.Fprintf(&b, i18n.T("已定义 type %s %s;\n"), ta.Type, ta.Name)
+		fmt.Fprintf(&b, msg("已定义 type %s %s;\n"), ta.Type, ta.Name)
 	}
 	return b.String()
 }
