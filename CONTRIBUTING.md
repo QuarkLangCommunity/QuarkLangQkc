@@ -20,7 +20,7 @@ git clone https://github.com/QuarkLangCommunity/QuarkLangQkc && cd QuarkLangQkc
 git switch -c fix/short-description    # branch names: fix/… feat/… docs/… ci/…
 # …make your change…
 go test ./... && (cd compiler && go test ./...)      # ① both test layers
-(cd compiler && ./testdata/compare.sh)               # ② dual-path parity (expects "全部一致")
+(cd compiler && ./testdata/compare.sh)               # ② dual-path parity (must print "all identical")
 git commit -m "Short title (English or Chinese, one line)"   # ③ commit message: imperative, add a body when useful
 git push -u origin HEAD && gh pr create --fill       # ④ open the PR; CI runs the three-platform matrix
 ```

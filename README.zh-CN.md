@@ -505,7 +505,7 @@ go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释�
   ```sh
   go test ./...                     # 解释器 + 工具链
   (cd compiler && go test ./...)    # 编译器
-  (cd compiler && ./testdata/compare.sh)   # 双路径一致性（期望「全部一致」）
+  (cd compiler && ./testdata/compare.sh)   # 双路径一致性（脚本输出 `all identical`）
   go test ./internal/lang/ -run 'TestLintBenchmark|TestLintStatsP99'   # 静态检查误报/漏报门禁
   ```
 - **维护者**：[@Enoch-199811](https://github.com/Enoch-199811)（Issue / PR 里 @ 即可）。

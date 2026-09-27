@@ -513,7 +513,7 @@ PRs and issues are welcome. The three lowest-friction ways to get involved:
   ```sh
   go test ./...                            # interpreter + toolchain
   (cd compiler && go test ./...)           # compiler
-  (cd compiler && ./testdata/compare.sh)   # dual-path parity (expects "全部一致" / all-identical)
+  (cd compiler && ./testdata/compare.sh)   # dual-path parity (must print "all identical")
   go test ./internal/lang/ -run 'TestLintBenchmark|TestLintStatsP99'   # lint FP/FN gates
   ```
 
