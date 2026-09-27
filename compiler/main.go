@@ -163,6 +163,7 @@ func main() {
 	libName := ""
 	libVer := ""
 	var libPaths []string
+	srcFile := ""
 	for len(args) > 0 {
 		a := args[0]
 		switch a {
@@ -247,13 +248,28 @@ func main() {
 			outPath = args[1]
 			args = args[2:]
 		default:
-			goto parsed
+			// A positional argument is the source file. Flags that follow it are still parsed:
+			// `qkc -c f.qk -o out` used to drop `-o` silently and build nothing.
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(os.Stderr, msg("qkc: 未知参数 %s\n"), a)
+				qkcUsage()
+				os.Exit(2)
+			}
+			if srcFile != "" {
+				fmt.Fprintf(os.Stderr, msg("qkc: 只能指定一个源文件（已给出 %s）\n"), srcFile)
+				os.Exit(2)
+			}
+			srcFile = a
+			args = args[1:]
 		}
 	}
-parsed:
-	if len(args) < 1 {
+	if srcFile == "" {
 		qkcUsage()
 		os.Exit(2)
+	}
+	// `-c` without `-o`: default to the source basename, like clang, instead of building nothing.
+	if compileOnly && outPath == "" {
+		outPath = strings.TrimSuffix(filepath.Base(srcFile), filepath.Ext(srcFile))
 	}
 	// Preprocessor context (cross-platform): the target platform affects preprocessing results → it **must go into the cache key**
 	pp := newPreprocCtx()
@@ -268,7 +284,7 @@ parsed:
 		fmt.Fprintln(os.Stderr, msg("qkc[debug]: 预处理目标 ="), ppTag)
 	}
 
-	hash, err := srcHash(args[0])
+	hash, err := srcHash(srcFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -283,7 +299,7 @@ parsed:
 	if emitLib {
 		out := outPath
 		if out == "" {
-			out = strings.TrimSuffix(filepath.Base(args[0]), ".qk") + ".qklib"
+			out = strings.TrimSuffix(filepath.Base(srcFile), ".qk") + ".qklib"
 		}
 		if libName == "" {
 			libName = strings.TrimSuffix(filepath.Base(out), ".qklib")
@@ -302,7 +318,7 @@ parsed:
 		}
 		variants := map[string]string{}
 		var exports []QKExport
-		rawSrc, _ := os.ReadFile(args[0])
+		rawSrc, _ := os.ReadFile(srcFile)
 		for _, tgt := range targets {
 			osName, archName, _ := strings.Cut(tgt, "-")
 			pctx := newPreprocCtx()
@@ -310,7 +326,7 @@ parsed:
 			if archName != "" {
 				pctx.arch = archName
 			}
-			pre, perr := pctx.Process(string(rawSrc), args[0])
+			pre, perr := pctx.Process(string(rawSrc), srcFile)
 			if perr != nil {
 				fmt.Fprintln(os.Stderr, "error:", perr)
 				os.Exit(1)
@@ -321,7 +337,7 @@ parsed:
 				os.Exit(1)
 			}
 			cgen.SetLibMode(true) // library: main is exempt and main is not emitted
-			libIR, terr := cgen.Transpile(ex, args[0])
+			libIR, terr := cgen.Transpile(ex, srcFile)
 			cgen.SetLibMode(false)
 			if terr != nil {
 				fmt.Fprintln(os.Stderr, "error:", terr)
@@ -409,12 +425,12 @@ parsed:
 		ir = string(b) // already merged: do not merge again
 	}
 	if ir == "" {
-		src, rerr := os.ReadFile(args[0])
+		src, rerr := os.ReadFile(srcFile)
 		if rerr != nil {
 			fmt.Fprintln(os.Stderr, "error:", rerr)
 			os.Exit(1)
 		}
-		pre, perr := pp.Process(string(src), args[0])
+		pre, perr := pp.Process(string(src), srcFile)
 		if perr != nil {
 			fmt.Fprintln(os.Stderr, "error:", perr)
 			os.Exit(1)
@@ -427,7 +443,7 @@ parsed:
 			fmt.Fprintln(os.Stderr, "error:", xerr)
 			os.Exit(1)
 		}
-		ir, err = cgen.Transpile(expanded, args[0])
+		ir, err = cgen.Transpile(expanded, srcFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)

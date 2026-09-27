@@ -33,7 +33,8 @@ func formatVerbs(s string) map[string]int {
 // templateIndex maps a called name to the argument position carrying the format template.
 // -1 means "any argument": the first Chinese string literal wins.
 var templateIndex = map[string]int{
-	"T": -1, "Msgf": -1, "errf": 1, "warn": 2, "errAt": 0, "replyErr": 2,
+	"T": -1, "Msgf": -1, "msg": -1, // msg is the per-package facade name
+	"errf": 1, "warn": 2, "errAt": 0, "replyErr": 2,
 }
 
 // wiredTemplates parses every Go source in the repository (this package excluded) and returns the

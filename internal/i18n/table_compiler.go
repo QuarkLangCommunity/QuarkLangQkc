@@ -209,5 +209,7 @@ var compilerTable = map[string]string{
 	"接口方法 %s.%s 需要 %d 个参数，got %d":                                                             "interface method %s.%s requires %d arguments, got %d",
 	"暂未支持向接口方法 %s.%s 传递 %s 参数（需要 %s）":                                                         "passing a %s argument to interface method %s.%s is not supported yet (expected %s)",
 	"暂未支持编译 program library（库形态由解释器/导出流程处理）":                                                  "compiling 'program library' is not supported yet (library form is handled by the interpreter / export flow)",
-	"形参": "parameter",
+	"形参":             "parameter",
+	"qkc: 未知参数 %s\n": "qkc: unknown argument %s\n",
+	"qkc: 只能指定一个源文件（已给出 %s）\n": "qkc: only one source file may be given (already have %s)\n",
 }
