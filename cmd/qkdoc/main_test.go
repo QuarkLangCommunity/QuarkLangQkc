@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	lang_i18n "quarklang/internal/i18n"
 )
 
 func runCapture(t *testing.T, args ...string) (string, string, int) {
@@ -45,6 +47,8 @@ func writeLib(t *testing.T, dir string) string {
 }
 
 func TestQkdocMarkdownStdout(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	p := writeLib(t, t.TempDir())
 	out, errOut, code := runCapture(t, p)
 	if code != 0 {
@@ -68,6 +72,8 @@ func TestQkdocMarkdownStdout(t *testing.T) {
 }
 
 func TestQkdocAllFlag(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	p := writeLib(t, t.TempDir())
 	out, _, _ := runCapture(t, "-all", p)
 	if !strings.Contains(out, "hidden") {
@@ -76,6 +82,8 @@ func TestQkdocAllFlag(t *testing.T) {
 }
 
 func TestQkdocHTML(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	p := writeLib(t, t.TempDir())
 	out, _, code := runCapture(t, "-html", p)
 	if code != 0 {
@@ -92,6 +100,9 @@ func TestQkdocHTML(t *testing.T) {
 }
 
 func TestQkdocOutputFile(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
+	t.Setenv("QK_LANG", "zh")         // 该用例断言中文文案
 	dir := t.TempDir()
 	p := writeLib(t, dir)
 	outFile := filepath.Join(dir, "API.md")
@@ -112,6 +123,8 @@ func TestQkdocOutputFile(t *testing.T) {
 }
 
 func TestQkdocMultipleFiles(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	dir := t.TempDir()
 	p1 := writeLib(t, dir)
 	p2 := filepath.Join(dir, "other.qk")
@@ -131,6 +144,8 @@ func TestQkdocMultipleFiles(t *testing.T) {
 }
 
 func TestQkdocTitle(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	p := writeLib(t, t.TempDir())
 	out, _, _ := runCapture(t, "-title", "数学库 API", p)
 	if !strings.Contains(out, "# 数学库 API") {
@@ -139,6 +154,8 @@ func TestQkdocTitle(t *testing.T) {
 }
 
 func TestQkdocParseError(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	p := filepath.Join(t.TempDir(), "bad.qk")
 	if err := os.WriteFile(p, []byte("fn main(IOStream io) {\n    int x = ;\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -156,6 +173,8 @@ func TestQkdocParseError(t *testing.T) {
 }
 
 func TestQkdocUsage(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	if _, _, code := runCapture(t); code != 2 {
 		t.Errorf("无参数应退出 2")
 	}
@@ -175,6 +194,8 @@ func TestQkdocUsage(t *testing.T) {
 
 // TestQkdocRealLibrarySmoke 对真实库做冒烟：能生成、含关键符号、HTML 结构闭合。
 func TestQkdocRealLibrarySmoke(t *testing.T) {
+	defer lang_i18n.SetLocale(lang_i18n.Locale())
+	lang_i18n.SetLocale(lang_i18n.ZH) // 本用例断言中文文案
 	lib := filepath.Join("..", "..", "compiler", "testdata", "mathlib.qk")
 	if _, err := os.Stat(lib); err != nil {
 		t.Skipf("缺少真实库样本: %v", err)

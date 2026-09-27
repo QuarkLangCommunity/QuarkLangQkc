@@ -51,7 +51,7 @@ cd compiler && go build -o qkc . && ./qkc -run ../examples/hello.qk
 
 ```sh
 # ④ Toolchain (all reuse the same front end): lint / docs / REPL / language server
-go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/          # exits 1 when there are findings
+go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/          # exits 1 on findings; -json for CI
 go build -o qkdoc   ./cmd/qkdoc   && ./qkdoc -o API.md examples/tour.qk
 go build -o qkrepl  ./cmd/qkrepl  && ./qkrepl -e "int x = 6;" -e "x * 7"
 go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integration in editors/
@@ -95,7 +95,7 @@ qkcheck --lang en examples/           # per-invocation flag (also: --lang zh)
 qkc --lang en hello.qk                # all CLIs accept --lang: quark/qkc/qkcheck/qkdoc/qkrepl/qklsp
 ```
 
-- **Default is Chinese** (`zh`) to keep existing behaviour; `QK_LANG=en` (or `--lang en`) switches to English.
+- **The default follows your system locale**: an English machine reports English, a Chinese machine Chinese; `QK_LANG` (or `--lang`) always wins.
 - Untranslated messages **fall back to Chinese rather than disappearing** — information is never dropped.
 - Coverage is enforced in CI: `TestTableCoversWiredTemplates` fails if a wired Chinese message has no English entry,
   and `TestEnglishModeRendersEnglish` renders real type/parse/lint failures in English and rejects any leftover Chinese.

@@ -88,7 +88,7 @@ qkcheck --lang en examples/           # 单次调用的开关（也可 --lang zh
 qkc --lang en hello.qk                # quark/qkc/qkcheck/qkdoc/qkrepl/qklsp 均支持 --lang
 ```
 
-- **默认中文**（`zh`，保持既有行为）；`QK_LANG=en` 或 `--lang en` 切到英文。
+- **默认跟随系统 locale**：英文机器默认英文、中文机器默认中文；`QK_LANG` / `--lang` 可随时覆盖。
 - 未翻译的文案**回退中文而不是消失**——信息不丢。
 - 覆盖率由 CI 守住：`TestTableCoversWiredTemplates`（已接线的中文模板必须有英文译文）与
   `TestEnglishModeRendersEnglish`（英文模式下跑真实类型/解析/静态检查失败，不得残留中文）。
