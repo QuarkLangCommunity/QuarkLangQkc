@@ -1,10 +1,10 @@
-// Package i18n 提供用户可见文案的多语言支持（默认中文；QK_LANG / LC_ALL / LANG 决定语言）。
+// Package i18n provides multilingual support for user-visible text (Chinese by default; QK_LANG / LC_ALL / LANG select the language).
 //
-// 用法：把中文模板交给 T 即可——表里有英文就用英文渲染，没有则原样用中文（**绝不丢信息**）：
+// Usage: just hand the Chinese template to T -- if the table has English it renders English, otherwise the Chinese is used as-is (**never lose information**):
 //
-//	&RunError{Msg: i18n.T("类型 %s 不能赋给 %s", a, b)}
+//	&RunError{Msg: i18n.T("类型 %s 不能赋给 %s", a, b)}   // the Chinese template is the lookup key (see table.go)
 //
-// 覆盖率由 internal/i18n 的 TestCoverage 守住：源码里出现的中文模板必须在表中登记。
+// Coverage is enforced by TestCoverage in internal/i18n: every Chinese template appearing in the source must be registered in the table.
 package i18n
 
 import (
@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// 语言标识：目前支持 "zh"（默认）与 "en"。
+// Language identifiers: currently "zh" (default) and "en" are supported.
 const (
 	ZH = "zh"
 	EN = "en"
@@ -52,7 +52,7 @@ func detect() string {
 	return EN // global default: the docs are English-primary
 }
 
-// SetLocale 显式设置语言（工具 CLI 的 --lang 用）。
+// SetLocale sets the language explicitly (used by the tools' --lang CLI flag).
 func SetLocale(l string) {
 	l = strings.ToLower(strings.TrimSpace(l))
 	if l == EN || l == ZH {
@@ -60,10 +60,10 @@ func SetLocale(l string) {
 	}
 }
 
-// Locale 返回当前语言。
+// Locale returns the current language.
 func Locale() string { return locale }
 
-// T 渲染文案：英文模式下查表，未登记则原样返回中文（保证信息不丢）。
+// T renders a message: in English mode it looks up the table, and returns the Chinese as-is when the entry is not registered (so that no information is lost).
 func T(format string, args ...any) string {
 	if locale == EN {
 		if en, ok := table[format]; ok {
@@ -76,13 +76,13 @@ func T(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
-// Has 报告某模板是否已有英文译文（覆盖统计用）。
+// Has reports whether a template already has an English translation (used for coverage statistics).
 func Has(format string) bool {
 	_, ok := table[format]
 	return ok
 }
 
-// Untranslated 返回给定模板集合中尚未翻译的条目（按字典序）。
+// Untranslated returns the entries of the given template set that are not translated yet (in lexicographic order).
 func Untranslated(formats []string) []string {
 	var out []string
 	for _, f := range formats {

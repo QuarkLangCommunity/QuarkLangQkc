@@ -1,112 +1,112 @@
 name: ci
 on: [push, pull_request]
 
-# 最小权限：CI 只读仓库内容（本文件所有作业都只做 checkout / 构建 / 测试 / 跑基准）。
-# 显式声明而不是依赖仓库默认值，便于审计与防止默认值被改宽。
+# Least privilege: CI only reads the repository (every job here just checks out, builds, tests and runs benchmarks).
+# Declared explicitly instead of relying on repository defaults: auditable, and defaults cannot be widened silently.
 permissions:
   contents: read
 
-# 同一 ref 的新推送取消旧运行（省 runner；发布流程另有自己的 concurrency，见 release.yml）
+# A new push on the same ref cancels older runs (saves runners; the release flow has its own concurrency, see release.yml)
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # 跨系统门禁：Linux / macOS / Windows 跑同一套 Go 测试（含 qkcheck 误报漏报的多轮 P99 统计）
+  # Cross-platform gate: the same Go tests run on Linux / macOS / Windows (including the multi-round P99 false-positive/false-negative statistics)
   test:
-    name: 测试（${{ matrix.os }}）
+    name: tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; dependabot updates weekly)
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5 (SHA-pinned; dependabot updates weekly)
         with:
           go-version: '1.26'
-      - name: 构建与测试（解释器 + 工具链 + 编辑器产物校验）
+      - name: Build & test (interpreter + toolchain + editor artifacts)
         run: |
           go build ./...
           go test ./... -count=1
-      - name: 构建与测试（编译器 qkc）
+      - name: Build & test (compiler qkc)
         working-directory: compiler
         run: |
           go build ./...
           go test ./... -count=1
-      - name: qkcheck 误报/漏报统计（多轮 P99 门禁）
+      - name: qkcheck false-positive/false-negative statistics (multi-round P99 gate)
         env:
           LINT_ROUNDS: '2000'
         run: go test ./internal/lang/ -run 'TestLintStatsP99' -count=1 -v
-      - name: 语料扰动不变性（CRLF / 注释 / 行号平移）
+      - name: Corpus perturbation invariance (CRLF / comments / line shifts)
         run: go test ./internal/lang/ -run 'TestLintCorpusPerturbation|TestLintCRLF' -count=1 -v
 
-  # Linux 专项：依赖 clang/bash/tree-sitter/node 的部分留在 Linux
+  # Linux extras: the parts that need clang/bash/tree-sitter/node stay on Linux
   linux-extras:
-    name: Linux 专项（双路径 / 编辑器 / 发布）
+    name: linux extras (dual-path / editors / release)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; dependabot updates weekly)
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5 (SHA-pinned; dependabot updates weekly)
         with:
           go-version: '1.26'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; dependabot updates weekly)
         with:
           node-version: '20'
-      - name: 双路径对比（解释器 vs qkc）
+      - name: Dual-path comparison (interpreter vs qkc)
         run: |
           go build -o /tmp/quark main.go
           cd compiler && ./testdata/compare.sh
-      - name: 构建工具链二进制（qkcheck/qkdoc/qkrepl/qklsp）
+      - name: Build toolchain binaries (qkcheck/qkdoc/qkrepl/qklsp)
         run: |
           for t in qkcheck qkdoc qkrepl qklsp; do go build -o "/tmp/$t" "./cmd/$t"; done
           /tmp/qkcheck --version && /tmp/qkdoc --version && /tmp/qkrepl --version && /tmp/qklsp --version
-      - name: 静态检查自举（qkcheck 扫本仓语料；-exit0 = 报告式，门禁在 Go 快照测试里）
+      - name: Linter self-check (qkcheck over this repo corpus; -exit0 = report mode, the gate lives in the Go snapshot test)
         run: /tmp/qkcheck -exit0 examples compiler/testdata
-      - name: 编辑器：tree-sitter 语法（可选，装了 CLI 才跑）
+      - name: "Editors: tree-sitter grammar (optional; runs when the CLI is installed)"
         run: |
           if command -v tree-sitter >/dev/null 2>&1; then
             cd editors/tree-sitter-quarklang
             tree-sitter generate
             tree-sitter test -p .
           else
-            echo "未安装 tree-sitter CLI，跳过"
+            echo "tree-sitter CLI not installed, skipping"
           fi
-      - name: 编辑器：VS Code 扩展的 LSP 客户端联调
+      - name: "Editors: VS Code extension LSP client integration"
         run: QKLSP=/tmp/qklsp node editors/vscode/test/protocol.test.js
-      - name: 覆盖率报告（语句覆盖率，写入 job summary）
+      - name: Coverage report (statement coverage, written to the job summary)
         run: |
           go test ./... -coverprofile=/tmp/cover.out -covermode=atomic -count=1 >/dev/null
           total="$(go tool cover -func=/tmp/cover.out | tail -1)"
-          echo "### 覆盖率" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Coverage" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "$total" >> "$GITHUB_STEP_SUMMARY"
           go tool cover -func=/tmp/cover.out | awk '{split($1,a,":"); pkg=a[1]; c[pkg]=$NF} END {for (p in c) print p, c[p]}' | sort >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "$total"
-      - name: 库级基准冒烟（编译 + 跑一次，防基准腐化）
+      - name: Library benchmark smoke (build + run once, guards against rot)
         run: go test ./internal/lang/ ./cmd/qkcheck ./cmd/qkdoc ./cmd/qklsp -run XXX -bench . -benchtime 1x -count=1
-      - name: 工具链基准冒烟
+      - name: Toolchain benchmark smoke
         run: ./scripts/bench-tools.sh 3
-      - name: 发布产物冒烟（仅本平台，验证脚本可用；用绝对路径输出以覆盖路径归一）
+      - name: Release artifact smoke (this platform only; verifies the script; absolute output paths to cover path normalization)
         run: |
           out="${RUNNER_TEMP:-/tmp}/quarklang-dist-ci"
           rm -rf "$out"
           QUARK_TARGETS="linux/amd64" ./scripts/build-release.sh 0.0.0-ci "$out"
           for t in quark qkc qkcheck qkdoc qkrepl qklsp; do
-            ls "$out/$t"-0.0.0-ci-linux-amd64 >/dev/null || { echo "缺少产物: $t"; exit 1; }
+            ls "$out/$t"-0.0.0-ci-linux-amd64 >/dev/null || { echo "missing artifact: $t"; exit 1; }
           done
           ls -la "$out"
-      - name: 变更日志生成冒烟
+      - name: Changelog generation smoke
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
 
-  # 库制品 / 预处理器：在三平台**真跑**（出库 → 引用 → 运行），验证跨系统不依赖 .so
+  # Library artifacts / preprocessor: run for real on all three platforms (emit -> link -> run) to prove nothing depends on a .so
   libraries:
-    name: 库与预处理器（${{ matrix.os }}）
+    name: libraries & preprocessor (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -116,22 +116,22 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; dependabot updates weekly)
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5 (SHA-pinned; dependabot updates weekly)
         with:
           go-version: '1.26'
-      - name: 确认 clang 可用（Windows 上把它加进 PATH）
+      - name: Ensure clang is available (added to PATH on Windows)
         run: |
           if ! command -v clang >/dev/null 2>&1; then
             echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
           fi
           clang --version | head -2
-      - name: 构建 qkc
+      - name: Build qkc
         working-directory: compiler
         run: |
           go build -o qkc .
           if [ -f qkc.exe ]; then echo "QKC=$PWD/qkc.exe" >> "$GITHUB_ENV"; else echo "QKC=$PWD/qkc" >> "$GITHUB_ENV"; fi
-      - name: 出库（多平台变体 + 混淆）
+      - name: Emit library (multi-platform variants + obfuscation)
         run: |
           mkdir -p /tmp/qklib-ci && cd /tmp/qklib-ci
           cat > ext.qk <<'QK'
@@ -150,7 +150,7 @@ jobs:
                  --lib-targets linux-x86_64,windows-x86_64,darwin-arm64,darwin-x86_64 \
                  -o ci.qklib ext.qk
           test -s ci.qklib
-      - name: 引用库并运行（断言平台分支正确）
+      - name: Link the library and run (asserts the platform branch)
         run: |
           cd /tmp/qklib-ci
           cat > app.qk <<'QK'
@@ -161,29 +161,29 @@ jobs:
           QK
           "$QKC" -c -L ci.qklib -o app app.qk
           OUT=$(./app 2>/dev/null || ./app.exe)
-          echo "输出：$OUT"
-          # 平台分支：linux 21+37=58 / macOS 21+38=59 / windows 21+40=61
+          echo "output: $OUT"
+          # Platform branch values: linux 21+37=58 / macOS 21+38=59 / windows 21+40=61
           case "$RUNNER_OS" in
             Linux)   WANT=58 ;;
             macOS)   WANT=59 ;;
             Windows) WANT=61 ;;
           esac
           FIRST=$(echo "$OUT" | head -1)
-          [ "$FIRST" = "$WANT" ] || { echo "平台分支断言失败：期望 $WANT 得到 $FIRST"; exit 1; }
-          echo "$OUT" | sed -n 2p | grep -q '^350$' || { echo "权重函数断言失败（期望 350）"; exit 1; }
-          # 产物不得依赖共享库
+          [ "$FIRST" = "$WANT" ] || { echo "platform branch assertion failed: expected $WANT, got $FIRST"; exit 1; }
+          echo "$OUT" | sed -n 2p | grep -q '^350$' || { echo "weight function assertion failed (expected 350)"; exit 1; }
+          # The artifact must not depend on a shared library
           if command -v readelf >/dev/null 2>&1; then
-            ! readelf -d app 2>/dev/null | grep -qi 'NEEDED.*libtest' || { echo "不应依赖共享库"; exit 1; }
+            ! readelf -d app 2>/dev/null | grep -qi 'NEEDED.*libtest' || { echo "must not depend on a shared library"; exit 1; }
           fi
-      - name: 交叉预处理（--target-os 选择变体）
+      - name: Cross-target preprocessing (--target-os selects the variant)
         run: |
           cd /tmp/qklib-ci
           "$QKC" --emit-ir --target-os windows -L ci.qklib app.qk > win.ll
           "$QKC" --emit-ir --target-os darwin -L ci.qklib app.qk > mac.ll
-          # IR 里常量是 add 的第二个操作数（形如 `%2 = add i32 %1, 40`），不要按字面量匹配
+          # In the IR the constant is add's second operand (like `%2 = add i32 %1, 40`); do not match it as a literal
           if ! grep -qE 'add i32 %[0-9]+, 40$' win.ll; then
-            echo "windows 变体未生效"; sed -n '/merged library IR/,/^}/p' win.ll | head -20; exit 1
+            echo "the windows variant did not take effect"; sed -n '/merged library IR/,/^}/p' win.ll | head -20; exit 1
           fi
           if ! grep -qE 'add i32 %[0-9]+, 38$' mac.ll; then
-            echo "darwin 变体未生效"; sed -n '/merged library IR/,/^}/p' mac.ll | head -20; exit 1
+            echo "the darwin variant did not take effect"; sed -n '/merged library IR/,/^}/p' mac.ll | head -20; exit 1
           fi

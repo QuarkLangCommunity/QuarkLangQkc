@@ -29,7 +29,7 @@ Merge requirements (automated — no human approval needed today):
 
 | Gate | What it means |
 |---|---|
-| 7 required checks | `测试（os）` on all three platforms, `Linux 专项`, `库与预处理器（os）` on all three |
+| 7 required checks | `tests (os)` on all three platforms, `linux extras (dual-path / editors / release)`, `libraries & preprocessor (os)` on all three |
 | Branch protection | `main` rejects direct pushes, force-pushes and deletions |
 
 ## Pre-push checklist (runs locally)

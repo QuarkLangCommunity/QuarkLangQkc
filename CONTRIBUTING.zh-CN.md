@@ -28,7 +28,7 @@ PR 合入条件（自动化，不需要人工点 Approve）：
 
 | 门禁 | 说明 |
 |---|---|
-| 7 项必需检查 | 三平台 `测试（os）`、`Linux 专项`、三平台 `库与预处理器` |
+| 7 项必需检查 | 三平台 `tests (os)`、`linux extras (dual-path / editors / release)`、三平台 `libraries & preprocessor (os)` |
 | 分支保护 | `main` 禁止直推 / 禁 force-push / 禁删除 |
 
 ## 提交前自检清单（本机即可跑）

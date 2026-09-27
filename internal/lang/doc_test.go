@@ -163,7 +163,7 @@ func TestDocModelExtraction(t *testing.T) {
 
 func TestDocMarkdownPubFilter(t *testing.T) {
 	defer i18n.SetLocale(i18n.Locale())
-	i18n.SetLocale(i18n.ZH) // 本用例断言中文文案；英文渲染由 internal/i18n 的测试覆盖
+	i18n.SetLocale(i18n.ZH) // this test asserts the Chinese wording; English rendering is covered by the tests in internal/i18n
 	d, _ := buildFixtureDoc(t)
 	md := d.Markdown(DocOptions{Path: "mathlib.qk"})
 	if !strings.Contains(md, "# mathlib.qk") {
@@ -194,7 +194,7 @@ func TestDocMarkdownPubFilter(t *testing.T) {
 	}
 }
 
-// 文件没有 pub 时（program main）默认渲染全部，避免生成空文档。
+// With no pub symbols in the file (program main) everything is rendered by default, so no empty document is produced.
 func TestDocMarkdownNoPubRendersAll(t *testing.T) {
 	src := "fn helper(int a) int {\n    return a;\n}\nfn main(IOStream io) {\n    io.println(helper(1));\n}\n"
 	prog, comments, err := ParseSourceWithComments(src)
@@ -245,7 +245,7 @@ func TestDocSummary(t *testing.T) {
 	}
 }
 
-// 回归：上一行的行尾注释不能泄漏为下一行声明的文档注释。
+// Regression: a trailing comment on the previous line must not leak into the doc comment of the next declaration.
 func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 	src := "type struct {\n    int kind; // 0=无 1=linear\n    int angle;\n} Grad;\n"
 	prog, comments, err := ParseSourceWithComments(src)
@@ -270,7 +270,7 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 	}
 }
 
-// 宏定义在解析前被切出 AST，文档模型需显式收录（BuildDocWithMacros）。
+// Macro definitions are cut out of the AST before parsing, so the doc model must collect them explicitly (BuildDocWithMacros).
 func TestDocMacros(t *testing.T) {
 	src := `/* 工具宏库。 */
 program library;
@@ -310,7 +310,7 @@ pub fn dbl(int n) int {
 	if !strings.Contains(md, "| 宏 | `twice` |") {
 		t.Errorf("概览表应含宏条目:\n%s", md)
 	}
-	// 无宏时应正常（nil 安全）
+	// Should work normally with no macros (nil safe)
 	if got := BuildDocWithMacros(prog, comments, nil); len(got.Macros) != 0 {
 		t.Error("macros 为 nil 时不应产生宏条目")
 	}

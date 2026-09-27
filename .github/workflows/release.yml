@@ -1,43 +1,43 @@
 name: release
 
-# 打 tag（v*）即发布：三平台原生构建（含 cgo → FFI 可用）+ 版本注入 + 变更日志 + 校验清单。
+# Pushing a v* tag releases: native builds on three platforms (cgo on -> FFI works) + version injection + changelog + checksum manifest.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 2.0.0；留空则用 VERSION 文件）'
+        description: 'Version (e.g. 2.0.0; empty uses the VERSION file)'
         required: false
 
-# 最小权限：工作流级只读；**只有 release 作业**额外拿 contents: write（创建 Release / 传资产）。
-# 构建作业（三平台）不写仓库，因此不需要写权限。
+# Least privilege: workflow-level read-only; **only the release job** additionally gets contents: write (create the Release, upload assets).
+# The build jobs (three platforms) do not write to the repository, so they need no write permission.
 permissions:
   contents: read
 
-# 发布不并发、不取消：两次 tag 同时来时排队，避免把进行中的发布打断
+# Releases are neither concurrent nor cancelled: two simultaneous tags queue up instead of interrupting a release in flight
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
-    name: 构建（${{ matrix.os }}）
+    name: build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; dependabot updates weekly)
         with:
-          fetch-depth: 0   # 变更日志需要完整历史与 tag
+          fetch-depth: 0   # the changelog needs the full history and tags
 
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5（SHA 固定；dependabot 周更）
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5 (SHA-pinned; dependabot updates weekly)
         with:
           go-version: '1.26'
 
-      - name: 版本号
+      - name: Version
         id: ver
         shell: bash
         run: |
@@ -49,15 +49,15 @@ jobs:
             v="$(cat VERSION)"
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "版本: $v"
+          echo "version: $v"
 
-      - name: 测试（解释器 + 编译器）
+      - name: Tests (interpreter + compiler)
         shell: bash
         run: |
           go test ./... -count=1
           (cd compiler && go test ./... -count=1)
 
-      - name: 构建全部工具（本机平台，cgo 开启 → FFI 可用）
+      - name: Build every tool (host platform, cgo on -> FFI available)
         shell: bash
         run: |
           set -euo pipefail
@@ -78,25 +78,25 @@ jobs:
             go build -trimpath -ldflags "-s -w -X main.version=$V" -o "out/${name}-${V}-${plat}${ext}" "$pkg"
           done
           (cd compiler && go build -trimpath -ldflags "-s -w -X main.version=$V" -o "../out/qkc-${V}-${plat}${ext}" .)
-          # 无版本号别名：便于 README 里的固定一行命令（releases/latest/download/<工具>-<平台>）
+          # Version-less aliases: they keep the one-line command in the README stable (releases/latest/download/<tool>-<platform>)
           for f in out/*-${V}-${plat}${ext}; do
             alias="$(echo "$(basename "$f")" | sed "s/-${V}-/-/")"
             cp "$f" "out/$alias"
           done
-          echo "构建完成："; ls -la out
+          echo "build complete:"; ls -la out
 
-      - name: 校验清单（sha256）
+      - name: Verify manifest (sha256)
         shell: bash
         run: |
           V="${{ steps.ver.outputs.version }}"
-          { echo "# QuarkLang ${V} 发布产物（${RUNNER_OS}/${RUNNER_ARCH}，cgo 开启）"; } > "out/MANIFEST-${V}-${RUNNER_OS}.txt"
+          { echo "# QuarkLang ${V} release artifacts (${RUNNER_OS}/${RUNNER_ARCH}, cgo enabled)"; } > "out/MANIFEST-${V}-${RUNNER_OS}.txt"
           for f in out/*; do
             case "$f" in *MANIFEST*) continue;; esac
             printf '%s  %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$(basename "$f")" >> "out/MANIFEST-${V}-${RUNNER_OS}.txt"
           done
           cat "out/MANIFEST-${V}-${RUNNER_OS}.txt"
 
-      - name: 冒烟（跑一个示例 + --version）
+      - name: Smoke test (run an example + --version)
         shell: bash
         run: |
           V="${{ steps.ver.outputs.version }}"
@@ -109,7 +109,7 @@ jobs:
           chmod +x out/qkcheck-*${ext} || true
           "$(ls out/qkcheck-*${ext} | head -1)" examples/ || true
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
         with:
           name: quarklang-${{ steps.ver.outputs.version }}-${{ runner.os }}
           path: out/*
@@ -117,20 +117,20 @@ jobs:
           retention-days: 30
 
   release:
-    name: 发布（GitHub Release + 变更日志）
+    name: publish (GitHub Release + changelog)
     needs: build
     runs-on: ubuntu-latest
-    # 人工闸门：发布前必须由 environment "release" 的必需审阅人批准（admin 旁路已关闭）
+    # Human gate: the required reviewer of the "release" environment must approve before publishing (admin bypass is off)
     environment: release
-    # 唯一需要写权限的作业：创建 Release、上传资产（其余作业只有 contents: read）
+    # The only job that needs write access: create the Release and upload assets (every other job has contents: read)
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; dependabot updates weekly)
         with:
           fetch-depth: 0
 
-      - name: 版本号
+      - name: Version
         id: ver
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
@@ -142,23 +142,23 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4（SHA 固定；dependabot 周更）
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 (SHA-pinned; dependabot updates weekly)
         with:
           path: artifacts
 
-      - name: 生成变更日志
+      - name: Generate changelog
         run: |
           chmod +x scripts/changelog.sh
           ./scripts/changelog.sh "${{ steps.ver.outputs.version }}" > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
-      - name: 汇总产物
+      - name: Summarize artifacts
         run: |
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;
           ls -la release | head -50
 
-      - name: 创建 Release
+      - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
