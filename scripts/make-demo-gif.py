@@ -147,10 +147,10 @@ def main():
     t.type_cmd("qkc -run hello.qk")
     t.out("Hello World!", GREEN, pause=6)
 
-    # 4) 静态检查（真实输出：examples/ 里一处已复核告警）
-    t.type_cmd("qkcheck examples/")
-    t.out("examples/trycatch.qk:3:13: warning: 变量 a 声明后从未使用 [QK101]", AMBER, pause=6)
-    t.out("qkcheck: 1 个问题（0 错误 / 1 警告）", DIM, pause=16)
+    # 4) 静态检查（真实输出；英文模式，英文 README 用）
+    t.type_cmd("QK_LANG=en qkcheck examples/")
+    t.out("examples/trycatch.qk:3:13: warning: variable a is declared but never used [QK101]", AMBER, pause=6)
+    t.out("qkcheck: 1 issue(s) (0 error(s) / 1 warning(s))", DIM, pause=16)
     t.save(out)
 
 

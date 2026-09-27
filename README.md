@@ -27,8 +27,8 @@ It ships with a linter, doc generator, REPL, language server and editor support 
 <p align="center"><img src="assets/demo.gif" alt="QuarkLang demo: interpret, compile and lint" width="900"></p>
 
 > Everything in the GIF is real output (regenerate it with `scripts/make-demo-gif.py`):
-> `quark hello.qk` → `qkc -run hello.qk` → `qkcheck examples/` (a genuine warning, not a mock-up).
-> Tool messages are currently Chinese-first; message internationalization is on the roadmap.
+> `quark hello.qk` → `qkc -run hello.qk` → `QK_LANG=en qkcheck examples/` (a genuine warning, not a mock-up).
+> The last line demonstrates the bilingual tooling: the same command prints Chinese by default.
 
 ## 🚀 Quick start
 
