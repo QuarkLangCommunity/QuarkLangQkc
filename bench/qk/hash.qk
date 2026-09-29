@@ -1,0 +1,14 @@
+// HashTable<String,int>: 1,000,000 put/get round trips over 16 keys.
+fn main(IOStream io) void {
+    HashTable<String, int> h = HashTable::new();
+    List<String> keys = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p"];
+    int i = 0;
+    int total = 0;
+    while (i < 1000000) {
+        String k = keys.get(i % 16);
+        h.put(k, i % 1000);
+        total = total + h.get(k);
+        i = i + 1;
+    }
+    io.println(total, h.size());
+}

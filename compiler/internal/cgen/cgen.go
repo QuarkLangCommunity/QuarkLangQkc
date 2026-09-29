@@ -70,6 +70,7 @@ const (
 	kMerge    // taskm.merge / t.merge: an i64 slot carries 0..4 arguments
 	kTable    // HashTable method call (put/get/contains/remove/size/keys)
 	kNewRef   // new T: allocate a single-element cell and return a T& pointer
+	kListS    // List<String> literal: a heap %ListS whose buffer holds i8* elements
 )
 
 // expr is a cgen IR expression. typ is filled in by lowering with the language type ("?" = undecided).
@@ -2832,6 +2833,8 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		}
 	case kList:
 		return e.compileListLit(x)
+	case kListS:
+		return e.compileListSLit(x)
 	}
 	return "0", "int"
 }
@@ -2969,6 +2972,36 @@ func (e *emitter) compileListLit(x *expr) (string, string) {
 	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
 	e.emitInstr("store i32 %d, i32* %s", n, tf)
 	return lo, "List<int>"
+}
+
+// compileListSLit builds a List<String> literal: a heap %ListS object whose buffer holds i8* elements.
+// The element buffer is calloc-ed (not malloc) so that an untouched tail slot is a null pointer, never
+// garbage; the interpreter prints a zero String as "", and calloc keeps the two backends identical.
+func (e *emitter) compileListSLit(x *expr) (string, string) {
+	e.ensureListS()
+	n := len(x.lst.items)
+	obj := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	lo := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %%ListS*", lo, obj)
+	buf := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 %d, i64 8)", buf, max(1, n))
+	p := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to i8**", p, buf)
+	for i, it := range x.lst.items {
+		v, vt := e.compileExpr(it)
+		v = e.coerce(v, vt, "String")
+		g2 := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %d", g2, p, i)
+		e.emitInstr("store i8* %s, i8** %s", v, g2)
+	}
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, lo)
+	e.emitInstr("store i8** %s, i8*** %s", p, bf)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 2", tf, lo)
+	e.emitInstr("store i32 %d, i32* %s", n, tf)
+	return lo, "List<String>"
 }
 
 // compileCall compiles ordinary function calls and builtins (sum/clock).
@@ -3310,6 +3343,44 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			r := e.newReg()
 			e.emitInstr("%s = call i8* @ql_list_str_str(i8** %s, i32 %s, i32 %s)", r, p, head, tail)
 			return r, "String"
+		case "append":
+			// geometric growth with 8-byte elements (mirrors the List<int> path; elements are i8*)
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 2", tf, recv)
+			t1 := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t1, tf)
+			n1 := e.newReg()
+			e.emitInstr("%s = shl i32 %s, 1", n1, t1)
+			n1b := e.newReg()
+			e.emitInstr("%s = icmp slt i32 %s, 1", n1b, n1)
+			n1c := e.newReg()
+			e.emitInstr("%s = select i1 %s, i32 1, i32 %s", n1c, n1b, n1)
+			n64 := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
+			sz := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 8", sz, n64)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, recv)
+			lp := e.newReg()
+			e.emitInstr("%s = load i8**, i8*** %s", lp, bf)
+			bc := e.newReg()
+			e.emitInstr("%s = bitcast i8** %s to i8*", bc, lp)
+			rc := e.newReg()
+			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			np := e.newReg()
+			e.emitInstr("%s = bitcast i8* %s to i8**", np, rc)
+			e.emitInstr("store i8** %s, i8*** %s", np, bf)
+			t1i := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
+			g2 := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g2, np, t1i)
+			v, vt := e.compileExpr(m.args[0])
+			v = e.coerce(v, vt, "String")
+			e.emitInstr("store i8* %s, i8** %s", v, g2)
+			t2 := e.newReg()
+			e.emitInstr("%s = add i32 %s, 1", t2, t1)
+			e.emitInstr("store i32 %s, i32* %s", t2, tf)
+			return "0", "void"
 		}
 	}
 	// List builtin methods
@@ -4130,6 +4201,11 @@ func analyzeExpr(e *expr, m *fnMeta) {
 		analyzeExpr(e.idx.recv, m)
 		analyzeExpr(e.idx.i, m)
 	case kList:
+		m.impure = true
+		for _, it := range e.lst.items {
+			analyzeExpr(it, m)
+		}
+	case kListS:
 		m.impure = true
 		for _, it := range e.lst.items {
 			analyzeExpr(it, m)

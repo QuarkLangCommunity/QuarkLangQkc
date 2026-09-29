@@ -398,9 +398,12 @@ func TestBuiltinMethodsIR(t *testing.T) {
 			t.Fatalf("String.split IR missing %q:\n%s", want, sp)
 		}
 	}
-	// List<String> operations that are not lowered: must fail explicitly
-	if _, err := Transpile("fn main(IOStream io) { String s = \"a,b\"; List<String> l = s.split(\",\"); l.append(\"c\"); io.println(1); }\n", "test.qk"); err == nil {
-		t.Fatal("List<String>.append must report unsupported")
+	// List<String> literals and append are lowered as well (engine 13): a heap %ListS with i8* elements
+	lit := transpile(t, "fn main(IOStream io) { List<String> l = [\"a\", \"b\"]; l.append(\"c\"); io.println(l.size(), l.get(2), l.toString()); }\n")
+	for _, want := range []string{"%ListS", "@realloc(", "call i8* @ql_list_str_str("} {
+		if !strings.Contains(lit, want) {
+			t.Fatalf("List<String> literal/append IR missing %q:\n%s", want, lit)
+		}
 	}
 	// keys() supports String keys only
 	if _, err := Transpile("fn main(IOStream io) { HashTable<int, int> t = HashTable::new(); t.put(1, 2); List<String> k = t.keys(); io.println(k.size()); }\n", "test.qk"); err == nil {
@@ -667,8 +670,8 @@ func TestUnsupportedConstructs(t *testing.T) {
 			want: "暂未支持返回类型",
 		},
 		{
-			name: "List<String> 变量",
-			src:  "fn main(IOStream io) { List<String> l = [\"a\"]; io.println(1); }\n",
+			name: "List<float> 字面量（只 lower List<int> / List<String>）",
+			src:  "fn main(IOStream io) { List<float> l = [1.0]; io.println(1); }\n",
 			want: "暂未支持",
 		},
 		{

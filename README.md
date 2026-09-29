@@ -7,7 +7,7 @@
 [![Download](https://img.shields.io/github/v/release/QuarkLangCommunity/QuarkLangQkc?label=download&sort=semver)](https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest)
 ![platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-blue)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8)
-![coverage](https://img.shields.io/badge/coverage-65.1%25-yellowgreen)
+![coverage](https://img.shields.io/badge/coverage-65.0%25-yellowgreen)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -361,6 +361,21 @@ git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: nati
 
 Reproduce with `bench/Makefile` (cross-language) and `docs/benchmarks.md` (methodology and fairness statement).
 
+`bench/qk/` holds the same program measured **on both backends** (interpreter vs native `qkc`):
+
+```sh
+scripts/bench-report.sh 3      # median of 3 runs per side; asserts the two backends print identical output
+```
+
+| Program | Interpreter | Native qkc | Speedup |
+|---|---|---|---|
+| fib(30) | 284 ms | 3.9 ms | 74× |
+| 10M-iteration loop | 827 ms | 6.7 ms | 124× |
+| List<int>, 1M appends + traversal | 297 ms | 9.4 ms | 32× |
+| struct + impl, 1M method calls | 416 ms | 1.9 ms | 224× |
+| HashTable<String,int>, 1M put/get | 504 ms | 239 ms | 2× |
+| String, 50k concatenations | 768 ms | 868 ms | 1× (quadratic on both paths) |
+
 <details>
 <summary>Toolchain performance work (including a measured rule for when to offload work to C libraries)</summary>
 
@@ -473,6 +488,7 @@ Key optimizations (all profile-driven):
 | QuarkLangLibs-Json | Certified `json` library: Python-style `json::dumps` / `json::loads` (objects → HashTable, arrays → List, integers → int; malformed input raises `JSONError`) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Json |
 | QuarkLangLibs-Regex | Certified `regex` library: pure-qk engine **or** a PCRE2-backed backend with the same API (measured 6.6× faster) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Regex |
 | QuarkLangLibs-Actions | Certified `actions` library (two levels): `space` system functions (`system`/`network`, `exec`/`execv`/`popen`/`get`/`post`) + `Command`/`Network` classes implementing the `Executor` interface | https://github.com/QuarkLangCommunity/QuarkLangLibs-Actions |
+| QuarkLangPlayground | **Web playground**: the interpreter compiled to WebAssembly (`cmd/quarkwasm`, `GOOS=js GOARCH=wasm`), running in a Web Worker with live diagnostics, stdin, examples and share-by-URL | https://github.com/QuarkLangCommunity/QuarkLangPlayground |
 
 Usage: put the library's `.qk` file next to your source and `import "json";` / `import "actions";` / `import "gl";` etc.
 
@@ -481,10 +497,12 @@ Usage: put the library's `.qk` file next to your source and `import "json";` / `
 - `main.go` + `internal/lang/` — interpreter (lexer / parser / type checker / evaluator / runtime / macros)
 - `compiler/` — LLVM compiler (`qkc` + `internal/cgen` IR emitter + embedded thread runtime)
 - `cmd/` — toolchain sharing the same front end: `qkcheck`, `qkdoc`, `qkrepl`, `qklsp`
+- `cmd/quarkwasm/` — the interpreter as a WebAssembly module (the engine behind the web playground)
 - `scripts/` — release & ops: `build-release.sh` (three-platform artifacts, version injection, sha256 manifest),
-  `changelog.sh`, `make-demo-gif.py`
+  `changelog.sh`, `coverage.sh` (per-package coverage report for both modules), `bench-report.sh`
+  (interpreter vs native on `bench/qk/`, parity asserted), `make-demo-gif.py`
 - `editors/` — editor support: VS Code extension (`vscode/`) + tree-sitter grammar (`tree-sitter-quarklang/`)
-- `bench/` — cross-language benchmark sources (C/Rust/Go/Erlang + Makefile)
+- `bench/` — cross-language benchmark sources (C/Rust/Go/Erlang + Makefile) and `bench/qk/` (dual-backend programs)
 - `examples/` — runnable examples (`hello.qk`, `tour.qk`, `fib.qk`, `struct.qk`, `macro.qk`, `sum.qk`)
 
 ## Branches
@@ -539,7 +557,7 @@ Written down on purpose — a young language is better judged by what it admits 
 - **Macro system**: token-level macros are shared by both engines, but compile-time symbol insertion (`#ast`) and
   import resolution are still in progress.
 - **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
-- **Test coverage is 65.1%** (root module); the linter's statistical gates cover its generated corpus, not all code.
+- **Test coverage is 65.0%** (root module, 75.3% for the compiler module — `scripts/coverage.sh`); the linter's statistical gates cover its generated corpus, not all code.
 - **Source comments** are mid-translation to English (README, docs, `SYNTAX.md` and tool output are already English).
 - **Compiled-path runtime text is Chinese-only for now.** `QK_LANG=en` switches the interpreter's diagnostics, but the
   C runtime embedded into compiled binaries still prints the Chinese error text (e.g. `越界`), so the dual-path
