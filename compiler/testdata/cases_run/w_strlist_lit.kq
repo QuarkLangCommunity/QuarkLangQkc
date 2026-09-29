@@ -1,0 +1,17 @@
+// w_strlist_lit: List<String> literals + append (engine 13) - both backends must agree byte for byte.
+fn main(IOStream io) {
+    List<String> l = ["a", "bb", "ccc"];
+    io.println(l.size(), l.toString());
+    l.append("dddd");
+    io.println(l.size(), l.get(3), l.toString());
+    List<String> empty = [];
+    io.println(empty.size(), empty.toString());
+    empty.append("x");
+    io.println(empty.size(), empty.get(0));
+    List<String> m = ["k"];
+    m.append(m.get(0) + "2");
+    io.println(m.toString());
+    int n = 0;
+    for (String s : m) { n = n + s.size(); }
+    io.println(n, m.size());
+}

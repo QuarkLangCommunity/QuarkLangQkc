@@ -1,0 +1,26 @@
+// struct + impl: 1,000,000 method calls through a Point whose fields change every round
+// (constant fields would let LLVM fold the whole loop away and compare nothing).
+type struct { int x; int y; } Point;
+
+impl {
+    fn new(int x, int y) Point {
+        Point p = .{x: x, y: y};
+        return p;
+    }
+    fn sum(Point self) int {
+        return self.x + self.y;
+    }
+} Point;
+
+fn main(IOStream io) void {
+    Point p = Point::new(3, 4);
+    int i = 0;
+    int total = 0;
+    while (i < 1000000) {
+        p.x = i % 7;
+        p.y = i % 5;
+        total = total + p.sum();
+        i = i + 1;
+    }
+    io.println(total);
+}

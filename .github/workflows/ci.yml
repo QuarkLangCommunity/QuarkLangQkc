@@ -74,16 +74,18 @@ jobs:
           fi
       - name: "Editors: VS Code extension LSP client integration"
         run: QKLSP=/tmp/qklsp node editors/vscode/test/protocol.test.js
-      - name: Coverage report (statement coverage, written to the job summary)
+      - name: WebAssembly engine build (GOOS=js GOARCH=wasm; the web playground links this artifact)
         run: |
-          go test ./... -coverprofile=/tmp/cover.out -covermode=atomic -count=1 >/dev/null
-          total="$(go tool cover -func=/tmp/cover.out | tail -1)"
-          echo "### Coverage" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "$total" >> "$GITHUB_STEP_SUMMARY"
-          go tool cover -func=/tmp/cover.out | awk '{split($1,a,":"); pkg=a[1]; c[pkg]=$NF} END {for (p in c) print p, c[p]}' | sort >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "$total"
+          GOOS=js GOARCH=wasm go build -o "$RUNNER_TEMP/quark.wasm" ./cmd/quarkwasm
+          ls -la "$RUNNER_TEMP/quark.wasm"
+      - name: Coverage report (root + compiler modules; written to the job summary and uploaded)
+        run: |
+          ./scripts/coverage.sh -o "$RUNNER_TEMP/coverage.md"
+          cat "$RUNNER_TEMP/coverage.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Interpreter vs native benchmark report (1 round; parity between the two backends is asserted)
+        run: |
+          ./scripts/bench-report.sh 1 > "$RUNNER_TEMP/bench-report.md"
+          cat "$RUNNER_TEMP/bench-report.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Library benchmark smoke (build + run once, guards against rot)
         run: go test ./internal/lang/ ./cmd/qkcheck ./cmd/qkdoc ./cmd/qklsp -run XXX -bench . -benchtime 1x -count=1
       - name: Toolchain benchmark smoke
@@ -103,6 +105,16 @@ jobs:
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
+        with:
+          name: quarklang-reports
+          path: |
+            ${{ runner.temp }}/coverage.md
+            ${{ runner.temp }}/bench-report.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
+        with:
+          name: quark-wasm
+          path: ${{ runner.temp }}/quark.wasm
 
   # Library artifacts / preprocessor: run for real on all three platforms (emit -> link -> run) to prove nothing depends on a .so
   libraries:

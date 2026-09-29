@@ -1,0 +1,10 @@
+// String: 50,000 concatenations (ql_strcat on the native path, the interpreter's value concat).
+fn main(IOStream io) void {
+    String s = "";
+    int i = 0;
+    while (i < 50000) {
+        s = s + "ab";
+        i = i + 1;
+    }
+    io.println(s.size());
+}

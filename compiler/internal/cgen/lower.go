@@ -1173,9 +1173,17 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		if st.Init == nil {
 			return nil, l.errf(st.Pos, "暂未支持无初值的 List<String> %q（编译器只 lower keys() 等已有列表）", st.Name)
 		}
+		if _, isLit := st.Init.(*lang.ListLit); isLit {
+			// ["a", "b", ...]: the dedicated List<String> literal path (elements are i8* pointers)
+			x, err := fc.exprAs(st.Init, t)
+			if err != nil {
+				return nil, err
+			}
+			return &declStmt{name: st.Name, typ: t, init: x}, nil
+		}
 		it := fc.typeOfAs(st.Init, t)
 		if it != "List<String>" {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 List<String>（编译器只 lower HashTable.keys() 结果与 List<String> 变量）", it)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 List<String>（编译器 lower 字面量、HashTable.keys() 结果与 List<String> 变量）", it)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1484,19 +1492,20 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		}
 		return &expr{kind: kNewRef, typ: pt + "&", s: pt}, nil
 	case *lang.ListLit:
-		// list literal: valid in any expression position (the compiler only lowers List<int>; elements must be assignable to int)
+		// list literal: valid in any expression position (the compiler lowers List<int> and List<String>)
 		t := "List<int>"
 		if _, ok := listElem(fc.expectT); ok {
 			t = fc.expectT
 		}
-		if elem, ok := listElem(t); !ok || elem != "int" {
-			return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持列表字面量 %s（编译器只 lower List<int>；List<String> 等需要运行期元素类型）", t)
+		elem, ok := listElem(t)
+		if !ok || (elem != "int" && elem != "String") {
+			return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持列表字面量 %s（编译器已 lower List<int> 与 List<String>）", t)
 		}
 		items := make([]*expr, 0, len(e.Items))
 		for _, it := range e.Items {
 			et := fc.typeOf(it)
-			if !fc.assignable(et, "int") {
-				return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持用 %s 元素初始化 List<int>", et)
+			if !fc.assignable(et, elem) {
+				return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持用 %s 元素初始化 %s", et, t)
 			}
 			x, err := fc.expr(it)
 			if err != nil {
@@ -1504,7 +1513,11 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 			}
 			items = append(items, x)
 		}
-		return &expr{kind: kList, typ: "List<int>", lst: &listLit{items: items}}, nil
+		kind := kList
+		if elem == "String" {
+			kind = kListS
+		}
+		return &expr{kind: kind, typ: t, lst: &listLit{items: items}}, nil
 	case *lang.ScopeCall:
 		return fc.scopeCall(e)
 	case *lang.MemberExpr:
@@ -2212,8 +2225,16 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 				return nil, l.errf(me.Pos, "toString() 不接受参数")
 			}
 			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: rx, name: "toString"}}, nil
+		case "append":
+			if len(c.Args) != 1 {
+				return nil, l.errf(me.Pos, "List.append(v) 需要 1 个参数")
+			}
+			if t := fc.typeOf(c.Args[0]); t != "String" && t != "?" {
+				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List<String>.append 的 %s 参数（需要 String）", t)
+			}
+			return &expr{kind: kMethod, typ: "void", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "append", args: args}}, nil
 		}
-		return nil, l.errf(me.Pos, "暂未支持 List<String>.%s（编译器只 lower size/get/toString 与 for-in 迭代）", me.Name)
+		return nil, l.errf(me.Pos, "暂未支持 List<String>.%s（编译器 lower size/get/toString/append 与 for-in 迭代）", me.Name)
 	}
 	// List builtin methods (the receiver may be any List<int> expression: a variable / struct field etc.)
 	if elem, ok := listElem(rt); ok && elem == "int" {
@@ -2898,6 +2919,18 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 		return "String"
 	case *lang.BoolLit:
 		return "bool"
+	case *lang.ListLit:
+		// a list literal takes its expected type when there is one (List<int> vs List<String>),
+		// otherwise it is typed by its first element
+		if _, ok := listElem(fc.expectT); ok {
+			return fc.expectT
+		}
+		for _, it := range e.Items {
+			if fc.typeOf(it) == "String" {
+				return "List<String>"
+			}
+		}
+		return "List<int>"
 	case *lang.NullLit:
 		return "null"
 	case *lang.Ident:

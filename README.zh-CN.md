@@ -7,7 +7,7 @@
 [![Release 下载](https://img.shields.io/github/v/release/QuarkLangCommunity/QuarkLangQkc?label=download&sort=semver)](https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest)
 ![platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-blue)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8)
-![coverage](https://img.shields.io/badge/coverage-65.1%25-yellowgreen)
+![coverage](https://img.shields.io/badge/coverage-65.0%25-yellowgreen)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -353,6 +353,21 @@ git tag v2.1.0 && git push origin v2.1.0   # 触发 release 工作流：三平�
 
 ## 性能（实测，可复现）
 
+`bench/qk/` 用同一份程序分别跑**两条后端**（解释器 vs 原生 `qkc`）：
+
+```sh
+scripts/bench-report.sh 3      # 每侧取 3 次中位数；同时断言两条后端输出逐字节一致
+```
+
+| 程序 | 解释器 | 原生 qkc | 倍数 |
+|---|---|---|---|
+| fib(30) | 284ms | 3.9ms | 74× |
+| 1000 万次循环 | 827ms | 6.7ms | 124× |
+| List<int> 100 万次 append + 遍历 | 297ms | 9.4ms | 32× |
+| struct + impl 100 万次方法调用 | 416ms | 1.9ms | 224× |
+| HashTable<String,int> 100 万次 put/get | 504ms | 239ms | 2× |
+| String 5 万次拼接 | 768ms | 868ms | 1×（两条路径都是平方复杂度） |
+
 | 基准 | QuarkLang(编译) | C | Rust | Go | Erlang |
 |---|---|---|---|---|---|
 | fib(30) | **3ms** | 3ms | 3ms | 6ms | 1106ms |
@@ -465,6 +480,7 @@ go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释�
 | QuarkLangLibs-Vulkan | 官方认证的 `vulkan` 库：**Vulkan 声明集**（`library vulkan { ... }`，实例/设备/交换链/内存/缓冲常用面 + `vk::` 判定常量） | https://github.com/QuarkLangCommunity/QuarkLangLibs-Vulkan |
 | QuarkLangLibs-Json | 官方认证的 `json` 库：Python 风格 `json::dumps` / `json::loads`（值↔JSON，对象→HashTable/数组→List/整数→int，非法输入报 JSONError） | https://github.com/QuarkLangCommunity/QuarkLangLibs-Json |
 | QuarkLangLibs-Actions | 官方认证的 `actions` 库（两级）：`space` 系统级函数（`system`/`network` 空间，`exec`/`execv`/`popen`/`get`/`post`）+ `Command`/`Network` 类实现 `Executor` 接口（`self Self`，`.exec()`）；含 shell 注入说明与 8 MiB/10s 上限 | https://github.com/QuarkLangCommunity/QuarkLangLibs-Actions |
+| QuarkLangPlayground | **在线演练场**：解释器编译成 WebAssembly（`cmd/quarkwasm`，`GOOS=js GOARCH=wasm`），跑在 Web Worker 里——实时诊断、stdin、示例、URL 分享 | https://github.com/QuarkLangCommunity/QuarkLangPlayground |
 
 使用：把库的 `.qk` 文件放在与源码同目录，`import "actions";`（进程/网络）、`import "json";`（JSON）、`import "gl";` / `import "vulkan";`（图形）、`import "cleg";`（GUI 框架）后即可调用。
 
@@ -473,9 +489,11 @@ go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释�
 - `main.go` + `internal/lang/` —— 解释器（lexer/parser/typecheck/eval/runtime/宏）
 - `compiler/` —— LLVM 编译器（`qkc` + `internal/cgen` IR 发射器 + 内嵌线程运行时）
 - `cmd/` —— 工具链（复用同一前端）：`qkcheck` 静态检查、`qkdoc` API 文档、`qkrepl` 交互求值、`qklsp` 语言服务器
-- `scripts/` —— 发布与运维：`build-release.sh` 三平台产物（版本注入 + sha256 清单）、`changelog.sh` 变更日志
+- `cmd/quarkwasm/` —— 解释器的 WebAssembly 入口（在线演练场的引擎）
+- `scripts/` —— 发布与运维：`build-release.sh` 三平台产物（版本注入 + sha256 清单）、`changelog.sh` 变更日志、
+  `coverage.sh`（双模块逐包覆盖率报告）、`bench-report.sh`（`bench/qk/` 解释器 vs 原生，且断言两条后端输出一致）
 - `editors/` —— 编辑器支持：VS Code 扩展（`vscode/`）+ tree-sitter 语法（`tree-sitter-quarklang/`）
-- `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）
+- `bench/` —— 跨语言对比源（C/Rust/Go/Erlang + Makefile）与 `bench/qk/`（双后端同一程序）
 - `examples/` —— 示例
 
 ## 分支
@@ -524,7 +542,7 @@ v2 语法面完整（解释器 + 编译器一致），性能 = C 级（编译路
   `qkm` 与 `qkc -L` 只做本地依赖解析。
 - **宏系统**：token 级宏已供两条后端共用，但编译期符号插入（`#ast`）与 import 解析仍在推进。
 - **Windows FFI** 使用自研 ABI 垫片，最多 4 个参数。
-- **测试覆盖率 65.1%**（主模块）；linter 的统计门禁覆盖的是生成语料，不是全部代码。
+- **测试覆盖率 65.0%**（主模块，编译器模块 75.3%——`scripts/coverage.sh`）；linter 的统计门禁覆盖的是生成语料，不是全部代码。
 - **源码注释**正在翻成英文（README、docs、`SYNTAX.md` 与工具输出已是英文）。
 - **编译产物的运行期文案目前只有中文**：`QK_LANG=en` 能切换解释器的诊断语言，但编入二进制的 C 运行时仍输出中文错误文案
   （如 `越界`），因此双路径逐字节一致的门禁当前在默认中文模式下成立。

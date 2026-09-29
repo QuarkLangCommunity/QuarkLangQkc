@@ -1,0 +1,16 @@
+// List<int>: 1,000,000 appends, then a full for-in traversal.
+// List is a two-cursor buffer: for-in rolls the head, so size() is read before the loop.
+fn main(IOStream io) void {
+    List<int> l = [];
+    int i = 0;
+    while (i < 1000000) {
+        l.append(i % 1000);
+        i = i + 1;
+    }
+    int n = l.size();
+    int total = 0;
+    for (int v : l) {
+        total = total + v;
+    }
+    io.println(total, n);
+}
