@@ -15,6 +15,10 @@ cd compiler && go build -o qkc .
 ./qkc -run examples/fib.qk
 # Cross-language comparison (C/Rust/Go/Erlang sources in bench/)
 cd bench && make all
+# Same program on both backends (interpreter vs native qkc), parity asserted
+./scripts/bench-report.sh 3
+# Per-package test coverage of both modules
+./scripts/coverage.sh -o coverage.md
 ```
 
 ## Compute-heavy (fib, same LLVM -O3 backend, same machine)

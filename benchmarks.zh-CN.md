@@ -13,6 +13,10 @@ cd compiler && go build -o qkc .
 ./qkc -run examples/fib.qk
 # 跨语言对比（C/Rust/Go/Erlang 源见 bench/）
 cd bench && make all
+# 同一程序跑两条后端（解释器 vs 原生 qkc），并断言输出一致
+./scripts/bench-report.sh 3
+# 双模块逐包测试覆盖率
+./scripts/coverage.sh -o coverage.md
 ```
 
 ## 高计算（fib，LLVM -O3 同后端同机）
