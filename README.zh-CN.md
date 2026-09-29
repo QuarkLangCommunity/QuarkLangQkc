@@ -312,6 +312,11 @@ go build -o qklsp ./cmd/qklsp        # 语言服务器（stdio LSP）
 编辑器产物：`editors/vscode`（VS Code 扩展：TextMate 语法高亮 + 片段 + 零依赖 LSP 客户端）、
 `editors/tree-sitter-quarklang`（tree-sitter 语法：Neovim/Helix/Emacs 可直接用）。
 
+**浏览器里**：<https://quarklangcommunity.github.io/QuarkLangPlayground/> 把解释器编译成 WebAssembly
+（`cmd/quarkwasm`，`GOOS=js GOARCH=wasm`）跑在 Web Worker 里——边敲边诊断、`io.readln()` 读输入、
+六个示例、URL 分享。页面在 [QuarkLangPlayground](https://github.com/QuarkLangCommunity/QuarkLangPlayground)，
+CI 直接从本仓构建引擎（从不 vendor），并把每个示例与真解释器逐字节对比。
+
 **实测**：`editors/tree-sitter-quarklang` 对主仓 + 6 个库仓共 **60 个 `.qk/.kq` 文件解析 0 错误**
 （含 `style.qk` 1567 行、`cleg.qk`），`tree-sitter test` 5/5 通过；
 `editors/vscode/test/protocol.test.js` 用 Node 直连 `qklsp` 八项全过（初始化/诊断/跳转/补全/悬停/改动静默/退出）。
@@ -539,7 +544,8 @@ v2 语法面完整（解释器 + 编译器一致），性能 = C 级（编译路
 - **已知 bug**：`return .{...};` 会报 `return type is Point, got .`，因为类型检查尚未把期望类型传入字面量
   （[issue #7](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/7)）。
 - **标准库偏薄**：6 个官方库（json、regex、cleg、gl、vulkan、actions）；没有包仓库，
-  `qkm` 与 `qkc -L` 只做本地依赖解析。
+  `qkm` 用 `cup.json` 固定依赖、`QKM_MIRROR` 走镜像、`QKM_OFFLINE=1` 离线命中缓存，并自带项目模板
+  （`qkm init -t app|cli|lib|gui|test`）；`qkc -L` 链接 `.qklib` 制品。但仍没有公共包仓库。
 - **宏系统**：token 级宏已供两条后端共用，但编译期符号插入（`#ast`）与 import 解析仍在推进。
 - **Windows FFI** 使用自研 ABI 垫片，最多 4 个参数。
 - **测试覆盖率 65.0%**（主模块，编译器模块 75.3%——`scripts/coverage.sh`）；linter 的统计门禁覆盖的是生成语料，不是全部代码。
