@@ -312,6 +312,12 @@ go build -o qklsp ./cmd/qklsp        # language server (stdio LSP)
 Editor artifacts: `editors/vscode` (VS Code extension: TextMate grammar, snippets, zero-dependency LSP client),
 `editors/tree-sitter-quarklang` (tree-sitter grammar, usable from Neovim/Helix/Emacs).
 
+**In the browser**: <https://quarklangcommunity.github.io/QuarkLangPlayground/> runs the interpreter as
+WebAssembly (`cmd/quarkwasm`, `GOOS=js GOARCH=wasm`) inside a Web Worker — live diagnostics while typing,
+`io.readln()` stdin, six examples and share-by-URL. The app lives in
+[QuarkLangPlayground](https://github.com/QuarkLangCommunity/QuarkLangPlayground); its CI builds the engine
+from this repository (never vendored) and compares every example byte for byte against the interpreter.
+
 **Measured**: the tree-sitter grammar parses **60 `.qk/.kq` files with 0 errors** (including the 1,567-line
 `style.qk` and `cleg.qk`), and `tree-sitter test` passes 5/5; `editors/vscode/test/protocol.test.js` connects
 to a real `qklsp` over stdio and passes 8/8 checks.
@@ -552,8 +558,9 @@ Written down on purpose — a young language is better judged by what it admits 
   value inside a `catch` body.
 - **Known bug**: `return .{...};` fails with `return type is Point, got .` because the typechecker does not propagate
   an expected type into the literal yet ([issue #7](https://github.com/QuarkLangCommunity/QuarkLangQkc/issues/7)).
-- **Thin standard library**: six official libraries (json, regex, cleg, gl, vulkan, actions). There is no package
-  registry — `qkm` and `qkc -L` resolve dependencies locally.
+- **Thin standard library**: six official libraries (json, regex, cleg, gl, vulkan, actions), and still no public
+  package registry. `qkm` pins dependencies in `cup.json`, mirrors them (`QKM_MIRROR`), caches them for offline
+  builds (`QKM_OFFLINE=1`) and ships project templates (`qkm init -t app|cli|lib|gui|test`); `qkc -L` links `.qklib` artifacts.
 - **Macro system**: token-level macros are shared by both engines, but compile-time symbol insertion (`#ast`) and
   import resolution are still in progress.
 - **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
