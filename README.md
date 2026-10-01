@@ -367,6 +367,14 @@ git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: nati
 
 Reproduce with `bench/Makefile` (cross-language) and `docs/benchmarks.md` (methodology and fairness statement).
 
+> **On the "as fast as C" numbers.** Both the compiled path and C go through LLVM `-O3`, so parity here is a
+> property of the shared backend — Rust, Swift and Zig can say the same. The IR is not identical either
+> (QuarkLang passes parameters by reference, so its unoptimised `fib` takes `i32*` and loads, where C takes
+> `i32`), but the backend closes the gap. The language's own contribution is the *arrangement*: an interpreter
+> for the development loop, a compiler for deployment, and CI that fails unless the two agree. The interpreter
+> is not a speed feature — on call-heavy code it is ~3× slower than CPython (224 ms vs 72 ms for fib(30) on the
+> reference machine); it exists to remove the compile step and keep REPL state.
+
 `bench/qk/` holds the same program measured **on both backends** (interpreter vs native `qkc`):
 
 ```sh
