@@ -384,6 +384,12 @@ scripts/bench-report.sh 3      # 每侧取 3 次中位数；同时断言两条�
 
 复现：`bench/Makefile`（跨语言）+ `docs/benchmarks.md`（方法/公正性声明）。
 
+> **关于"与 C 持平"的数字**：编译路径与 C 都走 LLVM `-O3`，因此持平是**共用后端**的性质——Rust、Swift、Zig 同样成立。
+> 两者 IR 也并不同构（QuarkLang 参数按引用传递：未优化的 `fib` 收 `i32*` 并 load；C 收 `i32`），只是后端把差距抹平。
+> 语言自身的贡献是**这套安排**：解释器负责开发循环、编译器负责交付、CI 强制两者一致。解释器不是速度卖点——
+> 调用密集负载上它比 CPython 慢约 3 倍（参考机 fib(30)：224 ms vs 72 ms）；它的价值是省掉编译步骤并保留 REPL 状态。
+
+
 <details>
 <summary>工具链性能优化（含「何时该托管给 C 库」的实测判据）</summary>
 
