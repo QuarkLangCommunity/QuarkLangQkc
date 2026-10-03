@@ -356,6 +356,17 @@ git tag v2.1.0 && git push origin v2.1.0   # 触发 release 工作流：三平�
 - **增量编译**：IR+二进制两级缓存，二次编译 16 倍提速；
 - **零第三方依赖**：词法/解析/类型检查/求值/LLVM IR 发射全部手写。
 
+### 解释器的执行模型
+
+解释器对每个函数在两种引擎间自动选择，外部不可观测：
+
+| 引擎 | 适用条件 | 效果（本机，6 次取最小） |
+|---|---|---|
+| **字节码 VM** | 整个函数体落在可编译子集内：int/bool 算术与比较、`if`/`while`/C 式 `for`、直接调用、`return`、`log`、`io.print`/`io.println` | `BenchmarkEvalLoop1M` 73.95 → **51.09 ms**（1.45×）、`BenchmarkFib24` 14.64 → **11.13 ms**（1.32×）、`BenchmarkFuncCalls100K` 17.63 → **13.15 ms**（1.34×） |
+| **树遍历** | 其余全部——字符串、列表、结构体、接口、宏、taskm、`try/catch`、`io.*` 以外的方法调用、按实参类型选重载 | 语义基准 |
+
+VM 复用解释器自身的原语（`wrapI32`、`callFunc`、`ioPrintln`）与错误值。当值的运行期类型与静态推断不符（语言允许 int→float 隐式提升，`int` 形参可以合法收到 float）时，该函数会**去优化**：被拉黑并交回树遍历执行——这也是 `compiler/testdata/compare.sh` 仍然输出 `all identical` 的原因。`TestVMEqualsTreeWalker`、`TestVMCompilesHotShapes`、`TestVMEqualsTreeWalkerOnCorpus`（22 个语料程序）强制两引擎输出逐字一致；`QUARK_NO_VM=1` 可完全关闭 VM。
+
 ## 性能（实测，可复现）
 
 `bench/qk/` 用同一份程序分别跑**两条后端**（解释器 vs 原生 `qkc`）：
