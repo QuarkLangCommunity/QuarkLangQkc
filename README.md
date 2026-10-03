@@ -354,6 +354,24 @@ git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: nati
 - **Incremental compilation**: two-level IR + binary cache, 16× faster rebuilds.
 - **Zero third-party dependencies**: lexer, parser, type checker, evaluator and LLVM IR emission are all hand-written.
 
+### Interpreter execution model
+
+The interpreter runs functions through two engines, chosen per function and never observable from the
+outside:
+
+| Engine | When | Effect (this machine, min of 6 runs) |
+|---|---|---|
+| **Bytecode VM** | the whole function body fits the compiled subset: int/bool arithmetic and comparisons, `if`/`while`/C-style `for`, direct calls, `return`, `log`, `io.print`/`io.println` | `BenchmarkEvalLoop1M` 73.95 → **51.09 ms** (1.45x), `BenchmarkFib24` 14.64 → **11.13 ms** (1.32x), `BenchmarkFuncCalls100K` 17.63 → **13.15 ms** (1.34x) |
+| **Tree-walker** | everything else — strings, lists, structs, interfaces, macros, taskm, `try/catch`, method calls beyond `io.*`, overload resolution by argument type | the semantic reference |
+
+The VM reuses the interpreter's own primitives (`wrapI32`, `callFunc`, `ioPrintln`) and its error
+values. When a value's runtime type does not match the statically proven type (the language allows
+implicit int→float promotion, so an `int` parameter can legitimately receive a float), the function
+**deoptimizes**: it is blacklisted and re-run by the tree-walker, which is why
+`compiler/testdata/compare.sh` still prints `all identical`. `TestVMEqualsTreeWalker`,
+`TestVMCompilesHotShapes` and `TestVMEqualsTreeWalkerOnCorpus` (22 corpus programs) hold both engines
+to identical output; `QUARK_NO_VM=1` disables the VM entirely.
+
 ## Performance (measured, reproducible)
 
 | Benchmark | QuarkLang (compiled) | C | Rust | Go | Erlang |

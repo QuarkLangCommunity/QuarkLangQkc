@@ -600,6 +600,8 @@ type Func struct {
 	Pos        Pos
 	paramNames []string // parameter-name cache (for slot binding, shared, zero allocation)
 	paramCopyd []bool   // Copyd parameter flags (lazy cache, avoids string scanning on the call hot path)
+	vm         *vmProg  // bytecode for the hot subset (nil = tree-walk; see vm.go)
+	vmTried    bool     // compilation attempted
 }
 
 // ParamNames returns the parameter-name array (lazily cached and shared by every call).
@@ -647,6 +649,10 @@ type execCtx struct {
 	// argArena is the reuse area for argument slices (owned by this ctx → no sharing across goroutines).
 	// evalArgs appends at its tail and the call site truncates it back after the call; the capacity is kept for reuse.
 	argArena []Value
+
+	// vmStack is the bytecode VM's operand stack. It lives on the ctx because ctxs are pooled, so
+	// the stack is reused across calls instead of being allocated per invocation.
+	vmStack []Value
 }
 
 // newCtx takes ownership of the call's argument slice (evalArgs creates a fresh one per call, so no copy is needed).

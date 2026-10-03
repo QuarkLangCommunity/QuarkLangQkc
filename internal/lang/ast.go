@@ -271,6 +271,12 @@ type CallExpr struct {
 	Sign  *SignCall
 	Pos   Pos
 	FnIdx int // function index resolved at compile time (-1 = unresolved/variable call); eval indexes FnList directly, avoiding a map
+
+	// Argument classification, computed once on the first evaluation (superinstruction-style bookkeeping):
+	// when no argument can form an lvalue cell, the argument list is evaluated without the per-argument
+	// lvalue probe that evalArg performs. Classification is stable for a given AST node.
+	argsClassified bool
+	plainArgs      bool
 }
 type SignCall struct {
 	Name string

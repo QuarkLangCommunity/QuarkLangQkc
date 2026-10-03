@@ -652,6 +652,18 @@ func (in *interp) execute(ctx *execCtx) error {
 		}
 	}
 	sc.setParams(fn.ParamNames(), args)
+	// Bytecode path: compiled lazily on first call, only for functions whose whole body fits the
+	// supported subset (vm.go). Placed after parameter binding so the slots the VM reads are bound.
+	if in.vmFor(fn) != nil {
+		err := in.runVM(ctx)
+		if err != errVMDeopt {
+			return err
+		}
+		// Blacklist: this function keeps tree-walking from now on. The guard fires before any side
+		// effect, so nothing has been printed or recorded yet.
+		fn.vm = nil
+		sc = &ctx.sc
+	}
 	if err := in.execBlock(fn.Body, sc, ctx); err != nil {
 		if err == errReturn {
 			return nil
@@ -1323,7 +1335,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		}
 		mark := len(ctx.argArena)
 		defer func() { ctx.argArena = ctx.argArena[:mark] }()
-		argVals, err := in.evalArgs(c.Args, sc, ctx)
+		argVals, err := in.evalCallArgs(c, sc, ctx)
 		if err != nil {
 			return NilV(), err
 		}
@@ -1369,7 +1381,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 			return NilV(), err
 		}
 		mark := len(ctx.argArena)
-		args, err := in.evalArgs(c.Args, sc, ctx)
+		args, err := in.evalCallArgs(c, sc, ctx)
 		if err != nil {
 			return NilV(), err
 		}
@@ -1383,7 +1395,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 		return NilV(), &RunError{Msg: "TypeError: this expression is not callable", Pos: c.Pos, Ctx: ctx}
 	}
 	mark := len(ctx.argArena)
-	argVals, err := in.evalArgs(c.Args, sc, ctx)
+	argVals, err := in.evalCallArgs(c, sc, ctx)
 	if err != nil {
 		return NilV(), err
 	}
@@ -1482,6 +1494,46 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 // evalArgs evaluates the argument list. The resulting slice comes from ctx.argArena (no per-call allocation):
 // the caller must restore `ctx.argArena = ctx.argArena[:mark]` **after the call ends** (take mark = len before the call).
 // Nested evaluation is naturally LIFO: an inner call truncates at its own mark and never overwrites the outer arguments.
+// isLValueExpr reports whether an expression can produce a reference cell in evalArg (declared
+// variable, struct member, list index). Anything it lists is treated conservatively: those argument
+// lists keep going through evalArg.
+func isLValueExpr(e Expr) bool {
+	switch e.(type) {
+	case *Ident, *MemberExpr, *IndexExpr:
+		return true
+	}
+	return false
+}
+
+// evalCallArgs evaluates a call's arguments into the ctx arena. For argument lists that cannot form
+// lvalues (the common case: literals, arithmetic, nested calls) it skips evalArg's lvalue probe and
+// evaluates each argument directly — same values, one dispatch less per argument.
+func (in *interp) evalCallArgs(c *CallExpr, sc *scope, ctx *execCtx) ([]Value, error) {
+	if !c.argsClassified {
+		c.plainArgs = true
+		for _, a := range c.Args {
+			if isLValueExpr(a) {
+				c.plainArgs = false
+				break
+			}
+		}
+		c.argsClassified = true
+	}
+	if !c.plainArgs {
+		return in.evalArgs(c.Args, sc, ctx) // fallback: the general path with lvalue/reference handling
+	}
+	start := len(ctx.argArena)
+	for _, a := range c.Args {
+		v, err := in.evalExpr(a, sc, ctx)
+		if err != nil {
+			ctx.argArena = ctx.argArena[:start]
+			return nil, err
+		}
+		ctx.argArena = append(ctx.argArena, v)
+	}
+	return ctx.argArena[start:], nil
+}
+
 func (in *interp) evalArgs(args []Expr, sc *scope, ctx *execCtx) ([]Value, error) {
 	start := len(ctx.argArena)
 	for _, a := range args {
