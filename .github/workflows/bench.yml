@@ -37,16 +37,21 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5 (SHA-pinned; dependabot updates weekly)
         with:
           go-version: '1.26'
-      - name: Run interpreter benchmarks (best of N)
+      - name: Run interpreter benchmarks (best of N, bytecode VM on and off)
         run: |
           set -o pipefail
           RUNS='${{ github.event.inputs.runs || '10' }}'
           BT='${{ github.event.inputs.benchtime || '1s' }}'
-          echo "### interpreter benchmarks on ${{ matrix.os }} (runs=$RUNS, benchtime=$BT)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          scripts/bench-interp.sh "$RUNS" "$BT" | tee /tmp/bench.txt
-          cat /tmp/bench.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Both engines in one run, so the bytecode VM's contribution is visible without having to
+          # compare against a previous run on a possibly different runner.
+          for mode in vm treewalk; do
+            if [ "$mode" = treewalk ]; then export QUARK_NO_VM=1; else unset QUARK_NO_VM; fi
+            echo "### interpreter benchmarks on ${{ matrix.os }} — $mode (runs=$RUNS, benchtime=$BT)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            scripts/bench-interp.sh "$RUNS" "$BT" | tee "/tmp/bench-$mode.txt"
+            cat "/tmp/bench-$mode.txt" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Interpreter vs compiler on the shared corpus (parity must hold)
         run: |
           cd compiler
