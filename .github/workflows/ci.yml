@@ -101,17 +101,17 @@ jobs:
           ls -la "$out"
       - name: Changelog generation smoke
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; dependabot updates weekly)
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; dependabot updates weekly)
         with:
           name: quarklang-reports
           path: |
             ${{ runner.temp }}/coverage.md
             ${{ runner.temp }}/bench-report.md
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; dependabot updates weekly)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; dependabot updates weekly)
         with:
           name: quark-wasm
           path: ${{ runner.temp }}/quark.wasm
