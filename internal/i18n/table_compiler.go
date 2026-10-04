@@ -215,4 +215,6 @@ var compilerTable = map[string]string{
 	"qkc: 未知参数 %s\n": "qkc: unknown argument %s\n",
 	"qkc: 只能指定一个源文件（已给出 %s）\n":      "qkc: only one source file may be given (already have %s)\n",
 	"暂未支持编译 %s（=== 存储同一性目前仅在解释器实现）": "compiling %s is not supported yet (=== storage identity is implemented in the interpreter only)",
+	"暂未支持编译 & 取址（引用目前仅在解释器实现）":      "compiling & (address-of) is not supported yet (references are implemented in the interpreter only)",
+	"暂未支持编译权限引用 &%s %s（目前仅在解释器实现）":  "compiling the permission reference &%s %s is not supported yet (implemented in the interpreter only)",
 }

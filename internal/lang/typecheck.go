@@ -350,6 +350,10 @@ type cVar struct {
 	typ     *Type
 	init    bool
 	isConst bool
+	// Permission-carrying references (R2): the permission lives on the declaration, so it is recorded
+	// here and every read/write check consults it. Bare T& keeps full permission and program scope.
+	refPerm  string
+	refScope string
 }
 
 type cScope struct {
@@ -959,7 +963,11 @@ func (c *checker) checkFunc(f *Func) error {
 			return err
 		}
 		// Parameter modifiers (same as the declaration form): const = not assignable inside the callee; copyd only affects binding-time copying (eval side)
-		if err := sc.declare(p.Name, &cVar{typ: t, init: true, isConst: p.Decor == "const"}, p.Pos); err != nil {
+		perm, scope := p.Perm, p.Scope
+		if perm == "" {
+			perm, scope = refDefaultPerm, refDefaultScope
+		}
+		if err := sc.declare(p.Name, &cVar{typ: t, init: true, isConst: p.Decor == "const", refPerm: perm, refScope: scope}, p.Pos); err != nil {
 			return err
 		}
 	}
@@ -1097,7 +1105,11 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		if err != nil {
 			return err
 		}
-		v := &cVar{typ: typ, init: false, isConst: s.Decor == "const"}
+		perm, scope := s.Perm, s.Scope
+		if perm == "" {
+			perm, scope = refDefaultPerm, refDefaultScope
+		}
+		v := &cVar{typ: typ, init: false, isConst: s.Decor == "const", refPerm: perm, refScope: scope}
 		if s.Init != nil {
 			// .{...} literal → named struct: fields are matched and the type name is bound (xmind §struct literals)
 			if sl, ok := s.Init.(*StructLit); ok && typ.Kind == tStruct && typ.FName != "." {
@@ -1143,6 +1155,21 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				if !assignable(it, typ) {
 					return c.errf(s.Pos, "TypeError: cannot assign %s to %s", it, typ)
 				}
+				// R2 reference rules apply to declarations too, not only to later assignments: a
+				// reference may not be parked in a wider-scoped variable, and a more restrictive
+				// permission may not be widened.
+				if isRefKind(typ) {
+					if src, ok := s.Init.(*Ident); ok {
+						if sv := sc.lookup(src.Name); sv != nil && isRefKind(sv.typ) {
+							if !refPermCovers(sv.refPerm, perm) {
+								return c.errf(s.Pos, msg("TypeError: cannot assign a %q reference to a %q reference (the source is more restrictive)", sv.refPerm, perm))
+							}
+							if refScopeRank(sv.refScope) < refScopeRank(scope) {
+								return c.errf(s.Pos, msg("TypeError: cannot store a %s-scoped reference in a %s-scoped variable (the variable would outlive the reference)", refScopeName(sv.refScope), refScopeName(scope)))
+							}
+						}
+					}
+				}
 				if err := c.checkIfaceStrict(it, typ, s.Pos, "decl "+s.Name); err != nil {
 					return err
 				}
@@ -1166,8 +1193,28 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if v.isConst {
 				return c.errf(target.Pos, "CompileError: const 变量 %q 不可重新赋值", target.Name)
 			}
+			// R2 permission enforcement (write side): writing through a reference requires the w
+			// permission. This is the same rule the compiler front end applies, and it is what makes
+			// "&r int p" read-only rather than merely documented as read-only.
+			if isRefKind(v.typ) && !refAllows(v.refPerm, "w") {
+				return c.errf(target.Pos, msg("TypeError: reference %q has permission %q and cannot be written through (w is missing)", target.Name, v.refPerm))
+			}
 			if !assignable(t, v.typ) {
 				return c.errf(s.Pos, "TypeError: cannot assign %s to %s", t, v.typ)
+			}
+			// R2 permission enforcement (reference assignment): the source must grant everything the
+			// destination requires, and its scope must not be narrower than the destination's.
+			if isRefKind(v.typ) {
+				if src, isSrcIdent := s.X.(*Ident); isSrcIdent {
+					if sv := sc.lookup(src.Name); sv != nil && isRefKind(sv.typ) {
+						if !refPermCovers(sv.refPerm, v.refPerm) {
+							return c.errf(s.Pos, msg("TypeError: cannot assign a %q reference to a %q reference (the source is more restrictive)", sv.refPerm, v.refPerm))
+						}
+						if refScopeRank(sv.refScope) < refScopeRank(v.refScope) {
+							return c.errf(s.Pos, msg("TypeError: cannot store a %s-scoped reference in a %s-scoped variable (the variable would outlive the reference)", refScopeName(sv.refScope), refScopeName(v.refScope)))
+						}
+					}
+				}
 			}
 			if err := c.checkIfaceStrict(t, v.typ, s.Pos, "assign "+target.Name); err != nil {
 				return err
@@ -1342,6 +1389,14 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 		}
 		return &Type{Kind: tStruct, FName: ".", Fields: fields}, nil
 	case *Ident:
+		// R2 permission enforcement (read side): using a reference as a value requires the r
+		// permission. Assignment targets never reach this path (the assignment case resolves the target
+		// through the scope directly), so a write-only reference stays assignable but unreadable.
+		if v := sc.lookup(x.Name); v != nil {
+			if isRefKind(v.typ) && !refAllows(v.refPerm, "r") {
+				return nil, c.errf(x.Pos, msg("TypeError: reference %q has permission %q and cannot be read (r is missing)", x.Name, v.refPerm))
+			}
+		}
 		if c.libs != nil {
 			if lb, ok := c.libs[x.Name]; ok {
 				return &Type{Kind: tLib, FName: lb.Name}, nil // system library object (library X binding)
@@ -1391,6 +1446,19 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			return nil, err
 		}
 		switch x.Op {
+		case "&":
+			// Address-of: only lvalues have storage to point at, and the result is a bare reference
+			// (full permission, program scope) unless a declaration narrows it.
+			switch x.X.(type) {
+			case *Ident, *MemberExpr, *IndexExpr:
+			default:
+				return nil, c.errf(x.Pos, msg("TypeError: cannot take the address of this expression (needs a variable, field or list element)"))
+			}
+			t, err := c.infer(x.X, sc)
+			if err != nil {
+				return nil, err
+			}
+			return &Type{Kind: tPtr, Elem: t}, nil
 		case "*":
 			if t.Kind != tList {
 				return nil, c.errf(x.Pos, "TypeError: '*' requires a List, got %s", t)

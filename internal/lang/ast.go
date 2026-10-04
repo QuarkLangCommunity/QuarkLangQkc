@@ -71,6 +71,8 @@ type Param struct {
 	Name  string
 	Type  string
 	Decor string
+	Perm  string // permission stack r/w/m for a reference parameter ("&rw u int p"), "" when absent
+	Scope string // follow layer u/f/a/t for a reference parameter, "" when absent
 	Pos   Pos
 }
 
@@ -190,6 +192,8 @@ type DeclStmt struct {
 	Type  string
 	Init  Expr   // nil = uninitialized
 	Decor string // "" | "const" | "copyd" (xmind §variable modifiers)
+	Perm  string // permission stack r/w/m for a reference declaration ("&rw u int p"), "" when absent
+	Scope string // follow layer u/f/a/t for a reference declaration, "" when absent
 	Pos   Pos
 }
 type AssignStmt struct {
