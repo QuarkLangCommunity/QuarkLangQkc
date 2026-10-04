@@ -47,6 +47,7 @@ const (
 	TPercent
 	TBang
 	TEq
+	TEqStrict // === storage identity (not overloadable)
 	TNe
 	TLt
 	TLe
@@ -318,6 +319,13 @@ func (lx *lexer) next() (Token, error) {
 	case '%':
 		return one(TPercent)
 	case '=':
+		// === is lexed before == so the strict form is never split into == followed by =
+		if lx.peekByteAt(1) == '=' && lx.peekByteAt(2) == '=' {
+			lx.advance()
+			lx.advance()
+			lx.advance()
+			return Token{Kind: TEqStrict, Text: "===", Line: line, Col: col}, nil
+		}
 		if lx.peekByteAt(1) == '=' {
 			lx.advance()
 			lx.advance()
