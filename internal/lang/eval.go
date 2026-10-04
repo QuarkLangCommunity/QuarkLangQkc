@@ -1062,6 +1062,11 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		}
 		return ListV(l), nil
 	case *UnOp:
+		// Address-of must not evaluate the operand (that would run side effects for &f() and read
+		// values pointlessly), so it is handled before the generic operand evaluation.
+		if x.Op == "&" {
+			return in.addrOf(x.X, sc, ctx, x.Pos)
+		}
 		v, err := in.evalExpr(x.X, sc, ctx)
 		if err != nil {
 			return NilV(), err
@@ -1499,6 +1504,48 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 // evalArgs evaluates the argument list. The resulting slice comes from ctx.argArena (no per-call allocation):
 // the caller must restore `ctx.argArena = ctx.argArena[:mark]` **after the call ends** (take mark = len before the call).
 // Nested evaluation is naturally LIFO: an inner call truncates at its own mark and never overwrites the outer arguments.
+// addrOf builds the reference cell for an lvalue expression: a variable, a struct field or a list
+// element. These are exactly the reference kinds the interpreter already uses for by-reference
+// argument passing, so a reference taken here writes through like any other.
+func (in *interp) addrOf(e Expr, sc *scope, ctx *execCtx, pos Pos) (Value, error) {
+	switch t := e.(type) {
+	case *Ident:
+		if owner := sc.findScope(t.Name); owner != nil {
+			return RefV(owner.refHandle(t.Name)), nil
+		}
+		return NilV(), &RunError{Msg: msg("TypeError: cannot take the address of undeclared identifier %q", t.Name), Pos: pos, Ctx: ctx}
+	case *MemberExpr:
+		obj, err := in.evalExpr(t.X, sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		if obj.IsCopyd() {
+			obj = obj.Copyd().V
+		}
+		if !obj.IsStruct() {
+			return NilV(), &RunError{Msg: msg("TypeError: cannot take the address of a field on %s (not a struct)", obj.TypeName()), Pos: pos, Ctx: ctx}
+		}
+		return RefV(&refValue{kind: refMember, obj: obj, name: t.Name}), nil
+	case *IndexExpr:
+		obj, err := in.evalExpr(t.X, sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		if !obj.IsList() {
+			return NilV(), &RunError{Msg: msg("TypeError: cannot take the address of an element of %s (not a list)", obj.TypeName()), Pos: pos, Ctx: ctx}
+		}
+		key, err := in.evalExpr(t.Idx, sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		if !key.IsInt() {
+			return NilV(), &RunError{Msg: msg("TypeError: list index must be int, got %s", key.TypeName()), Pos: pos, Ctx: ctx}
+		}
+		return RefV(&refValue{kind: refIndex, obj: obj, key: key}), nil
+	}
+	return NilV(), &RunError{Msg: msg("TypeError: cannot take the address of this expression (needs a variable, field or list element)"), Pos: pos, Ctx: ctx}
+}
+
 // storageIdentical implements ===: it reports whether two operand expressions occupy the same
 // storage space. Both sides must be lvalues that resolve to the same location; anything else (a
 // literal, a temporary, two distinct variables — even ones holding equal values or pointers to the

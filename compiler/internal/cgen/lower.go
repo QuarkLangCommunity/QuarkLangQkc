@@ -1140,6 +1140,10 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 // ---------- Variable declarations ----------
 
 func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
+	if st.Perm != "" {
+		// Permission-carrying references (&rw u int p) are interpreter-only for now.
+		return nil, fc.l.errf(st.Pos, "暂未支持编译权限引用 &%s %s（目前仅在解释器实现）", st.Perm, st.Scope)
+	}
 	l := fc.l
 	t := fc.resolveT(st.Type)
 	if err := l.checkType(t, st.Pos, "变量"); err != nil {
@@ -1834,6 +1838,11 @@ func (fc *funcCtx) binary(e *lang.BinOp, op string) (*expr, error) {
 // unOp lowers unary operations: - expands to 0 - x (fneg semantics for float), ! goes through logical negation.
 func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 	l := fc.l
+	if e.Op == "&" {
+		// Address-of feeds the reference machinery, which the compiler does not lower yet. Hard error
+		// rather than a silently different answer (project policy for unsupported constructs).
+		return nil, l.errf(e.Pos, "暂未支持编译 & 取址（引用目前仅在解释器实现）")
+	}
 	t := fc.typeOf(e.X)
 	switch e.Op {
 	case "-":

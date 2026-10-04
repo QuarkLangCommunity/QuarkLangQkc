@@ -182,6 +182,18 @@ func (p *parser) peekTextIs(t string) bool {
 
 func (p *parser) peekIs(k TokenKind) bool { return p.i+1 < len(p.toks) && p.toks[p.i+1].Kind == k }
 
+// peekAt returns the token n positions ahead (n = 0 is the current one), clamped to the last token.
+func (p *parser) peekAt(n int) Token {
+	if p.i+n < len(p.toks) {
+		return p.toks[p.i+n]
+	}
+	return p.toks[len(p.toks)-1]
+}
+
+func (p *parser) peekIsAt(n int, k TokenKind) bool {
+	return p.i+n < len(p.toks) && p.toks[p.i+n].Kind == k
+}
+
 func (p *parser) peek() Token {
 	if p.i+1 < len(p.toks) {
 		return p.toks[p.i+1]
@@ -569,8 +581,12 @@ func (p *parser) parseParamList() ([]Param, error) {
 	if !p.curIs(TRParen) {
 		for {
 			decor := ""
+			perm, scope, hasPerm := p.parseRefPermission()
+			if hasPerm {
+				decor = "ref"
+			}
 			// Modifier disambiguation: when cur is const/copyd and the next token is a type (TIdent/TInterface), parse it as a modifier
-			if p.curIs(TIdent) && (p.cur().Text == "const" || p.cur().Text == "copyd") &&
+			if !hasPerm && p.curIs(TIdent) && (p.cur().Text == "const" || p.cur().Text == "copyd") &&
 				(p.peekIs(TIdent) || p.peekIs(TInterface) || p.peekIs(TStruct)) {
 				decor = p.cur().Text
 				p.advance()
@@ -578,6 +594,9 @@ func (p *parser) parseParamList() ([]Param, error) {
 			typ, err := p.parseType()
 			if err != nil {
 				return nil, err
+			}
+			if hasPerm {
+				typ = refBaseType(typ)
 			}
 			ptok, err := p.expectIdent("parameter name")
 			if err != nil {
@@ -587,6 +606,8 @@ func (p *parser) parseParamList() ([]Param, error) {
 				Name:  ptok.Text,
 				Type:  typ,
 				Decor: decor,
+				Perm:  perm,
+				Scope: scope,
 				Pos:   Pos{Line: ptok.Line, Col: ptok.Col},
 			})
 			if p.curIs(TComma) {
@@ -1277,10 +1298,44 @@ func (p *parser) parseStmt() (Stmt, error) {
 }
 
 // parseDecl parses "name Type [= init];".
+// parseRefPermission parses the leading "&<perm> <scope>" of a reference declaration, e.g.
+// "&rw u int p = &x;" or "&rm f int q = &a[1];". perm is a stack of r/w/m, scope is u/f/a/t
+// (BioLang's typed smart references). It reports ok=false when this is not such a form, so the
+// caller can fall back to parsing an ordinary declaration or an expression.
+func (p *parser) parseRefPermission() (perm, scope string, ok bool) {
+	if !p.curIs(TAmper) {
+		return "", "", false
+	}
+	// Lookahead only: an address-of expression such as &x must not be mistaken for a declaration.
+	if !p.peekIs(TIdent) || !p.peekIsAt(2, TIdent) {
+		return "", "", false
+	}
+	pm := p.peekAt(1).Text
+	if !validRefPerm(pm) {
+		return "", "", false
+	}
+	sc := p.peekAt(2).Text
+	if !validRefScope(sc) {
+		return "", "", false
+	}
+	// The token after the scope must start a type, otherwise this is not a declaration.
+	if !(p.peekIsAt(3, TIdent) || p.peekIsAt(3, TInterface) || p.peekIsAt(3, TStruct) || p.peekIsAt(3, TStar)) {
+		return "", "", false
+	}
+	p.advance() // &
+	p.advance() // perm
+	p.advance() // scope
+	return pm, sc, true
+}
+
 // tryParseDecl parses "<modifier> <type> <name> [= initializer];"; when it is not a declaration it falls back (ok=false) and the caller parses an expression.
 func (p *parser) tryParseDecl() (Stmt, bool, error) {
 	save := p.i
 	decor := ""
+	perm, scope, hasPerm := p.parseRefPermission()
+	if hasPerm {
+		decor = "ref"
+	}
 	if p.curIs(TIdent) && (p.cur().Text == "const" || p.cur().Text == "copyd") {
 		decor = p.cur().Text
 		p.advance()
@@ -1295,7 +1350,10 @@ func (p *parser) tryParseDecl() (Stmt, bool, error) {
 		return nil, false, nil
 	}
 	name := p.advance()
-	st := &DeclStmt{Name: name.Text, Type: typ, Decor: decor, Pos: Pos{Line: name.Line, Col: name.Col}}
+	if hasPerm {
+		typ = refBaseType(typ)
+	}
+	st := &DeclStmt{Name: name.Text, Type: typ, Decor: decor, Perm: perm, Scope: scope, Pos: Pos{Line: name.Line, Col: name.Col}}
 	if p.curIs(TAssign) {
 		p.advance()
 		init, err := p.parseExpr()
@@ -1399,7 +1457,10 @@ func (p *parser) parseBin(left func() (Expr, error), kinds ...TokenKind) (Expr, 
 }
 
 func (p *parser) parseUnary() (Expr, error) {
-	if p.curIs(TBang) || p.curIs(TMinus) || p.curIs(TStar) {
+	// & takes an lvalue's address (BioLang-style references). Declaration forms such as
+	// "&rw u int p = &x;" are recognised by tryParseDecl before expression parsing ever sees them,
+	// so an & reaching this point is an address-of expression.
+	if p.curIs(TBang) || p.curIs(TMinus) || p.curIs(TStar) || p.curIs(TAmper) {
 		tok := p.advance()
 		x, err := p.parseUnary()
 		if err != nil {
