@@ -1614,6 +1614,11 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		}
 		x.typ = "int"
 		return x, nil
+	case "===":
+		// Storage identity is implemented in the interpreter. The compiler would need address
+		// computation for both operands, which arrives with the pointer work (R2); until then it is a
+		// hard error instead of a silently different answer (project policy for unsupported constructs).
+		return nil, l.errf(e.Pos, "暂未支持编译 %s（=== 存储同一性目前仅在解释器实现）", e.Op)
 	case "==", "!=", "<", "<=", ">", ">=":
 		// T& / pointer T comparison: against null it compares pointer identity (the interpreter's equalValues(ref, nil));
 		// against a value it compares the dereferenced value (the interpreter's p == 0 → compares the pointed-to cell).

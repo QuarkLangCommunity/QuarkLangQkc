@@ -1367,7 +1367,7 @@ func (p *parser) parseExpr() (Expr, error) { return p.parseOr() }
 func (p *parser) parseOr() (Expr, error)  { return p.parseBin(p.parseAnd, TOr) }
 func (p *parser) parseAnd() (Expr, error) { return p.parseBin(p.parseCmp, TAnd) }
 func (p *parser) parseCmp() (Expr, error) {
-	return p.parseBin(p.parseAdd, TEq, TNe, TLt, TLe, TGt, TGe)
+	return p.parseBin(p.parseAdd, TEqStrict, TEq, TNe, TLt, TLe, TGt, TGe)
 }
 func (p *parser) parseAdd() (Expr, error)   { return p.parseBin(p.parseShift, TPlus, TMinus) }
 func (p *parser) parseMul() (Expr, error)   { return p.parseBin(p.parseUnary, TStar, TSlash, TPercent) }

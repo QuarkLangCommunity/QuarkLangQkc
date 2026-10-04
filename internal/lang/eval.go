@@ -1099,6 +1099,11 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		}
 		return NilV(), &RunError{Msg: "internal: unknown unary operator " + x.Op, Pos: x.Pos, Ctx: ctx}
 	case *BinOp:
+		// === is the storage-identity primitive: it compares where the operands live, never their
+		// values, and it is deliberately not overloadable (no operation method, no user hook).
+		if x.Op == "===" {
+			return in.storageIdentical(x.L, x.R, sc), nil
+		}
 		l, err := in.evalExpr(x.L, sc, ctx)
 		if err != nil {
 			return NilV(), err
@@ -1494,6 +1499,82 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 // evalArgs evaluates the argument list. The resulting slice comes from ctx.argArena (no per-call allocation):
 // the caller must restore `ctx.argArena = ctx.argArena[:mark]` **after the call ends** (take mark = len before the call).
 // Nested evaluation is naturally LIFO: an inner call truncates at its own mark and never overwrites the outer arguments.
+// storageIdentical implements ===: it reports whether two operand expressions occupy the same
+// storage space. Both sides must be lvalues that resolve to the same location; anything else (a
+// literal, a temporary, two distinct variables — even ones holding equal values or pointers to the
+// same target) is false.
+//
+// This is why a pointer compared with === is false while == is true: == compares values (for
+// pointers, the target), === compares the storage the operands themselves occupy.
+func (in *interp) storageIdentical(l, r Expr, sc *scope) Value {
+	li, lok := in.storageID(l, sc)
+	if !lok {
+		return BoolV(false)
+	}
+	ri, rok := in.storageID(r, sc)
+	if !rok {
+		return BoolV(false)
+	}
+	return BoolV(li == ri)
+}
+
+// storageID returns a stable identity string for an lvalue expression's storage. It only reads
+// through already-resolved variables and pure member/index paths, so no user code runs and no side
+// effect can be observed by evaluating ===.
+func (in *interp) storageID(e Expr, sc *scope) (string, bool) {
+	switch x := e.(type) {
+	case *Ident:
+		if x.Slot > 0 {
+			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+				return fmt.Sprintf("slot:%p:%d", sc, i), true
+			}
+		}
+		if owner := sc.findScope(x.Name); owner != nil {
+			if i := owner.paramIndex(x.Name); i >= 0 {
+				return fmt.Sprintf("slot:%p:%d", owner, i), true
+			}
+			if owner.vars != nil {
+				if _, ok := owner.vars[x.Name]; ok {
+					return fmt.Sprintf("var:%p:%s", owner, x.Name), true
+				}
+			}
+		}
+		return "", false
+	case *MemberExpr:
+		obj, err := in.evalExpr(x.X, sc, &execCtx{Log: NewList()})
+		if err != nil {
+			return "", false
+		}
+		if obj.IsCopyd() {
+			obj = obj.Copyd().V
+		}
+		if !obj.IsStruct() {
+			return "", false
+		}
+		if _, ok := obj.Struct().Fields[x.Name]; !ok {
+			return "", false
+		}
+		return fmt.Sprintf("field:%p:%s", obj.Struct(), x.Name), true
+	case *IndexExpr:
+		obj, err := in.evalExpr(x.X, sc, &execCtx{Log: NewList()})
+		if err != nil {
+			return "", false
+		}
+		idx, err := in.evalExpr(x.Idx, sc, &execCtx{Log: NewList()})
+		if err != nil || !idx.IsInt() {
+			return "", false
+		}
+		switch {
+		case obj.IsList():
+			return fmt.Sprintf("elem:%p:%d", obj.List(), idx.Int()), true
+		case obj.IsStr():
+			return "", false // strings are immutable: no element storage to identify
+		}
+		return "", false
+	}
+	return "", false
+}
+
 // isLValueExpr reports whether an expression can produce a reference cell in evalArg (declared
 // variable, struct member, list index). Anything it lists is treated conservatively: those argument
 // lists keep going through evalArg.

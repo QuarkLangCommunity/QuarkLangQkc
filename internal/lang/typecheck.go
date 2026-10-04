@@ -1562,6 +1562,11 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 			return nil, c.errf(x.Pos, "TypeError: 位移运算需要 int 操作数，got %s and %s", l, r)
 		}
 		return tIntV, nil
+	case "===":
+		// Storage identity: the operands' types do not matter, only where they live, so any pair of
+		// types is accepted. It is a language primitive and cannot be overloaded (opMethodFor has no
+		// entry for it, so the user-method hook above never fires for ===).
+		return tBoolV, nil
 	case "==", "!=":
 		ok := (isNumeric(l) && isNumeric(r)) || (l.Kind == tString && r.Kind == tString) ||
 			(l.Kind == tBool && r.Kind == tBool) || (l.Kind == tAny || r.Kind == tAny) ||
