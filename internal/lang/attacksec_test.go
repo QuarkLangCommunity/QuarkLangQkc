@@ -23,7 +23,7 @@ func TestChannelCapLimit(t *testing.T) {
 
 // Tightened new limit (1<<23 entries)
 func TestNewCapLimit(t *testing.T) {
-	_, err := runSrc(t, "fn main(IOStream io) { pointer List<int> p = new int[66000000]; }")
+	_, err := runSrc(t, "fn main(IOStream io) { pointer int p = new int[66000000]; }")
 	if err == nil || !strings.Contains(err.Error(), "badAlloc") {
 		t.Fatalf("got %v", err)
 	}

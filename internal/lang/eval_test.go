@@ -714,7 +714,7 @@ func TestDeleteReclaimsBlock(t *testing.T) {
 // pointer modifier + new <type>[size] (allocated on the heap, failure gives badAlloc)
 func TestPointerAndNew(t *testing.T) {
 	out, err := runSrc(t, `fn main(IOStream io) {
-    pointer List<int> l = new int[10];
+    pointer int l = new int[10];
     io.println("ok");
     delete l;
 }`)
@@ -730,7 +730,7 @@ func TestPointerAndNew(t *testing.T) {
 func TestNewBadAlloc(t *testing.T) {
 	_, err := runSrc(t, `fn main(IOStream io) {
     try {
-        pointer List<int> bad = new int[-1];
+        pointer int bad = new int[-1];
     } catch (void e) {
         io.println("badalloc");
     }

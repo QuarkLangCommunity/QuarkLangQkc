@@ -990,6 +990,15 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		l := NewList()
 		l.mem = in.mem
 		l.blockID = id
+		// new T[n] is a raw block of n elements, so indexing and length are defined on it: the block
+		// starts out holding n zero values of T. This is what makes the allocation primitive usable by
+		// a library type (Vec) without the type system having to know about List.
+		if x.Size != nil {
+			zero := in.zeroValue(x.Typ)
+			for i := 0; i < size; i++ {
+				l.Append(zero)
+			}
+		}
 		return ListV(l), nil
 	case *StructLit:
 		st := x.Name

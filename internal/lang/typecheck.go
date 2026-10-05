@@ -1259,14 +1259,14 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "table value"); err != nil {
 					return err
 				}
-			case tList:
+			case tList, tPtr:
 				if kidx.Kind != tInt {
 					return c.errf(target.Pos, "TypeError: 列表索引必须是 int")
 				}
 				if recvT.Elem != nil && !assignable(t, recvT.Elem) {
 					return c.errf(target.Pos, "TypeError: 值需要 %s，给了 %s", recvT.Elem, t)
 				}
-				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "list element"); err != nil {
+				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "element"); err != nil {
 					return err
 				}
 			default:
@@ -1413,7 +1413,9 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			if _, err := c.infer(x.Size, sc); err != nil {
 				return nil, err
 			}
-			return &Type{Kind: tPtr, Elem: mkList(elem)}, nil
+			// new T[n] is a raw block of n elements: its type is pointer T, with no List in the type
+			// system. List is a library type; the allocation primitive must not depend on it.
+			return &Type{Kind: tPtr, Elem: elem}, nil
 		}
 		return &Type{Kind: tPtr, Elem: elem}, nil
 	case *StructLit:
@@ -1563,8 +1565,8 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 		if err != nil {
 			return nil, err
 		}
-		if t.Kind != tList {
-			return nil, c.errf(x.Pos, "TypeError: indexing requires a List, got %s", t)
+		if t.Kind != tList && t.Kind != tPtr {
+			return nil, c.errf(x.Pos, "TypeError: indexing requires a List or a pointer block, got %s", t)
 		}
 		it, err := c.infer(x.Idx, sc)
 		if err != nil {
@@ -2287,6 +2289,14 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return tStringV, nil
 			}
 			return nil, c.errf(pos, "TypeError: no method %q on pointer", name)
+		}
+		// A raw block allocated by new T[n] knows its own length: that is a property of the
+		// allocation, not of a library type, so size() is answered here.
+		if name == "size" && recv.Elem != nil {
+			if err := c.checkArity(name, 0, len(args), pos); err != nil {
+				return nil, err
+			}
+			return tIntV, nil
 		}
 		// Pointer method calls dereference automatically
 		return c.methodType(recv.Elem, name, args, pos)
