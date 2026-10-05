@@ -41,7 +41,7 @@
 - 泛型：`type struct<T> { ... } Box;` / `impl<T> { ... } Box;`；struct 有泛型参数时 impl 必须引入同样参数；实例化替换检查。泛型调用自动推断（`id(5)`）；**显式泛型实参暂不支持**。
 - 指针：`T&` / `pointer T` 可空引用，零值 `null`，成员访问自动解引用，解引用 null 抛 `NullPointerError`。
 - `Copyd<T>`：参数传递时深拷贝，`.ptr()` 取出包装值。`copyd` 是**修饰符**且写在最前：参数写 `copyd int a`，
-  局部声明写 `copyd List<int> l = [1,2];`。方括号形式 `T[Copyd]` 是**类型**（`Copyd<Array<T>>`），不是修饰符的另一种写法。
+  局部声明写 `copyd List<int> l = [1,2];`。语言里**没有** `Copyd<T>` 类型，也没有 `T[Copyd]` 写法。
 - `int` 为 32 位（wrapI32）；越界字面量是编译错误。
 - 内建类型：`List<T>`、`HashTable<K,V>`、`IOStream`、`Channel`、`thread`（`Task` 内部）、`memorize`、`memory`、`Sign`。
 
