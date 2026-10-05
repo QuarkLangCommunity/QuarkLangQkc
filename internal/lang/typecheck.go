@@ -109,7 +109,7 @@ func (t *Type) String() string {
 		}
 		return t.Elem.String() + "&"
 	case tCopyd:
-		return "Copyd<" + t.Elem.String() + ">"
+		return t.Elem.String() // the copyd modifier affects passing, not the type's identity
 	case tNull:
 		return "null"
 	}
@@ -275,11 +275,9 @@ func parseTypeStr(s string) (*Type, error) {
 		}
 		return mkList(e), nil
 	case "Copyd":
-		e, err := elem()
-		if err != nil {
-			return nil, err
-		}
-		return e, nil // Copyd<T> is semantically just T (the copy happens on passing)
+		// Removed type form: copyd is a modifier (copyd int a), not a type constructor. The copy happens
+		// on passing, so a copyd-declared variable's type is just the underlying type.
+		return nil, fmt.Errorf("TypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd int a)")
 	case "HashTable":
 		k, v, err := splitTopComma(inner)
 		if err != nil {
@@ -702,6 +700,10 @@ func Typecheck(prog *Program) error {
 
 // resolveType resolves a type annotation (no substitution context).
 func (c *checker) resolveType(s string, pos Pos) (*Type, error) {
+	// copyd is a modifier, not a type: `copyd <type> <name>`. The Copyd<...> type form was removed.
+	if strings.HasPrefix(strings.TrimSpace(s), "Copyd<") {
+		return nil, fmt.Errorf("TypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)")
+	}
 	return c.substType(s, nil, pos)
 }
 
@@ -710,6 +712,11 @@ func (c *checker) resolveType(s string, pos Pos) (*Type, error) {
 // Copyd<T>, int[Copyd]/int[] (≈Copyd<Array>/Array), null.
 func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, error) {
 	s = strings.TrimSpace(s)
+	// copyd is a modifier, not a type: the Copyd<...> type form was removed. Rejecting it at the common
+	// entry point keeps every path honest (declarations, parameters, fields, returns, generics).
+	if strings.HasPrefix(strings.TrimSpace(s), "Copyd<") || strings.HasPrefix(strings.TrimSpace(s), "Copyd[") {
+		return nil, &CheckError{Msg: "TypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)", Pos: pos}
+	}
 	if s == "null" {
 		return &Type{Kind: tNull}, nil
 	}

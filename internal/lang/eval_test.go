@@ -325,10 +325,9 @@ fn main(IOStream io) {
 
 func TestCopydPtr(t *testing.T) {
 	out, err := runSrc(t, `
-fn f(IOStream io, int[Copyd] a) void {
+fn f(IOStream io, copyd List<int> a) void {
     a.append(99);
-    List<int> b = a.ptr();
-    io.println(b.size());
+    io.println(a.size());
 }
 
 fn main(IOStream io) {

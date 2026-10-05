@@ -681,11 +681,6 @@ func TestUnsupportedConstructs(t *testing.T) {
 			want: "暂未支持",
 		},
 		{
-			name: "Copyd<T> 类型标注",
-			src:  "fn f(Copyd<int> a) int { return a.ptr(); }\nfn main(IOStream io) { io.println(f(1)); }\n",
-			want: "暂未支持",
-		},
-		{
 			name: "打印 struct 值（解释器字段序不确定）",
 			src: "type struct { int a; } P;\n" +
 				"fn main(IOStream io) { P p; io.println(p); }\n",

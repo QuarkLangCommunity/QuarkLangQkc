@@ -885,7 +885,7 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			v = StructV(in.zeroInstance(def))
 		}
 		// copyd modifier: the declaration is a Copyd value right away (copy on pass, .ptr() unwraps).
-		// Modifier form only: `T[Copyd]` is the type Copyd<Array<T>>, not this.
+		// Modifier only: copyd modifies the declaration; there is no Copyd<T> type.
 		if s.Decor == "copyd" && !v.IsCopyd() {
 			v = CopydV(&CopydValue{V: deepCopy(v)})
 		}
@@ -1477,7 +1477,7 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	// Parameter binding (the only canonical form):
 	//   ① plain parameter → an lvalue argument binds by reference (the reference lives in the slot; reads/writes go through to the caller);
 	//      a non-lvalue argument is a temporary cell, so callee writes have no side effect;
-	//   ② copyd parameter (the `copyd` modifier, or the type Copyd<T>) → deep-copied before binding,
+	//   ② copyd parameter (the `copyd` modifier: `copyd int a`, `copyd List<int> a`) → deep-copied before binding,
 	//      never written back to the caller: the type form binds the Copyd wrapper (readable via .ptr()), the modifier form binds the bare value;
 	//   ③ the argument itself is a copyd-declared Copyd value while the parameter is not copyd → unwrap and deep copy (copy on pass).
 	flags := fn.CopydFlags()
