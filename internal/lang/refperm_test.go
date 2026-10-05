@@ -139,3 +139,65 @@ func TestRefPermissionMatrix(t *testing.T) {
 		t.Error("refBaseType must produce a bare reference type")
 	}
 }
+
+// TestCopydIsOnlyAModifier pins that copyd is a modifier: the language has no Copyd<T> type and no
+// T[Copyd] form, while the modifier keeps its deep-copy-on-pass semantics.
+func TestCopydIsOnlyAModifier(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.EN))
+	cases := []struct {
+		name    string
+		src     string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "modifier deep-copies a list on pass",
+			src: `program main;
+fn take(copyd List<int> a) int { a.append(9); return a.size(); }
+fn main(IOStream io) { List<int> l = [1, 2]; io.println(take(l)); io.println(l.size()); }`,
+			want: "3\n2\n",
+		},
+		{
+			name: "modifier deep-copies a scalar on pass",
+			src: `program main;
+fn take(copyd int a) int { a = a + 1; return a; }
+fn main(IOStream io) { int x = 5; io.println(take(x)); io.println(x); }`,
+			want: "6\n5\n",
+		},
+		{
+			name:    "Copyd<T> is not a type",
+			src:     `program main;` + "\n" + `fn main(IOStream io) { Copyd<int> c = null; io.println(1); }`,
+			wantErr: "Copyd is a modifier, not a type",
+		},
+		{
+			name:    "Copyd<T> as a parameter type is not a type",
+			src:     `program main;` + "\n" + `fn f(Copyd<int> a) int { return 1; }` + "\n" + `fn main(IOStream io) { io.println(1); }`,
+			wantErr: "Copyd is a modifier, not a type",
+		},
+		{
+			name:    "the [Copyd] suffix is not accepted either",
+			src:     `program main;` + "\n" + `fn f(int[Copyd] a) int { return 1; }` + "\n" + `fn main(IOStream io) { io.println(1); }`,
+			wantErr: "ParseError",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := runSrc(t, tc.src)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected an error containing %q, program ran and printed %q", tc.wantErr, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
