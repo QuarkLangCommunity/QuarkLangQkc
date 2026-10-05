@@ -1,0 +1,59 @@
+// Vec<T> — the dynamic array, written in QuarkLang on top of the raw allocation primitive.
+//
+// This is a library type, not a language capability: the core provides raw blocks (new T[n] →
+// pointer T), references, structs, generics and interfaces, and Vec is built from those. `list` is
+// the compatibility spelling for it (see the alias at the bottom), so the old name keeps working while
+// the collection moves out of the core.
+
+pub type struct<T> {
+    pointer T data;
+    int len;
+    int cap;
+} Vec;
+
+// vecNew builds an empty vector with room for cap elements. The element type is carried by the
+// `zero` argument: generics are type-erased, so a return type of Vec<T> cannot be inferred from the
+// capacity alone.
+pub fn<T> vecNew(T zero, int cap) Vec<T> {
+    Vec<T> v = .{new T[cap], 0, cap};
+    return v;
+}
+
+impl<T> {
+    fn size(Vec<T> self) int { return self.len; }
+
+    fn capacity(Vec<T> self) int { return self.cap; }
+
+    fn get(Vec<T> self, int i) T { return self.data[i]; }
+
+    fn set(Vec<T> self, int i, T v) void { self.data[i] = v; }
+
+    // push grows geometrically (4, then doubling): amortized constant time, and every element is
+    // copied into the new block before the old one is released.
+    fn push(Vec<T> self, T v) void {
+        if (self.len == self.cap) {
+            int ncap = self.cap * 2;
+            if (ncap < 4) { ncap = 4; }
+            pointer T nd = new T[ncap];
+            for (int i = 0; i < self.len; i = i + 1) {
+                nd[i] = self.data[i];
+            }
+            pointer T old = self.data;
+            self.data = nd;
+            self.cap = ncap;
+            delete old;
+        }
+        self.data[self.len] = v;
+        self.len = self.len + 1;
+    }
+
+    fn pop(Vec<T> self) T {
+        self.len = self.len - 1;
+        return self.data[self.len];
+    }
+
+    fn clear(Vec<T> self) void { self.len = 0; }
+} Vec;
+
+// list is the compatibility spelling: the old name keeps resolving to the vector type.
+type Vec list;
