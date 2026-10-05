@@ -1142,7 +1142,7 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	if st.Perm != "" {
 		// Permission-carrying references (&rw u int p) are interpreter-only for now.
-		return nil, fc.l.errf(st.Pos, "暂未支持编译权限引用 &%s %s（目前仅在解释器实现）", st.Perm, st.Scope)
+		return nil, fc.l.errf(st.Pos, "compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)", st.Perm, st.Scope)
 	}
 	l := fc.l
 	t := fc.resolveT(st.Type)
@@ -1622,7 +1622,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// Storage identity is implemented in the interpreter. The compiler would need address
 		// computation for both operands, which arrives with the pointer work (R2); until then it is a
 		// hard error instead of a silently different answer (project policy for unsupported constructs).
-		return nil, l.errf(e.Pos, "暂未支持编译 %s（=== 存储同一性目前仅在解释器实现）", e.Op)
+		return nil, l.errf(e.Pos, "compiling %s is not supported yet (=== storage identity is implemented in the interpreter only)", e.Op)
 	case "==", "!=", "<", "<=", ">", ">=":
 		// T& / pointer T comparison: against null it compares pointer identity (the interpreter's equalValues(ref, nil));
 		// against a value it compares the dereferenced value (the interpreter's p == 0 → compares the pointed-to cell).
@@ -1841,7 +1841,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 	if e.Op == "&" {
 		// Address-of feeds the reference machinery, which the compiler does not lower yet. Hard error
 		// rather than a silently different answer (project policy for unsupported constructs).
-		return nil, l.errf(e.Pos, "暂未支持编译 & 取址（引用目前仅在解释器实现）")
+		return nil, l.errf(e.Pos, "compiling & (address-of) is not supported yet (references are implemented in the interpreter only)")
 	}
 	t := fc.typeOf(e.X)
 	switch e.Op {
