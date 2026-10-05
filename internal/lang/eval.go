@@ -363,10 +363,11 @@ type StructDef struct {
 
 // InterfaceDef is a registered interface declaration.
 type InterfaceDef struct {
-	Name    string
-	Methods []MethodSig
-	Expands []string // expand interface composes interfaces
-	Partial bool     // optionally implemented interface (event family): a missing method is not an error (emit ignores it at runtime)
+	Name       string
+	TypeParams []string // generic interface: interface<T> { ... } Index; — used as Index<Vec<int>>
+	Methods    []MethodSig
+	Expands    []string // expand interface composes interfaces
+	Partial    bool     // optionally implemented interface (event family): a missing method is not an error (emit ignores it at runtime)
 }
 
 // ImplDef is a registered impl block: Methods are static (no self), SelfMethods
@@ -525,7 +526,7 @@ func (in *interp) registerProgramMode(prog *Program, replace bool) error {
 		if _, dup := in.interfaces[i.Name]; dup && !replace {
 			return fmt.Errorf("CompileError: duplicate interface %q", i.Name)
 		}
-		in.interfaces[i.Name] = &InterfaceDef{Name: i.Name, Methods: i.Methods, Expands: i.Expands}
+		in.interfaces[i.Name] = &InterfaceDef{Name: i.Name, TypeParams: i.TypeParams, Methods: i.Methods, Expands: i.Expands}
 	}
 	for _, im := range prog.Impls {
 		// A type may have several impl blocks: methods are aggregated (xmind §classes: impl<T> {...} name;)
