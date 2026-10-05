@@ -1046,17 +1046,17 @@ func (p *parser) parseType() (string, error) {
 			p.advance()
 		}
 	}
-	if p.curIs(TLBracket) && !p.peekIs(TInt) && !p.peekIs(TMinus) {
-		// Type suffixes [Copyd]/[]: a '[' followed by a digit is the size of new <type>[size] and is not consumed here
+	// Type suffixes: [Copyd] and [] only. A '[' followed by anything else is not part of the type —
+	// that is the size of `new <type>[size]`, where the size can be an arbitrary expression
+	// (`new T[ncap]` used to be swallowed as the type "T[ncap]", which broke allocating a block of a
+	// user-defined or generic element type).
+	if p.curIs(TLBracket) && (p.peekIs(TRBracket) || (p.peekIs(TIdent) && p.peekAt(1).Text == "Copyd" && p.peekIsAt(2, TRBracket))) {
 		p.advance()
 		if p.curIs(TRBracket) {
 			p.advance()
 			name += "[]"
 		} else {
-			inner, err := p.expectIdent("type suffix (e.g. Copyd)")
-			if err != nil {
-				return "", err
-			}
+			inner := p.advance()
 			if _, err := p.expect(TRBracket, "']'"); err != nil {
 				return "", err
 			}
