@@ -1516,8 +1516,15 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			}
 			return &Type{Kind: tPtr, Elem: t}, nil
 		case "*":
+			// *Index<C> is the dereference of a container handle: it is defined as calling get() on it,
+			// so the result type comes from that method rather than from the List-peek builtin.
+			if t.Kind == tInterface || t.Kind == tStruct {
+				if ret, err := c.methodType(t, "get", nil, x.Pos); err == nil {
+					return ret, nil
+				}
+			}
 			if t.Kind != tList {
-				return nil, c.errf(x.Pos, "TypeError: '*' requires a List, got %s", t)
+				return nil, c.errf(x.Pos, "TypeError: '*' requires a List or a container handle with get(), got %s", t)
 			}
 			return t.Elem, nil
 		case "-":
@@ -1695,7 +1702,10 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 		ok := (isNumeric(l) && isNumeric(r)) || (l.Kind == tString && r.Kind == tString) ||
 			(l.Kind == tBool && r.Kind == tBool) || (l.Kind == tAny || r.Kind == tAny) ||
 			(l.Kind == tNull || r.Kind == tNull) || (l.Kind == tPtr || r.Kind == tPtr) ||
-			(l.Kind == tStruct && r.Kind == tStruct) || (l.Kind == tCopyd || r.Kind == tCopyd)
+			(l.Kind == tStruct && r.Kind == tStruct) || (l.Kind == tCopyd || r.Kind == tCopyd) ||
+			// Interface (and therefore Index<Container>) equality: the runtime compares identity — the
+			// same underlying block — which is what a handle-like type needs from ==.
+			(l.Kind == tInterface && r.Kind == tInterface)
 		if !ok {
 			return nil, c.errf(x.Pos, "TypeError: cannot compare %s and %s", l, r)
 		}
