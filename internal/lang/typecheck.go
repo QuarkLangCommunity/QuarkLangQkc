@@ -582,7 +582,7 @@ func Typecheck(prog *Program) error {
 		if _, dup := c.interfaces[i.Name]; dup {
 			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate interface %q", i.Name), Pos: i.Pos}
 		}
-		c.interfaces[i.Name] = &InterfaceDef{Name: i.Name, Methods: i.Methods, Expands: i.Expands}
+		c.interfaces[i.Name] = &InterfaceDef{Name: i.Name, TypeParams: i.TypeParams, Methods: i.Methods, Expands: i.Expands}
 	}
 	for _, lb := range prog.Libraries {
 		if c.libs == nil {
@@ -859,8 +859,26 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		}
 		return &Type{Kind: tStruct, FName: base, Args: args}, nil
 	}
-	if _, ok := c.interfaces[base]; ok {
-		return &Type{Kind: tInterface, FName: base}, nil // named interface: dynamic-dispatch protocol type
+	if def, ok := c.interfaces[base]; ok {
+		// Generic interface instantiation: Index<Vec<int>> carries its type arguments so the interface's
+		// method signatures can be substituted (T -> Vec<int>) wherever they are consulted.
+		var args []*Type
+		if inner != "" {
+			for _, a := range splitTopCommas(inner) {
+				at, err := c.substType(a, subst, pos)
+				if err != nil {
+					return nil, err
+				}
+				args = append(args, at)
+			}
+		}
+		if len(def.TypeParams) > 0 && len(args) != len(def.TypeParams) {
+			return nil, &CheckError{Msg: fmt.Sprintf("CompileError: %s takes %d type argument(s), got %d", base, len(def.TypeParams), len(args)), Pos: pos}
+		}
+		if len(def.TypeParams) == 0 && len(args) > 0 {
+			return nil, &CheckError{Msg: fmt.Sprintf("CompileError: interface %s is not generic, but %d type argument(s) were given", base, len(args)), Pos: pos}
+		}
+		return &Type{Kind: tInterface, FName: base, Args: args}, nil
 	}
 	// Function type function<ret, p1, ...>: tFunc (signature string)
 	if base == "function" {
@@ -1785,6 +1803,21 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				}
 				if ret == "Self" {
 					return tAnyV, nil // Self return: the concrete runtime value
+				}
+				// Generic interface: substitute its type parameters with the receiver's arguments, so
+				// Index<T> { fn get(Self self) T; } used as Index<Box> returns Box rather than the
+				// unresolved parameter T.
+				if len(iface.TypeParams) > 0 {
+					subst := map[string]*Type{}
+					for i, tp := range iface.TypeParams {
+						if i < len(recv.Args) {
+							subst[tp] = recv.Args[i]
+						}
+					}
+					if _, isParam := subst[ret]; isParam {
+						return subst[ret], nil
+					}
+					return c.substType(ret, subst, pos)
 				}
 				return c.resolveType(ret, pos)
 			}
