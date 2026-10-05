@@ -201,3 +201,58 @@ fn main(IOStream io) { int x = 5; io.println(take(x)); io.println(x); }`,
 		})
 	}
 }
+
+// TestForInProtocol pins that for-in accepts a library container: any type with size() int and
+// get(int) T can be iterated, which is what lets the standard-library Vec work in a loop while the
+// core knows nothing about it.
+func TestForInProtocol(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.EN))
+	cases := []struct {
+		name    string
+		src     string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "user type with size()/get() is iterable",
+			src: `program main;
+type struct { int n; } Squares;
+impl { fn size(Squares self) int { return self.n; } fn get(Squares self, int i) int { return i * i; } } Squares;
+fn main(IOStream io) { Squares s = .{3}; int sum = 0; for (int v : s) { sum = sum + v; } io.println(sum); }`,
+			want: "5\n",
+		},
+		{
+			name: "loop variable type is checked against get()",
+			src: `program main;
+type struct { int n; } Squares;
+impl { fn size(Squares self) int { return self.n; } fn get(Squares self, int i) int { return i * i; } } Squares;
+fn main(IOStream io) { Squares s = .{3}; for (String v : s) { io.println(v); } }`,
+			wantErr: "does not match element type",
+		},
+		{
+			name:    "a type without the protocol is rejected",
+			src:     `program main;` + "\n" + `type struct { int n; } Plain;` + "\n" + `fn main(IOStream io) { Plain p = .{3}; for (int v : p) { io.println(v); } }`,
+			wantErr: "for-in requires a List or a container with size() int and get(int)",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := runSrc(t, tc.src)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected an error containing %q, program ran and printed %q", tc.wantErr, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

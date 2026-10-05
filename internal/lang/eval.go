@@ -820,7 +820,32 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			return err
 		}
 		if !v.IsList() {
-			return &RunError{Msg: fmt.Sprintf("TypeError: for-in requires a List, got %s", v.TypeName()), Pos: s.Pos, Ctx: ctx}
+			// Library protocol: size() + get(i). This is what lets a standard-library container be
+			// iterated without the core having any knowledge of it.
+			if v.IsStruct() {
+				sizeV, serr := in.callMethod(v, "size", nil, ctx, s.Pos)
+				if serr == nil && sizeV.IsInt() {
+					inner := newScope(sc)
+					for i := 0; i < int(sizeV.Int()); i++ {
+						item, gerr := in.callMethod(v, "get", []Value{IntV(int64(i))}, ctx, s.Pos)
+						if gerr != nil {
+							return &RunError{Msg: gerr.Error(), Pos: s.Pos, Ctx: ctx}
+						}
+						if inner.vars == nil {
+							inner.vars = map[string]Value{}
+						}
+						inner.vars[s.Var] = item
+						if err := in.execBlock(s.Body, inner, ctx); err != nil {
+							if errors.Is(err, errLoopBreak) {
+								return nil
+							}
+							return err
+						}
+					}
+					return nil
+				}
+			}
+			return &RunError{Msg: fmt.Sprintf("TypeError: for-in requires a List or a container with size() int and get(int), got %s", v.TypeName()), Pos: s.Pos, Ctx: ctx}
 		}
 		l := v.List()
 		inner := newScope(sc)

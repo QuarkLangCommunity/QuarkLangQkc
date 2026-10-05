@@ -108,6 +108,35 @@ fn main(IOStream io) {
 			want: "0\n5\n",
 		},
 		{
+			name: "iteration follows the size()/get() protocol",
+			src: `program main;
+import "vec";
+fn main(IOStream io) {
+    Vec<int> v = vecNew(0, 2);
+    v.push(10); v.push(20); v.push(30);
+    int sum = 0;
+    for (int x : v) { sum = sum + x; }
+    io.println(sum);
+}`,
+			want: "60\n",
+		},
+		{
+			name: "break leaves the loop early",
+			src: `program main;
+import "vec";
+fn main(IOStream io) {
+    Vec<int> v = vecNew(0, 4);
+    v.push(1); v.push(2); v.push(3); v.push(4);
+    int seen = 0;
+    for (int x : v) {
+        if (x == 3) { break; }
+        seen = seen + 1;
+    }
+    io.println(seen);
+}`,
+			want: "2\n",
+		},
+		{
 			name: "elements survive many growth steps",
 			src: `program main;
 import "vec";

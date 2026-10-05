@@ -1077,11 +1077,19 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		if err != nil {
 			return err
 		}
+		elem := it.Elem
 		if it.Kind != tList {
-			return c.errf(s.Pos, "TypeError: for-in requires a List, got %s", it)
+			// Library protocol: any type offering size() int and get(int) T can be iterated, so a
+			// standard-library container (Vec) works in a loop without the core knowing about it.
+			sz, serr := c.methodType(it, "size", nil, s.Pos)
+			gt, gerr := c.methodType(it, "get", []*Type{tIntV}, s.Pos)
+			if serr != nil || gerr != nil || sz == nil || sz.Kind != tInt || gt == nil {
+				return c.errf(s.Pos, "TypeError: for-in requires a List or a container with size() int and get(int), got %s", it)
+			}
+			elem = gt
 		}
 		inner := newCScope(sc)
-		if err := inner.declare(s.Var, &cVar{typ: it.Elem, init: true}, s.Pos); err != nil {
+		if err := inner.declare(s.Var, &cVar{typ: elem, init: true}, s.Pos); err != nil {
 			return err
 		}
 		if s.Type != "" { // loop variable type declared first: for (<type> <name> : <list>)
@@ -1089,7 +1097,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if err != nil {
 				return err
 			}
-			if !assignable(it.Elem, dt) {
+			if !assignable(elem, dt) {
 				return c.errf(s.Pos, "TypeError: for 迭代变量类型 %s 与元素类型 %s 不匹配", dt, it.Elem)
 			}
 			if err := c.checkIfaceStrict(it.Elem, dt, s.Pos, "for 迭代变量"); err != nil {
