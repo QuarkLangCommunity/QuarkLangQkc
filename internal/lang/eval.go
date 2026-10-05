@@ -1076,8 +1076,15 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		}
 		switch x.Op {
 		case "*":
+			// *handle is defined as handle.get(): a container handle (Index<C>) yields its current
+			// element, while a List keeps the original peek behaviour.
+			if v.IsStruct() {
+				if _, err := in.callMethod(v, "get", nil, ctx, x.Pos); err == nil {
+					return in.callMethod(v, "get", nil, ctx, x.Pos)
+				}
+			}
 			if !v.IsList() {
-				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: '*' requires a List, got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: '*' requires a List or a container handle with get(), got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
 			}
 			l := v.List()
 			item, err := l.Peek()
