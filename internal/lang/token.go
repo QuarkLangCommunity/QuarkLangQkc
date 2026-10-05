@@ -41,6 +41,7 @@ const (
 	TAt
 	TAssign
 	TPlus
+	TInc // ++ (move a reference forward one element, m permission)
 	TMinus
 	TStar
 	TSlash
@@ -309,6 +310,11 @@ func (lx *lexer) next() (Token, error) {
 	case '@':
 		return one(TAt)
 	case '+':
+		if lx.peekByteAt(1) == '+' {
+			lx.advance()
+			lx.advance()
+			return Token{Kind: TInc, Text: "++", Line: line, Col: col}, nil
+		}
 		return one(TPlus)
 	case '-':
 		return one(TMinus)

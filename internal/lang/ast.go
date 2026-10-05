@@ -196,6 +196,15 @@ type DeclStmt struct {
 	Scope string // follow layer u/f/a/t for a reference declaration, "" when absent
 	Pos   Pos
 }
+
+// IncExpr is the postfix move "p++": it advances a movable reference (permission m) to the next
+// element of its container and rebinds the variable that holds it. BioLang calls this moving the
+// pointer, and it is the operation the m permission exists for.
+type IncExpr struct {
+	X   Expr
+	Pos Pos
+}
+
 type AssignStmt struct {
 	Target Expr
 	X      Expr
@@ -303,16 +312,18 @@ type IndexExpr struct {
 	Pos Pos
 }
 
-func (*IntLit) isExpr()     {}
-func (*FloatLit) isExpr()   {}
-func (*StrLit) isExpr()     {}
-func (*BoolLit) isExpr()    {}
-func (*NullLit) isExpr()    {}
-func (*Ident) isExpr()      {}
-func (*ListLit) isExpr()    {}
-func (*StructLit) isExpr()  {}
-func (*NewExpr) isExpr()    {}
-func (*BinOp) isExpr()      {}
+func (*IntLit) isExpr()    {}
+func (*FloatLit) isExpr()  {}
+func (*StrLit) isExpr()    {}
+func (*BoolLit) isExpr()   {}
+func (*NullLit) isExpr()   {}
+func (*Ident) isExpr()     {}
+func (*ListLit) isExpr()   {}
+func (*StructLit) isExpr() {}
+func (*NewExpr) isExpr()   {}
+func (*BinOp) isExpr()     {}
+func (*IncExpr) isExpr()   {}
+
 func (*UnOp) isExpr()       {}
 func (*CallExpr) isExpr()   {}
 func (*MemberExpr) isExpr() {}

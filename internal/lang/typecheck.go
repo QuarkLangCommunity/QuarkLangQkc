@@ -1300,6 +1300,25 @@ func (c *checker) requireBool(e Expr, sc *cScope) error {
 }
 
 // posOf returns an approximate position for an expression.
+// exprKindName names an expression form for error messages ("a call", "a literal", …).
+func exprKindName(e Expr) string {
+	switch e.(type) {
+	case *Ident:
+		return "an identifier"
+	case *IntLit, *FloatLit, *StrLit, *BoolLit, *NullLit:
+		return "a literal"
+	case *CallExpr:
+		return "a call"
+	case *BinOp:
+		return "an expression"
+	case *IndexExpr:
+		return "an element access"
+	case *MemberExpr:
+		return "a field access"
+	}
+	return "this expression"
+}
+
 func posOf(e Expr) Pos {
 	switch x := e.(type) {
 	case *IntLit:
@@ -1319,6 +1338,8 @@ func posOf(e Expr) Pos {
 	case *BinOp:
 		return x.Pos
 	case *UnOp:
+		return x.Pos
+	case *IncExpr:
 		return x.Pos
 	case *CallExpr:
 		return x.Pos
@@ -1388,6 +1409,23 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			fields[f.Name] = ft
 		}
 		return &Type{Kind: tStruct, FName: ".", Fields: fields}, nil
+	case *IncExpr:
+		// R2 move permission: advancing a reference is what m exists for.
+		id, ok := x.X.(*Ident)
+		if !ok {
+			return nil, c.errf(x.Pos, msg("TypeError: ++ moves a reference variable, got %s", exprKindName(x.X)))
+		}
+		v := sc.lookup(id.Name)
+		if v == nil {
+			return nil, c.errf(x.Pos, msg("CompileError: undeclared identifier %q", id.Name))
+		}
+		if !isRefKind(v.typ) {
+			return nil, c.errf(x.Pos, msg("TypeError: ++ needs a reference (permission m), but %q is %s", id.Name, v.typ))
+		}
+		if !refAllows(v.refPerm, "m") {
+			return nil, c.errf(x.Pos, msg("TypeError: reference %q has permission %q and cannot move (m is missing)", id.Name, v.refPerm))
+		}
+		return v.typ, nil
 	case *Ident:
 		// R2 permission enforcement (read side): using a reference as a value requires the r
 		// permission. Assignment targets never reach this path (the assignment case resolves the target

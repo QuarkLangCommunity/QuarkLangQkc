@@ -1061,6 +1061,8 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 			l.Append(v)
 		}
 		return ListV(l), nil
+	case *IncExpr:
+		return in.moveRef(x.X, sc, ctx, x.Pos)
 	case *UnOp:
 		// Address-of must not evaluate the operand (that would run side effects for &f() and read
 		// values pointlessly), so it is handled before the generic operand evaluation.
@@ -1504,6 +1506,56 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 // evalArgs evaluates the argument list. The resulting slice comes from ctx.argArena (no per-call allocation):
 // the caller must restore `ctx.argArena = ctx.argArena[:mark]` **after the call ends** (take mark = len before the call).
 // Nested evaluation is naturally LIFO: an inner call truncates at its own mark and never overwrites the outer arguments.
+// moveRef implements p++: advance a reference by one element and rebind the variable that holds it.
+// Only element references can move (there is nothing to move to in a plain variable reference), and
+// moving past the container's end is an error rather than a dangling reference.
+func (in *interp) moveRef(e Expr, sc *scope, ctx *execCtx, pos Pos) (Value, error) {
+	id, ok := e.(*Ident)
+	if !ok {
+		return NilV(), &RunError{Msg: msg("TypeError: ++ moves a reference variable, not this expression"), Pos: pos, Ctx: ctx}
+	}
+	owner := sc.findScope(id.Name)
+	if owner == nil {
+		return NilV(), &RunError{Msg: msg("CompileError: undeclared identifier %q", id.Name), Pos: pos, Ctx: ctx}
+	}
+	cur := owner.rawGet(id.Name)
+	if !cur.IsRef() {
+		return NilV(), &RunError{Msg: msg("TypeError: ++ needs a reference, but %q is %s", id.Name, cur.TypeName()), Pos: pos, Ctx: ctx}
+	}
+	// Follow reference-to-variable chains: a reference-typed parameter is bound by reference, so its
+	// slot holds a reference to the caller's variable, not the element reference itself. The move has
+	// to happen on the real element reference and be written back to the caller's storage.
+	for hops := 0; hops < 8 && cur.IsRef() && cur.Ref().kind == refIdent && cur.Ref().sc != nil; hops++ {
+		inner := cur.Ref()
+		nxt := inner.sc.rawGet(inner.name)
+		if !nxt.IsRef() {
+			break
+		}
+		cur = nxt
+	}
+	ref := cur.Ref()
+	if ref.kind != refIndex || !ref.obj.IsList() {
+		return NilV(), &RunError{Msg: msg("TypeError: ++ only moves element references (&a[i]); %q refers to something else", id.Name), Pos: pos, Ctx: ctx}
+	}
+	next := int(ref.key.Int()) + 1
+	if next < 0 || next >= ref.obj.List().Size() {
+		return NilV(), &RunError{Msg: msg("IndexOutOfRangeError: reference move past the end of the container (index %d, size %d)", next, ref.obj.List().Size()), Pos: pos, Ctx: ctx}
+	}
+	moved := RefV(&refValue{kind: refIndex, obj: ref.obj, key: IntV(int64(next))})
+	// Rebinding the variable must follow the same reference chain ordinary assignment does: when the
+	// variable is itself bound by reference (a reference-typed parameter), the move has to land in the
+	// caller's storage, otherwise p++ inside a helper would advance only the helper's own slot.
+	if target := owner.rawGet(id.Name); target.IsRef() && target.Ref().kind == refIdent {
+		inner := target.Ref()
+		if inner.sc != nil {
+			inner.sc.rawSet(inner.name, moved)
+			return moved, nil
+		}
+	}
+	owner.rawSet(id.Name, moved)
+	return moved, nil
+}
+
 // addrOf builds the reference cell for an lvalue expression: a variable, a struct field or a list
 // element. These are exactly the reference kinds the interpreter already uses for by-reference
 // argument passing, so a reference taken here writes through like any other.
