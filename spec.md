@@ -68,7 +68,7 @@ bridging compile time and run time.
   automatically; dereferencing null raises `NullPointerError`.
 - `Copyd<T>`: deep-copies on parameter passing; `.ptr()` unwraps. `copyd` is a **modifier** written first:
   parameters `copyd int a`, local declarations `copyd List<int> l = [1,2];`. The bracket form `T[Copyd]` is a
-  *type* — `Copyd<Array<T>>` — and is not another spelling of the modifier. Local
+  spelling at all: there is no `Copyd<T>` type and no `T[Copyd]` form. Local
   declarations `copyd List<int> l = [1,2];`.
 - `int` is 32-bit (wrapI32); out-of-range literals are compile errors.
 - Built-in types: `List<T>`, `HashTable<K,V>`, `IOStream`, `Channel`, `thread` (internal `Task`), `memorize`,
