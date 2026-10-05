@@ -40,7 +40,8 @@
 - 结构体字面量：`.{field: value, ...}`（字段名允许 `in`/`out` 等关键字）。
 - 泛型：`type struct<T> { ... } Box;` / `impl<T> { ... } Box;`；struct 有泛型参数时 impl 必须引入同样参数；实例化替换检查。泛型调用自动推断（`id(5)`）；**显式泛型实参暂不支持**。
 - 指针：`T&` / `pointer T` 可空引用，零值 `null`，成员访问自动解引用，解引用 null 抛 `NullPointerError`。
-- `Copyd<T>`：参数传递时深拷贝，`.ptr()` 取出包装值；参数写 `int[Copyd] a`，局部声明写 `copyd List<int> l = [1,2];`。
+- `Copyd<T>`：参数传递时深拷贝，`.ptr()` 取出包装值。`copyd` 是**修饰符**且写在最前：参数写 `copyd int a`，
+  局部声明写 `copyd List<int> l = [1,2];`。方括号形式 `T[Copyd]` 是**类型**（`Copyd<Array<T>>`），不是修饰符的另一种写法。
 - `int` 为 32 位（wrapI32）；越界字面量是编译错误。
 - 内建类型：`List<T>`、`HashTable<K,V>`、`IOStream`、`Channel`、`thread`（`Task` 内部）、`memorize`、`memory`、`Sign`。
 
@@ -67,7 +68,7 @@ fn<T> id(T v) T { return v; }           // 泛型函数；调用自动推断：i
 - `log expr;`：记录一条日志并**结束函数**（返回任意值，默认 nil）。
 - **没有 `out`、没有多返回值**；多输出返回 `List<T>` 单值。
 - 函数调用直接得到返回值：`int x = f(1, "a");`。
-- 参数可声明 `Copyd`（`int[Copyd] a`）触发深拷贝；也可用 `copyd` 修饰局部声明。
+- 参数可声明 `copyd` 修饰符（`copyd int a`）触发深拷贝；局部声明同样用 `copyd`。
 
 ## 6. 错误处理
 

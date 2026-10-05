@@ -66,7 +66,9 @@ bridging compile time and run time.
   automatically (`id(5)`); **explicit generic arguments are not supported yet**.
 - Pointers: `T&` / `pointer T` are nullable references with zero value `null`; member access dereferences
   automatically; dereferencing null raises `NullPointerError`.
-- `Copyd<T>`: deep-copies on parameter passing; `.ptr()` unwraps; parameters are written `int[Copyd] a`, local
+- `Copyd<T>`: deep-copies on parameter passing; `.ptr()` unwraps. `copyd` is a **modifier** written first:
+  parameters `copyd int a`, local declarations `copyd List<int> l = [1,2];`. The bracket form `T[Copyd]` is a
+  *type* — `Copyd<Array<T>>` — and is not another spelling of the modifier. Local
   declarations `copyd List<int> l = [1,2];`.
 - `int` is 32-bit (wrapI32); out-of-range literals are compile errors.
 - Built-in types: `List<T>`, `HashTable<K,V>`, `IOStream`, `Channel`, `thread` (internal `Task`), `memorize`,
@@ -96,7 +98,7 @@ fn<T> id(T v) T { return v; }           // generic function; calls infer: int x 
 - `log expr;`: records a log entry and **ends the function** (returning whatever, nil by default).
 - **There is no `out` and no multiple return values**; multiple outputs are returned as a single `List<T>`.
 - A call evaluates directly to the returned value: `int x = f(1, "a");`.
-- Parameters may be declared `Copyd` (`int[Copyd] a`) to trigger a deep copy; local declarations can use the
+- Parameters may be declared `copyd` (the modifier: `copyd int a`) to trigger a deep copy; local declarations can use the
   `copyd` modifier instead.
 
 ## 6. Error handling
