@@ -616,8 +616,8 @@ func (f *Func) ParamNames() []string {
 }
 
 // CopydFlags returns the parameter Copyd flags (lazily cached, same idea as ParamNames).
-// copyd is a parameter modifier: `fn f(copyd int a)`. The bracket form `T[Copyd]` is a *type* --
-// Copyd<Array<T>> -- and is not another way of writing the modifier.
+// copyd is a parameter modifier: `fn f(copyd int a)`, `copyd List<int> a`. There is no Copyd<T> type
+// and no T[Copyd] spelling: copyd modifies a declaration, it does not construct a type.
 func (f *Func) CopydFlags() []bool {
 	if f.paramCopyd == nil {
 		f.paramCopyd = make([]bool, len(f.Params))

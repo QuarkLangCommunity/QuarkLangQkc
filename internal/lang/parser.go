@@ -1046,11 +1046,11 @@ func (p *parser) parseType() (string, error) {
 			p.advance()
 		}
 	}
-	// Type suffixes: [Copyd] and [] only. A '[' followed by anything else is not part of the type —
+	// Type suffix: [] only (array sugar). A '[' followed by anything else is not part of the type —
 	// that is the size of `new <type>[size]`, where the size can be an arbitrary expression
 	// (`new T[ncap]` used to be swallowed as the type "T[ncap]", which broke allocating a block of a
 	// user-defined or generic element type).
-	if p.curIs(TLBracket) && (p.peekIs(TRBracket) || (p.peekIs(TIdent) && p.peekAt(1).Text == "Copyd" && p.peekIsAt(2, TRBracket))) {
+	if p.curIs(TLBracket) && p.peekIs(TRBracket) {
 		p.advance()
 		if p.curIs(TRBracket) {
 			p.advance()
