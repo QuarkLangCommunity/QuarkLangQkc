@@ -1478,6 +1478,9 @@ func (p *parser) parsePostfix() (Expr, error) {
 	}
 	for {
 		switch {
+		case p.curIs(TInc):
+			tok := p.advance()
+			x = &IncExpr{X: x, Pos: Pos{Line: tok.Line, Col: tok.Col}}
 		case p.curIs(TDot):
 			p.advance()
 			name, err := p.expectMemberName("member name")

@@ -1455,6 +1455,9 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		}
 		return &expr{kind: kIdent, typ: t, s: e.Name}, nil
 
+	case *lang.IncExpr:
+		// Moving a reference (p++) belongs to the reference machinery the compiler does not lower yet.
+		return nil, l.errf(e.Pos, "compiling ++ (reference move) is not supported yet (implemented in the interpreter only)")
 	case *lang.BinOp:
 		return fc.binOp(e)
 	case *lang.UnOp:
