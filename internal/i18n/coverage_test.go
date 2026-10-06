@@ -85,9 +85,9 @@ func wiredTemplates(t *testing.T) map[string][]string {
 				} else if len(raw) >= 2 && raw[0] == '`' {
 					raw = raw[1 : len(raw)-1] // raw strings carry no escapes
 				}
-				if hanRe.MatchString(raw) {
-					out[raw] = append(out[raw], rel)
-				}
+				// Every wired template is collected, English-source ones included: they need a Chinese
+				// catalog value for QK_LANG=zh, so they cannot be skipped by a Han filter.
+				out[raw] = append(out[raw], rel)
 				if idx == -1 {
 					return true
 				}
@@ -120,9 +120,15 @@ func calleeTemplateIndex(fun ast.Expr) (idx int, known bool) {
 // catalog — the "no Chinese leaking through an unwired message" gate.
 func TestTemplatesRegistered(t *testing.T) {
 	wired := wiredTemplates(t)
-	missing := Untranslated(sortedKeys(wired))
-	if len(missing) > 0 {
-		t.Errorf("%d wired templates are missing from the catalog:", len(missing))
+	// Every wired template must have a translation, including the English-source ones: English is the
+	// source language, so a message written in English needs a Chinese catalog value for QK_LANG=zh.
+	missing := missingEntries(sortedKeys(wired))
+	// Ratchet, not a cliff: every message needs a Chinese catalog value (English is the source
+	// language, so QK_LANG=zh renders the translation). The scanner used to skip English templates —
+	// that is how this backlog was found — so the count may only go down from here.
+	const allowedMissing = 124
+	if len(missing) > allowedMissing {
+		t.Errorf("%d wired templates have no translation (limit %d): an English message needs a Chinese catalog value for QK_LANG=zh", len(missing), allowedMissing)
 		for i, m := range missing {
 			if i == 25 {
 				t.Errorf("  … and %d more", len(missing)-i)
@@ -131,7 +137,20 @@ func TestTemplatesRegistered(t *testing.T) {
 			t.Errorf("  %q   <- %s", m, strings.Join(wired[m], ", "))
 		}
 	}
-	t.Logf("wired templates: %d, catalog entries: %d", len(wired), len(stdCatalog.Keys()))
+	t.Logf("wired templates: %d, without a translation: %d (limit %d)", len(wired), len(missing), allowedMissing)
+}
+
+// missingEntries reports wired templates with no catalog entry at all. The Han filter used to live
+// here, which let English-source messages through without a Chinese translation — they then stayed
+// English under QK_LANG=zh, which is exactly what an internationalized catalog must avoid.
+func missingEntries(keys []string) []string {
+	var out []string
+	for _, k := range keys {
+		if !stdCatalog.Has(k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 func sortedKeys(m map[string][]string) []string {
@@ -234,7 +253,7 @@ func TestDecouplingRatchet(t *testing.T) {
 // set was written the other way round, which also made Chinese the *default* rendering; the count may
 // only go down as those messages are migrated.
 func TestEnglishSourceRatchet(t *testing.T) {
-	const allowed = 391 // measured by the AST scan when the ratchet was added; migrate downwards, never up
+	const allowed = 371 // lowered from 391 by the first English-source batch (compiler/internal/cgen/lower.go)
 	wired := wiredTemplates(t)
 	n := 0
 	var sample []string
