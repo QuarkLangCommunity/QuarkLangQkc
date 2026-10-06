@@ -253,7 +253,7 @@ func TestDecouplingRatchet(t *testing.T) {
 // set was written the other way round, which also made Chinese the *default* rendering; the count may
 // only go down as those messages are migrated.
 func TestEnglishSourceRatchet(t *testing.T) {
-	const allowed = 371 // lowered from 391 by the first English-source batch (compiler/internal/cgen/lower.go)
+	const allowed = 347 // lowered by the English-source batches (lower.go: 44 of ~90 migrated)
 	wired := wiredTemplates(t)
 	n := 0
 	var sample []string

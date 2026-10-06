@@ -678,13 +678,13 @@ func TestUnsupportedConstructs(t *testing.T) {
 			name: "指针成员访问",
 			src: "type struct { int v; } P;\n" +
 				"fn main(IOStream io) { P& p = new P; io.println(p.v); }\n",
-			want: "暂未支持",
+			want: "v is not supported by the compiler",
 		},
 		{
 			name: "打印 struct 值（解释器字段序不确定）",
 			src: "type struct { int a; } P;\n" +
 				"fn main(IOStream io) { P p; io.println(p); }\n",
-			want: "暂未支持打印",
+			want: "printing a value of type P is not supported",
 		},
 		// float modulo is already lowered
 		{
