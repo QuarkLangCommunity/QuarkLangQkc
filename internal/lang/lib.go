@@ -63,10 +63,40 @@ func ImportLibrary(path string) (map[string]string, error) {
 	return syms, nil
 }
 
-// LoadImport finds an import by compile/run options: a same-directory .qk (source) or .qlib (library).
+// LoadImport finds an import: a same-directory .qk (source) or .qlib (library), then the standard
+// library. The stdlib location is discovered by walking up from the importing file for a `stdlib`
+// directory, or from QK_STDLIB when set, so `import "vec";` works from anywhere inside a checkout —
+// the standard library is ordinary library code, not a special case in the resolver.
 func LoadImport(dir, path string) (string, error) {
-	src, _, err := LoadImportIn([]string{dir}, path)
+	dirs := []string{dir}
+	if std := stdlibDir(dir); std != "" {
+		dirs = append(dirs, std)
+	}
+	src, _, err := LoadImportIn(dirs, path)
 	return src, err
+}
+
+// stdlibDir locates the standard library for a program directory: QK_STDLIB wins, otherwise the
+// nearest ancestor holding a stdlib/vec.qk (the canonical entry point of the collection library).
+func stdlibDir(dir string) string {
+	if env := os.Getenv("QK_STDLIB"); env != "" {
+		return env
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	for {
+		cand := filepath.Join(abs, "stdlib")
+		if _, err := os.Stat(filepath.Join(cand, "vec.qk")); err == nil {
+			return cand
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return ""
+		}
+		abs = parent
+	}
 }
 
 // LoadImportIn searches several directories in turn for an import (same directory first, then extra search paths).
@@ -247,6 +277,9 @@ func CompileWithImportPaths(src, filename string, extraPaths []string) (*Program
 				base0 = dir
 			}
 			dirs := append([]string{base0}, extraPaths...)
+			if std := stdlibDir(base0); std != "" {
+				dirs = append(dirs, std) // the standard library is importable from anywhere in a checkout
+			}
 			key := imp
 			if filepath.IsAbs(imp) {
 				key = imp
