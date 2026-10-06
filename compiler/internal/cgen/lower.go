@@ -1077,10 +1077,10 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 
 	case *lang.TryStmt:
 		if st.CatchVarType != "" && st.CatchVarType != "void" {
-			return nil, l.errf(st.Pos, "暂未支持 catch (%s %s)（编译器仅支持 catch (void e)）", st.CatchVarType, st.CatchVar)
+			return nil, l.errf(st.Pos, "catch (%s %s) is not supported (the compiler handles catch (void e) only)", st.CatchVarType, st.CatchVar)
 		}
 		if st.CatchVar != "" && blockUsesIdent(st.Catch, st.CatchVar) {
-			return nil, l.errf(st.Pos, "暂未支持在 catch 体内使用 %q（错误值传递仅解释器可用）", st.CatchVar)
+			return nil, l.errf(st.Pos, "using %q inside a catch body is not supported (error value passing is interpreter-only)", st.CatchVar)
 		}
 		thenB, err := fc.block(st.Try)
 		if err != nil {
@@ -1095,10 +1095,10 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 	case *lang.DeleteStmt:
 		id, ok := st.X.(*lang.Ident)
 		if !ok {
-			return nil, l.errf(st.Pos, "暂未支持 delete 非变量表达式（编译器仅支持 delete <List 变量>）")
+			return nil, l.errf(st.Pos, "delete on a non-variable expression is not supported (the compiler handles delete <List variable> only)")
 		}
 		if t, _ := fc.lookup(id.Name); t != "List<int>" {
-			return nil, l.errf(st.Pos, "暂未支持 delete %q（编译器仅支持 delete List 变量）", id.Name)
+			return nil, l.errf(st.Pos, "delete %q is not supported (the compiler handles delete on a List variable only)", id.Name)
 		}
 		return &deleteStmt{name: id.Name}, nil
 	}
@@ -1159,7 +1159,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOf(st.Init)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1175,7 +1175,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 			return nil, err
 		}
 		if st.Init == nil {
-			return nil, l.errf(st.Pos, "暂未支持无初值的 List<String> %q（编译器只 lower keys() 等已有列表）", st.Name)
+			return nil, l.errf(st.Pos, "List<String> %q without an initializer is not supported (the compiler only lowers existing lists such as keys())", st.Name)
 		}
 		if _, isLit := st.Init.(*lang.ListLit); isLit {
 			// ["a", "b", ...]: the dedicated List<String> literal path (elements are i8* pointers)
@@ -1187,7 +1187,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if it != "List<String>" {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 List<String>（编译器 lower 字面量、HashTable.keys() 结果与 List<String> 变量）", it)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing List<String> with %s is not supported (the compiler lowers literals, HashTable.keys() results and List<String> variables)", it)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1197,7 +1197,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 
 	case "List<int>":
 		if st.Init == nil {
-			return nil, l.errf(st.Pos, "暂未支持无初值的 List<int> %q（解释器零值为空列表，编译器后端未 lower）", st.Name)
+			return nil, l.errf(st.Pos, "List<int> %q without an initializer is not supported (the interpreter's zero value is an empty list; the compiler backend does not lower it)", st.Name)
 		}
 		lit, ok := st.Init.(*lang.ListLit)
 		if !ok {
@@ -1218,7 +1218,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		for _, it := range lit.Items {
 			et := fc.typeOf(it)
 			if !fc.assignable(et, "int") {
-				return nil, l.errf(exprPos(it, st.Pos), "暂未支持用 %s 元素初始化 List<int>", et)
+				return nil, l.errf(exprPos(it, st.Pos), "initializing List<int> with %s elements is not supported", et)
 			}
 			x, err := fc.expr(it)
 			if err != nil {
@@ -1243,7 +1243,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1263,7 +1263,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1282,7 +1282,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化接口 %s 变量 %q", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing interface %s variable %q with %s is not supported", it, t, st.Name)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1303,7 +1303,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	}
 	it := fc.typeOfAs(st.Init, t)
 	if it != t {
-		return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持用 %s 初始化 %s 变量 %q", it, t, st.Name)
+		return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
 	}
 	x, err := fc.exprAs(st.Init, t)
 	if err != nil {
@@ -1358,7 +1358,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if _, base, isRef := ptrRefBase(vt); isRef {
 			// p = v (v is a T) → write through; p = q (q is a T&) → rebind the pointer
 			if !fc.assignable(xt, vt) && !fc.assignable(xt, base) {
-				return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s 变量 %q 赋值", xt, vt, tgt.Name)
+				return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s variable %q is not supported", xt, vt, tgt.Name)
 			}
 			x, err := fc.expr(st.X)
 			if err != nil {
@@ -1368,7 +1368,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			return &assignStmt{name: tgt.Name, x: x, thru: true}, nil
 		}
 		if !fc.assignable(xt, vt) {
-			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s 变量 %q 赋值", xt, vt, tgt.Name)
+			return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s variable %q is not supported", xt, vt, tgt.Name)
 		}
 		x, err := fc.exprAs(st.X, vt)
 		if err != nil {
@@ -1379,13 +1379,13 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 	case *lang.IndexExpr:
 		rt := fc.typeOf(tgt.X)
 		if _, ok := listElem(rt); !ok {
-			return nil, l.errf(st.Pos, "暂未支持该下标赋值（编译器仅支持 List<int>）")
+			return nil, l.errf(st.Pos, "this subscript assignment is not supported (the compiler handles List<int> only)")
 		}
 		if t := fc.typeOf(tgt.Idx); t != "int" && t != "?" {
 			return nil, l.errf(exprPos(tgt.Idx, st.Pos), "暂未支持下标为 %s（需要 int）", t)
 		}
 		if t := fc.typeOf(st.X); !fc.assignable(t, "int") {
-			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 赋值给 List<int> 元素", t)
+			return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to a List<int> element is not supported", t)
 		}
 		recv, err := fc.expr(tgt.X)
 		if err != nil {
@@ -1409,7 +1409,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 				return nil, l.errf(tgt.Pos, "struct %s 没有字段 %q", rt, tgt.Name)
 			}
 			if !fc.assignable(fc.typeOf(st.X), ft) {
-				return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持用 %s 给 %s.%s（%s）赋值", fc.typeOf(st.X), rt, tgt.Name, ft)
+				return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s.%s (%s) is not supported", fc.typeOf(st.X), rt, tgt.Name, ft)
 			}
 			recv, err := fc.expr(tgt.X)
 			if err != nil {
@@ -1468,7 +1468,7 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		rt := fc.typeOf(e.X)
 		elem, ok := listElem(rt)
 		if !ok {
-			return nil, l.errf(e.Pos, "暂未支持该下标访问（编译器仅支持 List<int>）")
+			return nil, l.errf(e.Pos, "this subscript read is not supported (the compiler handles List<int> only)")
 		}
 		if t := fc.typeOf(e.Idx); t != "int" && t != "?" {
 			return nil, l.errf(exprPos(e.Idx, e.Pos), "暂未支持下标为 %s（需要 int）", t)
@@ -1506,13 +1506,13 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		}
 		elem, ok := listElem(t)
 		if !ok || (elem != "int" && elem != "String") {
-			return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持列表字面量 %s（编译器已 lower List<int> 与 List<String>）", t)
+			return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "list literal %s is not supported (the compiler lowers List<int> and List<String>)", t)
 		}
 		items := make([]*expr, 0, len(e.Items))
 		for _, it := range e.Items {
 			et := fc.typeOf(it)
 			if !fc.assignable(et, elem) {
-				return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "暂未支持用 %s 元素初始化 %s", et, t)
+				return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "initializing %s with %s elements is not supported", et, t)
 			}
 			x, err := fc.expr(it)
 			if err != nil {
@@ -1786,7 +1786,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.typ = "bool"
 		return x, nil
 	}
-	return nil, l.errf(pos, "暂未支持运算符 %q（解释器可用）", e.Op)
+	return nil, l.errf(pos, "operator %q is not supported by the compiler (available in the interpreter)", e.Op)
 }
 
 // opMethodFor maps an operator to an Operation protocol method name (consistent with internal/lang/typecheck).
@@ -1892,9 +1892,9 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 			}
 			return &expr{kind: kMethod, typ: "int", line: e.Pos.Line, method: &methodExpr{recv: recv, name: "peek"}}, nil
 		}
-		return nil, l.errf(e.Pos, "暂未支持解引用 *（指针仅解释器可用）")
+		return nil, l.errf(e.Pos, "dereference * is not supported (pointers are interpreter-only)")
 	}
-	return nil, l.errf(e.Pos, "暂未支持一元运算符 %q", e.Op)
+	return nil, l.errf(e.Pos, "unary operator %q is not supported", e.Op)
 }
 
 // ---------- Calls ----------
@@ -1922,7 +1922,7 @@ func (fc *funcCtx) signCall(c *lang.CallExpr) (*expr, error) {
 	l := fc.l
 	id, ok := c.Fn.(*lang.Ident)
 	if !ok {
-		return nil, l.errf(c.Pos, "暂未支持该签名调用（编译器要求直接函数名 f(args) @sign(...)）")
+		return nil, l.errf(c.Pos, "this signature call is not supported (the compiler requires a direct function name: f(args) @sign(...))")
 	}
 	st, ok := fc.lookup(c.Sign.Name)
 	if !ok {
@@ -1996,7 +1996,7 @@ func (fc *funcCtx) callNamed(name string, pos lang.Pos, c *lang.CallExpr) (*expr
 		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", name, len(fd.Params), len(c.Args))
 	}
 	if l.nilFns[irName] && fc.discarded != c {
-		return nil, l.errf(pos, "暂未支持在表达式中使用含 log 的函数 %s 的返回值（解释器返回 nil）", name)
+		return nil, l.errf(pos, "using the return value of the log-containing function %s in an expression is not supported (the interpreter returns nil)", name)
 	}
 	args, err := fc.callArgs(c, fd.Params)
 	if err != nil {
@@ -2131,7 +2131,7 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 	}
 	gid, ok := c.Args[0].(*lang.Ident)
 	if !ok {
-		return nil, l.errf(exprPos(c.Args[0], pos), "暂未支持该 sum 生成器（编译器要求生成器是具名函数）")
+		return nil, l.errf(exprPos(c.Args[0], pos), "this sum generator is not supported (the compiler requires a named function)")
 	}
 	if gfn, isGen := l.generics[gid.Name]; isGen {
 		// generic generator: sum requires int(int), monomorphized with T=int
@@ -2162,7 +2162,7 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 		return nil, err
 	}
 	if len(gfn.Params) != 1 || gfn.Params[0].Type != "int" || l.fnRet[gIR] != "int" {
-		return nil, l.errf(gid.Pos, "暂未支持生成器 %q（编译器要求 int %s(int)）", gid.Name, gid.Name)
+		return nil, l.errf(gid.Pos, "generator %q is not supported (the compiler requires int %s(int))", gid.Name, gid.Name)
 	}
 	args := []*expr{{kind: kIdent, typ: "function", s: gIR}}
 	for _, a := range c.Args[1:] {
@@ -2358,7 +2358,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			return fc.methodCall(imi, rt, me.X, c.Args, me.Pos)
 		}
 		if l.hasMethod(rt, me.Name) {
-			return nil, l.errf(me.Pos, "暂未支持静态方法以实例方式调用 %s.%s（正典写法 %s::%s(...)）", rt, me.Name, rt, me.Name)
+			return nil, l.errf(me.Pos, "calling static method %s.%s on an instance is not supported (canonical: %s::%s(...))", rt, me.Name, rt, me.Name)
 		}
 		return nil, l.errf(me.Pos, "struct %s 没有方法 %q（解释器在类型检查期报错）", rt, me.Name)
 	}
@@ -2504,7 +2504,7 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		}
 		return &expr{kind: kTable, typ: ret, tbl: &tableExpr{recv: recv, name: me.Name, args: []*expr{k}, keyT: keyT, valT: valT}}, nil
 	}
-	return nil, l.errf(me.Pos, "暂未支持 HashTable 方法 %q（编译器支持 put/get/contains/remove/size/keys）", me.Name)
+	return nil, l.errf(me.Pos, "HashTable method %q is not supported (the compiler handles put/get/contains/remove/size/keys)", me.Name)
 }
 
 // scopeCallCall lowers the T::m(...) / space::f(...) call form.
@@ -2537,7 +2537,7 @@ func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, e
 		ret = "void"
 	}
 	if l.nilFns[mi.irName] {
-		return nil, l.errf(sc.Pos, "暂未支持在表达式中使用含 log 的函数 %s 的返回值（解释器返回 nil）", mi.irName)
+		return nil, l.errf(sc.Pos, "using the return value of the log-containing function %s in an expression is not supported (the interpreter returns nil)", mi.irName)
 	}
 	args := make([]*expr, 0, len(sc.Args))
 	for i, a := range sc.Args {
@@ -2579,7 +2579,7 @@ func (fc *funcCtx) member(e *lang.MemberExpr) (*expr, error) {
 		return &expr{kind: kField, typ: ft, field: &fieldExpr{recv: recv, name: e.Name, typ: rt}}, nil
 	}
 	if l.isIfaceType(rt) {
-		return nil, l.errf(e.Pos, "暂未支持接口成员访问 %s.%s（dynamic 分发仅解释器可用）", rt, e.Name)
+		return nil, l.errf(e.Pos, "interface member access %s.%s is not supported (dynamic dispatch is interpreter-only)", rt, e.Name)
 	}
 	if id, ok := e.X.(*lang.Ident); ok {
 		if _, isLib := l.libs[id.Name]; isLib {
@@ -2603,12 +2603,12 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 		if tb == base && len(ta) > 0 {
 			typ = target
 		} else {
-			return nil, l.errf(e.Pos, "暂未支持无法推断类型实参的泛型 struct 字面量 .{...}（%s，解释器可用）", base)
+			return nil, l.errf(e.Pos, "a generic struct literal .{...} whose type arguments cannot be inferred is not supported (%s; available in the interpreter)", base)
 		}
 	}
 	sd, sub := l.structSubst(typ)
 	if sd == nil {
-		return nil, l.errf(e.Pos, "暂未支持匿名 struct 字面量 .{...}（编译器要求有名 struct）")
+		return nil, l.errf(e.Pos, "anonymous struct literal .{...} is not supported (the compiler requires a named struct)")
 	}
 	l.ensureStructTy(typ)
 	// collect field values in declaration order (both named and positional forms)
@@ -2634,7 +2634,7 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 		ft := substType(sd.Members[idx].Type, sub)
 		vt := fc.typeOfAs(f.X, ft)
 		if !fc.assignable(vt, ft) {
-			return nil, l.errf(exprPos(f.X, e.Pos), "暂未支持用 %s 初始化字段 %s.%s（%s）", vt, typ, sd.Members[idx].Name, ft)
+			return nil, l.errf(exprPos(f.X, e.Pos), "initializing field %s.%s with %s is not supported (%s)", vt, typ, sd.Members[idx].Name, ft)
 		}
 		x, err := fc.exprAs(f.X, ft)
 		if err != nil {
