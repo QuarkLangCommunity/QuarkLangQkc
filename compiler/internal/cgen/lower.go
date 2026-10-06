@@ -321,7 +321,7 @@ func (l *lowerer) errAt(format string, args ...interface{}) error {
 
 func (l *lowerer) collect() error {
 	if l.prog.Kind == "library" {
-		return l.errAt("暂未支持编译 program library（库形态由解释器/导出流程处理）")
+		return l.errAt("compiling a program library is not supported (library form is handled by the interpreter/export flow)")
 	}
 	for _, sd := range l.prog.Structs {
 		if sd.Name == "" {
@@ -350,11 +350,11 @@ func (l *lowerer) collect() error {
 	var mainFn *lang.FuncDecl
 	for _, f := range l.prog.Funcs {
 		if f.Name == "sum" || f.Name == "clock" {
-			return l.errf(f.Pos, "暂未支持重定义内置函数 %q（编译器将 %s 视为内建）", f.Name, f.Name)
+			return l.errf(f.Pos, "redefining builtin function %q is not supported (the compiler treats %s as builtin)", f.Name, f.Name)
 		}
 		if len(f.TypeParams) > 0 {
 			if _, dup := l.generics[f.Name]; dup {
-				return l.errf(f.Pos, "暂未支持泛型函数重载 %q（编译器要求泛型函数名唯一）", f.Name)
+				return l.errf(f.Pos, "overloading a generic function %q is not supported (the compiler requires unique generic function names)", f.Name)
 			}
 			l.generics[f.Name] = f
 			continue
@@ -371,7 +371,7 @@ func (l *lowerer) collect() error {
 	for _, name := range order {
 		defs := groups[name]
 		if _, isGen := l.generics[name]; isGen {
-			return l.errf(defs[0].Pos, "暂未支持泛型函数与普通函数同名 %q（编译器要求二选一）", name)
+			return l.errf(defs[0].Pos, "a generic and a plain function sharing the name %q is not supported (the compiler requires one or the other)", name)
 		}
 		if len(defs) == 1 {
 			f := defs[0]
@@ -385,7 +385,7 @@ func (l *lowerer) collect() error {
 		for _, f := range defs {
 			ir := mangleOverload(name, f.Params)
 			if sigs[ir] {
-				return l.errf(f.Pos, "重复的函数定义 %s（参数类型签名相同）", ir)
+				return l.errf(f.Pos, "duplicate function definition %s (same parameter type signature)", ir)
 			}
 			sigs[ir] = true
 			l.ovl[name] = append(l.ovl[name], f)
@@ -451,7 +451,7 @@ func (l *lowerer) registerImpl(im *lang.ImplDecl) error {
 	}
 	for _, m := range im.Methods {
 		if _, dup := l.methods[typ][m.Name]; dup {
-			return l.errf(m.Pos, "暂未支持重载/重定义方法 %s.%s（编译器按名字修饰生成函数，无法区分重载）", typ, m.Name)
+			return l.errf(m.Pos, "overloading/redefining method %s.%s is not supported (the compiler emits name-mangled functions and cannot distinguish overloads)", typ, m.Name)
 		}
 		mi := &methodInfo{fn: m, impl: im, irName: typ + "_" + m.Name, subst: map[string]string{}}
 		for i, tp := range im.TypeParams {
@@ -643,7 +643,7 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		if elem == "String" {
 			return nil // List<String>: read-only subset (keys() results / size/get/toString/for-in/indexing)
 		}
-		return l.errf(pos, "暂未支持 %s 类型 %q（编译器支持 List<int> 与 List<String>，元素 %s）", what, t, elem)
+		return l.errf(pos, "%s type %q is not supported (the compiler handles List<int> and List<String>; element %s)", what, t, elem)
 	}
 	if l.isStructType(t) {
 		return nil
@@ -657,18 +657,18 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	case "pointer":
 		return nil // FFI opaque handle (i8*, nullable)
 	case "char":
-		return l.errf(pos, "暂未支持 %s 类型 %q（编译器暂未 lower）", what, t)
+		return l.errf(pos, "%s type %q is not supported (not lowered by the compiler yet)", what, t)
 	case "thread", "Task", "Channel", "channel":
 		return nil // taskm: thread = pid(i32), Channel = i8* handle
 	case "memorize":
 		return nil // built-in memorize signature instance (i8* handle; @mb() memoization)
 	case "IOStream":
-		return l.errf(pos, "暂未支持 IOStream %s（编译器仅在 main 入口绑定 io）", what)
+		return l.errf(pos, "IOStream %s is not supported (the compiler binds io only at the main entry)", what)
 	case "interface{}":
 		return nil // boxes any value + runtime type descriptor (RTTI); printing/equality/scalar unboxing already lowered
 	}
 	if strings.HasPrefix(t, "List") {
-		return l.errf(pos, "暂未支持 %s 类型 %q（编译器仅支持 List<int>）", what, t)
+		return l.errf(pos, "%s type %q is not supported (the compiler handles List<int> only)", what, t)
 	}
 	if isTableT(t) {
 		return nil // HashTable<K,V>: i8* handle + runtime structured keys (the interpreter's key rule)
@@ -688,10 +688,10 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		if l.isStructType(base) {
 			return nil
 		}
-		return l.errf(pos, "暂未支持 %s 类型 %q（编译器只 lower 标量/String/struct 的 T&）", what, t)
+		return l.errf(pos, "%s type %q is not supported (the compiler lowers T& for scalars/String/struct only)", what, t)
 	}
 	if strings.Contains(t, "[Copyd]") || strings.HasPrefix(t, "Copyd<") || strings.HasSuffix(t, "[]") {
-		return l.errf(pos, "暂未支持指针/传时复制类型 %q（copyd 作为形参修饰已支持；Copyd<T> 形参见 copyd 语义）", t)
+		return l.errf(pos, "pointer/copy-on-pass type %q is not supported (copyd as a parameter modifier is supported; there is no Copyd<T> type)", t)
 	}
 	return l.errf(pos, "未知类型 %q（%s 声明）", t, what)
 }
@@ -787,7 +787,7 @@ func (fc *funcCtx) lookup(name string) (string, bool) {
 // so shadowing would be a silent miscompile and must be rejected here).
 func (fc *funcCtx) declare(name, typ string, pos lang.Pos) error {
 	if _, ok := fc.lookup(name); ok {
-		return fc.l.errf(pos, "暂未支持变量重名/遮蔽 %q（编译器变量表不支持同名变量，请改名）", name)
+		return fc.l.errf(pos, "duplicate/shadowed variable %q is not supported (the compiler's variable table has no same-name variables; rename it)", name)
 	}
 	fc.top.vars[name] = typ
 	return nil
@@ -806,7 +806,7 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		ret = canon // pointer T → T&
 	}
 	if !l.retOK(ret) {
-		return nil, l.errf(f.Pos, "暂未支持返回类型 %q（编译器支持 int/bool/float/String/void/struct）", f.Ret)
+		return nil, l.errf(f.Pos, "return type %q is not supported (the compiler handles int/bool/float/String/void/struct)", f.Ret)
 	}
 	fc := l.newCtx(irName, ret)
 	fc.subst = subst
@@ -900,13 +900,13 @@ func (l *lowerer) lowerMain(f *lang.FuncDecl) ([]stmt, error) {
 		return nil, l.errf(f.Pos, "暂未支持泛型 main 函数")
 	}
 	if f.Ret != "" && f.Ret != "void" {
-		return nil, l.errf(f.Pos, "main 不能有返回值（got %q）", f.Ret)
+		return nil, l.errf(f.Pos, "main cannot return a value (got %q)", f.Ret)
 	}
 	if len(f.Params) == 0 || f.Params[0].Type != "IOStream" {
-		return nil, l.errf(f.Pos, "main 的第一个参数必须是 IOStream（正典：fn main(IOStream io) { ... }）")
+		return nil, l.errf(f.Pos, "main's first parameter must be IOStream (canonical: fn main(IOStream io) { ... })")
 	}
 	if len(f.Params) > 1 {
-		return nil, l.errf(f.Params[1].Pos, "暂未支持 main 的 %q 参数（编译器只绑定 IOStream io）", f.Params[1].Name)
+		return nil, l.errf(f.Params[1].Pos, "main's %q parameter is not supported (the compiler binds IOStream io only)", f.Params[1].Name)
 	}
 	fc := l.newCtx("main", "void")
 	fc.ioName = f.Params[0].Name
@@ -939,7 +939,7 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 	switch st := s.(type) {
 	case *lang.DeclStmt:
 		if st.Decor == "copyd" {
-			return nil, l.errf(st.Pos, "暂未支持 copyd 修饰（传时复制仅解释器可用）")
+			return nil, l.errf(st.Pos, "the copyd modifier is not supported (copy-on-pass is interpreter-only)")
 		}
 		return fc.declStmt(st)
 
@@ -965,7 +965,7 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 						}
 						return &printStmt{args: args}, nil
 					default:
-						return nil, l.errf(call.Pos, "暂未支持 IOStream 方法 %q（编译器仅支持 io.println/io.print）", me.Name)
+						return nil, l.errf(call.Pos, "IOStream method %q is not supported (the compiler handles io.println/io.print only)", me.Name)
 					}
 				}
 			}
@@ -992,7 +992,7 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 			return &returnStmt{x: nil}, nil
 		}
 		if fc.ret == "void" {
-			return nil, l.errf(st.Pos, "void 函数不能 return 值（解释器会忽略返回值，编译器不静默忽略）")
+			return nil, l.errf(st.Pos, "a void function cannot return a value (the interpreter ignores the value; the compiler refuses to ignore it silently)")
 		}
 		t := fc.typeOfAs(st.X, fc.ret)
 		if !fc.assignable(t, fc.ret) {
@@ -1146,7 +1146,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	}
 	l := fc.l
 	t := fc.resolveT(st.Type)
-	if err := l.checkType(t, st.Pos, "变量"); err != nil {
+	if err := l.checkType(t, st.Pos, "variable"); err != nil {
 		return nil, err
 	}
 	switch t {

@@ -656,7 +656,7 @@ func TestUnsupportedConstructs(t *testing.T) {
 			name: "IOStream 形参（仅 main 入口绑定）",
 			src: "fn f(int n, IOStream io) void { io.println(n); }\n" +
 				"fn main(IOStream io) { f(1, io); }\n",
-			want: "暂未支持 IOStream",
+			want: "IOStream 参数 is not supported",
 		},
 		// String builtin methods are already lowered (see the interpreter/compiler comparison in testdata/cases_run/s_string_methods.kq)
 		// List.toString is already lowered (see testdata/cases_run/t_list_methods.kq)
@@ -667,12 +667,12 @@ func TestUnsupportedConstructs(t *testing.T) {
 				"    return l;\n" +
 				"}\n" +
 				"fn main(IOStream io) { io.println(1); }\n",
-			want: "暂未支持返回类型",
+			want: "return type \"List<String>\" is not supported",
 		},
 		{
 			name: "List<float> 字面量（只 lower List<int> / List<String>）",
 			src:  "fn main(IOStream io) { List<float> l = [1.0]; io.println(1); }\n",
-			want: "暂未支持",
+			want: "variable type \"List<float>\" is not supported",
 		},
 		{
 			name: "指针成员访问",
