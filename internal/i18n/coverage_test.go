@@ -227,6 +227,35 @@ func TestDecouplingRatchet(t *testing.T) {
 	t.Logf("direct i18n.T( call sites: %d (limit %d)", n, allowed)
 }
 
+// TestEnglishSourceRatchet freezes the number of Chinese-source wired templates.
+//
+// English is the source language for an internationalized project: a new message is written in English
+// and the catalog carries the Chinese translation (so `QK_LANG=zh` still renders Chinese). The legacy
+// set was written the other way round, which also made Chinese the *default* rendering; the count may
+// only go down as those messages are migrated.
+func TestEnglishSourceRatchet(t *testing.T) {
+	const allowed = 391 // measured by the AST scan when the ratchet was added; migrate downwards, never up
+	wired := wiredTemplates(t)
+	n := 0
+	var sample []string
+	for tpl, files := range wired {
+		if !hanRe.MatchString(tpl) {
+			continue
+		}
+		n++
+		if len(sample) < 5 {
+			sample = append(sample, truncate(tpl)+"  <- "+strings.Join(files, ", "))
+		}
+	}
+	if n > allowed {
+		t.Errorf("Chinese-source wired templates grew to %d (limit %d): write new messages in English and put the Chinese in the catalog", n, allowed)
+		for _, s := range sample {
+			t.Errorf("  %s", s)
+		}
+	}
+	t.Logf("Chinese-source wired templates: %d (limit %d)", n, allowed)
+}
+
 func truncate(s string) string {
 	s = strings.ReplaceAll(s, "\n", "\\n")
 	if len(s) > 90 {
