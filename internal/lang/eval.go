@@ -2866,6 +2866,18 @@ func detectPeriod(g func(int64) (int64, error), begin, step, n int64) (int64, bo
 }
 
 func (in *interp) registerIOBuiltins() {
+	// panic is the minimal core's abort primitive: with exceptions removed, a library that must refuse
+	// (Option.unwrap on none, Result.unwrap on err) terminates here instead of returning a silent zero.
+	in.builtins["panic"] = func(args []Value, pos Pos, ctx *execCtx) (Value, error) {
+		m := "panic"
+		if len(args) > 0 {
+			m = args[0].String()
+		}
+		if ctx != nil {
+			ctx.ensureLog().Append(StrV("panic: " + m))
+		}
+		return NilV(), &RunError{Msg: "PanicError: " + m, Pos: pos, Ctx: ctx}
+	}
 	in.builtins["clock"] = func(args []Value, pos Pos, ctx *execCtx) (Value, error) {
 		if len(args) != 0 {
 			return NilV(), wantArity("clock", 0, len(args), pos, ctx)

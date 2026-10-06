@@ -1,0 +1,35 @@
+// Result<T, E> — failure as a value, from the standard library.
+//
+// Replaces exception handling: a fallible operation returns Result, and the caller decides. The core
+// keeps no try/catch, no throw and no error type of its own.
+
+pub type struct<T, E> {
+    bool ok;
+    T v;
+    E e;
+} Result;
+
+pub fn<T, E> ok(T v, E sample) Result<T, E> { Result<T, E> r = .{true, v, sample}; return r; }
+pub fn<T, E> err(E e, T sample) Result<T, E> { Result<T, E> r = .{false, sample, e}; return r; }
+
+impl<T, E> {
+    fn isOk(Result<T, E> self) bool { return self.ok; }
+    fn isErr(Result<T, E> self) bool { return !self.ok; }
+
+    // unwrap refuses on err: the value does not exist, so there is nothing to return.
+    fn unwrap(Result<T, E> self) T {
+        if (!self.ok) { panic("Result.unwrap on err"); }
+        return self.v;
+    }
+
+    fn unwrapOr(Result<T, E> self, T d) T {
+        if (!self.ok) { return d; }
+        return self.v;
+    }
+
+    // unwrapErr is the mirror image, for callers that want the failure value.
+    fn unwrapErr(Result<T, E> self) E {
+        if (self.ok) { panic("Result.unwrapErr on ok"); }
+        return self.e;
+    }
+} Result;

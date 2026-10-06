@@ -1,0 +1,31 @@
+// Option<T> — absence as a value, from the standard library.
+//
+// The core has no exceptions: a function that may have nothing to return says so in its type. Option is
+// library code like everything else — the language core knows only pointers and basic types.
+
+pub type struct<T> {
+    bool some;
+    T v;
+} Option;
+
+// some/none construct the two cases. none takes a sample value because generics are type-erased: the
+// element type has to come from somewhere, and there is no other argument to infer it from.
+pub fn<T> some(T v) Option<T> { Option<T> o = .{true, v}; return o; }
+pub fn<T> none(T sample) Option<T> { Option<T> o = .{false, sample}; return o; }
+
+impl<T> {
+    fn isSome(Option<T> self) bool { return self.some; }
+    fn isNone(Option<T> self) bool { return !self.some; }
+
+    // unwrap refuses on none: without exceptions the only honest answer is to stop.
+    fn unwrap(Option<T> self) T {
+        if (!self.some) { panic("Option.unwrap on none"); }
+        return self.v;
+    }
+
+    // unwrapOr is the non-failing form, for callers with a sensible default.
+    fn unwrapOr(Option<T> self, T d) T {
+        if (!self.some) { return d; }
+        return self.v;
+    }
+} Option;
