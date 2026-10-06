@@ -1111,19 +1111,19 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 	lt := fc.typeOf(st.Iter)
 	base, args := splitGeneric(lt)
 	if base != "List" || len(args) != 1 {
-		return nil, l.errf(st.Pos, "暂未支持对 %s 的 for 迭代（编译器支持 List<int>）", lt)
+		return nil, l.errf(st.Pos, "for-iteration over %s is not supported (the compiler handles List<int>)", lt)
 	}
 	elem := args[0]
 	if elem != "int" && elem != "String" {
-		return nil, l.errf(st.Pos, "暂未支持迭代 List<%s>（编译器支持 List<int> 与 List<String>）", elem)
+		return nil, l.errf(st.Pos, "iterating List<%s> is not supported (the compiler handles List<int> and List<String>)", elem)
 	}
 	id, ok := st.Iter.(*lang.Ident)
 	if !ok {
-		return nil, l.errf(st.Pos, "暂未支持对非变量列表的 for 迭代（编译器要求 List 变量）")
+		return nil, l.errf(st.Pos, "for-iteration over a non-variable list is not supported (the compiler requires a List variable)")
 	}
 	vt, _ := fc.lookup(id.Name)
 	if vt != "List<int>" && vt != "List<String>" {
-		return nil, l.errf(st.Pos, "暂未支持对 %s 的 for 迭代（编译器支持 List<int> 与 List<String>）", vt)
+		return nil, l.errf(st.Pos, "for-iteration over %s is not supported (the compiler handles List<int> and List<String>)", vt)
 	}
 	fc.push()
 	defer fc.pop()
@@ -1327,7 +1327,7 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}", "List<String>":
 		case "int&", "float&", "bool&", "String&", "long&": // T&: print the dereferenced value (same as the interpreter)
 		default:
-			return nil, fc.l.errf(exprPos(a, call.Pos), "暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String/interface{}）", t)
+			return nil, fc.l.errf(exprPos(a, call.Pos), "printing a value of type %s is not supported (the compiler handles int/float/bool/String/interface{})", t)
 		}
 		args = append(args, x)
 	}
@@ -1421,9 +1421,9 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			}
 			return &fieldAssignStmt{recv: recv, field: tgt.Name, x: x}, nil
 		}
-		return nil, l.errf(tgt.Pos, "暂未支持成员赋值（接口分发仅解释器可用）")
+		return nil, l.errf(tgt.Pos, "member assignment is not supported by the compiler (interface dispatch is interpreter-only)")
 	}
-	return nil, l.errf(st.Pos, "暂未支持该赋值目标（编译器仅支持变量、List 下标与 struct 字段）")
+	return nil, l.errf(st.Pos, "this assignment target is not supported (the compiler handles variables, List subscripts and struct fields only)")
 }
 
 // ---------- Expressions ----------
@@ -1448,7 +1448,7 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 			if _, isLib := l.libs[e.Name]; isLib {
 				return nil, l.errf(e.Pos, "暂未支持 library 库对象 %q 作为值（FFI 仅解释器可用）", e.Name)
 			}
-			return nil, l.errf(e.Pos, "未声明的标识符 %q（编译器不支持函数引用/全局名）", e.Name)
+			return nil, l.errf(e.Pos, "undeclared identifier %q (the compiler does not support function references or global names)", e.Name)
 		}
 		if t == "IOStream" {
 			return nil, l.errf(e.Pos, "暂未支持 IOStream 值 %q（编译器仅在 main 入口绑定 io）", e.Name)
@@ -1571,7 +1571,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）", lt, rt, e.Op)
+			return nil, l.errf(pos, "using %q on %s / %s is not supported (Operation overloading works for same-type structs only)", lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, "+")
 		if err != nil {
@@ -1581,7 +1581,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		return x, nil
 	case "-", "*", "/":
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）", lt, rt, e.Op)
+			return nil, l.errf(pos, "using %q on %s / %s is not supported (Operation overloading works for same-type structs only)", lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1602,7 +1602,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）", lt, rt, e.Op)
+			return nil, l.errf(pos, "using %q on %s / %s is not supported (Operation overloading works for same-type structs only)", lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1613,7 +1613,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		return x, nil
 	case "<<", ">>":
 		if lt != "int" || rt != "int" {
-			return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（位移需要 int 操作数）", lt, rt, e.Op)
+			return nil, l.errf(pos, "using %q on %s / %s is not supported (shifts need int operands)", lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1631,7 +1631,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// against a value it compares the dereferenced value (the interpreter's p == 0 → compares the pointed-to cell).
 		if (isPtrRefT(lt) && rt == "null") || (lt == "null" && isPtrRefT(rt)) || (isPtrRefT(lt) && isPtrRefT(rt)) {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）", lt, rt, e.Op)
+				return nil, l.errf(pos, "using %q on %s / %s is not supported (pointers allow == / != only)", lt, rt, e.Op)
 			}
 			x, err := fc.expr(e.L)
 			if err != nil {
@@ -1654,14 +1654,14 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// for != use (ptr == null) || (deref != value)). The pointer side must be a variable (to avoid double evaluation).
 		if isPtrRefT(lt) != isPtrRefT(rt) && lt != "null" && rt != "null" {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（可空引用只支持 == / !=）", lt, rt, e.Op)
+				return nil, l.errf(pos, "using %q on %s / %s is not supported (nullable references allow == / != only)", lt, rt, e.Op)
 			}
 			refSide, valSide := e.L, e.R
 			if isPtrRefT(rt) {
 				refSide, valSide = e.R, e.L
 			}
 			if _, ok := refSide.(*lang.Ident); !ok {
-				return nil, l.errf(exprPos(refSide, pos), "暂未支持对非变量的可空引用做比较（编译器要求 T& 变量）")
+				return nil, l.errf(exprPos(refSide, pos), "comparing a non-variable nullable reference is not supported (the compiler requires a T& variable)")
 			}
 			rv, err := fc.expr(refSide)
 			if err != nil {
@@ -1695,7 +1695,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// consistent with the interpreter's equalValues: int/float compared numerically across types, String by content, struct/List by reference)
 		if isAnyT(lt) || isAnyT(rt) {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "暂未支持对 interface{} 使用 %q（只支持 == / !=）", e.Op)
+				return nil, l.errf(pos, "using %q on interface{} is not supported (only == / !=)", e.Op)
 			}
 			x, err := fc.expr(e.L)
 			if err != nil {
@@ -1739,7 +1739,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// pointer / null: reference comparison (interpreter Value semantics: the same pointer is equal; null is the zero value)
 		if isPtrType(lt) || isPtrType(rt) {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）", lt, rt, e.Op)
+				return nil, l.errf(pos, "using %q on %s / %s is not supported (pointers allow == / != only)", lt, rt, e.Op)
 			}
 			x, err := fc.binary(e, e.Op)
 			if err != nil {
@@ -1751,7 +1751,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		}
 		if lt == "bool" && rt == "bool" {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "暂未支持对 bool 使用 %q（解释器只允许 == / !=）", e.Op)
+				return nil, l.errf(pos, "using %q on bool is not supported (the interpreter allows == / != only)", e.Op)
 			}
 			x, err := fc.binary(e, e.Op)
 			if err != nil {
@@ -1762,7 +1762,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "暂未支持对 %s / %s 使用 %q（String/Operation 比较仅同类型可用）", lt, rt, e.Op)
+			return nil, l.errf(pos, "using %q on %s / %s is not supported (String/Operation comparison needs the same type)", lt, rt, e.Op)
 		}
 		// ordered comparison: both int and float are compared as float64 (the interpreter's ordCmp)
 		x, err := fc.binary(e, e.Op)
@@ -1775,7 +1775,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 	case "&&", "||":
 		for _, t := range []string{lt, rt} {
 			if t != "bool" && t != "?" {
-				return nil, l.errf(pos, "暂未支持对 %s 使用 %q（需要 bool）", t, e.Op)
+				return nil, l.errf(pos, "using %q on %s is not supported (bool required)", t, e.Op)
 			}
 		}
 		x, err := fc.binary(e, e.Op)
@@ -1864,7 +1864,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 			}
 		}
 		if !numLike(t) {
-			return nil, l.errf(e.Pos, "暂未支持对 %s 取负（Operation 运算符重载仅同类型 struct 可用）", t)
+			return nil, l.errf(e.Pos, "negating %s is not supported (Operation overloading works for same-type structs only)", t)
 		}
 		inner, err := fc.expr(e.X)
 		if err != nil {
@@ -1912,7 +1912,7 @@ func (fc *funcCtx) call(c *lang.CallExpr) (*expr, error) {
 	case *lang.ScopeCall:
 		return fc.scopeCallCall(c, fn)
 	}
-	return nil, l.errf(c.Pos, "暂未支持该调用形式（编译器仅支持 f(...)、obj.m(...) 与 T::m(...)）")
+	return nil, l.errf(c.Pos, "this call form is not supported (the compiler handles f(...), obj.m(...) and T::m(...) only)")
 }
 
 // signCall lowers a signature call f(args) @sign(prefix) (canonical §6: sign.call(prefix) receives
@@ -2024,7 +2024,7 @@ func (l *lowerer) resolveGenerator(name string, pos lang.Pos) (*lang.FuncDecl, s
 	}
 	gfn, ok := l.fns[name]
 	if !ok {
-		return nil, "", l.errf(pos, "未知生成器函数 %q（编译器只支持同一程序内定义且无泛型的函数）", name)
+		return nil, "", l.errf(pos, "unknown generator function %q (the compiler only supports non-generic functions defined in the same program)", name)
 	}
 	return gfn, name, nil
 }
@@ -2035,7 +2035,7 @@ func (l *lowerer) resolveRunnerTarget(name string, nargs int, pos lang.Pos) (*la
 	if !ok {
 		fn, ok := l.fns[name]
 		if !ok {
-			return nil, "", l.errf(pos, "未知函数 %q（编译器只支持同一程序内定义的函数）", name)
+			return nil, "", l.errf(pos, "unknown function %q (the compiler only supports functions defined in the same program)", name)
 		}
 		return fn, name, nil
 	}
@@ -2063,7 +2063,7 @@ func (fc *funcCtx) resolveFunc(name string, args []lang.Expr, pos lang.Pos) (str
 	if !isOvl {
 		fd, ok := l.fns[name]
 		if !ok {
-			return "", nil, l.errf(pos, "未知函数 %q（编译器只支持同一程序内定义的函数）", name)
+			return "", nil, l.errf(pos, "unknown function %q (the compiler only supports functions defined in the same program)", name)
 		}
 		return name, fd, nil
 	}
@@ -2138,7 +2138,7 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 		if len(gfn.TypeParams) != 1 || len(gfn.Params) != 1 ||
 			strings.TrimSpace(gfn.Params[0].Type) != gfn.TypeParams[0] ||
 			strings.TrimSpace(gfn.Ret) != gfn.TypeParams[0] {
-			return nil, l.errf(gid.Pos, "暂未支持该泛型生成器 %s（编译器要求 fn<T> %s(T) T）", gid.Name, gid.Name)
+			return nil, l.errf(gid.Pos, "this generic generator %s is not supported (the compiler requires fn<T> %s(T) T)", gid.Name, gid.Name)
 		}
 		irName, err := l.instantiateFunc(gid.Name, gfn, map[string]string{gfn.TypeParams[0]: "int"})
 		if err != nil {
@@ -2374,7 +2374,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			return nil, l.errf(me.Pos, "io.%s 无返回值，不能用于表达式（请作为独立语句调用）", me.Name)
 		}
 	}
-	return nil, l.errf(me.Pos, "暂未支持对 %s 调用方法 %s（解释器可用）", rt, me.Name)
+	return nil, l.errf(me.Pos, "calling method %s on %s is not supported by the compiler (available in the interpreter)", rt, me.Name)
 }
 
 // methodCall lowers a single instance method call (including operator overload).
@@ -2586,7 +2586,7 @@ func (fc *funcCtx) member(e *lang.MemberExpr) (*expr, error) {
 			return nil, l.errf(e.Pos, "暂未支持 library 成员访问 %s.%s（FFI 仅解释器可用）", id.Name, e.Name)
 		}
 	}
-	return nil, l.errf(e.Pos, "暂未支持成员访问 %s.%s（解释器可用）", rt, e.Name)
+	return nil, l.errf(e.Pos, "member access %s.%s is not supported by the compiler (available in the interpreter)", rt, e.Name)
 }
 
 // structLit lowers a .{...} literal (when target is empty, take the Name filled in by typecheck).
