@@ -650,7 +650,7 @@ func TestUnsupportedConstructs(t *testing.T) {
 			src: "fn main(IOStream io) {\n" +
 				"    try { int a = 1 / 0; } catch (void e) { io.println(\"caught: \" + e); }\n" +
 				"}\n",
-			want: "暂未支持在 catch 体内使用",
+			want: "inside a catch body is not supported",
 		},
 		{
 			name: "IOStream 形参（仅 main 入口绑定）",
@@ -691,7 +691,7 @@ func TestUnsupportedConstructs(t *testing.T) {
 			name: "含 log 的函数返回值被使用",
 			src: "fn f(int n) int { log n; return n; }\n" +
 				"fn main(IOStream io) { io.println(f(7)); }\n",
-			want: "暂未支持在表达式中使用含 log 的函数",
+			want: "log-containing function",
 		},
 	}
 	for _, c := range cases {
