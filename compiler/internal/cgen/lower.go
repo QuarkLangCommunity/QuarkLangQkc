@@ -1146,7 +1146,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	}
 	l := fc.l
 	t := fc.resolveT(st.Type)
-	if err := l.checkType(t, st.Pos, "变量"); err != nil {
+	if err := l.checkType(t, st.Pos, "variable"); err != nil {
 		return nil, err
 	}
 	switch t {
