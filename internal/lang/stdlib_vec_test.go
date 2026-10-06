@@ -108,6 +108,32 @@ fn main(IOStream io) {
 			want: "0\n5\n",
 		},
 		{
+			name: "a literal builds a Vec through the overloadable notation",
+			src: `program main;
+import "vec";
+fn main(IOStream io) {
+    Vec<int> v = [1, 2, 3];
+    io.println(v.size());
+    io.println(v.get(1));
+    io.println(v.capacity());
+    int sum = 0;
+    for (int x : v) { sum = sum + x; }
+    io.println(sum);
+}`,
+			want: "3\n2\n4\n6\n",
+		},
+		{
+			name: "the element type follows the container",
+			src: `program main;
+import "vec";
+fn main(IOStream io) {
+    Vec<String> names = ["a", "bb"];
+    io.println(names.size());
+    io.println(names.get(1));
+}`,
+			want: "2\nbb\n",
+		},
+		{
 			name: "iteration follows the size()/get() protocol",
 			src: `program main;
 import "vec";

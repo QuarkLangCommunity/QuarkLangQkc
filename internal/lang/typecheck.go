@@ -1180,6 +1180,13 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				}
 				sl.Name = typ.FName
 				v.init = true
+			} else if lit, isLit := s.Init.(*ListLit); isLit && c.literalProtocol(typ) {
+				// [...] is an overloadable notation: a type that defines the literal protocol builds
+				// itself from the elements, and the core never needs to know what that type is.
+				if err := c.checkLiteral(typ, lit, sc, s.Pos); err != nil {
+					return err
+				}
+				v.init = true
 			} else {
 				it, err := c.infer(s.Init, sc)
 				if err != nil {
@@ -2746,6 +2753,68 @@ func (c *checker) checkIfaceCovers(fromIface, toIface string) error {
 //
 //	struct → interface: the type must implement every method the interface requires (aggregated over impls);
 //	interface → interface: the source interface's method set must cover the target's with identical signatures.
+//
+// literalProtocol reports whether a type declares the literal protocol: a static __literal__() that
+// builds an empty container. `[...]` then appends each element through __element__(Self, T).
+func (c *checker) literalProtocol(t *Type) bool {
+	if t == nil || t.Kind != tStruct || t.FName == "" {
+		return false
+	}
+	return c.staticMeth(t.FName, "__literal__") != nil
+}
+
+// typeArgsSubst maps a generic type's parameters to the arguments of a concrete use, so that the
+// signatures of its impl methods can be substituted (Vec<T> used as Vec<int> gives T -> int).
+func (c *checker) typeArgsSubst(t *Type) map[string]*Type {
+	if t == nil || t.FName == "" {
+		return nil
+	}
+	def, ok := c.structs[t.FName]
+	if !ok || len(def.TypeParams) == 0 {
+		return nil
+	}
+	subst := map[string]*Type{}
+	for i, tp := range def.TypeParams {
+		if i < len(t.Args) {
+			subst[tp] = t.Args[i]
+		}
+	}
+	return subst
+}
+
+// checkLiteral type-checks an overloaded [...] against the type that declares the protocol.
+func (c *checker) checkLiteral(t *Type, lit *ListLit, sc *cScope, pos Pos) error {
+	fn := c.staticMeth(t.FName, "__literal__")
+	if len(fn.Params) != 0 {
+		return c.errf(pos, "TypeError: %s.__literal__ must take no parameters", t.FName)
+	}
+	appendFn := c.selfMeth(t.FName, "__element__")
+	if appendFn == nil {
+		return c.errf(pos, "TypeError: %s declares __literal__ but no __element__ to receive the elements", t.FName)
+	}
+	if len(appendFn.Params) != 2 {
+		return c.errf(pos, "TypeError: %s.__element__ must take exactly one element parameter", t.FName)
+	}
+	subst := c.typeArgsSubst(t)
+	if subst == nil {
+		subst = c.curSubst
+	}
+	want, err := c.substType(appendFn.Params[1].Type, subst, pos)
+	if err != nil {
+		return err
+	}
+	for _, it := range lit.Items {
+		et, err := c.infer(it, sc)
+		if err != nil {
+			return err
+		}
+		if !assignable(et, want) {
+			return c.errf(pos, "TypeError: literal element is %s, but %s.__element__ takes %s", et, t.FName, want)
+		}
+	}
+	return nil
+}
+
 func (c *checker) checkIfaceStrict(from, to *Type, pos Pos, what string) error {
 	if from == nil || to == nil || to.Kind != tInterface {
 		return nil

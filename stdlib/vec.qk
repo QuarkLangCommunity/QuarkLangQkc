@@ -53,7 +53,15 @@ impl<T> {
     }
 
     fn clear(Vec<T> self) void { self.len = 0; }
+
+    // Literal protocol members (see vecEmpty above): the language only knows the protocol names.
+    fn __literal__() Vec<T> { Vec<T> v = .{new T[0], 0, 0}; return v; }
+    fn __element__(Vec<T> self, T v) void { self.push(v); }
 } Vec;
+
+// Literal protocol: `[...]` is an overloadable notation. A type that declares a static __literal__()
+// (an empty container) plus __element__(Self, T) can be built directly from a literal, which is how
+// `Vec<int> v = [1, 2, 3];` works without the language core knowing anything about Vec.
 
 // list is the compatibility spelling: the old name keeps resolving to the vector type.
 type Vec list;

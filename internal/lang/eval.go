@@ -900,6 +900,31 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 		}
 	case *DeclStmt:
 		var v Value = NilV()
+		if lit, isLit := s.Init.(*ListLit); isLit {
+			// Overloadable literal: when the declared type declares the literal protocol, build through
+			// its own hooks instead of the core buffer. This must come first — the generic branch below
+			// would otherwise turn the literal into a plain buffer.
+			if fn := in.staticMethodOf(baseTypeName(s.Type), "__literal__"); fn != nil {
+				built, err := in.callFunc(fn, nil, s.Pos, ctx.depth)
+				if err != nil {
+					return err
+				}
+				appendFn := in.selfMethodOf(baseTypeName(s.Type), "__element__")
+				if appendFn == nil {
+					return &RunError{Msg: msg("TypeError: %s declares __literal__ but no __element__", baseTypeName(s.Type)), Pos: s.Pos, Ctx: ctx}
+				}
+				for _, it := range lit.Items {
+					item, err := in.evalExpr(it, sc, ctx)
+					if err != nil {
+						return err
+					}
+					if _, err := in.callFunc(appendFn, []Value{built, item}, s.Pos, ctx.depth); err != nil {
+						return err
+					}
+				}
+				return sc.declare(s.Name, built, s.Pos)
+			}
+		}
 		if s.Init != nil {
 			var err error
 			v, err = in.evalExpr(s.Init, sc, ctx)

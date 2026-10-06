@@ -256,3 +256,76 @@ fn main(IOStream io) { Squares s = .{3}; for (String v : s) { io.println(v); } }
 		})
 	}
 }
+
+// TestLiteralProtocol pins that [...] is an overloadable notation: a type declaring a static
+// __literal__() (an empty container) plus __element__(Self, T) is built from a literal, and the core
+// knows only those two protocol names — not the container.
+func TestLiteralProtocol(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.EN))
+	cases := []struct {
+		name    string
+		src     string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "a user type with the protocol is built from a literal",
+			src: `program main;
+type struct { int sum; int n; } Tally;
+impl {
+    fn __literal__() Tally { Tally t = .{0, 0}; return t; }
+    fn __element__(Tally self, int v) void { self.sum = self.sum + v; self.n = self.n + 1; }
+    fn total(Tally self) int { return self.sum; }
+    fn count(Tally self) int { return self.n; }
+} Tally;
+fn main(IOStream io) { Tally t = [1, 2, 3]; io.println(t.count()); io.println(t.total()); }`,
+			want: "3\n6\n",
+		},
+		{
+			name: "a wrong element type is rejected",
+			src: `program main;
+type struct { int sum; } Tally;
+impl {
+    fn __literal__() Tally { Tally t = .{0}; return t; }
+    fn __element__(Tally self, int v) void { self.sum = self.sum + v; }
+} Tally;
+fn main(IOStream io) { Tally t = ["x"]; io.println(t.sum); }`,
+			wantErr: "literal element is",
+		},
+		{
+			name: "__literal__ without __element__ is rejected",
+			src: `program main;
+type struct { int n; } Half;
+impl { fn __literal__() Half { Half h = .{0}; return h; } } Half;
+fn main(IOStream io) { Half h = [1]; io.println(h.n); }`,
+			wantErr: "no __element__",
+		},
+		{
+			name: "a type without the protocol keeps the plain literal",
+			src: `program main;
+type struct { int n; } Plain;
+fn main(IOStream io) { Plain p = .{1}; List<int> l = [1, 2]; io.println(l.size()); io.println(p.n); }`,
+			want: "2\n1\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := runSrc(t, tc.src)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected an error containing %q, program ran and printed %q", tc.wantErr, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
