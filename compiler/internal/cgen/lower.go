@@ -1159,7 +1159,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOf(st.Init)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1243,7 +1243,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1263,7 +1263,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1282,7 +1282,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing interface %s variable %q with %s is not supported", it, t, st.Name)
+			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize interface %s variable %q is not supported", it, t, st.Name)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1303,7 +1303,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	}
 	it := fc.typeOfAs(st.Init, t)
 	if it != t {
-		return nil, l.errf(exprPos(st.Init, st.Pos), "initializing %s variable %q with %s is not supported", it, t, st.Name)
+		return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
 	}
 	x, err := fc.exprAs(st.Init, t)
 	if err != nil {
@@ -1775,7 +1775,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 	case "&&", "||":
 		for _, t := range []string{lt, rt} {
 			if t != "bool" && t != "?" {
-				return nil, l.errf(pos, "using %q on %s is not supported (bool required)", t, e.Op)
+				return nil, l.errf(pos, "%s with %q is not supported (bool required)", t, e.Op)
 			}
 		}
 		x, err := fc.binary(e, e.Op)
