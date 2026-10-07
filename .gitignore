@@ -22,3 +22,11 @@ dist/
 dist-ci/
 .editors-tmp/
 *.test
+
+# Sibling QuarkLang projects, each with its own repository, live directly in this workspace.
+# They are not part of this repository and must not be tracked here.
+QuarkLangLibs-*/
+QuarkLangNpm/
+QuarkLangPlayground/
+QuarkLangQk*/
+QuarkLangQuark/
