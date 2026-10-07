@@ -2546,6 +2546,11 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			return nil, err
 		}
 		return tOutputStreamV, nil
+	case "panic":
+		if len(args) != 1 {
+			return nil, c.errf(id.Pos, "TypeError: panic(msg String) takes exactly 1 argument")
+		}
+		return tNilV, nil
 	case "rand", "clock":
 		if err := c.checkArity(id.Name, 0, len(args), id.Pos); err != nil {
 			return nil, err

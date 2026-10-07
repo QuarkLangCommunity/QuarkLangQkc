@@ -199,3 +199,39 @@ fn main(IOStream io) {
 		})
 	}
 }
+
+// TestStdlibImportSearchPath pins that the standard library resolves from anywhere inside a checkout:
+// the resolver walks up from the importing file for a stdlib/ directory (or uses QK_STDLIB), so a
+// program in examples/ or a nested testdata directory can simply write import "vec".
+func TestStdlibImportSearchPath(t *testing.T) {
+	withLocalizer(t, i18n.New(nil, i18n.EN))
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "a", "b")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A stdlib directory next to the program tree, holding a canonical vec.qk entry point.
+	std := filepath.Join(dir, "stdlib")
+	if err := os.MkdirAll(std, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(std, "vec.qk"), []byte("pub fn marker() int { return 42; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := "program main;\nimport \"vec\";\nfn main(IOStream io) { io.println(marker()); }\n"
+	mainPath := filepath.Join(nested, "main.qk")
+	if err := os.WriteFile(mainPath, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prog, _, err := CompileWithImportsMapped(src, mainPath)
+	if err != nil {
+		t.Fatalf("import \"vec\" did not resolve through the stdlib search path: %v", err)
+	}
+	var out bytes.Buffer
+	if err := Run(prog, mainPath, nil, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "42\n" {
+		t.Fatalf("got %q, want %q", out.String(), "42\n")
+	}
+}

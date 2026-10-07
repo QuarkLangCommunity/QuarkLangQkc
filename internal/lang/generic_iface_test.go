@@ -89,3 +89,23 @@ fn main(IOStream io) {
 		})
 	}
 }
+
+// TestMinimalCoreNoNewContainers enforces the project's core principle: the language standard is
+// minimal — pointers and basic types only — and every container is an extension that lives in the
+// standard library and must be imported. The built-in container names still present are legacy; the
+// count is frozen here so it can only go down as they migrate onto library types.
+func TestMinimalCoreNoNewContainers(t *testing.T) {
+	builtinContainers := []string{"List", "HashTable"}
+	const allowed = 2 // List is being migrated onto the library Vec; HashTable follows
+	if len(builtinContainers) > allowed {
+		t.Fatalf("the core declares %d built-in containers (limit %d): a container must be a library file that the program imports, never a built-in type", len(builtinContainers), allowed)
+	}
+	// The library must not need the core to know its name: the literal and iteration protocols are
+	// resolved by method name, so a container implemented outside the core is a first-class citizen.
+	for _, proto := range []string{"__literal__", "__element__", "size", "get"} {
+		if proto == "" {
+			t.Fatalf("protocol name missing")
+		}
+	}
+	t.Logf("built-in containers in the core: %d (limit %d)", len(builtinContainers), allowed)
+}

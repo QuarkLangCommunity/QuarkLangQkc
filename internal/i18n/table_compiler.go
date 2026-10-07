@@ -244,4 +244,5 @@ var compilerTable = map[string]string{
 	"暂未支持 delete 非变量表达式（编译器仅支持 delete <List 变量>）":                                   "delete on a non-variable expression is not supported (the compiler handles delete <List variable> only)",
 	"暂未支持 delete %q（编译器仅支持 delete List 变量）":                                         "delete %q is not supported (the compiler handles delete on a List variable only)",
 	"暂未支持 HashTable 方法 %q（编译器支持 put/get/contains/remove/size/keys）":                 "HashTable method %q is not supported (the compiler handles put/get/contains/remove/size/keys)",
+	"TypeError: panic(msg String) takes exactly 1 argument":                         "TypeError: panic(msg String) 只接受 1 个参数",
 }
