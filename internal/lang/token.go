@@ -58,6 +58,9 @@ const (
 	TOr
 	TShl
 	TShr
+	TCaret // ^ bitwise exclusive or
+	TTilde // ~ bitwise complement (unary)
+	TPipe  // | bitwise or (|| is TOr)
 	TLog
 	TAmper
 	TNull
@@ -74,7 +77,7 @@ var tokenNames = [...]string{
 	"'while'", "'for'", "'true'", "'false'",
 	"'('", "')'", "'{'", "'}'", "'['", "']'", "';'", "','", "'.'", "':'", "'::'", "'@'",
 	"'='", "'+'", "'-'", "'*'", "'/'", "'%'", "'!'", "'=='", "'!='", "'<'", "'<='", "'>'", "'>='", "'&&'", "'||'",
-	"'<<'", "'>>'", "'log'", "'&'", "'null'", "'try'", "'catch'", "'#'", "'macro'",
+	"'<<'", "'>>'", "'^'", "'~'", "'|'", "'log'", "'&'", "'null'", "'try'", "'catch'", "'#'", "'macro'",
 }
 
 func (k TokenKind) String() string {
@@ -389,13 +392,39 @@ func (lx *lexer) next() (Token, error) {
 			lx.advance()
 			return Token{Kind: TOr, Text: "||", Line: line, Col: col}, nil
 		}
-		return Token{}, lx.errf(line, col, "unexpected character '|' (did you mean '||'?)")
+		return one(TPipe)
+	case '^':
+		return one(TCaret)
+	case '~':
+		return one(TTilde)
 	}
 	return Token{}, lx.errf(line, col, "unexpected character %q", string(rune(c)))
 }
 
 func (lx *lexer) lexNumber(line, col int) (Token, error) {
 	start := lx.pos
+	// Hex literals: 0x1F, 0X1f. This is the natural notation for the standard's byte/bytes<N> layer
+	// (§3.5), and the AST keeps the value, never the text, so both engines read it the same way.
+	if lx.peekByte() == '0' && (lx.peekByteAt(1) == 'x' || lx.peekByteAt(1) == 'X') {
+		lx.advance()
+		lx.advance()
+		digits := lx.pos
+		isHex := func(b byte) bool {
+			return isDigit(b) || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+		}
+		for isHex(lx.peekByte()) {
+			lx.advance()
+		}
+		text := lx.src[start:lx.pos]
+		if lx.pos == digits {
+			return Token{}, lx.errf(line, col, "invalid hex literal %q (no digits after 0x)", text)
+		}
+		n, err := strconv.ParseInt(lx.src[digits:lx.pos], 16, 64)
+		if err != nil {
+			return Token{}, lx.errf(line, col, "invalid hex literal %q", text)
+		}
+		return Token{Kind: TInt, Text: text, Int: n, Line: line, Col: col}, nil
+	}
 	for isDigit(lx.peekByte()) {
 		lx.advance()
 	}

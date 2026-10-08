@@ -1611,6 +1611,10 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.typ = "int"
 		x.line = pos.Line
 		return x, nil
+	case "&", "|", "^":
+		// The interpreter implements these; the compiler does not lower them yet. Hard error rather
+		// than a silent difference (project policy), and the parity corpus keeps both engines honest.
+		return nil, l.errf(pos, "compiling %q (bitwise operators) is not supported yet (implemented in the interpreter only)", e.Op)
 	case "<<", ">>":
 		if lt != "int" || rt != "int" {
 			return nil, l.errf(pos, "using %q on %s / %s is not supported (shifts need int operands)", lt, rt, e.Op)
@@ -1845,6 +1849,10 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 		// Address-of feeds the reference machinery, which the compiler does not lower yet. Hard error
 		// rather than a silently different answer (project policy for unsupported constructs).
 		return nil, l.errf(e.Pos, "compiling & (address-of) is not supported yet (references are implemented in the interpreter only)")
+	}
+	if e.Op == "~" {
+		// Bitwise complement is implemented in the interpreter; the compiler hard-errors for now.
+		return nil, l.errf(e.Pos, "compiling '~' (bitwise complement) is not supported yet (implemented in the interpreter only)")
 	}
 	t := fc.typeOf(e.X)
 	switch e.Op {

@@ -82,6 +82,8 @@ var compilerTable = map[string]string{
 	"暂未支持 %s 与 %s 相加（String 拼接要求两侧都是 String）":                                                                                     "adding %s and %s is not supported yet (String concatenation requires both sides to be String)",
 	"using %q on %s / %s is not supported (Operation overloading works for same-type structs only)":                               "暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）",
 	"using %q on %s / %s is not supported (shifts need int operands)":                                                             "暂未支持对 %s / %s 使用 %q（位移需要 int 操作数）",
+	"compiling %q (bitwise operators) is not supported yet (implemented in the interpreter only)":                                 "暂未支持编译 %q（位运算，仅解释器已实现）",
+	"compiling '~' (bitwise complement) is not supported yet (implemented in the interpreter only)":                               "暂未支持编译 '~'（取反运算，仅解释器已实现）",
 	"using %q on %s / %s is not supported (pointers allow == / != only)":                                                          "暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）",
 	"using %q on %s / %s is not supported (nullable references allow == / != only)":                                               "暂未支持对 %s / %s 使用 %q（可空引用只支持 == / !=）",
 	"comparing a non-variable nullable reference is not supported (the compiler requires a T& variable)":                          "暂未支持对非变量的可空引用做比较（编译器要求 T& 变量）",

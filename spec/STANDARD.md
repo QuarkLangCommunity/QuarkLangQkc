@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.6 — **`byte` is the mother of every basic type**: `byte`/`bytes<N>` is the only
+**Version:** 0.6.1 — **`byte` is the mother of every basic type**: `byte`/`bytes<N>` is the only
 storage there is, every other basic type is a view over it, and raw bytes admit bitwise
 operations only
 **Frozen:** 2026-10-08 · **Review after:** 2026-11-08
@@ -42,6 +42,8 @@ it, and `compiler/testdata/compare.sh` must keep printing `all identical (interp
 - **Implements:** `impl<T> { … } Name;` — structural: a type satisfies an interface by having the
   methods. Method members cannot carry `pub` (top-level declarations only).
 - **Comments:** `//` to end of line. Preprocessor: `#` at the start of a line.
+- **Integer literals:** decimal (`42`) or hexadecimal (`0x2A`); the hex form is the notation for raw
+  byte data (§3.5).
 
 ## 3. Types — `byte` is the mother of every basic type
 
@@ -143,9 +145,15 @@ more restrictive reference may not be widened.
 
 ## 5. Operators
 
-Arithmetic `+ - * / %`, shifts `<< >>`, comparison `< <= > >=`, equality `== !=`, logic `&& || !`,
-unary `- *`, address `&` — **defined for views; on `byte` and `bytes<N>` only the bitwise operators of
-§3.3 exist** — and:
+Arithmetic `+ - * / %`, the bitwise family `& | ^ ~`, shifts `<< >>`, comparison `< <= > >=`, equality
+`== !=`, logic `&& || !`, unary `- *`, address `&`.
+
+Arithmetic and bitwise are defined for **int views** — and, once they land, for `byte`/`bytes<N>`, which
+take the bitwise family and nothing else (§3.3). The type checker refuses them elsewhere.
+
+Precedence, loosest first: `||`, `&&`, `== != < <= > >=`, `|`, `^`, `&`, `<< >>`, `+ -`, `* / %`, then
+the unary operators. The bitwise family therefore binds tighter than comparison, so `a & b == c` is
+`(a & b) == c`. And:
 
 - **`===` is storage identity** — it asks whether the two operands *occupy the same storage space*,
   never what they hold. `x === x` is true; `x === y` is false even when the values are equal; two
@@ -241,5 +249,6 @@ The difference between the two, spelled out:
 
 | Version | Date | Change |
 |---|---|---|
+| 0.6.1 | 2026-10-08 | Corrections: integer views admit the bitwise family `& \| ^ ~` (0.6 had stated it for raw bytes only), operator precedence written down, hex integer literals recorded |
 | 0.6 | 2026-10-08 | `byte` made the mother of every basic type; `bytes<N>` added; basic types restated as views over it; raw bytes restricted to bitwise operations; the three meanings of the conversion call `T(x)` fixed; layout rules written down; the split type table and the duplicated §8 row of 0.5 repaired. Freeze restarts: review after 2026-11-08 |
 | 0.5 | 2026-10-07 | integers and floats split by width, pointers separated from references, `char` added, `String` moved to the library, `null` and `pointer T` removed, `program` and the runtime directives recorded |
