@@ -6,30 +6,25 @@ import (
 	"strings"
 )
 
-// SplitMacroDefs splits every #macro name (params...) { body } definition out of a token stream,
-// returning the macro list and the remaining tokens.
+// SplitMacroDefs splits every standard macro definition out of a token stream, returning the macro list and the remaining tokens.
 //
-// Syntax (settled by the user):
+// Standard spelling (spec/STANDARD.md 6.6):
 //
-//	#macro name (p1, p2, ...) { body }
-//	#macro name [p1, p2] { body }   // the parameter-list delimiter may be () [] or {}
-//	#macro name {p1, p2} { body }
+//	macro name($a $b) { body }
 //
-// Parameters are names, comma-separated, with no limit on the count; inside the body they are replaced by the call's argument tokens.
-// Invocation (mirrors the definition; the delimiter is likewise free):
-//
-//	name(args) / name[args] / name{args}
+// `macro` is the keyword, the parameters are one or more `$name` (the sigil is what marks them) and the body is a braced block.
+// Invocation keeps the three call forms name(args) / name[args] / name{args}.
 func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
-	// Fast path: when the whole file has no token starting with `#` (macro/preprocessor directives) there is nothing to split →
-	// return the original slice (zero copy, zero allocation). The vast majority of source files take this path.
-	hasSharp := false
+	// Fast path: without a `macro` keyword token there is nothing to split → return the original slice
+	// (zero copy, zero allocation). The vast majority of source files take this path.
+	hasMacro := false
 	for i := range toks {
-		if toks[i].Kind == TSharp {
-			hasSharp = true
+		if toks[i].Kind == TMacro {
+			hasMacro = true
 			break
 		}
 	}
-	if !hasSharp {
+	if !hasMacro {
 		return nil, toks, nil
 	}
 	var macros []*MacroDef
@@ -37,55 +32,70 @@ func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
 	i := 0
 	for i < len(toks) {
 		t := toks[i]
-		if t.Kind != TSharp || i+1 >= len(toks) || toks[i+1].Kind != TMacro {
+		if t.Kind == TSharp && i+1 < len(toks) && toks[i+1].Kind == TMacro {
+			return nil, nil, errors.New(msg("ParseError: #macro is not the standard spelling (STANDARD 6.6): write macro name($a $b) { ... }, line %d", t.Line))
+		}
+		if t.Kind != TMacro {
 			rest = append(rest, t)
 			i++
 			continue
 		}
-		pos := Pos{Line: t.Line, Col: t.Col}
-		i += 2 // consume '# macro'
-		if i >= len(toks) || toks[i].Kind != TIdent {
-			return nil, nil, errors.New(msg("ParseError: #macro 需要名字，第 %d 行", t.Line))
-		}
-		name := toks[i].Text
-		i++
-		if i >= len(toks) {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 缺少参数列表，第 %d 行", name, t.Line))
-		}
-		closeK, ok := closeOf(toks[i].Kind)
-		if !ok {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行", name, toks[i].Line))
-		}
-		params, ni, err := takeBalancedPair(toks, i, closeK)
+		m, ni, err := parseMacroDef(toks, i)
 		if err != nil {
 			return nil, nil, err
 		}
+		macros = append(macros, m)
 		i = ni
-		var pnames []string
-		for _, pt := range splitTop(params) {
-			if len(pt) == 0 {
-				continue
-			}
-			if len(pt) != 1 || pt[0].Kind != TIdent {
-				return nil, nil, errors.New(msg("ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行", name, t.Line))
-			}
-			pnames = append(pnames, pt[0].Text)
-		}
-		if i >= len(toks) {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 缺少主体，第 %d 行", name, t.Line))
-		}
-		closeB, ok := closeOf(toks[i].Kind)
-		if !ok {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行", name, toks[i].Line))
-		}
-		body, ni, err := takeBalancedPair(toks, i, closeB)
-		if err != nil {
-			return nil, nil, err
-		}
-		i = ni
-		macros = append(macros, &MacroDef{Name: name, Params: pnames, Body: body, Pos: pos})
 	}
 	return macros, rest, nil
+}
+
+// parseMacroDef parses one standard definition, macro name($a $b) { body }, starting at the `macro` keyword toks[i]
+// and returning it with the index just past the body.
+func parseMacroDef(toks []Token, i int) (*MacroDef, int, error) {
+	pos := Pos{Line: toks[i].Line, Col: toks[i].Col}
+	i++
+	if i >= len(toks) || toks[i].Kind != TIdent {
+		return nil, 0, errors.New(msg("ParseError: macro needs a name, line %d", pos.Line))
+	}
+	name := toks[i].Text
+	i++
+	if i >= len(toks) || toks[i].Kind != TLParen {
+		return nil, 0, errors.New(msg("ParseError: macro %s is missing its ($name) parameter list, line %d", name, pos.Line))
+	}
+	params, i, err := macroParams(toks, i, name)
+	if err != nil {
+		return nil, 0, err
+	}
+	if i >= len(toks) || toks[i].Kind != TLBrace {
+		return nil, 0, errors.New(msg("ParseError: macro %s body must be a { ... } block, line %d", name, pos.Line))
+	}
+	body, i, err := takeBalancedPair(toks, i, TRBrace)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &MacroDef{Name: name, Params: params, Body: body, Pos: pos}, i, nil
+}
+
+// macroParams reads the ($a $b) parameter list of macro name at toks[i] (the opening parenthesis)
+// and returns the parameter names with the index just past the closing parenthesis.
+func macroParams(toks []Token, i int, name string) ([]string, int, error) {
+	inner, next, err := takeBalancedPair(toks, i, TRParen)
+	if err != nil {
+		return nil, 0, err
+	}
+	var params []string
+	for j := 0; j < len(inner); {
+		if inner[j].Kind != TDollar || j+1 >= len(inner) || inner[j+1].Kind != TIdent {
+			return nil, 0, errors.New(msg("ParseError: macro %s parameters are written $name (one or more, space-separated), line %d", name, inner[j].Line))
+		}
+		params = append(params, inner[j+1].Text)
+		j += 2
+	}
+	if len(params) == 0 {
+		return nil, 0, errors.New(msg("ParseError: macro %s needs at least one $name parameter, line %d", name, toks[i].Line))
+	}
+	return params, next, nil
 }
 
 // closeOf returns the closing delimiter matching an opening one.
@@ -204,21 +214,41 @@ func macroCallExcluded(i int, toks []Token) bool {
 	return false
 }
 
-// expandBody expands a macro body: parameters are replaced by name; #when (compile|run) { ... } selects a block by state;
+// substParam splices the argument tokens bound to the `$name` parameter reference at body[i],
+// returning them with the index just past the reference.
+func substParam(body []Token, i int, subst map[string][]Token) ([]Token, int, error) {
+	if i+1 >= len(body) || body[i+1].Kind != TIdent {
+		return nil, 0, errors.New(msg("ParseError: $ must be followed by a parameter name, line %d", body[i].Line))
+	}
+	name := body[i+1].Text
+	arg, ok := subst[name]
+	if !ok {
+		return nil, 0, errors.New(msg("ParseError: $%s is not a parameter of this macro, line %d", name, body[i].Line))
+	}
+	return arg, i + 2, nil
+}
+
+// expandBody expands a macro body: a `$name` reference is replaced by the argument bound to that parameter;
+// #when (compile|run) { ... } selects a block by state;
 // #return <token...> is the macro's return value (the expansion result is the tokens after the return directive, with parameters substituted) and terminates the whole expansion immediately;
-// #error("msg") reports an error directly; #insert/#execute/#ast were removed with the pattern syntax.
+// #error("msg") reports an error directly; #insert/#execute/#ast come from the removed pattern syntax.
 // Returns (output, whether a #return terminated it).
 func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder []string) ([]Token, bool, error) {
 	var out []Token
 	i := 0
 	for i < len(body) {
 		t := body[i]
-		if t.Kind != TSharp {
-			if sub, ok := subst[t.Text]; ok && t.Kind == TIdent {
-				out = append(out, sub...)
-			} else {
-				out = append(out, t)
+		if t.Kind == TDollar {
+			arg, ni, err := substParam(body, i, subst)
+			if err != nil {
+				return nil, false, err
 			}
+			out = append(out, arg...)
+			i = ni
+			continue
+		}
+		if t.Kind != TSharp {
+			out = append(out, t)
 			i++
 			continue
 		}
@@ -229,7 +259,7 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 		i += 2
 		if cmd == "return" {
 			// #return <expr>: the shown result is everything after the return directive (parameters substituted + later directives still processed),
-			// e.g. #return #insert(#ast(a)); and it terminates the whole macro expansion.
+			// e.g. #return #insert(#ast($a)); and it terminates the whole macro expansion.
 			sub, _, err := expandBody(body[i:], subst, mode, paramOrder)
 			if err != nil {
 				return nil, false, err
@@ -278,7 +308,7 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 			}
 			return nil, false, errors.New(msg("第 %d 行：预处理错误 #error(%s)", t.Line, args[0].Text))
 		case "insert":
-			// #insert(#ast(name)): splice in the tokens of parameter name; #insert(#ast(...)): splice in all parameters in order
+			// #insert(#ast($name)): splice in the tokens of parameter name (a bare name is still accepted); #insert(#ast(...)): splice in all parameters in order
 			inner, err := parseAstArg(args)
 			if err != nil {
 				return nil, false, err
@@ -311,22 +341,35 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 	return out, false, nil
 }
 
-// parseAstArg parses an (#ast(name)) argument and returns the name; the name may be a parameter name or ... (all parameters).
+// parseAstArg parses an (#ast($name)) argument and returns the name; `$name` is the parameter sigil and a
+// bare name is still accepted, and the name may be ... (all parameters).
 func parseAstArg(args []Token) (string, error) {
 	if len(args) < 4 || args[0].Kind != TSharp || args[1].Kind != TIdent || args[1].Text != "ast" ||
 		args[2].Kind != TLParen || args[len(args)-1].Kind != TRParen {
-		return "", errors.New(msg("#insert 需要 (#ast(名字)) 形式"))
+		return "", errors.New(msg("#insert 需要 (#ast($名字)) 形式"))
 	}
 	if len(args) >= 5 && args[3].Kind == TDot && args[4].Kind == TDot && len(args) >= 6 && args[5].Kind == TDot {
 		return "...", nil
 	}
+	if args[3].Kind == TDollar && len(args) >= 6 && args[4].Kind == TIdent && args[5].Kind == TRParen {
+		return args[4].Text, nil
+	}
 	if args[3].Kind == TIdent {
 		return args[3].Text, nil
 	}
-	return "", errors.New(msg("#insert 需要 (#ast(名字)) 形式"))
+	return "", errors.New(msg("#insert 需要 (#ast($名字)) 形式"))
 }
 
-// String renders it for error messages.
+// Signature renders the macro's standard declaration form: macro name($a $b).
+func (m *MacroDef) Signature() string {
+	params := make([]string, len(m.Params))
+	for i, p := range m.Params {
+		params[i] = "$" + p
+	}
+	return fmt.Sprintf("macro %s(%s)", m.Name, strings.Join(params, " "))
+}
+
+// String renders the definition in the standard spelling for error messages.
 func (m *MacroDef) String() string {
-	return fmt.Sprintf("#macro %s (%s)", m.Name, strings.Join(m.Params, ", "))
+	return m.Signature()
 }
