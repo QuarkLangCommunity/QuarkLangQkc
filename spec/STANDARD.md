@@ -1,8 +1,7 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.7 — **`bit` is the mother of every basic type**: `bit`/`bits<N>` is the only
-storage there is, every other basic type is a view over it, and raw bits admit bitwise
-operations only
+**Version:** 0.7.1 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+`bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-08 · **Review after:** 2026-11-08
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
 factual errors are allowed; new features are not. Anything not described here is *not* part of the
@@ -29,7 +28,7 @@ it, and `compiler/testdata/compare.sh` must keep printing `all identical (interp
    difference.
 5. **The core may shrink, never grow.** Legacy built-ins are migrated onto library types; the count of
    built-in containers is frozen by a test. Simplification counts as shrinkage: where there were six
-   unrelated storage types, 0.6 has one storage atom and a table of views.
+   unrelated storage types, 0.7 has one storage family and a table of views.
 
 ## 2. Lexical and declarative form
 
@@ -61,6 +60,11 @@ Nothing else is a storage type. Every other basic type is a **view**: an interpr
 sequence of a fixed width. A view and its bits occupy the *same* storage — a view is not a wrapper,
 never adds a field, and never moves.
 
+Every basic type is therefore *implemented from* `bit`/`bits<N>`: `bool` is a one-bit view, `uchar` an
+eight-bit one, `char` a 32-bit one, `float64` a 64-bit one. The core has exactly one storage
+representation, one copy rule and one reinterpretation rule for all of them; views differ only in the
+arithmetic the type checker then lets you apply.
+
 Memory is addressed in bytes: a `bits<N>` occupies `⌈N/8⌉` bytes, byte-aligned, and every bit past `N` is
 zero. So `bits<5>` is a five-bit value in one byte, and `bits<40>` is five bytes.
 
@@ -70,12 +74,17 @@ zero. So `bits<5>` is a five-bit value in one byte, and `bits<40>` is five bytes
 |---|---|---|---|
 | `bool` | `bit` | 1 | `0` = false, `1` = true; no other value |
 | `char` | `bits<32>` | 32 | one Unicode scalar value |
+| `uchar` | `bits<8>` | 8 | unsigned integer `0 … 255` — the octet view |
 | `int32` `int64` `int128` `int256` | `bits<32>` `bits<64>` `bits<128>` `bits<256>` | 32 / 64 / 128 / 256 | two's-complement integer |
 | `float32` `float64` | `bits<32>` `bits<64>` | 32 / 64 | IEEE-754 binary32 / binary64 |
 | `&T` `*T` | address | implementation-defined (`bits<64>` in the reference implementation) | reference / pointer |
 
 A view's name states its own width — `int32` is `bits<32>`, `float64` is `bits<64>` — which is the point
 of measuring storage in bits rather than in bytes.
+
+`uchar` is the octet type, keeping the C tradition's name for it (`unsigned char`): the element type for
+raw data, and the only 8-bit view — there is no signed one. `char` stays the text scalar (`bits<32>`, one
+Unicode code point) and is a different thing, not a wider `uchar`.
 
 `int` means `int32`, `float` means `float32` — the smallest is the default. `void` and `any` are the
 empty interface type, registered by the type system itself: `void` is *nothing*, `any` is *anything*.
@@ -117,6 +126,8 @@ The conversion call keeps its spelling `T(x)`; its meaning is decided by what th
 - A width mismatch is a compile-time error. There is no implicit widening or truncation of raw bits.
 - Between two views, `T(x)` **always** means the value conversion. To reinterpret bits instead, pass
   through the mother: `int32(bits<32>(f))`.
+- A value conversion **narrows by keeping the low bits**: `uchar(300)` is `44`, `uchar(-1)` is `255`.
+  Reinterpretation never truncates — it requires equal widths — so this rule applies only to the third row.
 
 ### 3.5 Fixed-size data needs no container
 
@@ -234,18 +245,19 @@ The difference between the two, spelled out:
 | In the core | In the standard library (imported) |
 |---|---|
 | `bit`, `bits<N>` — the storage atom | `String` (bits + length) |
-| the views `bool` `char` `int32/64/128/256` `float32/64`, and `void` `any` | `Vec<T>` (`stdlib/vec.qk`) |
+| the views `bool` `char` `uchar` `int32/64/128/256` `float32/64`, and `void` `any` | `Vec<T>` (`stdlib/vec.qk`) |
 | `&T` references, `*T` pointers, `&lvalue`, `p++` | `Option<T>`, `Result<T, E>` |
 | `struct`, `interface`, `impl`, generics, `type` aliases | smart pointers (permission references as a library layer — planned) |
 | `taskm`/threads/channels, `IOStream`, `panic` | every other collection |
 
 - **Legacy spellings** (`long`, `double`, and `char` used as a narrow integer) are implementation
-  compatibility, not standard; they are being migrated onto the views of §3.2.
+  compatibility, not standard; they are being migrated onto the views of §3.2 — a `char` used as a narrow
+  integer becomes `uchar`.
 - **Legacy built-ins still present** (`List`, `HashTable`): scheduled for migration onto library types.
   Their presence is frozen by a test — the count may only go down.
-- **Not yet implemented:** `bit`/`bits<N>` and the width-split views are the 0.7 target. Until they
-  land in both engines, `int`/`float` remain the working spellings, and `spec` is ahead of the code by
-  design.
+- **Not yet implemented:** `bit`/`bits<N>`, `uchar` and the width-split views are the 0.7 target. Until
+  they land in both engines, `int`/`char`/`float` remain the working spellings, and `spec` is ahead of the
+  code by design.
 
 ## 9. Change policy and revision log
 
@@ -256,6 +268,7 @@ The difference between the two, spelled out:
 
 | Version | Date | Change |
 |---|---|---|
+| 0.7.1 | 2026-10-08 | `uchar` added: the unsigned 8-bit view over `bits<8>` (`0 … 255`), the octet type and the element type for raw data — there is no signed 8-bit view. §3.1 now states explicitly that every basic type is *implemented from* `bit`/`bits<N>`. Value conversions narrow by keeping the low bits |
 | 0.7 | 2026-10-08 | The storage family is measured in **bits**: `byte`/`bytes<N>` became `bit`/`bits<N>`. A view's name now states its own width (`int32` is `bits<32>`, `float64` is `bits<64>`), layout is `⌈N/8⌉` bytes with the bits past `N` zero, and `b[i]` reads or writes the i-th bit. Freeze restarts: review after 2026-11-08 |
 | 0.6.1 | 2026-10-08 | Corrections: integer views admit the bitwise family `& \| ^ ~` (0.6 had stated it for raw bytes only), operator precedence written down, hex integer literals recorded |
 | 0.6 | 2026-10-08 | `byte` made the mother of every basic type; `bytes<N>` added; basic types restated as views over it; raw bytes restricted to bitwise operations; the three meanings of the conversion call `T(x)` fixed; layout rules written down; the split type table and the duplicated §8 row of 0.5 repaired. Freeze restarts: review after 2026-11-08 |
