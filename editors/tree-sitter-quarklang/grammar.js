@@ -3,7 +3,7 @@
  *
  * Canonical syntax lives in the repo's SYNTAX.md: type first (`int x`), `fn name(int a) Ret`,
  * `type struct { ... } Name;`, `impl { ... } Name;`, `space { ... } name;`,
- * `for (int x : l)`, `catch (void e)`, `#macro`, `@signature` calls, and so on.
+ * `for (int x : l)`, `catch (void e)`, `macro name($a $b)`, `@signature` calls, and so on.
  */
 module.exports = grammar({
   name: 'quarklang',
@@ -147,13 +147,12 @@ module.exports = grammar({
     // type <type> name;
     type_alias: $ => seq('type', field('type', $.type), field('name', $.identifier), ';'),
 
-    // #macro name (a, b) { body }
+    // macro name($a $b) { body }
     macro_definition: $ => seq(
-      '#',
       'macro',
       field('name', $.identifier),
       '(',
-      optional(commaSep1($.identifier)),
+      repeat1(seq('$', $.identifier)),
       ')',
       field('body', $.macro_block),
     ),
@@ -163,7 +162,7 @@ module.exports = grammar({
     _macro_token: $ => choice(
       $.identifier, $.number, $.string, $.raw_string, $.line_comment, $.block_comment,
       '(', ')', '[', ']', ',', ';', ':', '.', '=', '+', '-', '*', '/', '%',
-      '<', '>', '!', '&', '|', '?', '@', '#', '::',
+      '<', '>', '!', '&', '|', '?', '@', '#', '$', '::',
     ),
 
     // ---- Statements ----

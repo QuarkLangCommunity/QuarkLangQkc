@@ -1,0 +1,28 @@
+// M1: the standard macro spelling macro name($a $b) { body } — parameters carry the `$` sigil,
+// #when selects the branch by preprocessing state and #return is the expansion result.
+macro twice($x) {
+    #when (compile) {
+        #return $x + $x
+    }
+    #when (run) {
+        #return $x * 2
+    }
+}
+
+// A macro without #when is state-independent, so both engines expand it the same way.
+macro join($head $tail) {
+    #return $head + $tail
+}
+
+// Substitution is token-level and the argument keeps its shape, brackets included.
+macro pick($first $second) {
+    #return $second + $first
+}
+
+fn main(IOStream io) {
+    io.println(twice(21));
+    io.println(join("qu", "ark"));
+    io.println(pick(10 + 1, 31));
+    io.println(join("tab:\t", "end"));
+    io.println(join(`raw\n`, "line"));
+}

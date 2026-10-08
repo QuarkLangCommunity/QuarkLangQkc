@@ -4,11 +4,11 @@ import (
 	"testing"
 )
 
-// #insert(#ast(parameter)) and #execute restored: explicit direct insertion / identifier splicing
+// #insert(#ast($parameter)) and #execute: explicit direct insertion / identifier splicing
 func TestMacroInsertDirectives(t *testing.T) {
-	out, err := runSrc(t, `#macro pair (a, b) {
+	out, err := runSrc(t, `macro pair($a $b) {
     #when (run) {
-        #return #insert(#ast(a)) + #insert(#ast(b))
+        #return #insert(#ast($a)) + #insert(#ast($b))
     }
 }
 
@@ -28,7 +28,7 @@ func TestMacroInsertAll(t *testing.T) {
 	out, err := runSrc(t, `fn add2(int a, int b) int {
     return a + b;
 }
-#macro calladd (a, b) {
+macro calladd($a $b) {
     #when (run) {
         #return add2(#insert(#ast(...)))
     }
@@ -50,14 +50,14 @@ func TestMacroExecuteSplice(t *testing.T) {
 	out, err := runSrc(t, `fn give() int {
     return 7;
 }
-#macro callit () {
+macro callit($offset) {
     #when (run) {
-        #return #execute(give)()
+        #return #execute(give)() + $offset
     }
 }
 
 fn main(IOStream io) {
-    io.println(callit());
+    io.println(callit(0));
 }`)
 	if err != nil {
 		t.Fatal(err)

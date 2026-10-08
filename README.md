@@ -262,7 +262,7 @@ go build -o qkdoc ./cmd/qkdoc
 - Doc comments: the `//` or `/* */` block **immediately above** a declaration (godoc rule); falls back to a
   trailing comment on the same line (`int x; // x coordinate`); the file header comment becomes the file description.
 - Only `pub` symbols are exported by default; files without `pub` (e.g. `program main`) export everything.
-  `impl`/`space`/`library`/`#macro` are not filtered by `pub` (the language cannot prefix them with `pub`,
+  `impl`/`space`/`library`/`macro` are not filtered by `pub` (the language cannot prefix them with `pub`,
   and they are what library APIs consist of; macros are split out before parsing and supplied by `ParseSourceAll`).
 - Measured: `style.qk` (1,567 lines) → 8 ms to generate 335 lines of Markdown (overview table + sections).
 
@@ -500,8 +500,8 @@ Key optimizations (all profile-driven):
 - **Signatures**: `f(args) @instance(prefix)` ≡ `instance.call(prefix)(.{in, out})` — memoization/wrapping.
 - **taskm concurrency**: `t thread = taskm.spawn(); t.merge(fn, args); taskm.block(t.pid()); taskm.done(pid);
   c channel = taskm.channel(); c.send(v); c.recv();` — user-space tasks + thread pool (pthread carrier in the compiled path).
-- **Macro system**: `#macro name (params) { body }` with named parameters; `()`/`[]`/`{}` delimiters are interchangeable;
-  the body supports `#when(compile/run)` and `#error` — **interpreter and compiler share the same token-level expansion**.
+- **Macro system**: `macro name($a $b) { body }` with `$`-marked parameters; calls are `name(args)`/`name[args]`/`name{args}`;
+  the body supports `#when(compile/run)`, `#return` and `#error` — **interpreter and compiler share the same token-level expansion**.
 - **delete/clear semantics**: `delete` returns memory to the free queue (data preserved, reusable);
   `clear` actually wipes free blocks (in-use blocks are untouched — data safety).
 - **List<int>**: literals, indexing, `size()`, `get(i)`, `append(v)` (geometric growth).

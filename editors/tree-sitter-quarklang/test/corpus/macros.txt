@@ -2,9 +2,9 @@
 Macros
 ==================
 
-#macro add (a, b) {
+macro add($a $b) {
     #when (run) {
-        #return a + b
+        #return $a + $b
     }
 }
 

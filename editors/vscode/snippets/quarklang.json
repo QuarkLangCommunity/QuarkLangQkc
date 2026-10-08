@@ -51,7 +51,7 @@
   },
   "macro": {
     "prefix": "macro",
-    "body": ["#macro ${1:name} (${2:a, b}) {", "    #when (run) {", "        #return ${3:a + b}", "    }", "}"],
+    "body": ["macro ${1:name}(\\$a \\$b) {", "    #when (run) {", "        #return \\$a + \\$b", "    }", "}", "$0"],
     "description": "Named-parameter macro"
   }
 }

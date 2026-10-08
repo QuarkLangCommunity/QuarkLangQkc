@@ -52,7 +52,7 @@ type Doc struct {
 	Types     []*DocItem // struct / interface / alias
 	Impls     []*DocItem // impl / space
 	Libraries []*DocItem
-	Macros    []*DocItem // #macro named-parameter macros (expanded at token level, not in the AST)
+	Macros    []*DocItem // macro name($a $b) definitions (expanded at token level, not in the AST)
 }
 
 // All returns every item in source order (used by the overview table).
@@ -87,7 +87,7 @@ func BuildDoc(prog *Program, comments []Comment) *Doc {
 	return BuildDocWithMacros(prog, comments, nil)
 }
 
-// BuildDocWithMacros is the same but also includes macro definitions (#macro is split out before parsing, so it must be passed in explicitly).
+// BuildDocWithMacros is the same but also includes macro definitions (a macro definition is split out before parsing, so it must be passed in explicitly).
 func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *Doc {
 	d := &Doc{Kind: prog.Kind, Imports: append([]string{}, prog.Imports...)}
 	if d.Kind == "" {
@@ -191,10 +191,9 @@ func BuildDocWithMacros(prog *Program, comments []Comment, macros []*MacroDef) *
 	// Macro (named-parameter macro)
 	for _, m := range macros {
 		noteDecl(m.Pos)
-		sig := "#macro " + m.Name + " (" + strings.Join(m.Params, ", ") + ")"
 		d.Macros = append(d.Macros, &DocItem{
 			Kind: DocMacro, Name: m.Name, Pos: m.Pos,
-			Signature: sig, Doc: docs.docFor(m.Pos.Line),
+			Signature: m.Signature(), Doc: docs.docFor(m.Pos.Line),
 		})
 	}
 	// Top-level functions

@@ -551,11 +551,11 @@ func TestIORedirect(t *testing.T) {
 
 // ============ macro system ============
 
-// Named macros: #macro name (parameters) { body }, called as name(args), parameters are substituted by name
+// Named macros: macro name($a $b) { body }, called as name(args), parameters are substituted by the $name sigil
 func TestMacroNamedParams(t *testing.T) {
-	out, err := runSrc(t, `#macro emit (expr) {
+	out, err := runSrc(t, `macro emit($expr) {
     #when (run) {
-        #return expr
+        #return $expr
     }
 }
 
@@ -572,10 +572,10 @@ fn main(IOStream io) {
 
 // #when(compile) blocks are dropped at run time
 func TestMacroWhenCompileDropped(t *testing.T) {
-	out, err := runSrc(t, `#macro only (x) {
+	out, err := runSrc(t, `macro only($x) {
     #when (compile) { #return io.println("COMPILE-ONLY"); }
     #when (run) {
-        #return x
+        #return $x
     }
 }
 
@@ -592,7 +592,7 @@ fn main(IOStream io) {
 
 // #error raises an error directly in the selected preprocessor branch
 func TestMacroErrorDirective(t *testing.T) {
-	_, err := runSrc(t, `#macro bad (x) {
+	_, err := runSrc(t, `macro bad($x) {
     #when (run) {
         #error("cannot do this at run time")
     }
@@ -659,12 +659,12 @@ pub type struct {
 	}
 }
 
-// Parameter-list and call delimiters () [] {} are interchangeable; the parameter count is unlimited but the call must match
-func TestMacroDelimitersAndArity(t *testing.T) {
+// Call delimiters () [] {} are interchangeable; the definition is macro name($a $b) { body } and the call must match the parameter count
+func TestMacroCallDelimitersAndArity(t *testing.T) {
 	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
-	out, err := runSrc(t, `#macro add [a, b] {
+	out, err := runSrc(t, `macro add($a $b) {
     #when (run) {
-        #return a + b
+        #return $a + $b
     }
 }
 
@@ -678,8 +678,8 @@ fn main(IOStream io) {
 	if out != "42\n3\n" {
 		t.Fatalf("got %q", out)
 	}
-	_, err = runSrc(t, `#macro two (a, b) {
-    #return a
+	_, err = runSrc(t, `macro two($a $b) {
+    #return $a
 }
 
 fn main(IOStream io) {

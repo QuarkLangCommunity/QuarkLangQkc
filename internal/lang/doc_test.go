@@ -275,8 +275,8 @@ func TestDocMacros(t *testing.T) {
 program library;
 
 // 翻倍宏。
-#macro twice (a) {
-    #return a + a
+macro twice($a) {
+    #return $a + $a
 }
 
 // 正常函数。
@@ -296,14 +296,14 @@ pub fn dbl(int n) int {
 		t.Fatalf("文档模型应含 1 个宏，got %d", len(d.Macros))
 	}
 	m := d.Macros[0]
-	if m.Signature != "#macro twice (a)" {
+	if m.Signature != "macro twice($a)" {
 		t.Errorf("宏签名不对: %q", m.Signature)
 	}
 	if !strings.Contains(m.Doc, "翻倍宏") {
 		t.Errorf("宏文档注释不对: %q", m.Doc)
 	}
 	md := d.Markdown(DocOptions{})
-	if !strings.Contains(md, "## 宏") || !strings.Contains(md, "#macro twice (a)") {
+	if !strings.Contains(md, "## 宏") || !strings.Contains(md, "macro twice($a)") {
 		t.Errorf("Markdown 应含宏章节:\n%s", md)
 	}
 	if !strings.Contains(md, "| 宏 | `twice` |") {
