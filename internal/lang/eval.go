@@ -1165,6 +1165,11 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 				}
 			}
 			return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: unary '-' requires a number, got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
+		case "~":
+			if !v.IsInt() {
+				return NilV(), &RunError{Msg: "TypeError: the bitwise complement '~' requires an int operand", Pos: x.Pos, Ctx: ctx}
+			}
+			return wrapI32(^v.Int()), nil
 		case "!":
 			b, err := truthy(v)
 			if err != nil {
@@ -3418,9 +3423,21 @@ func binOp(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 	switch op {
 	case "+", "-", "*", "/", "%":
 		return arith(op, l, r, pos, ctx)
+	case "&", "|", "^":
+		if !l.IsInt() || !r.IsInt() {
+			return NilV(), &RunError{Msg: "TypeError: bitwise and shift operators require int operands", Pos: pos, Ctx: ctx}
+		}
+		a, b := int32(l.Int()), int32(r.Int())
+		switch op {
+		case "&":
+			return IntV(int64(a & b)), nil
+		case "|":
+			return IntV(int64(a | b)), nil
+		}
+		return IntV(int64(a ^ b)), nil
 	case "<<", ">>":
 		if !l.IsInt() || !r.IsInt() {
-			return NilV(), &RunError{Msg: msg("TypeError: 位移运算需要 int 操作数"), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: "TypeError: bitwise and shift operators require int operands", Pos: pos, Ctx: ctx}
 		}
 		li, sh := l.Int(), r.Int()
 		if op == "<<" {

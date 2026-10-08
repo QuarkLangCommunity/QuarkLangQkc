@@ -1539,6 +1539,12 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 				return nil, err
 			}
 			return &Type{Kind: tPtr, Elem: t}, nil
+		case "~":
+			// Bitwise complement: an int view only, until byte/bytes<N> land (the standard's raw-byte layer).
+			if t.Kind != tInt {
+				return nil, c.errf(x.Pos, "TypeError: the bitwise complement '~' requires an int operand, got %s", t)
+			}
+			return tIntV, nil
 		case "*":
 			// *Index<C> is the dereference of a container handle: it is defined as calling get() on it,
 			// so the result type comes from that method rather than from the List-peek builtin.
@@ -1712,9 +1718,9 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 			return tFloatV, nil
 		}
 		return tIntV, nil
-	case "<<", ">>":
+	case "<<", ">>", "&", "|", "^":
 		if l.Kind != tInt || r.Kind != tInt {
-			return nil, c.errf(x.Pos, "TypeError: 位移运算需要 int 操作数，got %s and %s", l, r)
+			return nil, c.errf(x.Pos, "TypeError: bitwise and shift operators require int operands, got %s and %s", l, r)
 		}
 		return tIntV, nil
 	case "===":

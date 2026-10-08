@@ -1425,11 +1425,17 @@ func (p *parser) parseExpr() (Expr, error) { return p.parseOr() }
 func (p *parser) parseOr() (Expr, error)  { return p.parseBin(p.parseAnd, TOr) }
 func (p *parser) parseAnd() (Expr, error) { return p.parseBin(p.parseCmp, TAnd) }
 func (p *parser) parseCmp() (Expr, error) {
-	return p.parseBin(p.parseAdd, TEqStrict, TEq, TNe, TLt, TLe, TGt, TGe)
+	return p.parseBin(p.parseBitOr, TEqStrict, TEq, TNe, TLt, TLe, TGt, TGe)
 }
-func (p *parser) parseAdd() (Expr, error)   { return p.parseBin(p.parseShift, TPlus, TMinus) }
-func (p *parser) parseMul() (Expr, error)   { return p.parseBin(p.parseUnary, TStar, TSlash, TPercent) }
-func (p *parser) parseShift() (Expr, error) { return p.parseBin(p.parseMul, TShl, TShr) }
+
+// Bitwise levels, loosest first: `|`, `^`, `&`. They bind tighter than comparison (so `a & b == c` reads
+// as `(a & b) == c`), looser than `+`/`-`, and `&&`/`||` stay outside them.
+func (p *parser) parseBitOr() (Expr, error)  { return p.parseBin(p.parseBitXor, TPipe) }
+func (p *parser) parseBitXor() (Expr, error) { return p.parseBin(p.parseBitAnd, TCaret) }
+func (p *parser) parseBitAnd() (Expr, error) { return p.parseBin(p.parseAdd, TAmper) }
+func (p *parser) parseAdd() (Expr, error)    { return p.parseBin(p.parseShift, TPlus, TMinus) }
+func (p *parser) parseMul() (Expr, error)    { return p.parseBin(p.parseUnary, TStar, TSlash, TPercent) }
+func (p *parser) parseShift() (Expr, error)  { return p.parseBin(p.parseMul, TShl, TShr) }
 
 func (p *parser) parseBin(left func() (Expr, error), kinds ...TokenKind) (Expr, error) {
 	x, err := left()
@@ -1460,7 +1466,7 @@ func (p *parser) parseUnary() (Expr, error) {
 	// & takes an lvalue's address (BioLang-style references). Declaration forms such as
 	// "&rw u int p = &x;" are recognised by tryParseDecl before expression parsing ever sees them,
 	// so an & reaching this point is an address-of expression.
-	if p.curIs(TBang) || p.curIs(TMinus) || p.curIs(TStar) || p.curIs(TAmper) {
+	if p.curIs(TBang) || p.curIs(TMinus) || p.curIs(TStar) || p.curIs(TAmper) || p.curIs(TTilde) {
 		tok := p.advance()
 		x, err := p.parseUnary()
 		if err != nil {
