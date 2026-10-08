@@ -2,8 +2,8 @@ package lang
 
 // Tests for the bitwise operator family: & | ^ on int views and ~ as a unary complement.
 //
-// The family is the precondition for the standard's byte/bytes<N> layer (§3.3 of spec/STANDARD.md):
-// raw bytes admit bitwise operations and nothing else, and the operators had to exist first.
+// The family is the precondition for the standard's bit/bits<N> layer (§3.3 of spec/STANDARD.md):
+// raw bits admit bitwise operations and nothing else, and the operators had to exist first.
 // Precedence follows Go, not C: the bitwise operators bind tighter than comparison, so `a & b == 0`
 // reads as `(a & b) == 0`, and they bind looser than + - * / %.
 
@@ -62,7 +62,7 @@ fn main(IOStream io) { int m = 0; m = m | 4; m = m | 1; io.println(m & 5); }`, "
 }
 
 // TestBitwiseRejectsNonInts pins the type rule: the family is defined for int views only until
-// byte/bytes<N> land, and the interpreter refuses instead of coercing.
+// bit/bits<N> land, and the interpreter refuses instead of coercing.
 func TestBitwiseRejectsNonInts(t *testing.T) {
 	cases := []struct {
 		name string
