@@ -195,6 +195,9 @@ type DeclStmt struct {
 	Perm  string // permission stack r/w/m for a reference declaration ("&rw u int p"), "" when absent
 	Scope string // follow layer u/f/a/t for a reference declaration, "" when absent
 	Pos   Pos
+	// Bits is the width the declared variable stores in (raw bit/bits<N>, or the uchar view), filled in
+	// by the type checker; 0 means no masking. Every bit past the width is zero (spec §3.1).
+	Bits int
 }
 
 // IncExpr is the postfix move "p++": it advances a movable reference (permission m) to the next
@@ -209,6 +212,9 @@ type AssignStmt struct {
 	Target Expr
 	X      Expr
 	Pos    Pos
+	// Bits is the width the target stores in (raw bit/bits<N>, or the uchar view), filled in by the type
+	// checker; 0 means no masking. Writing b[i] (a single bit) is Bits == 1.
+	Bits int
 }
 
 func (*ExprStmt) isStmt()   {}
@@ -267,16 +273,24 @@ type NewExpr struct {
 type StructLitField struct {
 	Name string
 	X    Expr
+	// Bits is the width of a raw-bits or uchar field of the target struct, filled in by the type
+	// checker; the value is masked to it when the literal is built (0 = no masking).
+	Bits int
 }
 type BinOp struct {
 	Op   string
 	L, R Expr
 	Pos  Pos
+	// Bits is the width of a raw-bits operation (& | ^ << >> on bit/bits<N>), filled in by the type
+	// checker; 0 means ordinary view arithmetic, where the runtime's int32 rules apply (spec §3.3).
+	Bits int
 }
 type UnOp struct {
 	Op  string
 	X   Expr
 	Pos Pos
+	// Bits is the width of a raw-bits complement (~bit / ~bits<N>), filled in by the type checker; 0 = a view.
+	Bits int
 }
 type CallExpr struct {
 	Fn    Expr
@@ -284,6 +298,10 @@ type CallExpr struct {
 	Sign  *SignCall
 	Pos   Pos
 	FnIdx int // function index resolved at compile time (-1 = unresolved/variable call); eval indexes FnList directly, avoiding a map
+
+	// ConvDst is the destination type of a conversion call T(x) (spec §3.4), filled in by the type
+	// checker; "" means the callee is an ordinary function, not a conversion.
+	ConvDst string
 
 	// Argument classification, computed once on the first evaluation (superinstruction-style bookkeeping):
 	// when no argument can form an lvalue cell, the argument list is evaluated without the per-argument
@@ -310,6 +328,9 @@ type IndexExpr struct {
 	X   Expr
 	Idx Expr
 	Pos Pos
+	// Bits is the width of the raw-bits container this subscript reads a bit from, filled in by the type
+	// checker; 0 means an ordinary List index.
+	Bits int
 }
 
 func (*IntLit) isExpr()    {}

@@ -3,6 +3,7 @@ package lang
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -37,6 +38,8 @@ const (
 	tLib
 	tInterface
 	tFile
+	tBits  // raw bits: bit (width 1) and bits<N> (spec §3.1)
+	tUchar // the unsigned 8-bit view over bits<8> (spec §3.2)
 )
 
 type Type struct {
@@ -47,6 +50,7 @@ type Type struct {
 	FName  string           // tFunc: function name ("" = unknown); tStruct: struct name
 	Args   []*Type          // tStruct: generic instance arguments
 	Fields map[string]*Type // tStruct anonymous (FName="."): field type table
+	Bits   int              // tBits: the width in bits (>= 1); 0 for every other kind
 }
 
 func mk(k tKind) *Type         { return &Type{Kind: k} }
@@ -72,12 +76,115 @@ var (
 	tTaskmV        = mk(tTaskm)
 )
 
+// ============ The bit storage family (spec §3) ============
+
+// bitsWidthLimit is the widest raw type this implementation stores; a wider bits<N> is refused here,
+// in the shared frontend, so that both engines refuse it with one identical message.
+const bitsWidthLimit = 32
+
+// isRawBits reports whether a type is raw bits: bit or bits<N> (spec §3.1).
+func isRawBits(t *Type) bool { return t != nil && t.Kind == tBits }
+
+// rawBitsOf builds the raw-bits type of width n (width 1 is spelled bit, because bits<1> IS bit).
+func rawBitsOf(n int) *Type { return &Type{Kind: tBits, Bits: n} }
+
+// isBitsTypeName reports whether a type name belongs to the raw-bits family (bit or bits<N>).
+func isBitsTypeName(s string) bool { return s == "bit" || strings.HasPrefix(s, "bits<") }
+
+// bitsWidthOf validates the width written between the angle brackets of bits<N>.
+func bitsWidthOf(inner string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(inner))
+	if err != nil {
+		return 0, fmt.Errorf("CompileError: bits<%s> needs a constant integer width (bit, or bits<N> with 1 <= N <= %d)", inner, bitsWidthLimit)
+	}
+	if n < 1 {
+		return 0, fmt.Errorf("CompileError: bits<%d> is not a width: N must be at least 1 (bits<1> is bit)", n)
+	}
+	if n > bitsWidthLimit {
+		return 0, fmt.Errorf("CompileError: bits<%d> is not supported: raw bits are limited to %d bits (bit, or bits<N> with 1 <= N <= %d)", n, bitsWidthLimit, bitsWidthLimit)
+	}
+	return n, nil
+}
+
+// rawBitsNameWidth parses a raw-bits type name ("bit" or "bits<N>") into its validated width.
+func rawBitsNameWidth(name string) (int, error) {
+	if name == "bit" {
+		return 1, nil
+	}
+	return bitsWidthOf(strings.TrimSuffix(strings.TrimPrefix(name, "bits<"), ">"))
+}
+
+// viewWidth returns the bit width of the view a raw sequence may be reinterpreted as (spec §3.2);
+// 0 means the type is not an integer view and cannot take part in a reinterpretation.
+func viewWidth(t *Type) int {
+	switch t.Kind {
+	case tBool:
+		return 1
+	case tUchar:
+		return 8
+	case tInt:
+		return 32 // int is int32 in this implementation (long and char share the same view here)
+	}
+	return 0
+}
+
+// isIntView reports whether a type is an integer view (int, long, char or uchar).
+func isIntView(t *Type) bool { return t != nil && (t.Kind == tInt || t.Kind == tUchar) }
+
+// isSignedView reports whether a view reads its bits as two's complement.
+func isSignedView(t *Type) bool { return t != nil && t.Kind == tInt }
+
+// storeWidth returns the width a value stored in this type is masked to: raw bits and the uchar view
+// always store exactly their width, everything else stores its own bits (0 = no masking).
+func storeWidth(t *Type) int {
+	if isRawBits(t) {
+		return t.Bits
+	}
+	if t != nil && t.Kind == tUchar {
+		return 8
+	}
+	return 0
+}
+
+// isIntConst reports whether an expression is an integer constant (a literal, possibly negated) —
+// a constant is not a view value, so it may be materialized at any raw width.
+func isIntConst(e Expr) bool {
+	_, ok := intConstValue(e)
+	return ok
+}
+
+// intConstValue returns the value of an integer constant expression (a literal, possibly negated).
+func intConstValue(e Expr) (int64, bool) {
+	switch v := e.(type) {
+	case *IntLit:
+		return v.V, true
+	case *UnOp:
+		if v.Op == "-" {
+			if n, ok := intConstValue(v.X); ok {
+				return -n, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// checkConstBitIndex refuses a constant bit index outside 0..N-1 (spec §3.3); a non-constant index is
+// checked at run time instead.
+func (c *checker) checkConstBitIndex(idx Expr, raw *Type) error {
+	n, ok := intConstValue(idx)
+	if !ok || (n >= 0 && n < int64(raw.Bits)) {
+		return nil
+	}
+	return c.errf(posOf(idx), "CompileError: bit index %d is out of range for %s (0..%d)", n, raw, raw.Bits-1)
+}
+
 var kindName = map[tKind]string{
 	tInt: "int", tFloat: "float", tString: "String", tBool: "bool",
 	tNil: "nil", tAny: "interface{}", tFuncBuffer: "FuncBuffer",
 	tIOStream: "IOStream", tInputStream: "InputStream", tOutputStream: "OutputStream",
 	tChannel: "Channel", tTask: "Task", tMemorize: "memorize", tMemory: "memory",
 	tFunc: "fn", tStruct: "struct", tTaskm: "taskm", tPtr: "ptr", tCopyd: "Copyd", tNull: "null", tTypeVar: "typevar", tLib: "library", tInterface: "interface", tFile: "file",
+	tBits: "bit", tUchar: "uchar",
 }
 
 func (t *Type) String() string {
@@ -112,6 +219,11 @@ func (t *Type) String() string {
 		return t.Elem.String() // the copyd modifier affects passing, not the type's identity
 	case tNull:
 		return "null"
+	case tBits:
+		if t.Bits <= 1 {
+			return "bit" // bits<1> IS bit (spec §3.1)
+		}
+		return fmt.Sprintf("bits<%d>", t.Bits)
 	}
 	if n, ok := kindName[t.Kind]; ok {
 		return n
@@ -135,6 +247,22 @@ func assignable(from, to *Type) bool {
 	}
 	if from.Kind == tInt && to.Kind == tFloat {
 		return true
+	}
+	// Raw bits (spec §3.4): only raw bits of the very same width are assignable; a view reaches them
+	// through the conversion call T(x), which is a reinterpretation or an explicit value conversion.
+	if isRawBits(to) {
+		return isRawBits(from) && from.Bits == to.Bits
+	}
+	if isRawBits(from) {
+		return false
+	}
+	// uchar is the 8-bit unsigned view: any integer view is assignable to it by value conversion
+	// (narrowing keeps the low bits, spec §3.4), and it is assignable to every integer view.
+	if to.Kind == tUchar {
+		return isIntView(from)
+	}
+	if from.Kind == tUchar {
+		return isIntView(to)
 	}
 	// Pointer: a value may be assigned to a pointer; null may be assigned to a pointer
 	if to.Kind == tPtr {
@@ -244,6 +372,17 @@ func parseTypeStr(s string) (*Type, error) {
 		return tFloatV, nil
 	case "bool":
 		return tBoolV, nil
+	case "uchar":
+		return mk(tUchar), nil // the unsigned 8-bit view over bits<8> (spec §3.2)
+	case "bit":
+		return rawBitsOf(1), nil
+	case "bits":
+		// bits<N> takes a NUMBER argument, not a type argument (spec §3.1)
+		n, err := bitsWidthOf(inner)
+		if err != nil {
+			return nil, err
+		}
+		return rawBitsOf(n), nil
 	case "String":
 		return tStringV, nil
 	case "void":
@@ -783,6 +922,18 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		return tStringV, nil
 	case "bool":
 		return tBoolV, nil
+	case "uchar":
+		return mk(tUchar), nil // the unsigned 8-bit view over bits<8> (spec §3.2)
+	case "bit":
+		return rawBitsOf(1), nil
+	case "bits":
+		// bits<N> takes a NUMBER argument, not a type argument (spec §3.1); a wider N is refused here,
+		// in the shared frontend, so both engines refuse it identically.
+		n, err := bitsWidthOf(inner)
+		if err != nil {
+			return nil, &CheckError{Msg: err.Error(), Pos: pos}
+		}
+		return rawBitsOf(n), nil
 	case "void":
 		return tAnyV, nil // v2: void = the default name of the empty interface interface{}
 	case "FuncBuffer":
@@ -1038,7 +1189,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if err != nil {
 				return err
 			}
-			if c.curRet != nil && !assignable(t, c.curRet) {
+			if c.curRet != nil && !passable(t, c.curRet) {
 				return c.errf(s.Pos, "TypeError: return type is %s, got %s", c.curRet, t)
 			}
 			if c.curRet != nil {
@@ -1174,9 +1325,11 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 					if err := c.checkIfaceStrict(fv, want, s.Pos, "struct literal "+s.Name+"."+f.Name); err != nil {
 						return err
 					}
-					if !assignable(fv, want) {
+					if !assignable(fv, want) && !(isRawBits(want) && isIntConst(f.X)) {
 						return c.errf(s.Pos, "TypeError: 字段 %q: cannot assign %s to %s", f.Name, fv, want)
 					}
+					// a raw-bits or uchar field stores exactly its width (f is a copy: write the slice element)
+					sl.Fields[i].Bits = storeWidth(want)
 				}
 				sl.Name = typ.FName
 				v.init = true
@@ -1192,7 +1345,9 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				if err != nil {
 					return err
 				}
-				if !assignable(it, typ) {
+				// An integer constant is materialized directly at a raw width (bits<8> a = 0xF0),
+				// because a constant is not a view value (spec §3.4).
+				if !assignable(it, typ) && !(isRawBits(typ) && isIntConst(s.Init)) {
 					return c.errf(s.Pos, "TypeError: cannot assign %s to %s", it, typ)
 				}
 				// R2 reference rules apply to declarations too, not only to later assignments: a
@@ -1218,6 +1373,9 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		} else if typ.Kind == tStruct || typ.Kind == tPtr {
 			v.init = true // struct zero-value instance / pointer zero value (null) is usable
 		}
+		// s.Bits tells both engines the width the variable stores in (raw bits / uchar); every bit past
+		// the width is zero, so declarations and assignments mask to it (spec §3.1).
+		s.Bits = storeWidth(typ)
 		return sc.declare(s.Name, v, s.Pos)
 	case *AssignStmt:
 		t, err := c.infer(s.X, sc)
@@ -1239,9 +1397,10 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if isRefKind(v.typ) && !refAllows(v.refPerm, "w") {
 				return c.errf(target.Pos, msg("TypeError: reference %q has permission %q and cannot be written through (w is missing)", target.Name, v.refPerm))
 			}
-			if !assignable(t, v.typ) {
+			if !assignable(t, v.typ) && !(isRawBits(v.typ) && isIntConst(s.X)) {
 				return c.errf(s.Pos, "TypeError: cannot assign %s to %s", t, v.typ)
 			}
+			s.Bits = storeWidth(v.typ) // raw bits and uchar store exactly their width (spec §3.1)
 			// R2 permission enforcement (reference assignment): the source must grant everything the
 			// destination requires, and its scope must not be narrower than the destination's.
 			if isRefKind(v.typ) {
@@ -1271,6 +1430,16 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				return err
 			}
 			switch recvT.Kind {
+			case tBits:
+				// b[i] = v writes one bit (spec §3.3): the value is a bit, or an integer constant.
+				if !assignable(t, rawBitsOf(1)) && !isIntConst(s.X) {
+					return c.errf(target.Pos, "TypeError: cannot assign %s to %s[i] (%s)", t, recvT, rawBitsOf(1))
+				}
+				if err := c.checkConstBitIndex(target.Idx, recvT); err != nil {
+					return err
+				}
+				target.Bits = recvT.Bits
+				s.Bits = 1
 			case tHashTable:
 				if recvT.Key != nil && !assignable(kidx, recvT.Key) {
 					return c.errf(target.Pos, "TypeError: 索引键需要 %s，给了 %s", recvT.Key, kidx)
@@ -1315,9 +1484,10 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if err != nil {
 				return err
 			}
-			if !assignable(t, ft) {
+			if !assignable(t, ft) && !(isRawBits(ft) && isIntConst(s.X)) {
 				return c.errf(s.Pos, "TypeError: cannot assign %s to %s.%s (%s)", t, objT.FName, target.Name, ft)
 			}
+			s.Bits = storeWidth(ft)
 			if err := c.checkIfaceStrict(t, ft, s.Pos, objT.FName+"."+target.Name); err != nil {
 				return err
 			}
@@ -1540,8 +1710,13 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 			}
 			return &Type{Kind: tPtr, Elem: t}, nil
 		case "~":
-			// Bitwise complement: an int view only, until byte/bytes<N> land (the standard's raw-byte layer).
-			if t.Kind != tInt {
+			// Bitwise complement: an int view, or raw bits, whose width the complement keeps (spec §3.3).
+			// A uchar is promoted to the int view first, like every other uchar operation.
+			if isRawBits(t) {
+				x.Bits = t.Bits
+				return rawBitsOf(t.Bits), nil
+			}
+			if t.Kind != tInt && t.Kind != tUchar {
 				return nil, c.errf(x.Pos, "TypeError: the bitwise complement '~' requires an int operand, got %s", t)
 			}
 			return tIntV, nil
@@ -1565,8 +1740,11 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 					}
 				}
 			}
-			if t.Kind != tInt && t.Kind != tFloat {
+			if t.Kind != tInt && t.Kind != tFloat && t.Kind != tUchar {
 				return nil, c.errf(x.Pos, "TypeError: unary '-' requires a number, got %s", t)
+			}
+			if t.Kind == tUchar {
+				return tIntV, nil // integer promotion: the negation does not fit the 8-bit unsigned view
 			}
 			return t, nil
 		case "!":
@@ -1593,6 +1771,21 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 		if err != nil {
 			return nil, err
 		}
+		// b[i] reads the i-th bit of raw bits as a bit (spec §3.3); the width is stamped for the engines.
+		if isRawBits(t) {
+			it, err := c.infer(x.Idx, sc)
+			if err != nil {
+				return nil, err
+			}
+			if !isIntView(it) {
+				return nil, c.errf(x.Pos, "TypeError: a bit index must be int, got %s", it)
+			}
+			if err := c.checkConstBitIndex(x.Idx, t); err != nil {
+				return nil, err
+			}
+			x.Bits = t.Bits
+			return rawBitsOf(1), nil
+		}
 		if t.Kind != tList && t.Kind != tPtr {
 			return nil, c.errf(x.Pos, "TypeError: indexing requires a List or a pointer block, got %s", t)
 		}
@@ -1608,7 +1801,9 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 	return nil, c.errf(Pos{}, "internal: unknown expression node")
 }
 
-func isNumeric(t *Type) bool { return t.Kind == tInt || t.Kind == tFloat }
+func isNumeric(t *Type) bool {
+	return t.Kind == tInt || t.Kind == tFloat || t.Kind == tUchar
+}
 
 // sameSig reports whether two function signatures are identical (same parameter count and type annotations).
 func sameSig(a, b *Func) bool {
@@ -1665,6 +1860,63 @@ func (c *checker) bestMatchT(defs []*Func, tys []*Type) *Func {
 	return best
 }
 
+// rawSide returns the width of a raw-bits operand, or 0 when the operand is not raw bits.
+func rawSide(t *Type) int {
+	if isRawBits(t) {
+		return t.Bits
+	}
+	return 0
+}
+
+// inferRawBin types an operation with at least one raw-bits operand: the bitwise family and equality
+// are admitted (spec §3.3), arithmetic, ordering and logic are refused with a precise message.
+func (c *checker) inferRawBin(x *BinOp, l, r *Type) (*Type, error) {
+	lw, rw := rawSide(l), rawSide(r)
+	switch x.Op {
+	case "===":
+		return tBoolV, nil // storage identity accepts any pair of types
+	case "&", "|", "^", "==", "!=":
+		w, err := c.rawPairWidth(x, l, r, lw, rw)
+		if err != nil {
+			return nil, err
+		}
+		if x.Op == "==" || x.Op == "!=" {
+			return tBoolV, nil
+		}
+		x.Bits = w // the interpreter and the compiler mask the result to this width
+		return rawBitsOf(w), nil
+	case "<<", ">>":
+		if lw == 0 {
+			return nil, c.errf(x.Pos, "TypeError: %s shifts raw bits, so the left operand must be raw bits, got %s", x.Op, l)
+		}
+		// The shift count is a distance: raw bits of any width, or an integer view (spec §3.3).
+		if rw == 0 && !isIntView(r) {
+			return nil, c.errf(x.Pos, "TypeError: %s needs a shift count of int or raw bits, got %s", x.Op, r)
+		}
+		x.Bits = lw
+		return rawBitsOf(lw), nil
+	case "+", "-", "*", "/", "%":
+		return nil, c.errf(x.Pos, "TypeError: raw bits admit no arithmetic: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)", x.Op, l, x.Op)
+	case "<", "<=", ">", ">=":
+		return nil, c.errf(x.Pos, "TypeError: raw bits admit no ordering: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)", x.Op, l, x.Op)
+	}
+	return nil, c.errf(x.Pos, "TypeError: raw bits admit only & | ^ ~ << >> == != and b[i], not '%s' (spec §3.3)", x.Op)
+}
+
+// rawPairWidth returns the common width of two operands of a bitwise or equality operation on raw
+// bits: both sides raw of one width, or a raw side plus an integer constant that adapts to it.
+func (c *checker) rawPairWidth(x *BinOp, l, r *Type, lw, rw int) (int, error) {
+	switch {
+	case lw != 0 && rw != 0 && lw != rw:
+		return 0, c.errf(x.Pos, "TypeError: %s and %s have different widths (%d and %d bits): a bitwise operation needs equal widths (spec §3.4)", l, r, lw, rw)
+	case lw != 0 && rw != 0:
+		return lw, nil
+	case lw != 0 && isIntConst(x.R), rw != 0 && isIntConst(x.L):
+		return lw + rw, nil // exactly one side is raw, and a constant is not a view value
+	}
+	return 0, c.errf(x.Pos, "TypeError: %s on %s and %s mixes raw bits with a view: both sides must be raw bits of one width (spec §3.3)", x.Op, l, r)
+}
+
 func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 	l, err := c.infer(x.L, sc)
 	if err != nil {
@@ -1687,6 +1939,10 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 	r, err := c.infer(x.R, sc)
 	if err != nil {
 		return nil, err
+	}
+	// Raw bits admit the bitwise family and equality, and nothing else (spec §3.3)
+	if isRawBits(l) || isRawBits(r) {
+		return c.inferRawBin(x, l, r)
 	}
 	// Operation overloading: same struct and an aggregate method matches → return the method's type
 	if l.Kind == tStruct && r.Kind == tStruct && l.FName == r.FName {
@@ -1719,10 +1975,10 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 		}
 		return tIntV, nil
 	case "<<", ">>", "&", "|", "^":
-		if l.Kind != tInt || r.Kind != tInt {
+		if !isIntView(l) || !isIntView(r) {
 			return nil, c.errf(x.Pos, "TypeError: bitwise and shift operators require int operands, got %s and %s", l, r)
 		}
-		return tIntV, nil
+		return tIntV, nil // uchar promotes to the int view, like every other uchar operation
 	case "===":
 		// Storage identity: the operands' types do not matter, only where they live, so any pair of
 		// types is accepted. It is a language primitive and cannot be overloaded (opMethodFor has no
@@ -2243,7 +2499,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 						if err != nil {
 							return nil, err
 						}
-						if !assignable(args[i+2], pt) {
+						if !passable(args[i+2], pt) {
 							return nil, c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, args[i+2], pt)
 						}
 					}
@@ -2296,7 +2552,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				if err != nil {
 					return nil, err
 				}
-				if !assignable(args[i], pt) {
+				if !passable(args[i], pt) {
 					return nil, c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, name, args[i], pt)
 				}
 			}
@@ -2338,6 +2594,90 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		return c.methodType(recv.Elem, name, args, pos)
 	}
 	return nil, c.errf(pos, "TypeError: no method %q on %s", name, recv)
+}
+
+// isConvTypeName reports whether a name can head a conversion call T(x) (spec §3.4).
+func isConvTypeName(name string) bool {
+	switch name {
+	case "bit", "uchar", "int", "long", "char", "bool":
+		return true
+	}
+	return isBitsTypeName(name)
+}
+
+// convDstType resolves the destination type of a conversion call; a width outside 1..32 is refused
+// with the shared raw-bits message.
+func (c *checker) convDstType(name string, pos Pos) (*Type, error) {
+	switch name {
+	case "uchar":
+		return mk(tUchar), nil
+	case "int", "long", "char":
+		return tIntV, nil
+	case "bool":
+		return tBoolV, nil
+	}
+	n, err := rawBitsNameWidth(name)
+	if err != nil {
+		return nil, &CheckError{Msg: err.Error(), Pos: pos}
+	}
+	return rawBitsOf(n), nil
+}
+
+// typeWidth returns the bit width of any type that has one (raw bits and the views of §3.2); 0 = no width.
+func typeWidth(t *Type) int {
+	if isRawBits(t) {
+		return t.Bits
+	}
+	return viewWidth(t)
+}
+
+// convWidthErr is the diagnostic for a conversion whose operands do not line up in width (spec §3.4).
+func (c *checker) convWidthErr(dst, src *Type, pos Pos) error {
+	return c.errf(pos, "TypeError: %s(%s) is a width mismatch: %s is %d bits wide and %s is %d bits wide (spec §3.4)", dst, src, dst, typeWidth(dst), src, typeWidth(src))
+}
+
+// convNotErr is the diagnostic for a conversion the spec does not define (spec §3.4).
+func (c *checker) convNotErr(dst, src *Type, pos Pos) error {
+	return c.errf(pos, "TypeError: %s(%s) is not a conversion: a reinterpretation needs a view of the same width, and a value conversion needs two integer views (spec §3.4)", dst, src)
+}
+
+// convResult types one conversion T(x): a reinterpretation, or a value conversion that narrows by
+// keeping the low bits (spec §3.4).
+func (c *checker) convResult(dst, src *Type, arg Expr, pos Pos) (*Type, error) {
+	if isRawBits(dst) {
+		switch {
+		case isRawBits(src) && src.Bits == dst.Bits:
+			return dst, nil // raw to raw: the same bits
+		case viewWidth(src) == dst.Bits:
+			return dst, nil // drop the interpretation: free
+		case isIntConst(arg):
+			return dst, nil // an integer constant is materialized at this width
+		case typeWidth(src) != 0:
+			return nil, c.convWidthErr(dst, src, pos)
+		}
+		return nil, c.convNotErr(dst, src, pos)
+	}
+	if dst.Kind == tUchar {
+		switch {
+		case isRawBits(src) && src.Bits == 8:
+			return dst, nil // gain the 8-bit view: free
+		case isIntView(src):
+			return dst, nil // value conversion: the low 8 bits are kept
+		case typeWidth(src) != 0:
+			return nil, c.convWidthErr(dst, src, pos)
+		}
+		return nil, c.convNotErr(dst, src, pos)
+	}
+	if isRawBits(src) {
+		if src.Bits != viewWidth(dst) {
+			return nil, c.convWidthErr(dst, src, pos)
+		}
+		return dst, nil // gain the view: free
+	}
+	if isIntView(src) || (src.Kind == tBool && dst.Kind == tBool) {
+		return dst, nil // value conversion between views
+	}
+	return nil, c.convNotErr(dst, src, pos)
 }
 
 func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
@@ -2453,6 +2793,23 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			return c.resolveType(fn.Ret, x.Pos)
 		}
 		return tFuncBufferV, nil
+	}
+	// Conversion call T(x) (spec §3.4): the callee names a type, and the operand decides the meaning.
+	// The canonical destination is stamped on the node so that both engines apply the same rule.
+	if len(x.Args) == 1 && isConvTypeName(id.Name) {
+		dst, err := c.convDstType(id.Name, id.Pos)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := c.convResult(dst, args[0], x.Args[0], x.Pos); err != nil {
+			return nil, err
+		}
+		if isRawBits(dst) {
+			x.ConvDst = dst.String() // bits<1> is stamped as bit
+		} else {
+			x.ConvDst = id.Name // int/long/char keep their spelling: they are distinct in the backend
+		}
+		return dst, nil
 	}
 	switch id.Name {
 	case "qkexec", "qkexecv":
@@ -2609,6 +2966,22 @@ func (c *checker) inferGenSubst(fn *Func, args []Expr, sc *cScope) (map[string]*
 }
 
 // checkCallArgs checks argument count and types against the parameters.
+// passable reports whether a value of type from may cross a function boundary as a value of type to
+// (an argument, or a returned value).
+//
+// A raw-bits or uchar type takes exactly its own type at a boundary: the interpreter binds parameters
+// by reference while the compiled code binds them by value, so an implicit narrowing there would have
+// to copy the argument — and the two engines would stop agreeing about writes. A narrowing crossing is
+// therefore spelled out (`uchar(x)`) instead of being implied, and a declaration or assignment (where
+// masking is specified, §3.1) is unaffected.
+func passable(from, to *Type) bool {
+	if to != nil && (to.Kind == tUchar || isRawBits(to)) {
+		return assignable(from, to) && (from == nil || from.Kind == to.Kind)
+	}
+	return assignable(from, to)
+}
+
+// checkCallArgs validates the argument list of a direct call against the callee's parameters.
 func (c *checker) checkCallArgs(fn *Func, args []Expr, sc *cScope, pos Pos) error {
 	argTys, err := c.inferArgs(args, sc)
 	if err != nil {
@@ -2639,12 +3012,12 @@ func (c *checker) checkCallArgs(fn *Func, args []Expr, sc *cScope, pos Pos) erro
 				if err := c.checkIfaceCovers(argTys[i].FName, pt.FName); err != nil {
 					return c.errf(pos, "TypeError: argument %d of %s: %v", i+1, fn.Name, err)
 				}
-			} else if !assignable(argTys[i], pt) {
+			} else if !passable(argTys[i], pt) {
 				return c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, argTys[i], pt)
 			}
 			continue
 		}
-		if !assignable(argTys[i], pt) {
+		if !passable(argTys[i], pt) {
 			return c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, argTys[i], pt)
 		}
 		if err := c.checkIfaceStrict(argTys[i], pt, pos, fmt.Sprintf("argument %d of %s", i+1, fn.Name)); err != nil {
@@ -2944,7 +3317,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 					if err != nil {
 						return nil, err
 					}
-					if !assignable(args[i], pt) {
+					if !passable(args[i], pt) {
 						return nil, c.errf(x.Pos, "TypeError: argument %d of %s::%s: cannot assign %s to %s", i+1, x.Scope, x.Name, args[i], pt)
 					}
 				}
