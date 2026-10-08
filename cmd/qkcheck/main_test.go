@@ -166,6 +166,9 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 	root := filepath.Join("..", "..")
 	var files []string
 	err := filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if skipNestedRepo(p, fi, root) {
+			return filepath.SkipDir
+		}
 		if err != nil {
 			return err
 		}
@@ -265,4 +268,16 @@ func itoa(n int) string {
 		return "-" + string(b)
 	}
 	return string(b)
+}
+
+// skipNestedRepo reports whether a walked directory belongs to a different repository. The QuarkLang
+// family keeps its sibling projects inside this workspace, each with its own .git, and another
+// repository's files are not this project's files: walking into them would let their sources decide
+// this project's gates.
+func skipNestedRepo(path string, info os.FileInfo, root string) bool {
+	if info == nil || !info.IsDir() || path == root {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(path, ".git"))
+	return err == nil
 }

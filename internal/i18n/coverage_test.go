@@ -46,6 +46,9 @@ func wiredTemplates(t *testing.T) map[string][]string {
 	fset := token.NewFileSet()
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if skipNestedRepo(path, info, root) {
+			return filepath.SkipDir
+		}
 		if err != nil || info.IsDir() {
 			return nil
 		}
@@ -281,4 +284,16 @@ func truncate(s string) string {
 		return s[:90] + "…"
 	}
 	return s
+}
+
+// skipNestedRepo reports whether a walked directory belongs to a different repository. The QuarkLang
+// family keeps its sibling projects inside this workspace, each with its own .git, and another
+// repository's files are not this project's files: walking into them would let their sources decide
+// this project's gates.
+func skipNestedRepo(path string, info os.FileInfo, root string) bool {
+	if info == nil || !info.IsDir() || path == root {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(path, ".git"))
+	return err == nil
 }
