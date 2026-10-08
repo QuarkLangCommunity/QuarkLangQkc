@@ -247,4 +247,16 @@ var compilerTable = map[string]string{
 	"using %s to initialize %s variable %q is not supported":                        "暂未支持用 %s 初始化 %s 变量 %q",
 	"using %s to initialize interface %s variable %q is not supported":              "暂未支持用 %s 初始化接口 %s 变量 %q",
 	"%s with %q is not supported (bool required)":                                   "暂未支持对 %s 使用 %q（需要 bool）",
+
+	// Raw bits (bit / bits<N>) and the uchar view: the conversion and indexing messages of spec §3.
+	"a bit index must be int, got %s":                                                                                  "位下标必须是 int，得到 %s",
+	"assigning %s to a bit is not supported":                                                                           "暂未支持把 %s 赋给一个 bit",
+	"b[i] = v requires raw bits, got %s":                                                                               "b[i] = v 需要原始位，得到 %s",
+	"subscripting a bit requires raw bits, got %s":                                                                     "对位取下标需要原始位，得到 %s",
+	"the bitwise complement '~' requires an int operand, got %s":                                                       "取反运算符 '~' 需要 int 操作数，得到 %s",
+	"using %q on %s is not supported (raw bits admit == and != only)":                                                  "暂未支持对 %s 使用 %q（原始位只支持 == 与 !=）",
+	"using %q on %s / %s is not supported (bitwise operators need int views or raw bits)":                              "暂未支持对 %s / %s 使用 %q（位运算需要 int 视图或原始位）",
+	"using %q on %s / %s is not supported (raw bits need one width)":                                                   "暂未支持对 %s / %s 使用 %q（原始位需要统一的宽度）",
+	"using %q on %s / %s is not supported: the widths differ":                                                          "暂未支持对 %s / %s 使用 %q：两侧宽度不同",
+	"using %s to initialize %s variable %q is not supported (raw bits take raw bits of the same width, or a constant)": "暂未支持用 %s 初始化 %s 变量 %q（原始位只接受同宽度的原始位或常量）",
 }

@@ -71,6 +71,7 @@ const (
 	kTable    // HashTable method call (put/get/contains/remove/size/keys)
 	kNewRef   // new T: allocate a single-element cell and return a T& pointer
 	kListS    // List<String> literal: a heap %ListS whose buffer holds i8* elements
+	kConv     // conversion call T(x) (spec §3.4): s names the destination type
 )
 
 // expr is a cgen IR expression. typ is filled in by lowering with the language type ("?" = undecided).
@@ -82,6 +83,7 @@ type expr struct {
 	s    string
 	op   string
 	typ  string
+	bits int // raw-bits width of the operation (kBin/kIndex), 0 = an ordinary view operation
 	l, r *expr
 
 	call   *callExpr   // kCall / kMemoCall
@@ -154,6 +156,15 @@ type indexAssignStmt struct {
 	recv *expr // List expression (variable/struct field/…)
 	idx  *expr
 	x    *expr
+}
+
+// bitAssignStmt writes one bit of raw bits — b[i] = v (spec §3.3) — by reading the raw value,
+// replacing that bit and storing it back.
+type bitAssignStmt struct {
+	recv *expr
+	idx  *expr
+	x    *expr
+	bits int
 }
 
 type fieldAssignStmt struct {
@@ -416,6 +427,7 @@ type emitter struct {
 	needPtrToStr   bool
 	needStrCmp     bool
 	needPanic      bool
+	needPanicBits  bool
 }
 
 func newEmitter(lp *lowered) *emitter {
@@ -673,6 +685,12 @@ func (e *emitter) irElem(t string) string {
 
 // ir returns the LLVM representation of a language type.
 func (e *emitter) ir(t string) string {
+	if w := bitsNameWidth(t); w > 0 {
+		return bitsLlvmType(w) // raw bits use the smallest LLVM integer that holds the width
+	}
+	if t == "uchar" {
+		return "i8" // the unsigned 8-bit view over bits<8>
+	}
 	switch t {
 	case "int":
 		return "i32"
@@ -738,6 +756,9 @@ func (e *emitter) ir(t string) string {
 
 // alignOf returns the alignment of a type in bytes.
 func (e *emitter) alignOf(t string) int {
+	if w := storeNameWidth(t); w > 0 {
+		return bitsLlvmSize(w) // the storage type's natural alignment
+	}
 	switch t {
 	case "bool":
 		return 1
@@ -1000,6 +1021,9 @@ func (e *emitter) emitProgram(lp *lowered) string {
 		if e.needPanic {
 			helpers += "declare void @ql_panic(i8*, i32)\n"
 		}
+		if e.needPanicBits {
+			helpers += "declare void @ql_panic_bits(i32, i32, i32)\n"
+		}
 	} else {
 		if e.needIntToStr || forceHelpers {
 			helpers += intToStrHelper
@@ -1012,6 +1036,9 @@ func (e *emitter) emitProgram(lp *lowered) string {
 		}
 		if e.needPanic || forceHelpers {
 			helpers += panicHelper
+		}
+		if e.needPanicBits || forceHelpers {
+			helpers += panicBitsHelper
 		}
 	}
 	// The runner's parameter types may emit struct definitions on demand, so this must happen before reading e.types
@@ -1317,6 +1344,9 @@ func (e *emitter) preRegisterStmt(s stmt) {
 	case *indexAssignStmt:
 		e.preRegister(st.idx)
 		e.preRegister(st.x)
+	case *bitAssignStmt:
+		e.preRegister(st.idx)
+		e.preRegister(st.x)
 	case *fieldAssignStmt:
 		e.preRegister(st.recv)
 		e.preRegister(st.x)
@@ -1429,6 +1459,8 @@ func (e *emitter) emitStmt(s stmt) {
 		e.emitAssign(st)
 	case *indexAssignStmt:
 		e.emitIndexAssign(st)
+	case *bitAssignStmt:
+		e.emitBitAssign(st)
 	case *fieldAssignStmt:
 		e.emitFieldAssign(st)
 	case *tryStmt:
@@ -1492,7 +1524,7 @@ func (e *emitter) emitReturn(st *returnStmt) {
 		}
 	}
 	v, vt := e.compileExpr(st.x)
-	v = e.coerce(v, vt, e.curRet)
+	v = e.coerceTo(v, vt, e.curRet)
 	e.emitInstr("ret %s %s", e.ir(e.curRet), v)
 	e.funcReturned = true
 }
@@ -1521,7 +1553,7 @@ func (e *emitter) compileArgs(c *callExpr) ([]string, bool) {
 		if want == "?" {
 			want = vt
 		}
-		v = e.coerce(v, vt, want)
+		v = e.coerceTo(v, vt, want)
 		// Variadic (printf style) is not covered here; every IR function in this backend has fixed arity
 		out = append(out, e.ir(want)+" "+v)
 	}
@@ -1545,7 +1577,7 @@ func (e *emitter) compileArgAddr(x *expr, want string) (string, string, bool) {
 	if want == "" || want == "?" {
 		want = vt
 	}
-	v = e.coerce(v, vt, want)
+	v = e.coerceTo(v, vt, want)
 	llt := e.ir(want)
 	slot := e.newReg()
 	e.emitInstr("%s = alloca %s, align %d", slot, llt, e.alignOf(want))
@@ -1629,6 +1661,9 @@ func (e *emitter) sigRet(name string) string {
 func (e *emitter) coerce(reg, from, to string) string {
 	if from == to || to == "" || to == "?" {
 		return reg
+	}
+	if from == "uchar" || isBitsT(from) || to == "uchar" || isBitsT(to) {
+		return e.convToType(reg, from, to) // raw bits and uchar re-read at the target's width
 	}
 	// interface{} → concrete scalar/String: unbox at runtime after checking the RTTI kind (an explicit runtime error on mismatch)
 	if from == "interface{}" {
@@ -1735,12 +1770,11 @@ func (e *emitter) emitDecl(st *declStmt) {
 		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
 		return
 	}
-	switch st.typ {
-	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel", "memorize":
+	if isScalarStore(st.typ) {
 		// SSA passthrough: a single-assignment scalar uses a register directly (no alloca/load/store)
 		if !e.assigned[st.name] && st.init != nil && !e.funcReturned {
 			v, vt := e.compileExpr(st.init)
-			e.vars[st.name] = varSlot{reg: e.coerce(v, vt, st.typ), typ: st.typ, direct: true}
+			e.vars[st.name] = varSlot{reg: e.coerceTo(v, vt, st.typ), typ: st.typ, direct: true}
 			return
 		}
 		reg := e.newReg()
@@ -1749,10 +1783,13 @@ func (e *emitter) emitDecl(st *declStmt) {
 		v := e.zeroOf(st.typ)
 		if st.init != nil {
 			x, xt := e.compileExpr(st.init)
-			v = e.coerce(x, xt, st.typ)
+			v = e.coerceTo(x, xt, st.typ)
 		}
 		e.emitInstr("store %s %s, %s* %s", llt, v, llt, reg)
 		e.vars[st.name] = varSlot{reg: reg, typ: st.typ}
+		return
+	}
+	switch st.typ {
 	case "List<String>":
 		e.ensureListS()
 		slot := e.newReg()
@@ -1923,12 +1960,12 @@ func (e *emitter) emitAssign(st *assignStmt) {
 		e.emitInstr("%s = select i1 %s, %s %s, %s %s", cell, isnull, pllt, fresh, pllt, ptr)
 		e.emitInstr("store %s %s, %s* %s", pllt, cell, pllt, info.reg)
 		v, vt := e.compileExpr(st.x)
-		v = e.coerce(v, vt, base)
+		v = e.coerceTo(v, vt, base)
 		e.emitInstr("store %s %s, %s* %s", blt, v, blt, cell)
 		return
 	}
 	v, vt := e.compileExpr(st.x)
-	v = e.coerce(v, vt, info.typ)
+	v = e.coerceTo(v, vt, info.typ)
 	if info.param || info.direct {
 		// Parameters/passthrough variables should never be assigned (guaranteed by lowering's assigned analysis)
 		e.emitInstr("; assignment to register variable %s", st.name)
@@ -1988,7 +2025,7 @@ func (e *emitter) emitFieldAssign(st *fieldAssignStmt) {
 	g := e.newReg()
 	e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(otyp), e.irElem(otyp), obj, fidx)
 	v, vt := e.compileExpr(st.x)
-	v = e.coerce(v, vt, ftyp)
+	v = e.coerceTo(v, vt, ftyp)
 	e.emitInstr("store %s %s, %s* %s", e.ir(ftyp), v, e.ir(ftyp), g)
 }
 
@@ -2296,6 +2333,13 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 	vals := make([]av, 0, len(args))
 	fmts := make([]string, 0, len(args))
 	for _, a := range args {
+		if a.typ == "uchar" || isBitsT(a.typ) {
+			// Raw bits and uchar print their unsigned decimal value (spec §3.1)
+			v, _ := e.compileExpr(a)
+			vals = append(vals, av{e.zextToI64(v, a.typ), "long"})
+			fmts = append(fmts, "%llu")
+			continue
+		}
 		v, t := e.compileExpr(a)
 		// T& argument: null → "nil" (the interpreter prints the nil value as nil); convert to String uniformly, then select
 		ptrNil := ""
@@ -2835,6 +2879,8 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		return e.compileListLit(x)
 	case kListS:
 		return e.compileListSLit(x)
+	case kConv:
+		return e.compileConv(x)
 	}
 	return "0", "int"
 }
@@ -2908,7 +2954,7 @@ func (e *emitter) compileStructLit(x *expr) (string, string) {
 			break
 		}
 		fv, ft := e.compileExpr(val)
-		fv = e.coerce(fv, ft, fields[i].typ)
+		fv = e.coerceTo(fv, ft, fields[i].typ)
 		g := e.newReg()
 		e.emitInstr("%s = getelementptr inbounds %s, %s %s, i32 0, i32 %d", g, e.irElem(typ), ptrTy, v, i)
 		e.emitInstr("store %s %s, %s* %s", e.ir(fields[i].typ), fv, e.ir(fields[i].typ), g)
@@ -2917,6 +2963,9 @@ func (e *emitter) compileStructLit(x *expr) (string, string) {
 }
 
 func (e *emitter) compileIndex(x *expr) (string, string) {
+	if x.bits > 0 {
+		return e.compileBitIndex(x)
+	}
 	lo, lt := e.compileExpr(x.idx.recv)
 	if lt == "List<String>" {
 		p, head, size := e.listSRange(lo)
@@ -2945,6 +2994,72 @@ func (e *emitter) compileIndex(x *expr) (string, string) {
 	v := e.newReg()
 	e.emitInstr("%s = load i32, i32* %s", v, g2)
 	return v, "int"
+}
+
+// compileBitIndex reads the i-th bit of raw bits as a bit (spec §3.3); the index is bounds-checked
+// with the interpreter's error message.
+func (e *emitter) compileBitIndex(x *expr) (string, string) {
+	recv, rt := e.compileExpr(x.idx.recv)
+	llty := e.ir(rt)
+	v := e.convToType(recv, rt, rt)
+	i, ity := e.compileExpr(x.idx.i)
+	cnt := e.toIntWidth(i, ity, llty)
+	e.emitBitBoundsCheck(e.toIntWidth(i, ity, "i32"), x.bits, x.line)
+	sh := e.newReg()
+	e.emitInstr("%s = lshr %s %s, %s", sh, llty, v, cnt)
+	r := e.newReg()
+	e.emitInstr("%s = and %s %s, 1", r, llty, sh)
+	return r, "bit"
+}
+
+// emitBitBoundsCheck reports an i32 bit index outside 0..width-1 as a runtime error (spec §3.3).
+func (e *emitter) emitBitBoundsCheck(i32idx string, width, line int) {
+	bad := e.newReg()
+	e.emitInstr("%s = icmp uge i32 %s, %d", bad, i32idx, width)
+	okB := e.newBlock()
+	if e.curTry != "" {
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, e.curTry, okB)
+		e.setBlock(okB)
+		return
+	}
+	e.needPanicBits = true
+	tgt := e.newBlock()
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, tgt, okB)
+	e.setBlock(tgt)
+	e.emitInstr("call void @ql_panic_bits(i32 %s, i32 %d, i32 %d)", i32idx, width, line)
+	e.emitInstr("unreachable")
+	e.setBlock(okB)
+}
+
+// emitBitAssign writes one bit of raw bits: the lvalue is read, the bit is replaced and stored back
+// (spec §3.3).
+func (e *emitter) emitBitAssign(st *bitAssignStmt) {
+	addr, typ, _, ok := e.lvalueAddr(st.recv)
+	if !ok {
+		e.emitInstr("; b[i] = v needs an addressable raw-bits target")
+		return
+	}
+	llty := e.ir(typ)
+	cur := e.newReg()
+	e.emitInstr("%s = load %s, %s* %s", cur, llty, llty, addr)
+	i, ity := e.compileExpr(st.idx)
+	cnt := e.toIntWidth(i, ity, llty)
+	e.emitBitBoundsCheck(e.toIntWidth(i, ity, "i32"), st.bits, st.idx.line)
+	bit := e.newReg()
+	e.emitInstr("%s = shl %s 1, %s", bit, llty, cnt)
+	cleared := e.newReg()
+	e.emitInstr("%s = xor %s %s, -1", cleared, llty, bit)
+	keep := e.newReg()
+	e.emitInstr("%s = and %s %s, %s", keep, llty, cur, cleared)
+	v, vt := e.compileExpr(st.x)
+	cv := e.convToType(v, vt, typ)
+	set := e.newReg()
+	e.emitInstr("%s = and %s %s, 1", set, llty, cv)
+	next := e.newReg()
+	e.emitInstr("%s = shl %s %s, %s", next, llty, set, cnt)
+	res := e.newReg()
+	e.emitInstr("%s = or %s %s, %s", res, llty, keep, next)
+	e.emitInstr("store %s %s, %s* %s", llty, e.maskToWidth(res, llty, st.bits), llty, addr)
 }
 
 func (e *emitter) compileListLit(x *expr) (string, string) {
@@ -3170,6 +3285,9 @@ func (e *emitter) nilSelect(isnull, s string) string {
 
 // sizeOf returns the byte size of a scalar type (struct goes through GEP computation).
 func (e *emitter) sizeOf(t string) int {
+	if w := storeNameWidth(t); w > 0 {
+		return bitsLlvmSize(w) // raw bits take ceil(N/8) bytes, uchar one byte
+	}
 	switch t {
 	case "bool", "char":
 		return 1
@@ -3182,6 +3300,154 @@ func (e *emitter) sizeOf(t string) int {
 		return 8
 	}
 	return 8
+}
+
+// ============ Raw bits and the uchar view (spec §3) ============
+
+// bitsNameWidth returns the width named by a raw-bits type ("bit" → 1, "bits<N>" → N), or 0 when the
+// name is not a raw-bits type.
+func bitsNameWidth(t string) int {
+	if t == "bit" {
+		return 1
+	}
+	if !strings.HasPrefix(t, "bits<") || !strings.HasSuffix(t, ">") {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(t, "bits<"), ">"))
+	if err != nil || n < 1 {
+		return 0
+	}
+	return n
+}
+
+// isBitsT reports whether a type name is raw bits (bit or bits<N>).
+func isBitsT(t string) bool { return bitsNameWidth(t) > 0 }
+
+// rawNameOf returns the canonical name of raw bits of a width (1 is spelled bit, because bits<1> IS bit).
+func rawNameOf(n int) string {
+	if n <= 1 {
+		return "bit"
+	}
+	return "bits<" + strconv.Itoa(n) + ">"
+}
+
+// storeNameWidth returns the width a value stored in this type is masked to (raw bits and the uchar
+// view); 0 means the type stores its own bits.
+func storeNameWidth(t string) int {
+	if w := bitsNameWidth(t); w > 0 {
+		return w
+	}
+	if t == "uchar" {
+		return 8
+	}
+	return 0
+}
+
+// bitsLlvmType returns the smallest LLVM integer that holds a raw width.
+func bitsLlvmType(width int) string {
+	switch {
+	case width <= 8:
+		return "i8"
+	case width <= 16:
+		return "i16"
+	}
+	return "i32"
+}
+
+// bitsLlvmSize returns the byte size of the LLVM integer that holds a raw width.
+func bitsLlvmSize(width int) int {
+	switch bitsLlvmType(width) {
+	case "i8":
+		return 1
+	case "i16":
+		return 2
+	}
+	return 4
+}
+
+// intLlvmWidth returns the bit width of an LLVM integer type name; 0 = not an integer type.
+func intLlvmWidth(ty string) int {
+	switch ty {
+	case "i1":
+		return 1
+	case "i8":
+		return 8
+	case "i16":
+		return 16
+	case "i32":
+		return 32
+	case "i64":
+		return 64
+	}
+	return 0
+}
+
+// isSignedName reports whether a language type reads its bits as two's complement.
+func isSignedName(t string) bool { return t == "int" || t == "long" || t == "char" }
+
+// isScalarStore reports whether a type is stored in a single scalar slot.
+func isScalarStore(t string) bool {
+	switch t {
+	case "int", "bool", "float", "long", "String", "pointer", "thread", "Channel", "channel", "memorize", "uchar":
+		return true
+	}
+	return isBitsT(t)
+}
+
+// toIntWidth re-reads an integer register as another LLVM integer type, sign-extending a signed view
+// and zero-extending everything else.
+func (e *emitter) toIntWidth(v, from, to string) string {
+	fty := e.ir(from)
+	if fty == to {
+		return v
+	}
+	fw, tw := intLlvmWidth(fty), intLlvmWidth(to)
+	if fw == 0 || tw == 0 {
+		return v // not an integer pair: the caller handles it
+	}
+	r := e.newReg()
+	switch {
+	case fw < tw && isSignedName(from):
+		e.emitInstr("%s = sext %s %s to %s", r, fty, v, to)
+	case fw < tw:
+		e.emitInstr("%s = zext %s %s to %s", r, fty, v, to)
+	default:
+		e.emitInstr("%s = trunc %s %s to %s", r, fty, v, to)
+	}
+	return r
+}
+
+// maskToWidth clears every bit at or above width, so bits past N are zero (spec §3.1).
+func (e *emitter) maskToWidth(v, llty string, width int) string {
+	full := intLlvmWidth(llty)
+	if width <= 0 || full == 0 || width >= full {
+		return v
+	}
+	r := e.newReg()
+	e.emitInstr("%s = and %s %s, %d", r, llty, v, (int64(1)<<uint(width))-1)
+	return r
+}
+
+// zextToI64 reads a raw-bits or uchar value as an unsigned i64, so that %llu prints its unsigned
+// decimal value.
+func (e *emitter) zextToI64(v, from string) string {
+	return e.toIntWidth(v, from, "i64")
+}
+
+// convToType re-reads an integer value at another type's width, keeping the low bits: the conversion
+// rule of spec §3.4 and the store rule of raw bits and uchar.
+func (e *emitter) convToType(v, from, to string) string {
+	llty := e.ir(to)
+	return e.maskToWidth(e.toIntWidth(v, from, llty), llty, storeNameWidth(to))
+}
+
+// coerceTo converts a value to a target type: raw bits and uchar are masked to their width, every
+// other target keeps the ordinary coercion rules.
+func (e *emitter) coerceTo(v, from, to string) string {
+	if to == "uchar" || isBitsT(to) {
+		return e.convToType(v, from, to)
+	}
+	return e.coerce(v, from, to)
 }
 
 // compileTable compiles a HashTable method call: keys are structured into strings by the interpreter's rule
@@ -3610,7 +3876,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 				if want == "?" {
 					want = vt
 				}
-				v = e.coerce(v, vt, want)
+				v = e.coerceTo(v, vt, want)
 				args = append(args, e.ir(want)+" "+e.valueOfCell(v, want))
 				continue
 			}
@@ -3883,6 +4149,9 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 	if x.kind == kCmp {
 		return e.compileCmp(x)
 	}
+	if x.bits > 0 {
+		return e.compileBitsBin(x) // raw bits keep their width and never wrap like an int (spec §3.3)
+	}
 	lv, lt := e.compileExpr(x.l)
 	rv, rt := e.compileExpr(x.r)
 	if x.strcat {
@@ -3921,10 +4190,72 @@ func (e *emitter) compileBin(x *expr) (string, string) {
 	if x.op == "/" || x.op == "%" {
 		e.emitZeroCheckI(rv, x.op, x.line)
 	}
-	op := map[string]string{"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem", "<<": "shl", ">>": "ashr"}[x.op]
+	if x.op == "<<" || x.op == ">>" {
+		return e.emitIntShift(x.op, lv, rv), "int"
+	}
+	op := map[string]string{"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem",
+		"&": "and", "|": "or", "^": "xor"}[x.op]
 	reg := e.newReg()
 	e.emitInstr("%s = %s i32 %s, %s", reg, op, lv, rv)
 	return reg, "int"
+}
+
+// emitIntShift emits a shift of the int view; the count is masked to 5 bits because the interpreter
+// shifts by sh&31 (a count of 32 or more would be poison in LLVM).
+func (e *emitter) emitIntShift(op, lv, rv string) string {
+	cnt := e.newReg()
+	e.emitInstr("%s = and i32 %s, 31", cnt, rv)
+	instr := "shl"
+	if op == ">>" {
+		instr = "ashr" // arithmetic: the interpreter sign-extends
+	}
+	reg := e.newReg()
+	e.emitInstr("%s = %s i32 %s, %s", reg, instr, lv, cnt)
+	return reg
+}
+
+// compileBitsBin emits the bitwise family on raw bits, masking the result to the operand width (spec §3.3).
+func (e *emitter) compileBitsBin(x *expr) (string, string) {
+	llty := e.ir(x.typ)
+	lv, lt := e.compileExpr(x.l)
+	lv = e.convToType(lv, lt, x.typ)
+	rv, rt := e.compileExpr(x.r)
+	if x.op == "<<" || x.op == ">>" {
+		return e.emitBitsShift(x.op, lv, rv, rt, llty, x.bits), x.typ
+	}
+	rv = e.convToType(rv, rt, x.typ) // a constant adapts to the raw width
+	op := map[string]string{"&": "and", "|": "or", "^": "xor"}[x.op]
+	reg := e.newReg()
+	e.emitInstr("%s = %s %s %s, %s", reg, op, llty, lv, rv)
+	return e.maskToWidth(reg, llty, x.bits), x.typ
+}
+
+// emitBitsShift emits a shift of raw bits: the count is compared in 64 bits and clamped so the shift
+// is never poison, and a count at or above the width shifts every bit out (spec §3.3).
+func (e *emitter) emitBitsShift(op, lv, rv, rt, llty string, width int) string {
+	cnt := e.toIntWidth(rv, rt, "i64")
+	over := e.newReg()
+	e.emitInstr("%s = icmp uge i64 %s, %d", over, cnt, width)
+	clamped := e.newReg()
+	e.emitInstr("%s = select i1 %s, i64 %d, i64 %s", clamped, over, width-1, cnt)
+	safe := e.newReg()
+	e.emitInstr("%s = trunc i64 %s to %s", safe, clamped, llty)
+	instr := "shl"
+	if op == ">>" {
+		instr = "lshr" // vacated bits are zero (raw bits are unsigned)
+	}
+	sh := e.newReg()
+	e.emitInstr("%s = %s %s %s, %s", sh, instr, llty, lv, safe)
+	zero := e.newReg()
+	e.emitInstr("%s = select i1 %s, %s 0, %s %s", zero, over, llty, llty, sh)
+	return e.maskToWidth(zero, llty, width)
+}
+
+// compileConv lowers a conversion call T(x): the value is re-read at the destination's width, keeping
+// the low bits (spec §3.4).
+func (e *emitter) compileConv(x *expr) (string, string) {
+	v, vt := e.compileExpr(x.l)
+	return e.convToType(v, vt, x.s), x.s
 }
 
 // emitZeroCheckI integer division-by-zero check (jump to catch inside try, otherwise a runtime error).
@@ -4210,6 +4541,8 @@ func analyzeExpr(e *expr, m *fnMeta) {
 		for _, it := range e.lst.items {
 			analyzeExpr(it, m)
 		}
+	case kConv:
+		analyzeExpr(e.l, m)
 	case kStructLit:
 		m.impure = true
 		for _, v := range e.sl.values {
@@ -4284,6 +4617,10 @@ func analyzeStmt(s stmt, m *fnMeta) {
 		m.impure = true // free
 	case *indexAssignStmt:
 		m.impure = true // heap array write
+		analyzeExpr(st.idx, m)
+		analyzeExpr(st.x, m)
+	case *bitAssignStmt:
+		m.impure = true // load/modify/store of the raw-bits lvalue
 		analyzeExpr(st.idx, m)
 		analyzeExpr(st.x, m)
 	case *fieldAssignStmt:
@@ -4379,6 +4716,11 @@ func scanAssigned(stmts []stmt, out map[string]bool) {
 		switch st := s.(type) {
 		case *assignStmt:
 			out[st.name] = true
+		case *bitAssignStmt:
+			// b[i] = v writes through the receiver's storage, so the receiver needs an address
+			if st.recv != nil && st.recv.kind == kIdent {
+				out[st.recv.s] = true
+			}
 		case *ifStmt:
 			scanAssigned(st.then, out)
 			scanAssigned(st.els, out)
@@ -4638,6 +4980,22 @@ hex:
   %v = ptrtoint i8* %p to i64
   %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %b, i64 20, i8* %f, i64 %v)
   ret i8* %b
+}
+`
+
+// panicBitsHelper reports an out-of-range bit index b[i] with the interpreter's exact message.
+const panicBitsHelper = `@.ql.panic.bits = private unnamed_addr constant [91 x i8] c"error: IndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d) at line %d\0A\00", align 1
+define void @ql_panic_bits(i32 %idx, i32 %width, i32 %line) {
+entry:
+  %buf = alloca [512 x i8], align 16
+  %p = getelementptr inbounds [512 x i8], [512 x i8]* %buf, i64 0, i64 0
+  %fmt = getelementptr inbounds [91 x i8], [91 x i8]* @.ql.panic.bits, i64 0, i64 0
+  %last = sub i32 %width, 1
+  %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %p, i64 512, i8* %fmt, i32 %idx, i32 %width, i32 %last, i32 %line)
+  %n64 = sext i32 %n to i64
+  %w = call i64 @write(i32 2, i8* %p, i64 %n64)
+  call void @exit(i32 1)
+  unreachable
 }
 `
 

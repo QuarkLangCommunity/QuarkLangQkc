@@ -1,0 +1,67 @@
+// z_bits: raw bits (bit, bits<N>) and the uchar view — spec §3.
+// Bitwise operations and shifts keep the operand's width, b[i] reads and writes one bit, the
+// conversion call T(x) reinterprets at equal width or converts by value, and raw values print
+// their unsigned decimal value.
+fn mix(bits<8> a, bits<8> b) bits<8> { return (a & b) | (a ^ b); }
+fn octet(uchar u) uchar { return uchar(u * 2); }
+type struct { bits<8> lo; bits<8> hi; } Pair;
+
+fn main(IOStream io) {
+  bits<8> a = 0xF0;                     // a constant is materialized at the raw width
+  bits<8> b = 0x0F;
+  io.println(a);                        // 240 (raw bits print unsigned)
+  io.println(a & b);                    // 0
+  io.println(a | b);                    // 255
+  io.println(a ^ b);                    // 255
+  io.println(~a);                       // 15 (the complement keeps the width)
+  io.println(a << 2);                   // 192
+  io.println(a >> 4);                   // 15
+  io.println(a << 9);                   // 0 (shifted past the width)
+  int n = 3;
+  io.println(a >> n);                   // 30
+  io.println(a[7]); io.println(a[3]);   // 1 then 0
+  a[3] = 1;
+  io.println(a);                        // 248
+  a[n] = 0;
+  io.println(a);                        // 240
+  io.println(mix(a, b));                // 255
+  bits<16> w1 = 0x0F00;                 // a constant is materialized at 16 bits
+  io.println(w1 | 0x000F);              // 3855
+  bits<16> wide = 0xF000;
+  io.println(wide >> 12);               // 15
+  io.println(wide << 8);                // 0 (shifted past the width)
+  bits<16> masked = 0x1F0F0;            // only the low 16 bits are stored
+  io.println(masked);                   // 61680
+  io.println(masked & 0x00FF);          // 240
+  bits<32> word = 0x7F454C46;
+  io.println(word);                     // 2135247942
+  io.println(word >> 24);               // 127
+  io.println(word & 0xFF);              // 70
+  io.println(~word);                    // 2159719353
+  uchar u = 0xF0;                       // uchar is the 8-bit unsigned view
+  io.println(u);                        // 240
+  io.println(bits<8>(u));               // 240 (dropping the interpretation is free)
+  io.println(uchar(a));                 // 240 (gaining the view is free)
+  io.println(int(u));                   // 240 (a value conversion between views)
+  io.println(uchar(300));               // 44 (a narrowing conversion keeps the low bits)
+  io.println(uchar(-1));                // 255
+  uchar c = 300;                        // declarations and assignments mask to the width
+  io.println(c);                        // 44
+  io.println(c + 100);                  // 144 (uchar promotes to the int view)
+  io.println(octet(uchar(200)));        // 144 (a boundary crossing names its conversion)
+  io.println(u & 0x0F);                 // 0
+  io.println(u >> 5);                   // 7
+  int neg = -1;
+  io.println(bits<32>(neg));            // 4294967295 (the same bits, seen as raw)
+  io.println(int(bits<32>(neg)));       // -1 (the round trip is free)
+  bit flag = 1;
+  io.println(flag);                     // 1
+  io.println(bool(flag));               // true
+  io.println(bits<1>(bool(true)));      // 1
+  Pair p = .{lo: 0x0F, hi: 0xF0};
+  p.lo[4] = 1;
+  io.println(p.lo);                     // 31
+  io.println(p.hi);                     // 240
+  io.println(p.lo == 31);               // true (equality compares bit by bit)
+  io.println(p.lo != p.hi);             // true
+}

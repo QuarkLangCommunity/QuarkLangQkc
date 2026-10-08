@@ -41,16 +41,6 @@ func TestInterpreterOnlyConstructsAreRefusedNotMiscompiled(t *testing.T) {
 			want: "compiling a permission reference",
 		},
 		{
-			name: "bitwise and",
-			src:  "fn main(IOStream io) {\n    int a = 12;\n    int b = 10;\n    io.println(a & b);\n}\n",
-			want: "(bitwise operators) is not supported yet",
-		},
-		{
-			name: "bitwise complement",
-			src:  "fn main(IOStream io) {\n    io.println(~5);\n}\n",
-			want: "(bitwise complement) is not supported yet",
-		},
-		{
 			name: "address-of",
 			src:  "fn main(IOStream io) {\n    int x = 5;\n    int& p = &x;\n    io.println(p);\n}\n",
 			want: "compiling & (address-of) is not supported yet",

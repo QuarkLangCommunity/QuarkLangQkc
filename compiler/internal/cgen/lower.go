@@ -634,10 +634,13 @@ func isAnyT(t string) bool { return strings.TrimSpace(t) == "interface{}" }
 func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	t = strings.TrimSpace(t)
 	switch t {
-	case "int", "bool", "float", "String", "List<int>":
+	case "int", "bool", "float", "String", "List<int>", "uchar":
 		return nil
 	case "void":
 		return l.errf(pos, "暂未支持 void 类型 %s", what)
+	}
+	if isBitsT(t) {
+		return nil // raw bits: bit / bits<N> for N <= 32 (a wider N is refused by the shared frontend)
 	}
 	if elem, ok := listElem(t); ok {
 		if elem == "String" {
@@ -698,6 +701,9 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 
 // retOK reports whether a return type can be lowered.
 func (l *lowerer) retOK(t string) bool {
+	if isBitsT(t) || t == "uchar" {
+		return true
+	}
 	switch t {
 	case "int", "bool", "float", "String", "long", "pointer", "void", "interface{}":
 		return true
@@ -1158,7 +1164,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 			return &declStmt{name: st.Name, typ: t}, nil
 		}
 		it := fc.typeOf(st.Init)
-		if !fc.assignable(it, t) {
+		if !fc.assignable(it, t) && !(isBitsT(t) && isIntConstLit(st.Init)) {
 			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
@@ -1169,7 +1175,31 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 			return nil, err
 		}
 		return &declStmt{name: st.Name, typ: t, init: x}, nil
+	}
+	if isBitsT(t) || t == "uchar" {
+		// Raw bits and the uchar view are scalar slots: the value is re-read at the declared width
+		// on the way in (declarations and assignments mask, spec §3.1).
+		if st.Init == nil {
+			if err := fc.declare(st.Name, t, st.Pos); err != nil {
+				return nil, err
+			}
+			return &declStmt{name: st.Name, typ: t}, nil
+		}
+		it := fc.typeOf(st.Init)
+		if !fc.assignable(it, t) && !(isBitsT(t) && isIntConstLit(st.Init)) {
+			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported (raw bits take raw bits of the same width, or a constant)", it, t, st.Name)
+		}
+		x, err := fc.expr(st.Init)
+		if err != nil {
+			return nil, err
+		}
+		if err := fc.declare(st.Name, t, st.Pos); err != nil {
+			return nil, err
+		}
+		return &declStmt{name: st.Name, typ: t, init: x}, nil
+	}
 
+	switch t {
 	case "List<String>":
 		if err := fc.declare(st.Name, t, st.Pos); err != nil {
 			return nil, err
@@ -1324,10 +1354,12 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 			return nil, err
 		}
 		switch t := fc.typeOf(a); t {
-		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}", "List<String>":
+		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}", "List<String>", "uchar":
 		case "int&", "float&", "bool&", "String&", "long&": // T&: print the dereferenced value (same as the interpreter)
 		default:
-			return nil, fc.l.errf(exprPos(a, call.Pos), "printing a value of type %s is not supported (the compiler handles int/float/bool/String/interface{})", t)
+			if !isBitsT(t) {
+				return nil, fc.l.errf(exprPos(a, call.Pos), "printing a value of type %s is not supported (the compiler handles int/float/bool/String/interface{})", t)
+			}
 		}
 		args = append(args, x)
 	}
@@ -1367,7 +1399,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			// interpreter semantics: p = q (q is a T&) → write the value q points at into the cell p points at (no rebinding)
 			return &assignStmt{name: tgt.Name, x: x, thru: true}, nil
 		}
-		if !fc.assignable(xt, vt) {
+		if !fc.assignable(xt, vt) && !(isBitsT(vt) && isIntConstLit(st.X)) {
 			return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s variable %q is not supported", xt, vt, tgt.Name)
 		}
 		x, err := fc.exprAs(st.X, vt)
@@ -1378,6 +1410,9 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 
 	case *lang.IndexExpr:
 		rt := fc.typeOf(tgt.X)
+		if isBitsT(rt) {
+			return fc.bitAssign(st, tgt)
+		}
 		if _, ok := listElem(rt); !ok {
 			return nil, l.errf(st.Pos, "this subscript assignment is not supported (the compiler handles List<int> only)")
 		}
@@ -1408,7 +1443,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			if !ok {
 				return nil, l.errf(tgt.Pos, "struct %s 没有字段 %q", rt, tgt.Name)
 			}
-			if !fc.assignable(fc.typeOf(st.X), ft) {
+			if !fc.assignable(fc.typeOf(st.X), ft) && !(isBitsT(ft) && isIntConstLit(st.X)) {
 				return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s.%s (%s) is not supported", fc.typeOf(st.X), rt, tgt.Name, ft)
 			}
 			recv, err := fc.expr(tgt.X)
@@ -1466,6 +1501,9 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		return fc.call(e)
 	case *lang.IndexExpr:
 		rt := fc.typeOf(e.X)
+		if e.Bits > 0 {
+			return fc.bitIndex(e, rt)
+		}
 		elem, ok := listElem(rt)
 		if !ok {
 			return nil, l.errf(e.Pos, "this subscript read is not supported (the compiler handles List<int> only)")
@@ -1612,11 +1650,25 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.line = pos.Line
 		return x, nil
 	case "&", "|", "^":
-		// The interpreter implements these; the compiler does not lower them yet. Hard error rather
-		// than a silent difference (project policy), and the parity corpus keeps both engines honest.
-		return nil, l.errf(pos, "compiling %q (bitwise operators) is not supported yet (implemented in the interpreter only)", e.Op)
+		// The bitwise family: raw bits keep their width, an int view is the 32-bit view (spec §3.3).
+		if isBitsT(lt) || isBitsT(rt) {
+			return fc.rawBitsBin(e, lt, rt)
+		}
+		if !isIntViewT(lt) || !isIntViewT(rt) {
+			return nil, l.errf(pos, "using %q on %s / %s is not supported (bitwise operators need int views or raw bits)", e.Op, lt, rt)
+		}
+		x, err := fc.binary(e, e.Op)
+		if err != nil {
+			return nil, err
+		}
+		x.typ = "int"
+		return x, nil
 	case "<<", ">>":
-		if lt != "int" || rt != "int" {
+		// Raw bits shift within their own width; an int view keeps the existing 32-bit behaviour.
+		if isBitsT(lt) || isBitsT(rt) {
+			return fc.rawBitsBin(e, lt, rt)
+		}
+		if !isIntViewT(lt) || !isIntViewT(rt) {
 			return nil, l.errf(pos, "using %q on %s / %s is not supported (shifts need int operands)", lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
@@ -1765,6 +1817,22 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			x.typ = "bool"
 			return x, nil
 		}
+		// raw bits: equality compares bit by bit, ordering is not admitted (spec §3.3)
+		if isBitsT(lt) || isBitsT(rt) {
+			if lt != rt && !rawVsConst(e, lt, rt) {
+				return nil, l.errf(pos, "using %q on %s / %s is not supported: the widths differ", e.Op, lt, rt)
+			}
+			if e.Op != "==" && e.Op != "!=" {
+				return nil, l.errf(pos, "using %q on %s is not supported (raw bits admit == and != only)", e.Op, lt)
+			}
+			x, err := fc.binary(e, e.Op)
+			if err != nil {
+				return nil, err
+			}
+			x.kind = kCmp
+			x.typ = "bool"
+			return x, nil
+		}
 		if !numLike(lt) || !numLike(rt) {
 			return nil, l.errf(pos, "using %q on %s / %s is not supported (String/Operation comparison needs the same type)", lt, rt, e.Op)
 		}
@@ -1822,6 +1890,34 @@ func opMethodFor(op string) string {
 	return ""
 }
 
+// rawVsConst reports whether an operation pairs raw bits with an integer constant, which adapts to
+// the raw width (spec §3.3).
+func rawVsConst(e *lang.BinOp, lt, rt string) bool {
+	return (isBitsT(lt) && isIntConstLit(e.R)) || (isBitsT(rt) && isIntConstLit(e.L))
+}
+
+// rawBitsBin lowers a bitwise operation with at least one raw-bits operand: both sides end up raw bits
+// of the operation's width, which the type checker stamped on the node (spec §3.3).
+func (fc *funcCtx) rawBitsBin(e *lang.BinOp, lt, rt string) (*expr, error) {
+	l := fc.l
+	if e.Bits == 0 {
+		return nil, l.errf(e.Pos, "using %q on %s / %s is not supported (raw bits need one width)", e.Op, lt, rt)
+	}
+	typ := rawNameOf(e.Bits)
+	for _, side := range []string{lt, rt} {
+		if isBitsT(side) && side != typ {
+			return nil, l.errf(e.Pos, "using %q on %s / %s is not supported: the widths differ", e.Op, lt, rt)
+		}
+	}
+	x, err := fc.binary(e, e.Op)
+	if err != nil {
+		return nil, err
+	}
+	x.typ = typ
+	x.bits = e.Bits
+	return x, nil
+}
+
 // binary lowers the left and right operands and builds the operation expression.
 func (fc *funcCtx) binary(e *lang.BinOp, op string) (*expr, error) {
 	x, err := fc.expr(e.L)
@@ -1842,6 +1938,77 @@ func (fc *funcCtx) binary(e *lang.BinOp, op string) (*expr, error) {
 	return &expr{kind: kind, op: op, l: x, r: y, line: e.Pos.Line}, nil
 }
 
+// complement lowers the bitwise complement ~x: raw bits keep their width, an int view is complemented
+// in 32 bits (spec §3.3).
+func (fc *funcCtx) complement(e *lang.UnOp) (*expr, error) {
+	t := fc.typeOf(e.X)
+	if !isBitsT(t) && !isIntViewT(t) {
+		return nil, fc.l.errf(e.Pos, "the bitwise complement '~' requires an int operand, got %s", t)
+	}
+	inner, err := fc.expr(e.X)
+	if err != nil {
+		return nil, err
+	}
+	x := &expr{kind: kBin, op: "^", typ: "int", l: &expr{kind: kInt, typ: "int", i: -1}, r: inner, line: e.Pos.Line}
+	if isBitsT(t) {
+		x.typ = rawNameOf(e.Bits)
+		x.bits = e.Bits
+	}
+	return x, nil
+}
+
+// bitIndex lowers b[i] on raw bits: the i-th bit comes out as a bit (spec §3.3).
+func (fc *funcCtx) bitIndex(e *lang.IndexExpr, rt string) (*expr, error) {
+	if !isBitsT(rt) {
+		return nil, fc.l.errf(e.Pos, "subscripting a bit requires raw bits, got %s", rt)
+	}
+	if t := fc.typeOf(e.Idx); !isIntViewT(t) && t != "?" {
+		return nil, fc.l.errf(exprPos(e.Idx, e.Pos), "a bit index must be int, got %s", t)
+	}
+	recv, err := fc.expr(e.X)
+	if err != nil {
+		return nil, err
+	}
+	idx, err := fc.expr(e.Idx)
+	if err != nil {
+		return nil, err
+	}
+	return &expr{kind: kIndex, typ: "bit", bits: e.Bits, line: e.Pos.Line, idx: &indexExpr{recv: recv, i: idx}}, nil
+}
+
+// conversion lowers a conversion call T(x) — the type checker stamped the destination (spec §3.4).
+func (fc *funcCtx) conversion(c *lang.CallExpr, arg lang.Expr) (*expr, error) {
+	x, err := fc.expr(arg)
+	if err != nil {
+		return nil, err
+	}
+	return &expr{kind: kConv, typ: c.ConvDst, s: c.ConvDst, l: x}, nil
+}
+
+// bitAssign lowers b[i] = v: the raw value is read, its i-th bit replaced and stored back (spec §3.3).
+func (fc *funcCtx) bitAssign(st *lang.AssignStmt, tgt *lang.IndexExpr) (stmt, error) {
+	rt := fc.typeOf(tgt.X)
+	if !isBitsT(rt) {
+		return nil, fc.l.errf(st.Pos, "b[i] = v requires raw bits, got %s", rt)
+	}
+	if t := fc.typeOf(st.X); !fc.assignable(t, "bit") && !isIntConstLit(st.X) {
+		return nil, fc.l.errf(exprPos(st.X, st.Pos), "assigning %s to a bit is not supported", t)
+	}
+	recv, err := fc.expr(tgt.X)
+	if err != nil {
+		return nil, err
+	}
+	idx, err := fc.expr(tgt.Idx)
+	if err != nil {
+		return nil, err
+	}
+	val, err := fc.expr(st.X)
+	if err != nil {
+		return nil, err
+	}
+	return &bitAssignStmt{recv: recv, idx: idx, x: val, bits: tgt.Bits}, nil
+}
+
 // unOp lowers unary operations: - expands to 0 - x (fneg semantics for float), ! goes through logical negation.
 func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 	l := fc.l
@@ -1851,8 +2018,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 		return nil, l.errf(e.Pos, "compiling & (address-of) is not supported yet (references are implemented in the interpreter only)")
 	}
 	if e.Op == "~" {
-		// Bitwise complement is implemented in the interpreter; the compiler hard-errors for now.
-		return nil, l.errf(e.Pos, "compiling '~' (bitwise complement) is not supported yet (implemented in the interpreter only)")
+		return fc.complement(e)
 	}
 	t := fc.typeOf(e.X)
 	switch e.Op {
@@ -1911,6 +2077,10 @@ func (fc *funcCtx) call(c *lang.CallExpr) (*expr, error) {
 	l := fc.l
 	if c.Sign != nil {
 		return fc.signCall(c)
+	}
+	// Conversion call T(x): the shared frontend stamped the destination type (spec §3.4).
+	if c.ConvDst != "" && len(c.Args) == 1 {
+		return fc.conversion(c, c.Args[0])
 	}
 	switch fn := c.Fn.(type) {
 	case *lang.Ident:
@@ -2641,7 +2811,7 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 		}
 		ft := substType(sd.Members[idx].Type, sub)
 		vt := fc.typeOfAs(f.X, ft)
-		if !fc.assignable(vt, ft) {
+		if !fc.assignable(vt, ft) && !(isBitsT(ft) && isIntConstLit(f.X)) {
 			return nil, l.errf(exprPos(f.X, e.Pos), "initializing field %s.%s with %s is not supported (%s)", vt, typ, sd.Members[idx].Name, ft)
 		}
 		x, err := fc.exprAs(f.X, ft)
@@ -2869,6 +3039,20 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	if from == "int" && to == "long" {
 		return true
 	}
+	// Raw bits and uchar (spec §3.4): only raw bits of the very same width are assignable, and a view
+	// reaches them through the conversion call T(x). uchar takes any integer view by value conversion.
+	if isBitsT(to) {
+		return from == to
+	}
+	if isBitsT(from) {
+		return false
+	}
+	if to == "uchar" {
+		return isIntViewT(from)
+	}
+	if from == "uchar" {
+		return isIntViewT(to)
+	}
 	// T& / pointer T: nullable reference (can only be assigned null or a reference of the same base type; not interchangeable with value types)
 	if _, base, isRef := ptrRefBase(to); isRef {
 		if from == "null" {
@@ -2915,7 +3099,29 @@ func (fc *funcCtx) assignable(from, to string) bool {
 	return false
 }
 
-func numLike(t string) bool { return t == "int" || t == "float" || t == "long" || t == "?" }
+func numLike(t string) bool {
+	return t == "int" || t == "float" || t == "long" || t == "uchar" || t == "?"
+}
+
+// isIntViewT reports whether a type name is an integer view stored as an integer (int, long, char, uchar).
+func isIntViewT(t string) bool {
+	switch t {
+	case "int", "long", "char", "uchar":
+		return true
+	}
+	return false
+}
+
+// isIntConstLit reports whether an expression is an integer constant (a literal, possibly negated).
+func isIntConstLit(e lang.Expr) bool {
+	switch v := e.(type) {
+	case *lang.IntLit:
+		return true
+	case *lang.UnOp:
+		return v.Op == "-" && isIntConstLit(v.X)
+	}
+	return false
+}
 
 // isPtrType reports whether the type is an FFI opaque pointer / null (i8* reference comparison).
 func isPtrType(t string) bool { return t == "pointer" || t == "null" }
@@ -2991,6 +3197,9 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 		}
 		return "?"
 	case *lang.IndexExpr:
+		if e.Bits > 0 {
+			return "bit" // b[i] on raw bits reads one bit (spec §3.3)
+		}
 		if elem, ok := listElem(fc.typeOf(e.X)); ok {
 			return elem
 		}
@@ -3024,7 +3233,18 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 		case "%":
 			return "int"
 		case "<<", ">>":
+			if e.Bits > 0 {
+				return rawNameOf(e.Bits) // raw bits keep the left operand's width
+			}
 			return "int"
+		case "&", "|", "^":
+			if e.Bits > 0 {
+				return rawNameOf(e.Bits)
+			}
+			if numLike(lt) && numLike(rt) {
+				return numResult(lt, rt)
+			}
+			return "?"
 		case "==", "!=", "<", "<=", ">", ">=", "&&", "||":
 			return "bool"
 		}
@@ -3046,6 +3266,11 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 			return t
 		case "!":
 			return "bool"
+		case "~":
+			if e.Bits > 0 {
+				return rawNameOf(e.Bits) // raw bits keep their width, an int view is complemented in 32 bits
+			}
+			return "int"
 		}
 		return "?"
 	case *lang.CallExpr:
@@ -3071,6 +3296,9 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 // callType infers the return type of a call expression.
 func (fc *funcCtx) callType(e *lang.CallExpr) string {
 	l := fc.l
+	if e.ConvDst != "" && len(e.Args) == 1 {
+		return e.ConvDst // conversion call T(x): the type checker stamped the destination
+	}
 	if me, ok := e.Fn.(*lang.MemberExpr); ok {
 		rt := fc.typeOf(me.X)
 		if fc.ioName != "" {

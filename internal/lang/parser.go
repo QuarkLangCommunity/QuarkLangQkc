@@ -1585,6 +1585,33 @@ func (p *parser) parseArgs() ([]Expr, error) {
 	return args, nil
 }
 
+// tryParseBitsCallName recognizes the parameterized conversion callee `bits<N>` in expression
+// position: `<` INT `>` is consumed only when the call parenthesis follows, so `bits<32>(f)` is a
+// conversion while `a < b > (c)` keeps parsing as comparisons. Every other shape restores the reader
+// and leaves the plain identifier to the caller.
+func (p *parser) tryParseBitsCallName(tok Token) (string, bool) {
+	if tok.Text != "bits" || !p.curIs(TLt) {
+		return "", false
+	}
+	saved := p.i
+	p.advance() // <
+	width, err := p.expect(TInt, "bit width")
+	if err != nil {
+		p.i = saved
+		return "", false
+	}
+	if !p.curIs(TGt) {
+		p.i = saved
+		return "", false
+	}
+	p.advance() // >
+	if !p.curIs(TLParen) {
+		p.i = saved
+		return "", false
+	}
+	return "bits<" + width.Text + ">", true
+}
+
 func (p *parser) parsePrimary() (Expr, error) {
 	tok := p.cur()
 	pos := Pos{Line: tok.Line, Col: tok.Col}
@@ -1669,6 +1696,9 @@ func (p *parser) parsePrimary() (Expr, error) {
 			return ne, nil
 		}
 		p.advance()
+		if name, ok := p.tryParseBitsCallName(tok); ok {
+			return &Ident{Name: name, Pos: pos}, nil
+		}
 		return &Ident{Name: tok.Text, Pos: pos}, nil
 	case TLBracket:
 		p.advance()

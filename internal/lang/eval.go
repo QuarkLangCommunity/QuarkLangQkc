@@ -939,12 +939,14 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 		if s.Decor == "copyd" && !v.IsCopyd() {
 			v = CopydV(&CopydValue{V: deepCopy(v)})
 		}
-		return sc.declare(s.Name, v, s.Pos)
+		// Raw bits and uchar store exactly their width (spec §3.1)
+		return sc.declare(s.Name, maskForStore(v, s.Bits), s.Pos)
 	case *AssignStmt:
 		v, err := in.evalExpr(s.X, sc, ctx)
 		if err != nil {
 			return err
 		}
+		v = maskForStore(v, s.Bits) // raw bits and uchar store exactly their width (spec §3.1)
 		switch t := s.Target.(type) {
 		case *Ident:
 			if t.Slot > 0 {
@@ -960,6 +962,10 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			}
 			return sc.set(t.Name, v, t.Pos)
 		case *IndexExpr:
+			if t.Bits > 0 {
+				// b[i] = v writes one bit: read the raw value, replace that bit, store it back (spec §3.3).
+				return in.assignBit(t, v, sc, ctx, s.Pos)
+			}
 			obj, err := in.evalExpr(t.X, sc, ctx)
 			if err != nil {
 				return err
@@ -1006,6 +1012,36 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			return nil
 		}
 		return &RunError{Msg: "TypeError: unsupported assignment target", Pos: s.Pos, Ctx: ctx}
+	}
+	return nil
+}
+
+// assignBit writes one bit of raw bits (b[i] = v): the lvalue keeps its storage and only that bit
+// changes (spec §3.3).
+func (in *interp) assignBit(t *IndexExpr, v Value, sc *scope, ctx *execCtx, pos Pos) error {
+	cell, err := in.addrOf(t.X, sc, ctx, pos)
+	if err != nil {
+		return err
+	}
+	if !cell.IsRef() {
+		return &RunError{Msg: "TypeError: b[i] needs a writable raw-bits target", Pos: pos, Ctx: ctx}
+	}
+	idx, err := in.evalExpr(t.Idx, sc, ctx)
+	if err != nil {
+		return err
+	}
+	if !idx.IsInt() || !v.IsInt() {
+		return &RunError{Msg: "TypeError: a bit index requires raw bits and an int index", Pos: pos, Ctx: ctx}
+	}
+	if err := checkBitRange(idx.Int(), t.Bits, pos, ctx); err != nil {
+		return err
+	}
+	cur := cell.Ref().load()
+	if !cur.IsInt() {
+		return &RunError{Msg: "TypeError: b[i] needs a writable raw-bits target", Pos: pos, Ctx: ctx}
+	}
+	if !cell.Ref().store(IntV(writeBit(cur.Int(), idx.Int(), v.Int()))) {
+		return &RunError{Msg: "TypeError: b[i] needs a writable raw-bits target", Pos: pos, Ctx: ctx}
 	}
 	return nil
 }
@@ -1073,7 +1109,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 				name = fieldNames[idx]
 			}
 			idx++
-			sv.Fields[name] = v
+			sv.Fields[name] = maskForStore(v, f.Bits) // a raw-bits or uchar field stores exactly its width
 		}
 		return StructV(sv), nil
 	case *Ident:
@@ -1166,6 +1202,13 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 			}
 			return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: unary '-' requires a number, got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
 		case "~":
+			if x.Bits > 0 {
+				// Raw bits: the complement keeps the operand's width, so it is masked to it (spec §3.3).
+				if !v.IsInt() {
+					return NilV(), &RunError{Msg: "TypeError: the bitwise complement '~' requires an int operand", Pos: x.Pos, Ctx: ctx}
+				}
+				return IntV(maskBits(^v.Int(), x.Bits)), nil
+			}
 			if !v.IsInt() {
 				return NilV(), &RunError{Msg: "TypeError: the bitwise complement '~' requires an int operand", Pos: x.Pos, Ctx: ctx}
 			}
@@ -1200,8 +1243,9 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 				}
 			}
 		}
-		// Fast path: int-only arithmetic/shift goes straight through (skips binOp dispatch; the hottest path for fib/loops)
-		if l.IsInt() && x.Op != "&&" && x.Op != "||" {
+		// Fast path: int-only arithmetic/shift goes straight through (skips binOp dispatch; the hottest path for fib/loops).
+		// Raw bits stay out of it: their width lives in the type, not in the value (x.Bits).
+		if l.IsInt() && x.Bits == 0 && x.Op != "&&" && x.Op != "||" {
 			li := l.Int()
 			if rv, err := in.evalExpr(x.R, sc, ctx); err == nil {
 				if rv.IsInt() {
@@ -1240,7 +1284,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 						return BoolV(int32(li) >= int32(ri)), nil
 					}
 				}
-				return binOp(x.Op, l, rv, x.Pos, ctx)
+				return binOp(x.Op, l, rv, x.Bits, x.Pos, ctx)
 			}
 		}
 		if x.Op == "&&" {
@@ -1283,7 +1327,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		if err != nil {
 			return NilV(), err
 		}
-		return binOp(x.Op, l, r, x.Pos, ctx)
+		return binOp(x.Op, l, r, x.Bits, x.Pos, ctx)
 	case *CallExpr:
 		return in.evalCall(x, sc, ctx)
 	case *MemberExpr:
@@ -1302,6 +1346,16 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		i, err := in.evalExpr(x.Idx, sc, ctx)
 		if err != nil {
 			return NilV(), err
+		}
+		if x.Bits > 0 {
+			// b[i] reads the i-th bit of raw bits as a bit (spec §3.3)
+			if !v.IsInt() || !i.IsInt() {
+				return NilV(), &RunError{Msg: "TypeError: a bit index requires raw bits and an int index", Pos: x.Pos, Ctx: ctx}
+			}
+			if err := checkBitRange(i.Int(), x.Bits, x.Pos, ctx); err != nil {
+				return NilV(), err
+			}
+			return IntV(readBit(v.Int(), i.Int())), nil
 		}
 		if !v.IsList() {
 			return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: indexing requires a List, got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
@@ -1340,6 +1394,14 @@ func evalMember(obj Value, name string, pos Pos, ctx *execCtx) (Value, error) {
 }
 
 func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) {
+	// Conversion call T(x) (spec §3.4): the type checker stamped the destination on the node.
+	if c.ConvDst != "" && len(c.Args) == 1 {
+		v, err := in.evalExpr(c.Args[0], sc, ctx)
+		if err != nil {
+			return NilV(), err
+		}
+		return convValue(c.ConvDst, v), nil
+	}
 	// Builtin signature @styleConfigure(file): read the JSON file → merge into the first argument node's style, then run the call
 	if c.Sign != nil && c.Sign.Name == "styleConfigure" {
 		if len(c.Sign.Args) != 1 {
@@ -1828,6 +1890,9 @@ func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
 		}
 		return evalMember(obj, x.Name, x.Pos, ctx)
 	case *IndexExpr:
+		if x.Bits > 0 {
+			return in.evalExpr(x, sc, ctx) // b[i] reads a bit, which is a value, not an addressable cell
+		}
 		obj, err := in.evalExpr(x.X, sc, ctx)
 		if err != nil {
 			return NilV(), err
@@ -3414,11 +3479,98 @@ func pow2(v int32) (int, bool) {
 	return n, true
 }
 
-func binOp(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
+// ============ Raw bits (spec §3) ============
+
+// maskBits keeps the low n bits of v: the storage rule of raw bit/bits<N> and of the uchar view,
+// where every bit past the width is zero (spec §3.1).
+func maskBits(v int64, n int) int64 {
+	if n <= 0 || n >= 64 {
+		return v
+	}
+	return v & ((int64(1) << uint(n)) - 1)
+}
+
+// rawWidth parses the width out of a canonical raw-bits type name ("bit" → 1, "bits<N>" → N).
+func rawWidth(name string) int {
+	if name == "bit" {
+		return 1
+	}
+	n, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(name, "bits<"), ">"))
+	if err != nil {
+		return 1
+	}
+	return n
+}
+
+// convValue returns the value of a conversion call T(x) at the destination type (spec §3.4): a
+// reinterpretation keeps the bits, a value conversion keeps the low bits of the destination width.
+func convValue(dst string, v Value) Value {
+	switch {
+	case dst == "uchar":
+		return IntV(maskBits(v.Int(), 8))
+	case dst == "bit" || strings.HasPrefix(dst, "bits<"):
+		return IntV(maskBits(v.Int(), rawWidth(dst)))
+	case dst == "bool":
+		return BoolV(v.Int() != 0)
+	case dst == "int" || dst == "char":
+		return IntV(int64(int32(v.Int()))) // the 32-bit signed view over the same bits
+	}
+	return v // long: the value already is the 64-bit view
+}
+
+// readBit returns the i-th bit of raw bits as 0 or 1 (spec §3.3).
+func readBit(v int64, i int64) int64 { return (v >> uint(i)) & 1 }
+
+// writeBit returns raw bits with the i-th bit set to the low bit of b (spec §3.3).
+func writeBit(v int64, i int64, b int64) int64 {
+	bit := int64(1) << uint(i)
+	return (v &^ bit) | ((b & 1) << uint(i))
+}
+
+// checkBitRange refuses a bit index outside 0..N-1 (spec §3.3).
+func checkBitRange(i int64, width int, pos Pos, ctx *execCtx) error {
+	if i >= 0 && i < int64(width) {
+		return nil
+	}
+	return &RunError{Msg: fmt.Sprintf("IndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)", i, width, width-1), Pos: pos, Ctx: ctx}
+}
+
+// maskForStore applies a declaration's or assignment's width to the value being stored.
+func maskForStore(v Value, width int) Value {
+	if width <= 0 || !v.IsInt() {
+		return v
+	}
+	return IntV(maskBits(v.Int(), width))
+}
+
+// rawBinOp evaluates the bitwise family on raw bits, masking the result to the operand width (spec §3.3).
+func rawBinOp(op string, l, r int64, width int) Value {
+	switch op {
+	case "&":
+		return IntV(l & r)
+	case "|":
+		return IntV(l | r)
+	case "^":
+		return IntV(l ^ r)
+	case "<<":
+		return IntV(maskBits(l<<uint(r), width)) // bits shifted out are lost
+	}
+	return IntV(maskBits(l>>uint(r), width)) // >>: vacated bits are zero
+}
+
+// binOp(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
+// binOp evaluates a binary operator; bits is the raw-bits width stamped by the type checker (0 = a view).
+func binOp(op string, l, r Value, bits int, pos Pos, ctx *execCtx) (Value, error) {
 	if op == "+" {
 		if l.IsStr() || r.IsStr() {
 			return StrV(l.String() + r.String()), nil
 		}
+	}
+	if bits > 0 && (op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>") {
+		if !l.IsInt() || !r.IsInt() {
+			return NilV(), &RunError{Msg: "TypeError: raw bits admit only the bitwise family and equality", Pos: pos, Ctx: ctx}
+		}
+		return rawBinOp(op, l.Int(), r.Int(), bits), nil
 	}
 	switch op {
 	case "+", "-", "*", "/", "%":

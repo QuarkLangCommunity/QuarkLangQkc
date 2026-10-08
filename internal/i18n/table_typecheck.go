@@ -41,4 +41,18 @@ var typecheckTable = map[string]string{
 	"CompileError: %s expects %d args (可加 retries), got %d":  "CompileError: %s expects %d args (optionally plus retries), got %d",
 	"sum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %d": "sum(generate, begin, stop[, step]) requires 3 or 4 arguments, got %d",
 	"接口 %s 没有方法 %q":                                          "interface %s has no method %q",
+
+	// Raw bits (bit / bits<N>) and the uchar view: the operator, indexing and conversion rules of spec §3.
+	"CompileError: bit index %d is out of range for %s (0..%d)":                                                                                            "CompileError: 位下标 %d 超出 %s 的范围 (0..%d)",
+	"TypeError: a bit index must be int, got %s":                                                                                                           "TypeError: 位下标必须是 int，得到 %s",
+	"TypeError: cannot assign %s to %s[i] (%s)":                                                                                                            "TypeError: 不能把 %s 赋给 %s[i]（%s）",
+	"TypeError: raw bits admit no arithmetic: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)":                                          "TypeError: 原始位不支持算术：'%s' 作用于 %s —— 请先转换为视图，例如 int(b) %s 1（规范 §3.3）",
+	"TypeError: raw bits admit no ordering: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)":                                            "TypeError: 原始位不支持比较大小：'%s' 作用于 %s —— 请先转换为视图，例如 int(b) %s 1（规范 §3.3）",
+	"TypeError: raw bits admit only & | ^ ~ << >> == != and b[i], not '%s' (spec §3.3)":                                                                    "TypeError: 原始位只支持 & | ^ ~ << >> == != 和 b[i]，不支持 '%s'（规范 §3.3）",
+	"TypeError: %s and %s have different widths (%d and %d bits): a bitwise operation needs equal widths (spec §3.4)":                                      "TypeError: %s 与 %s 宽度不同（%d 位与 %d 位）：位运算要求两侧宽度相同（规范 §3.4）",
+	"TypeError: %s needs a shift count of int or raw bits, got %s":                                                                                         "TypeError: %s 的移位次数需要 int 或原始位，得到 %s",
+	"TypeError: %s on %s and %s mixes raw bits with a view: both sides must be raw bits of one width (spec §3.3)":                                          "TypeError: %s 作用于 %s 与 %s：原始位与视图混用，两侧必须是同宽度的原始位（规范 §3.3）",
+	"TypeError: %s shifts raw bits, so the left operand must be raw bits, got %s":                                                                          "TypeError: %s 是原始位的移位，左操作数必须是原始位，得到 %s",
+	"TypeError: %s(%s) is a width mismatch: %s is %d bits wide and %s is %d bits wide (spec §3.4)":                                                         "TypeError: %s(%s) 宽度不匹配：%s 为 %d 位，%s 为 %d 位（规范 §3.4）",
+	"TypeError: %s(%s) is not a conversion: a reinterpretation needs a view of the same width, and a value conversion needs two integer views (spec §3.4)": "TypeError: %s(%s) 不是转换：重解释需要同宽度的视图，值转换需要两个整数视图（规范 §3.4）",
 }
