@@ -17,35 +17,20 @@ package lang
 // (full permission, program scope). The bare form is what older code and the compiler already handle,
 // which is why nothing regresses.
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkparser"
+)
 
 // validRefPerm reports whether s is a permission stack made of r/w/m.
-func validRefPerm(s string) bool {
-	switch s {
-	case "r", "w", "m", "rw", "rm", "wm", "rwm":
-		return true
-	}
-	return false
-}
+func validRefPerm(s string) bool { return qkparser.ValidRefPerm(s) }
 
 // validRefScope reports whether s is one of the four follow layers.
-func validRefScope(s string) bool {
-	switch s {
-	case "u", "f", "a", "t":
-		return true
-	}
-	return false
-}
+func validRefScope(s string) bool { return qkparser.ValidRefScope(s) }
 
-// refBaseType turns a base type into the reference type declared by "&perm scope base": the
-// permission itself is carried by the declaration (DeclStmt.Perm/Param.Perm), never by the type
-// string, so type normalization and every existing T& comparison keep working unchanged.
-func refBaseType(base string) string {
-	if strings.HasSuffix(base, "&") {
-		return base
-	}
-	return base + "&"
-}
+// refBaseType turns a base type into the reference type declared by "&perm scope base".
+func refBaseType(base string) string { return qkparser.RefBaseType(base) }
 
 // refDefaultPerm is the permission of a bare "T&" declaration: everything, program scope — the
 // behaviour T& had before permissions existed, so old code keeps working.
