@@ -64,7 +64,7 @@ go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integ
 <details>
 <summary>Building from source: full notes (interpreter / compiler dependencies)</summary>
 
-### Interpreter (repository root, Go module `quarklang`)
+### Interpreter (repository root, Go module `github.com/QuarkLangCommunity/QuarkLangQkc`)
 
 ```sh
 go build -o quark .

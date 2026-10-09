@@ -1,6 +1,6 @@
 package main
 
-import "quarklang/internal/i18n"
+import "github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 
 // The compiler renders its diagnostics through one localizer instead of calling i18n at each site.
 // SetLocalizer is the single injection point (tools and tests use it; nothing else mutates state).

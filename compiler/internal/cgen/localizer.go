@@ -1,6 +1,6 @@
 package cgen
 
-import "quarklang/internal/i18n"
+import "github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 
 // Lowering diagnostics are rendered through one localizer, so the lowering code itself does not
 // depend on the i18n package and a single call site decides the language.

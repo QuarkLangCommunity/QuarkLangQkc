@@ -2,13 +2,13 @@ package main
 
 import (
 	"bytes"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 	"os"
 	"path/filepath"
-	"quarklang/internal/lang"
 	"strings"
 	"testing"
 
-	lang_i18n "quarklang/internal/i18n"
+	lang_i18n "github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 func runCapture(t *testing.T, stdin string, args ...string) (string, string, int) {

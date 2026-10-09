@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // Transpile compiles QuarkLang source to LLVM IR.

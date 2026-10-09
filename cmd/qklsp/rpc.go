@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"io"
-	"quarklang/internal/i18n"
 	"strconv"
 	"strings"
 )

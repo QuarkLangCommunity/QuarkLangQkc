@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	lang_i18n "quarklang/internal/i18n"
+	lang_i18n "github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 func runCapture(t *testing.T, args ...string) (string, string, int) {

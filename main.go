@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // version is the release version: injected at build time with -ldflags "-X main.version=vX.Y.Z".

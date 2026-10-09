@@ -47,7 +47,7 @@ import (
 	"fmt"
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // ---------- Diagnostics with location ----------

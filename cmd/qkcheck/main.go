@@ -16,16 +16,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"io"
 	"os"
 	"path/filepath"
-	"quarklang/internal/i18n"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)

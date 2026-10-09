@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // vmDiffPrograms are inline programs covering the shapes the VM compiles plus the shapes that must

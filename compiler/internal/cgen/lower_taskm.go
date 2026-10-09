@@ -14,7 +14,7 @@ package cgen
 import (
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // taskPid takes the thread handle (a thread variable or an int pid; both are i32 on the compiled path).

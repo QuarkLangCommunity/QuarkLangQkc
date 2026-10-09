@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 func TestMain(m *testing.M) {

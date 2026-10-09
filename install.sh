@@ -170,7 +170,7 @@ build_core() {
 }
 
 # link_core_into_workspace exposes the core checkout as <workspace>/QuarkLang, the path the
-# sibling go.mod files replace (`replace quarklang => ../QuarkLang`) expect to find.
+# sibling go.mod files replace (`replace github.com/QuarkLangCommunity/QuarkLangQkc => ../QuarkLang`) expect to find.
 link_core_into_workspace() {
 	ws="$1"
 	root="$2"

@@ -14,7 +14,7 @@ package cgen
 import (
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // ifaceM is an interface method's slot in the dispatch table.

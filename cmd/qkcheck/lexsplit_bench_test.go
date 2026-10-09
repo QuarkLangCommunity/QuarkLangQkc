@@ -7,7 +7,7 @@ package main
 import (
 	"testing"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 func BenchmarkLexOnly(b *testing.B) {

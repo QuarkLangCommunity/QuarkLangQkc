@@ -1,7 +1,7 @@
 package lang
 
 import (
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"strings"
 	"testing"
 )
