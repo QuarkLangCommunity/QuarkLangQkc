@@ -110,6 +110,11 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("%s is not there: build it first (see stress/README.md)", bin)
 		}
 	}
+	if opt.notes != "" { // read it before the measurements: a missing notes file must not waste a full run
+		if _, err := os.ReadFile(opt.notes); err != nil {
+			return err
+		}
+	}
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -134,10 +139,7 @@ func cmdRun(args []string) error {
 		results = append(results, r)
 		fmt.Fprintf(os.Stderr, "%-24s %-15s %s\n", r.Name, r.Verdict, r.summaryLine())
 	}
-	rep, err := assembleReport(opt, results, known, knownText)
-	if err != nil {
-		return err
-	}
+	rep := assembleReport(opt, results, known, knownText)
 	if err := writeJSON(opt.jsonPath, rep); err != nil {
 		return err
 	}
@@ -327,13 +329,9 @@ func checkKnownNames(entries []knownEntry) error {
 }
 
 // assembleReport pairs the measurements with the known-failure list and the machine description.
-func assembleReport(opt options, results []caseResult, known []knownEntry, knownText string) (runReport, error) {
+func assembleReport(opt options, results []caseResult, known []knownEntry, knownText string) runReport {
 	notes := ""
-	if opt.notes != "" {
-		data, err := os.ReadFile(opt.notes)
-		if err != nil {
-			return runReport{}, err
-		}
+	if data, err := os.ReadFile(opt.notes); err == nil {
 		notes = string(data)
 	}
 	byName := map[string]string{}
@@ -367,10 +365,11 @@ func assembleReport(opt options, results []caseResult, known []knownEntry, known
 		Machine:   machineInfo(),
 		Cases:     results,
 		Known:     known,
+		KnownPath: opt.known,
 		KnownText: knownText,
 		Notes:     notes,
 		Stale:     stale,
-	}, nil
+	}
 }
 
 // undocumentedFailure returns the error that fails the run, naming every finding a human must look at.

@@ -26,6 +26,7 @@ type runReport struct {
 	Cases     []caseResult `json:"cases"`
 	Known     []knownEntry `json:"known_failures"`
 	Stale     []string     `json:"stale_known_failures"`
+	KnownPath string       `json:"known_path"`
 	KnownText string       `json:"-"` // the list is embedded verbatim in the Markdown report
 	Notes     string       `json:"-"` // the optional notes file, likewise embedded verbatim
 }
@@ -181,7 +182,8 @@ func writeResults(b *strings.Builder, rep runReport) {
 	fmt.Fprintf(b, "## Results\n\n")
 	fmt.Fprintf(b, "`interp` / `qkc gen` / `qkc run` are wall-clock seconds; `peak RSS` is the largest group figure seen in\n")
 	fmt.Fprintf(b, "either engine's run phase; `exits` are the two run exit statuses (interpreter / compiler); `pos` says\n")
-	fmt.Fprintf(b, "whether that engine's stderr carried a source position.\n\n")
+	fmt.Fprintf(b, "whether that engine's stderr matched a source-position shape (`at line N, col M` from the shared front\n")
+	fmt.Fprintf(b, "end, `file.kq:N:M` from the compiler), which is a heuristic and not a promise about the diagnostic.\n\n")
 	fmt.Fprintf(b, "| case | category | bytes | interp s | qkc gen s | qkc run s | peak RSS MiB i/c | exits i/c | pos i/c | verdict |\n")
 	fmt.Fprintf(b, "|---|---|---:|---:|---:|---:|---|---|---|---|\n")
 	for _, r := range rep.Cases {
@@ -319,7 +321,7 @@ func writePhaseRow(b *strings.Builder, engine, phase string, res probeResult) {
 
 // writeKnown embeds the known-failure list verbatim, so the report and the allow-list cannot drift.
 func writeKnown(b *strings.Builder, rep runReport) {
-	fmt.Fprintf(b, "## Known failures, verbatim from `%s`\n\n", "stress/known-failures.txt")
+	fmt.Fprintf(b, "## Known failures, verbatim from `%s`\n\n", rep.KnownPath)
 	if strings.TrimSpace(rep.KnownText) == "" {
 		fmt.Fprintf(b, "The list is empty: no defect is currently documented as known.\n")
 		return

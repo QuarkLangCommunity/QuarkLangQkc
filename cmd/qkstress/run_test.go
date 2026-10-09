@@ -188,12 +188,9 @@ func TestUndocumentedFailureNamesEveryNewFinding(t *testing.T) {
 
 // TestStaleKnownFailuresAreListed checks that a fixed case is reported instead of silently staying on.
 func TestStaleKnownFailuresAreListed(t *testing.T) {
-	rep, err := assembleReport(options{timeout: time.Second, memCapMB: 1024}, []caseResult{
+	rep := assembleReport(options{timeout: time.Second, memCapMB: 1024}, []caseResult{
 		{Name: "scale_ident_1m", Verdict: VerdictAgree},
 	}, []knownEntry{{Case: "scale_ident_1m", Reason: "used to fail"}}, "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(rep.Stale) != 1 || rep.Stale[0] != "scale_ident_1m" {
 		t.Fatalf("stale = %v, want [scale_ident_1m]", rep.Stale)
 	}
