@@ -1,0 +1,18 @@
+// Minimal reproduction: the interpreter refuses recursion the compiled binary handles.
+//
+//   quark    stress/repro/interpreter_recursion_limit.kq
+//     error: StackOverflowError: recursion depth exceeded 8192 at line 13   (exit 1)
+//   qkc -run stress/repro/interpreter_recursion_limit.kq
+//     40504500                                                            (exit 0)
+//
+// The interpreter caps recursion depth at 8192 (a deliberate DoS guard, see
+// internal/lang/attacksec_test.go), so any program that recurses deeper than that stops working on the
+// interpreter while the native backend runs it to completion. Tracked as path_recursion_stack.
+fn down(int n) int {
+  if (n == 0) { return 0; }
+  return n + down(n - 1);
+}
+
+fn main(IOStream io) {
+  io.println(down(9000));
+}
