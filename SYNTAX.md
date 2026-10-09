@@ -83,7 +83,7 @@
 
 | ID | Syntax | Notes |
 |---|---|---|
-| M1 | `macro name($a $b) { body }` | named-parameter macro; the `$` marks a parameter, calls are `name(args)`/`name[args]`/`name{args}`; single-pass expansion, not recursive |
+| M1 | `#macro name (a, b) { body }` | named-parameter macro; `()`/`[]`/`{}` delimiters are interchangeable; single-pass expansion, not recursive |
 | M2 | `#when (run) { ... }` / `#when (compile) { ... }` | state selection (the interpreter takes `run`) |
 | M3 | `#error("msg")` `#return <expr>` `#insert(...)` `#execute(name)` | preprocessor commands |
 | M4 | custom commands starting with `#` | see the internal macro table |

@@ -91,8 +91,6 @@ Every construct the backend does not lower returns a hard `compiler: not support
 - `internal/cgen/lower_taskm.go` —— taskm thread/channel lowering
 - `internal/cgen/cgen.go` —— LLVM IR emitter (types/string constants/printf/SSA values/function attributes/vtable)
 - `testdata/cases/` `testdata/cases_run/` —— interpreter/compiler output comparison corpora (`.out` is the interpreter baseline)
-- Regenerate the `.out` baselines with the interpreter from this directory (they are not committed):
-  `for f in testdata/cases/*.kq; do ../quark "$f" > "${f%.kq}.out"; done`
 - `testdata/compare.sh` —— bulk byte-for-byte comparison (interpreter vs `qkc -run`)
 
 For the language design see `SYNTAX.md` (the canonical syntax list, kept in sync with the implementation).

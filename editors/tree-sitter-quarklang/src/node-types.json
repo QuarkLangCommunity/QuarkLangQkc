@@ -912,7 +912,7 @@
     },
     "children": {
       "multiple": true,
-      "required": true,
+      "required": false,
       "types": [
         {
           "type": "identifier",
@@ -1664,10 +1664,6 @@
   },
   {
     "type": "#",
-    "named": false
-  },
-  {
-    "type": "$",
     "named": false
   },
   {

@@ -80,7 +80,7 @@
 
 | 编号 | 语法 | 说明 |
 |---|---|---|
-| M1 | `macro name($a $b) { 主体 }` | 命名参数宏；`$` 标记形参，调用 `name(args)`/`name[args]`/`name{args}`；单趟展开，不递归 |
+| M1 | `#macro name (a, b) { 主体 }` | 命名参数宏；`()`/`[]`/`{}` 分隔符可互换；单趟展开，不递归 |
 | M2 | `#when (run) { ... }` / `#when (compile) { ... }` | 态选择（解释器走 run） |
 | M3 | `#error("msg")` `#return <expr>` `#insert(...)` `#execute(名字)` | 预处理命令 |
 | M4 | `#` 开头的自定义命令 | 见内部宏表 |

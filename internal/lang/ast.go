@@ -30,7 +30,7 @@ type Program struct {
 	Src         string   // original source (sliced by function-body line range when exporting a library)
 }
 
-// MacroDef is a `macro name($a $b) { body }` definition (named-parameter macro; a `$name` reference in the body is substituted by that parameter's argument).
+// MacroDef is a `#macro name (params...) { body }` definition (named-parameter macro; parameters are substituted by name).
 type MacroDef struct {
 	Name   string
 	Params []string

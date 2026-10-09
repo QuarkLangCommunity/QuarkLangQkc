@@ -91,7 +91,6 @@ testdata/compare.sh                 # 解释器 vs 编译器逐字节对比（�
 - `internal/cgen/lower_taskm.go` —— taskm 线程/通道 lowering
 - `internal/cgen/cgen.go` —— LLVM IR 发射器（类型/字符串常量/printf/SSA 值/函数属性/vtable）
 - `testdata/cases/` `testdata/cases_run/` —— 解释器/编译器输出对比语料（`.out` 为解释器基准）
-- `.out` 基线用解释器在本目录重新生成（不入库）：`for f in testdata/cases/*.kq; do ../quark "$f" > "${f%.kq}.out"; done`
 - `testdata/compare.sh` —— 批量逐字节对比（解释器 vs `qkc -run`）
 
 语言设计见 `SYNTAX.md`（正典语法清单，与实现同步维护）。

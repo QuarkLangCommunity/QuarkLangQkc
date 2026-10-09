@@ -31,7 +31,7 @@ tree-sitter highlight -p . --scope source.quarklang path/to/file.qk
 ## 覆盖与实测
 
 - 语法覆盖正典语法的全部声明形态：`fn`（含泛型/重载）、`type struct`/`type interface`（含 `dynamic` 方法、
-  `expand interface`）、`impl`/`space`/`library`/`type` 别名、`program`/`import`/`pub`、`macro name($a $b)` 宏体。
+  `expand interface`）、`impl`/`space`/`library`/`type` 别名、`program`/`import`/`pub`、`#macro` 宏体。
 - 语句：`if/else`、`while`、C 风格 `for`、迭代 `for`、`try/catch`、`return`、`log`、`delete`、`break`、表达式语句。
 - 表达式：赋值、二元/一元运算（按 C 优先级）、调用（含 `@签名` 调用）、成员/下标、`space::fn`、
   `.{...}` 字面量、`[..]` 列表、`new T` 与 `new T[size]`、宏调用 `name{...}`。
