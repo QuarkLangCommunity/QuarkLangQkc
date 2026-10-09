@@ -50,6 +50,7 @@ type options struct {
 	known    string
 	jsonPath string
 	report   string
+	notes    string
 	filter   string
 }
 
@@ -93,6 +94,7 @@ func cmdRun(args []string) error {
 	fs.StringVar(&opt.known, "known", "stress/known-failures.txt", "known-failure list (a missing file is an empty list)")
 	fs.StringVar(&opt.jsonPath, "json", "stress-out/results.json", "machine-readable results")
 	fs.StringVar(&opt.report, "report", "stress-out/report.md", "generated Markdown report")
+	fs.StringVar(&opt.notes, "notes", "", "optional Markdown file appended to the report as a notes section")
 	fs.StringVar(&opt.filter, "filter", "", "only cases whose name matches this regular expression")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -132,7 +134,10 @@ func cmdRun(args []string) error {
 		results = append(results, r)
 		fmt.Fprintf(os.Stderr, "%-24s %-15s %s\n", r.Name, r.Verdict, r.summaryLine())
 	}
-	rep := assembleReport(opt, results, known, knownText)
+	rep, err := assembleReport(opt, results, known, knownText)
+	if err != nil {
+		return err
+	}
 	if err := writeJSON(opt.jsonPath, rep); err != nil {
 		return err
 	}
@@ -322,7 +327,15 @@ func checkKnownNames(entries []knownEntry) error {
 }
 
 // assembleReport pairs the measurements with the known-failure list and the machine description.
-func assembleReport(opt options, results []caseResult, known []knownEntry, knownText string) runReport {
+func assembleReport(opt options, results []caseResult, known []knownEntry, knownText string) (runReport, error) {
+	notes := ""
+	if opt.notes != "" {
+		data, err := os.ReadFile(opt.notes)
+		if err != nil {
+			return runReport{}, err
+		}
+		notes = string(data)
+	}
 	byName := map[string]string{}
 	for _, e := range known {
 		byName[e.Case] = e.Reason
@@ -345,6 +358,7 @@ func assembleReport(opt options, results []caseResult, known []knownEntry, known
 	}
 	sort.Strings(stale)
 	return runReport{
+		Command:   strings.Join(os.Args, " "),
 		Commit:    gitRevision(),
 		Date:      time.Now().Format(time.RFC3339),
 		TimeoutMS: opt.timeout.Milliseconds(),
@@ -354,8 +368,9 @@ func assembleReport(opt options, results []caseResult, known []knownEntry, known
 		Cases:     results,
 		Known:     known,
 		KnownText: knownText,
+		Notes:     notes,
 		Stale:     stale,
-	}
+	}, nil
 }
 
 // undocumentedFailure returns the error that fails the run, naming every finding a human must look at.
