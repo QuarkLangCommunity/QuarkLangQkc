@@ -56,19 +56,18 @@
       "patterns": [
         {
           "name": "meta.macro.quarklang",
-          "match": "(macro)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "(#)(macro)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
-              "name": "keyword.control.directive.quarklang"
+              "name": "punctuation.definition.directive.quarklang"
             },
             "2": {
+              "name": "keyword.control.directive.quarklang"
+            },
+            "3": {
               "name": "entity.name.function.macro.quarklang"
             }
           }
-        },
-        {
-          "name": "variable.parameter.macro.quarklang",
-          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
         },
         {
           "name": "keyword.control.directive.quarklang",

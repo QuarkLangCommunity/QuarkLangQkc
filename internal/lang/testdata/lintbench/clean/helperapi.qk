@@ -6,6 +6,6 @@ space {
 } api;
 
 // An API in macro form.
-macro inc($a) {
-    #return $a + 1
+#macro inc(a) {
+    #return a + 1
 }

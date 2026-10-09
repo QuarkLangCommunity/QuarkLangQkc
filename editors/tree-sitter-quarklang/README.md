@@ -31,7 +31,7 @@ Editor integration:
 ## Coverage and measurements
 
 - The grammar covers every declaration form of the canonical syntax: `fn` (including generics/overloads), `type struct`/`type interface` (including `dynamic` methods and
-  `expand interface`), `impl`/`space`/`library`/`type` aliases, `program`/`import`/`pub`, and `macro name($a $b)` definitions.
+  `expand interface`), `impl`/`space`/`library`/`type` aliases, `program`/`import`/`pub`, and `#macro` bodies.
 - Statements: `if/else`, `while`, C-style `for`, iteration `for`, `try/catch`, `return`, `log`, `delete`, `break`, expression statements.
 - Expressions: assignment, binary/unary operators (C precedence), calls (including `@signature` calls), member/index access, `space::fn`,
   `.{...}` literals, `[..]` lists, `new T` and `new T[size]`, macro calls `name{...}`.

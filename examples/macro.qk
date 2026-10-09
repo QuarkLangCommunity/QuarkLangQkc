@@ -1,12 +1,6 @@
-// macro name($a $b) { body } — the standard macro spelling (spec/STANDARD.md 6.6):
-// `$a` / `$b` are parameters (the `$` sigil), substituted by the call's argument tokens.
-// #when selects the branch for the state it is expanded in: the interpreter runs, the compiler compiles.
-macro add($a $b) {
-    #when (compile) {
-        #return $a + $b
-    }
+#macro add (a, b) {
     #when (run) {
-        #return $a + $b
+        #return a + b
     }
 }
 

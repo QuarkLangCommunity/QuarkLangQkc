@@ -258,7 +258,7 @@ go build -o qkdoc ./cmd/qkdoc
 
 - 文档注释：声明**上方紧邻**的 `//` 或 `/* */` 注释块（godoc 规则）；无上方注释时取**同行行尾**注释
   （`int x; // 横坐标`）；文件头注释作为文件说明。
-- 默认只导出 `pub` 符号；文件没有 `pub`（如 `program main`）时导出全部；`impl`/`space`/`library`/`macro`
+- 默认只导出 `pub` 符号；文件没有 `pub`（如 `program main`）时导出全部；`impl`/`space`/`library`/`#macro`
   不受 `pub` 过滤（语言中 `pub` 不能前缀它们，而它们正是库对外 API 的载体；宏定义在解析前被切出 AST，由
   `ParseSourceAll` 显式提供）。
 - 实测：`style.qk`（1567 行）→ 8ms 生成 335 行 Markdown（概览表 + 函数/类型/实现/空间分节）。
@@ -485,7 +485,7 @@ go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释�
 - **指针 / 堆申请**：`pointer T` 修饰、`new <type>[size]` 堆上申请（非法大小 `badAlloc`）、空指针解引用 `NullPointerError`；
 - **签名**：`f(args) @instance(prefix)` ≡ `instance.call(prefix)(.{in, out})`（instance 为任意 Sign 实例变量名）——记忆化/包装；
 - **taskm 并发**：`t thread = taskm.spawn(); t.merge(fn, args); taskm.block(t.pid()); taskm.done(pid); c channel = taskm.channel(); c.send(v); c.recv();`——用户态任务 + 线程池（编译路径 pthread 载体，跨系统）；
-- **宏系统**：`macro name($a $b) { 主体 }` 命名参数宏——形参以 `$` 标记，调用 `name(args)`/`name[args]`/`name{args}`，主体中的 `$形参` 被实参 token 替换；主体支持 `#when(compile/run)`、`#return` 与 `#error`——**解释器与编译器共享同一 token 级宏展开**；
+- **宏系统**：`#macro name (参数) { 主体 }` 命名参数宏——参数不限、`()/[]/{}` 分隔符任意，调用 `name(args)`/`name[args]`/`name{args}`，参数按名替换；主体支持 `#when(compile/run)` 与 `#error`——**解释器与编译器共享同一 token 级宏展开**；
 - **delete/clear 语义**：`delete` 入空闲队列（数据保留，可复用），`clear` 真正清空空闲数据（使用中保留，数据安全）；
 - **List<int>**：字面量/下标/`size()`/`get(i)`/`append(v)`（几何增长 O(n)）；
 - **program/library**：`program main;`/`library;`、`import`、`pub`——可发布为 `.qlib` 库；

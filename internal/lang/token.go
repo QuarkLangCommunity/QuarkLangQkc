@@ -68,7 +68,6 @@ const (
 	TCatch
 	TSharp
 	TMacro
-	TDollar // $ (the macro parameter sigil, STANDARD 6.6)
 )
 
 var tokenNames = [...]string{
@@ -77,8 +76,8 @@ var tokenNames = [...]string{
 	"'return'", "'if'", "'else'",
 	"'while'", "'for'", "'true'", "'false'",
 	"'('", "')'", "'{'", "'}'", "'['", "']'", "';'", "','", "'.'", "':'", "'::'", "'@'",
-	"'='", "'+'", "'++'", "'-'", "'*'", "'/'", "'%'", "'!'", "'=='", "'==='", "'!='", "'<'", "'<='", "'>'", "'>='", "'&&'", "'||'",
-	"'<<'", "'>>'", "'^'", "'~'", "'|'", "'log'", "'&'", "'null'", "'try'", "'catch'", "'#'", "'macro'", "'$'",
+	"'='", "'+'", "'-'", "'*'", "'/'", "'%'", "'!'", "'=='", "'!='", "'<'", "'<='", "'>'", "'>='", "'&&'", "'||'",
+	"'<<'", "'>>'", "'^'", "'~'", "'|'", "'log'", "'&'", "'null'", "'try'", "'catch'", "'#'", "'macro'",
 }
 
 func (k TokenKind) String() string {
@@ -293,8 +292,6 @@ func (lx *lexer) next() (Token, error) {
 	switch c {
 	case '#':
 		return one(TSharp)
-	case '$':
-		return one(TDollar)
 	case '(':
 		return one(TLParen)
 	case ')':
