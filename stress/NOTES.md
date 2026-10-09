@@ -51,6 +51,22 @@ behind this one case:
 | `bad_bom` | rejected by both engines, identical wording | a UTF-8 byte-order mark is a lex error ("unexpected character"), which is worth knowing because Windows editors add one |
 | `bad_invalid_utf8` | rejected by both engines, identical wording | invalid UTF-8 in an identifier or a string literal is a clean lex error, not a crash |
 
+### Interaction with the existing whole-repo lint gate
+
+`cmd/qkcheck`'s corpus gate (`TestCLICorpusNoFalsePositives`) walks the repository and lints every `.qk`
+file it finds, *including untracked and gitignored directories*. With this suite's generated corpus on
+disk that walk reaches `stress-out/cases/scale_line_1mb.kq` and the linter dies of the same type-checker
+stack overflow as the engines, which fails `go test ./...` for anyone who has run `qkstress gen`. Two
+changes come out of that:
+
+- the walk now skips `stress-out/`, next to the `dist/`, `dist-ci/`, `lintbench/` and `bench/` entries it
+  already skips, because generated adversarial inputs are not part of the reviewed corpus;
+- it is worth knowing that the gate's file set depends on what happens to be on disk: any `.kq` file left
+  in the tree, tracked or not, joins the corpus review.
+
+None of this affects the language: the linter was already unable to survive this input, and the suite is
+what made that visible.
+
 ### Found while building the corpus, not a corpus case
 
 `List<List<int>>` is accepted by the interpreter and refused by the compiler (`variable type … is not
