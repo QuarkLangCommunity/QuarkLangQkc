@@ -12,6 +12,9 @@ out2.txt
 # docs worktree（独立分支，不并入 main）
 /docs/
 
+# 抗压测试生成物：极端输入、二进制、缓存与运行中间产物（用例由 cmd/qkstress 生成，不入库）
+/.stress/
+
 # 编辑器/系统
 .DS_Store
 *.swp
