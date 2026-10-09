@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.7.1 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.7.2 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-08 · **Review after:** 2026-11-08
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -196,7 +196,9 @@ the core never learns the container's name:
 These are library protocols; the only types with built-in notations are `bit`/`bits<N>`, whose `b[i]`
 is core (§3.3).
 
-## 6.5 `program` and `main` are not mandatory
+## 7. Program shape and runtime
+
+### 7.1 `program` and `main` are not mandatory
 
 | Declaration | Requires `main()` |
 |---|---|
@@ -206,7 +208,7 @@ is core (§3.3).
 
 The `program` statement is itself only a *concretization of runtime capability*; it is never mandatory.
 
-## 6.6 Runtime = the preprocessor directives
+### 7.2 Runtime = the preprocessor directives
 
 | Directive | Meaning |
 |---|---|
@@ -229,7 +231,7 @@ The difference between the two, spelled out:
 
 `#expand` places a node inside the structure; `#run` executes it.
 
-## 7. Error model
+## 8. Error model
 
 - No `try`/`catch`, no `throw`.
 - **`Option<T>`** (library): `some(v)`, `none(sample)`, `isSome`, `isNone`, `unwrap`, `unwrapOr`.
@@ -240,7 +242,7 @@ The difference between the two, spelled out:
 - Runtime errors that remain (`DivisionByZeroError`, `IndexOutOfRangeError`, `NullPointerError`,
   `PanicError`) are reported with position and an execution log.
 
-## 8. Core vs standard library
+## 9. Core vs standard library
 
 | In the core | In the standard library (imported) |
 |---|---|
@@ -254,12 +256,42 @@ The difference between the two, spelled out:
   compatibility, not standard; they are being migrated onto the views of §3.2 — a `char` used as a narrow
   integer becomes `uchar`.
 - **Legacy built-ins still present** (`List`, `HashTable`): scheduled for migration onto library types.
-  Their presence is frozen by a test — the count may only go down.
-- **Not yet implemented:** `bit`/`bits<N>`, `uchar` and the width-split views are the 0.7 target. Until
-  they land in both engines, `int`/`char`/`float` remain the working spellings, and `spec` is ahead of the
-  code by design.
+  Their presence is frozen by a test — the count may only go down. See §10.3.
 
-## 9. Change policy and revision log
+## 10. Implementation status
+
+This section is **not normative**: it records how far the code has caught up with §1–§9, so a reader can
+tell the specification from the implementation. The standard is the source of truth — where the two
+differ, the code is wrong.
+
+### 10.1 Implemented, in both engines
+
+- `bit`, `bits<N>` for `1 ≤ N ≤ 32`, and `uchar`: the bitwise family, `b[i]` read and write, the three
+  conversion meanings of §3.4, and unsigned decimal printing. `compare.sh` keeps the interpreter and the
+  compiler identical on every corpus case.
+- the bitwise family on int views, hex literals, `===` storage identity, permission references, `&lvalue`
+  and the reference move `p++`.
+
+### 10.2 Limits of the current implementation
+
+- `bits<N>` with `N > 32` is refused by the shared frontend, with one identical message in both engines.
+- a width takes a decimal literal only, not an arbitrary constant expression.
+- reinterpreting `float`/`double` is refused: this implementation's `float` is 64-bit while §3.2 says
+  `float32`, so the widths cannot be trusted to agree yet.
+- layout: a `bits<N>` whose width is not 8, 16 or 32 occupies the next storage size in compiled structs
+  and is aligned to that type rather than to 1 as §3.1 requires. Values are exact; only layout rounds up.
+
+### 10.3 The code does not follow the standard here
+
+- **§7.2 macro spelling.** The standard says `macro x($a $b) { … }`. The implementation still accepts
+  `#macro name (params) { body }` and rejects `$`. A change that made the code conform was proposed and
+  then rolled back; it has to come back as its own reviewed change.
+- **§8 no exceptions.** `try`/`catch` still exist in the parser, the AST, the evaluator, the linter and
+  the compiler, although the standard has no exceptions. They are scheduled for removal, after which
+  `Option<T>` and `Result<T, E>` are the only way to carry failure.
+- **§9 core minus containers.** `List` and `HashTable` are still built in; their count is frozen by a test.
+
+## 11. Change policy and revision log
 
 - Corrections of **factual errors** in this document, and fixes that make the implementation match it,
   are allowed at any time.
@@ -268,6 +300,7 @@ The difference between the two, spelled out:
 
 | Version | Date | Change |
 |---|---|---|
+| 0.7.2 | 2026-10-09 | Reorganization and status correction: §6.5/§6.6 became §7 "Program shape and runtime" with subsections, the following sections were renumbered, and a new §10 "Implementation status" was added — the old note still claimed `bit`/`bits<N>`/`uchar` were unimplemented, while both engines have had them since PR #60. §10 now lists what is implemented, the implementation's limits, and the three places where the code does not yet follow the standard (§7.2 macro spelling, §8 no exceptions, §9 built-in containers). No normative content changed |
 | 0.7.1 | 2026-10-08 | `uchar` added: the unsigned 8-bit view over `bits<8>` (`0 … 255`), the octet type and the element type for raw data — there is no signed 8-bit view. §3.1 now states explicitly that every basic type is *implemented from* `bit`/`bits<N>`. Value conversions narrow by keeping the low bits |
 | 0.7 | 2026-10-08 | The storage family is measured in **bits**: `byte`/`bytes<N>` became `bit`/`bits<N>`. A view's name now states its own width (`int32` is `bits<32>`, `float64` is `bits<64>`), layout is `⌈N/8⌉` bytes with the bits past `N` zero, and `b[i]` reads or writes the i-th bit. Freeze restarts: review after 2026-11-08 |
 | 0.6.1 | 2026-10-08 | Corrections: integer views admit the bitwise family `& \| ^ ~` (0.6 had stated it for raw bytes only), operator precedence written down, hex integer literals recorded |
