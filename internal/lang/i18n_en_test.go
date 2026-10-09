@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"testing"
 
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 var hanRe = regexp.MustCompile(`[\p{Han}]`)

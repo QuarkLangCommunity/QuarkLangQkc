@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // bigSource generates synthetic source with n functions (local variables, loops, branches, strings, lists).

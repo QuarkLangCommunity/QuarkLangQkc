@@ -1,7 +1,7 @@
 # 构建产物
 /quark
 /quark.exe
-/quarklang
+/QuarkLangQkc
 /compiler/qkc
 
 # 示例运行产物

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 func docBigSource(n int) string {

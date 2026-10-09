@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 const genericIndexProgram = `program main;

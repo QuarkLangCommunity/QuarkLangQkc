@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 func TestStrictEqStorageIdentity(t *testing.T) {

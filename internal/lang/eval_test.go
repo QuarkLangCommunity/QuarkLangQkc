@@ -3,9 +3,9 @@ package lang
 import (
 	"bytes"
 	"fmt"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"os"
 	"path/filepath"
-	"quarklang/internal/i18n"
 	"strings"
 	"testing"
 )

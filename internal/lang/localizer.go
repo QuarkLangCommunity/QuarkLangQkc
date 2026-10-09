@@ -1,6 +1,6 @@
 package lang
 
-import "quarklang/internal/i18n"
+import "github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 
 // The interpreter renders every user-facing message through one localizer instead of reaching for
 // the i18n package at ~70 call sites. That keeps presentation out of the evaluator, type checker and

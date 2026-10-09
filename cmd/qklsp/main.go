@@ -11,13 +11,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"io"
 	"os"
-	"quarklang/internal/i18n"
 	"regexp"
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)

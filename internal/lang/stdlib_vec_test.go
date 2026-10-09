@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"quarklang/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // runWithStdlib copies the repository's stdlib into a temp dir alongside the program and runs it.

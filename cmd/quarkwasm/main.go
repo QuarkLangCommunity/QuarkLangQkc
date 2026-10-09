@@ -29,8 +29,8 @@ import (
 	"syscall/js"
 	"time"
 
-	"quarklang/internal/i18n"
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // version is injected at build time with -ldflags "-X main.version=vX.Y.Z".

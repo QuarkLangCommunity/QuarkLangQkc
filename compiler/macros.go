@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // Macro expansion engineering: the compiler reuses the interpreter's token-level macro system (one logic, two users).

@@ -9,7 +9,7 @@ package cgen
 import (
 	"strings"
 
-	"quarklang/internal/lang"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // typeArgsKey builds the type-argument key ("int" / "Box<int>" → "int" / "Box_int_").
