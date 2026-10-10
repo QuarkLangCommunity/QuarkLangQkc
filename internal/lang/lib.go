@@ -351,7 +351,9 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 		}
 		return prog, merged.srcMap(), nil
 	}
-	prog, err := compileTokens(append(acc, Token{Kind: TEOF, Line: merged.lineCount() + 1, Col: 1}), merged.String())
+	// One end-of-file marker closes the merged stream, at the position the merged text's lexer would give it.
+	mergedToks := append(acc, Token{Kind: TEOF, Line: merged.lineCount() + 1, Col: 1})
+	prog, err := compileTokens(mergedToks, merged.String())
 	if err != nil {
 		return nil, merged.srcMap(), err
 	}
@@ -387,10 +389,13 @@ func streamIn(toks []Token, lines map[int]int, off int) []Token {
 		}
 		if lines != nil {
 			ln, ok := lines[t.Line]
-			if !ok {
+			if t.Line == 0 {
+				t.Line = off + 1 // a token the expander synthesised without a source line has none to map
+			} else if !ok {
 				continue // a line the text merge dropped (a program declaration): absent from the merged source
+			} else {
+				t.Line = off + ln
 			}
-			t.Line = off + ln
 		} else if off != 0 {
 			t.Line += off
 		}
