@@ -41,6 +41,68 @@ jobs:
       - name: Corpus perturbation invariance (CRLF / comments / line shifts)
         run: go test ./internal/lang/ -run 'TestLintCorpusPerturbation|TestLintCRLF' -count=1 -v
 
+  # Stress / robustness suite: the extreme-input corpus executed against BOTH engines under a hard wall
+  # clock and memory bound, on all three platforms. One bounded job per platform instead of a Linux-only
+  # gate, because the three defects the suite found were platform-independent by construction (a Go stack
+  # overflow, a missing call-depth counter) and the fix must not reintroduce a platform-dependent answer.
+  #
+  # The subset: the two cases whose cost is dominated by sheer size rather than by the property this job
+  # guards are skipped with -skip — path_fn_10k_params (9.2 s of a 10 s default bound and 1.6 GiB peak RSS
+  # on the machine that measured the report, so it flakes on a shared runner) and res_few_mb (a 4 MB
+  # program, 6.3 s of compile and link). Everything else runs, with -timeout 90s explicit so no case can
+  # fail on the bound alone. The full corpus stays the developer-facing gate (see stress/README.md).
+  #
+  # RSS: the runner samples the process group through /proc on Linux only and records -1 ("unavailable")
+  # elsewhere, which the report renders as "-". The bound therefore degrades instead of failing on macOS
+  # and Windows, where the job still checks exit statuses, output parity and the wall-clock bound.
+  stress:
+    name: stress suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+      - name: Ensure clang is available (added to PATH on Windows)
+        run: |
+          if ! command -v clang >/dev/null 2>&1; then
+            echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
+          fi
+          clang --version | head -2
+      - name: Build both engines into the generated tree
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then EXT=.exe; else EXT=; fi
+          go build -o "stress-out/bin/quark$EXT" .
+          (cd compiler && go build -o "../stress-out/bin/qkc$EXT" .)
+          echo "STRESS_EXT=$EXT" >> "$GITHUB_ENV"
+      - name: Materialise the extreme corpus (gitignored, ~10 MB)
+        run: go run ./cmd/qkstress gen -out stress-out/cases
+      - name: Run the bounded subset against both engines
+        run: |
+          go run ./cmd/qkstress run \
+            -cases stress-out/cases \
+            -interp "stress-out/bin/quark$STRESS_EXT" \
+            -compiler "stress-out/bin/qkc$STRESS_EXT" \
+            -work stress-out \
+            -timeout 90s \
+            -skip 'path_fn_10k_params|res_few_mb' \
+            -known stress/known-failures.txt
+      - name: Upload the measured report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stress-report-${{ matrix.os }}
+          path: |
+            stress-out/report.md
+            stress-out/results.json
+
   # Linux extras: the parts that need clang/bash/tree-sitter/node stay on Linux
   linux-extras:
     name: linux extras (dual-path / editors / release)

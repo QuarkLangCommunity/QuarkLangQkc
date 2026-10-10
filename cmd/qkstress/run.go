@@ -28,7 +28,7 @@ const (
 )
 
 // errNoCases reports an empty case selection, which is always a mistake rather than a clean run.
-var errNoCases = errors.New("no cases selected: check -cases, -filter and `qkstress gen`")
+var errNoCases = errors.New("no cases selected: check -cases, -filter, -skip and `qkstress gen`")
 
 // loudVerdicts are the outcomes that fail a run unless the case is a documented known failure.
 var loudVerdicts = map[string]bool{
@@ -52,6 +52,7 @@ type options struct {
 	report   string
 	notes    string
 	filter   string
+	skip     string
 }
 
 // engineResult is the two bounded phases one engine ran on a case.
@@ -96,6 +97,7 @@ func cmdRun(args []string) error {
 	fs.StringVar(&opt.report, "report", "stress-out/report.md", "generated Markdown report")
 	fs.StringVar(&opt.notes, "notes", "", "optional Markdown file appended to the report as a notes section")
 	fs.StringVar(&opt.filter, "filter", "", "only cases whose name matches this regular expression")
+	fs.StringVar(&opt.skip, "skip", "", "drop cases whose name matches this regular expression (for a bounded CI subset)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -124,12 +126,17 @@ func cmdRun(args []string) error {
 			return err
 		}
 	}
-	corpus, err := selectCases(opt.cases, opt.filter)
+	corpus, err := selectCases(opt.cases, opt.filter, opt.skip)
 	if err != nil {
 		return err
 	}
 	known, knownText, err := loadKnown(opt.known)
 	if err != nil {
+		return err
+	}
+	// A list that names a case the corpus does not have would silently allow-list nothing, so it is
+	// refused before any measurement is taken.
+	if err := checkKnownNames(known); err != nil {
 		return err
 	}
 
@@ -150,8 +157,9 @@ func cmdRun(args []string) error {
 	return undocumentedFailure(rep)
 }
 
-// selectCases resolves the corpus on disk, refusing a stale or missing case directory.
-func selectCases(dir, filter string) ([]stressgen.Case, error) {
+// selectCases resolves the corpus on disk, refusing a stale or missing case directory; -filter and
+// -skip select a subset by name, which is how a bounded CI job keeps its cost predictable.
+func selectCases(dir, filter, skip string) ([]stressgen.Case, error) {
 	var pattern *regexp.Regexp
 	if filter != "" {
 		compiled, err := regexp.Compile(filter)
@@ -160,9 +168,20 @@ func selectCases(dir, filter string) ([]stressgen.Case, error) {
 		}
 		pattern = compiled
 	}
+	var skipped *regexp.Regexp
+	if skip != "" {
+		compiled, err := regexp.Compile(skip)
+		if err != nil {
+			return nil, fmt.Errorf("-skip %q: %w", skip, err)
+		}
+		skipped = compiled
+	}
 	var out []stressgen.Case
 	for _, c := range stressgen.All() {
 		if pattern != nil && !pattern.MatchString(c.Name) {
+			continue
+		}
+		if skipped != nil && skipped.MatchString(c.Name) {
 			continue
 		}
 		info, err := os.Stat(filepath.Join(dir, c.Name+".kq"))

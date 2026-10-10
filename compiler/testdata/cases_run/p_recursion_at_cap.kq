@@ -1,0 +1,9 @@
+// Call depth at the shared limit (internal/lang.MaxCallDepth = 8192): 8191 levels below main run.
+fn down(int n) int {
+  if (n == 0) { return 0; }
+  return n + down(n - 1);
+}
+
+fn main(IOStream io) {
+  io.println(down(8191));
+}

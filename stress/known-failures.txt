@@ -13,11 +13,6 @@
 #   * when the implementation is fixed, remove the entry: the runner reports such a stale entry as a
 #     warning, and a stale entry that is left behind would hide the next real failure of that case.
 #
-# The three entries below were found by the first full run of this suite; see stress/REPORT.md for the
-# measured table they come from.
-
-scale_line_1mb	a long expression chain overflows the Go stack in the shared front end: the type checker recurses once per binary node (internal/lang/typecheck.go: (*checker).inferBin -> infer), so a left-deep chain of ~300 000 additions dies with "runtime: goroutine stack exceeds 1000000000-byte limit" (exit 2) in BOTH engines instead of reporting a source-position diagnostic. Minimal reproduction: stress/repro/expression_chain_stack_overflow.sh 320000 > chain.kq, then run quark or qkc -run on it. Both engines crash identically, so this is not an engine divergence but a hard crash of the shared front end; the hand-measured cost curve that leads up to it (quadratic VM compilation in internal/lang/vm.go (*vmCompiler).typeOf, then the crash) is in the notes section of stress/REPORT.md.
-
-path_recursion_stack	the interpreter caps recursion depth at 8192 (a deliberate DoS guard) and reports StackOverflowError, while the native binary runs 1 000 000 levels of non-tail recursion to completion and exits 0: the two engines disagree on a program both front ends accept. Minimal reproduction: stress/repro/interpreter_recursion_limit.kq (depth 9000, interpreter exits 1, compiler prints 40504500 and exits 0). Recorded rather than fixed: raising the interpreter's limit is a language-behaviour change and out of scope for a test-only slice.
-
-path_recursion_tail	the same depth cap as above, in its sharpest form: the native backend turns the self call into a loop (so the depth never grows) and prints 9000, while the interpreter counts the calls and stops at 8192. Minimal reproduction: stress/repro/interpreter_recursion_limit_tail.kq. Same root cause as path_recursion_stack, kept separate because the two failures have different fixes.
+# The first full run of this suite found three defects, all three fixed: the empty list below is
+# deliberate, not an oversight. See the "closed findings" section of stress/NOTES.md for what each one
+# was, how it was fixed, and the minimal reproduction that now passes.

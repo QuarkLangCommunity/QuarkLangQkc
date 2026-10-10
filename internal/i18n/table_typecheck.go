@@ -42,6 +42,10 @@ var typecheckTable = map[string]string{
 	"sum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %d": "sum(generate, begin, stop[, step]) requires 3 or 4 arguments, got %d",
 	"接口 %s 没有方法 %q":                                          "interface %s has no method %q",
 
+	// Expression depth: the shared front end refuses a nesting deeper than its limit instead of
+	// exhausting the Go stack, so both engines report a position rather than dying.
+	"CompileError: expression nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements": "CompileError: 表达式嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句",
+
 	// Raw bits (bit / bits<N>) and the uchar view: the operator, indexing and conversion rules of spec §3.
 	"CompileError: bit index %d is out of range for %s (0..%d)":                                                                                            "CompileError: 位下标 %d 超出 %s 的范围 (0..%d)",
 	"TypeError: a bit index must be int, got %s":                                                                                                           "TypeError: 位下标必须是 int，得到 %s",

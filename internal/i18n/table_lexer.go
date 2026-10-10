@@ -17,4 +17,8 @@ var lexerTable = map[string]string{
 	"函数必须声明返回类型：fn %s(...) 返回类型 { ... }":                         "a function must declare its return type: fn %s(...) <return type> { ... }",
 	"匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）":       "an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)",
 	"匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）": "an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)",
+
+	// Parser nesting: an over-deep descent is refused instead of exhausting the Go stack, so the engine
+	// reports a position rather than dying.
+	"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements": "嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句",
 }

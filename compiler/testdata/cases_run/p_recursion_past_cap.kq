@@ -1,0 +1,9 @@
+// One level past the shared call-depth limit: both engines must report the same error at this line.
+fn down(int n) int {
+  if (n == 0) { return 0; }
+  return n + down(n - 1);
+}
+
+fn main(IOStream io) {
+  io.println(down(8192));
+}

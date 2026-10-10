@@ -280,6 +280,128 @@ type runnerDef struct {
 	params []string // target function parameter types (≤4; carried at runtime in i64 slots)
 }
 
+// depthGuardHelper is the call-depth guard of the generated code. The interpreter refuses a call made
+// from a frame that is already lang.MaxCallDepth deep, and the compiled binary must refuse exactly the
+// same call: the counter below is thread-local (taskm runs QL functions on its own threads, and one
+// shared counter would miscount them), the message comes from the shared constant so both engines
+// print the same bytes, and the line is the one the caller stored at the call site — the interpreter
+// reports the refused call's position, not the callee's. ql_depth_leave releases the level on every
+// return, so a program that makes many calls one after another does not accumulate depth.
+func depthGuardHelper() string {
+	msg := lang.MaxCallDepthMessage
+	n := len(msg) + 1 // the bare message: ql_panic appends " at line %d" and the newline itself
+	return fmt.Sprintf(`@qk_call_depth = thread_local global i32 0
+@qk_call_line = thread_local global i32 0
+@.ql.panic.depth = private unnamed_addr constant [%[1]d x i8] c"%[2]s\00", align 1
+define void @ql_depth_enter() {
+entry:
+  %%d = load i32, i32* @qk_call_depth, align 4
+  %%d1 = add i32 %%d, 1
+  store i32 %%d1, i32* @qk_call_depth, align 4
+  %%over = icmp sgt i32 %%d1, %[3]d
+  br i1 %%over, label %%ovf, label %%ok
+ovf:
+  %%line = load i32, i32* @qk_call_line, align 4
+  %%msg = getelementptr inbounds [%[1]d x i8], [%[1]d x i8]* @.ql.panic.depth, i64 0, i64 0
+  call void @ql_panic(i8* %%msg, i32 %%line)
+  unreachable
+ok:
+  ret void
+}
+define void @ql_depth_leave() {
+entry:
+  %%d = load i32, i32* @qk_call_depth, align 4
+  %%d1 = sub i32 %%d, 1
+  store i32 %%d1, i32* @qk_call_depth, align 4
+  ret void
+}
+`, n, irStringConst(msg), lang.MaxCallDepth)
+}
+
+// irStringConst escapes a message for an LLVM string constant, which ends at the first quote or
+// backslash that is not escaped.
+func irStringConst(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\5C`)
+	return strings.ReplaceAll(s, `"`, `\22`)
+}
+
+// emitDepthEnter takes one call-depth level for the function that is starting, which is what makes an
+// over-deep call chain a diagnostic instead of a crash.
+func (e *emitter) emitDepthEnter() {
+	e.needDepthGuard = true
+	e.needPanic = true
+	e.emitInstr("call void @ql_depth_enter()")
+}
+
+// callFreeBody reports whether a body provably never hands control to another QL function. Only such a
+// body may skip the depth counter, and it may, exactly: a frame that makes no call is always the
+// innermost one and has returned before the next call, so it can never be the caller of a refused call,
+// and the counter holds the same value at every refusal point with or without it. The predicate is a
+// whitelist — a call, an interface dispatch, an index, a table, a conversion, a print, a loop, a merge,
+// anything this walk does not recognise counts as a call — so a node kind added later can only widen the
+// guard, never narrow it. The gain is real for function-dense programs: 50 000 arithmetic-only functions
+// (the res_few_mb corpus case) used to pay two runtime calls each, which made every one of them a
+// non-leaf function for clang and cost ~60% more compile time.
+func callFreeBody(stmts []stmt) bool {
+	for _, s := range stmts {
+		if !callFreeStmt(s) {
+			return false
+		}
+	}
+	return true
+}
+
+// callFreeStmt reports whether one statement is call-free (see callFreeBody).
+func callFreeStmt(s stmt) bool {
+	switch st := s.(type) {
+	case *exprStmt:
+		return callFreeExpr(st.x)
+	case *returnStmt:
+		return callFreeExpr(st.x)
+	case *declStmt:
+		return callFreeExpr(st.init)
+	case *assignStmt:
+		return callFreeExpr(st.x)
+	case *ifStmt:
+		return callFreeExpr(st.cond) && callFreeBody(st.then) && callFreeBody(st.els)
+	}
+	return false
+}
+
+// callFreeExpr reports whether one expression is call-free: only arithmetic, comparisons, short-circuit
+// logic and reads of already-bound storage qualify (see callFreeBody).
+func callFreeExpr(x *expr) bool {
+	if x == nil {
+		return true
+	}
+	switch x.kind {
+	case kInt, kFloat, kString, kBool, kNull, kIdent:
+		return true
+	case kBin, kCmp, kAndOr:
+		return callFreeExpr(x.l) && callFreeExpr(x.r)
+	}
+	return false
+}
+
+// emitDepthLeave releases the level emitDepthEnter took, so sibling calls do not accumulate depth.
+func (e *emitter) emitDepthLeave() {
+	if e.depthGuarded {
+		e.emitInstr("call void @ql_depth_leave()")
+	}
+}
+
+// emitCallLine records the call site's line, which is the position the depth guard reports when the
+// call it is about to make is the one that passes the limit. Storing the line is what requires the
+// guard's globals in this module, including for a program whose only function is main.
+func (e *emitter) emitCallLine(line int) {
+	if line <= 0 {
+		line = 1
+	}
+	e.needDepthGuard = true
+	e.needPanic = true
+	e.emitInstr("store i32 %d, i32* @qk_call_line, align 4", line)
+}
+
 // emitRunners generates the taskm.merge executors: restore the runtime i64 slots into the target
 // function's parameter cells, then call it by reference (return value discarded). Supports 0..4 parameters of any lowerable type.
 func (e *emitter) emitRunners(rs []runnerDef) string {
@@ -428,6 +550,8 @@ type emitter struct {
 	needStrCmp     bool
 	needPanic      bool
 	needPanicBits  bool
+	needDepthGuard bool // the generated code counts call depth (see depthGuardHelper)
+	depthGuarded   bool // the function currently being emitted is a QL function, not the generated main
 }
 
 func newEmitter(lp *lowered) *emitter {
@@ -989,7 +1113,8 @@ func (e *emitter) emitProgram(lp *lowered) string {
 		}
 	}
 	e.cur = "entry"
-	e.curRet = "int" // main's LLVM return type is i32 (log/uniform ret i32 0 at the end)
+	e.curRet = "int"       // main's LLVM return type is i32 (log/uniform ret i32 0 at the end)
+	e.depthGuarded = false // main is the root of the call tree: it enters at depth 0 and never returns a level
 	e.body.Reset()
 	e.funcReturned = false
 	e.term = false
@@ -1024,6 +1149,12 @@ func (e *emitter) emitProgram(lp *lowered) string {
 		if e.needPanicBits {
 			helpers += "declare void @ql_panic_bits(i32, i32, i32)\n"
 		}
+		if e.needDepthGuard {
+			// The library counts call depth together with the program it is linked into: the entry points
+			// and the two counters live in the consumer module, which is also where ql_panic comes from.
+			helpers += "declare void @ql_depth_enter()\ndeclare void @ql_depth_leave()\n"
+			helpers += "@qk_call_line = external thread_local global i32\n"
+		}
 	} else {
 		if e.needIntToStr || forceHelpers {
 			helpers += intToStrHelper
@@ -1039,6 +1170,12 @@ func (e *emitter) emitProgram(lp *lowered) string {
 		}
 		if e.needPanicBits || forceHelpers {
 			helpers += panicBitsHelper
+		}
+		if e.needDepthGuard || forceHelpers {
+			// forceHelpers means a library is merged into this module: the library calls the guard entry
+			// points and reads the counter, so the program must define them even when it has no function
+			// of its own that needs one (a program whose only function is main).
+			helpers += depthGuardHelper()
 		}
 	}
 	// The runner's parameter types may emit struct definitions on demand, so this must happen before reading e.types
@@ -1082,16 +1219,23 @@ func (e *emitter) emitFunc(fd *funcDef) string {
 	}
 	sig.WriteString(")" + fnAttrs(fd.name, e.fnMeta) + "\n")
 	e.cur = "entry"
+	// A body that can call counts one call level; a call-free body cannot be a refusal site, so it carries
+	// no counter (see callFreeBody). The generated main is the root and is never counted.
+	e.depthGuarded = !callFreeBody(fd.body)
 	e.body.WriteString("entry:\n")
 	for i, p := range fd.params {
 		if p.copyd {
 			e.bindCopydParam(p, paramRegs[i])
 		}
 	}
+	if e.depthGuarded {
+		e.emitDepthEnter()
+	}
 	e.funcReturned = false
 	e.term = false
 	e.emitBlock(fd.body)
 	if !e.funcReturned && !e.term {
+		e.emitDepthLeave()
 		switch fd.ret {
 		case "int":
 			e.emitInstr("ret i32 0")
@@ -1487,6 +1631,7 @@ func (e *emitter) emitStmt(s stmt) {
 
 // emitRetZero emits a zero-value return of the current function's return type (used by log).
 func (e *emitter) emitRetZero() {
+	e.emitDepthLeave()
 	switch e.curRet {
 	case "int":
 		e.emitInstr("ret i32 0")
@@ -1507,45 +1652,29 @@ func (e *emitter) emitReturn(st *returnStmt) {
 		e.emitRetZero()
 		return
 	}
-	// Tail call optimization: return f(args) → tail call (tail-recursive stack O(1)).
-	// With by-reference passing a tail call is only possible when "the argument address is stable for the duration of the call": if an argument is a
-	// temporary alloca in the current frame, the tail call would invalidate the pointer (LLVM tail call rules), so we fall back to a normal call.
-	if st.x.kind == kCall && st.x.call != nil && st.x.call.name != "sum" && st.x.call.name != "clock" {
-		c := st.x.call
-		argRegs, tailSafe := e.compileArgs(c)
-		if tailSafe {
-			retTy := e.ir(e.sigRet(c.name))
-			r := e.newReg()
-			e.body.WriteString(r)
-			e.body.WriteString(" = tail call " + retTy + " @" + c.name + "(" + strings.Join(argRegs, ", ") + ")\n")
-			e.emitInstr("ret %s %s", retTy, r)
-			e.funcReturned = true
-			return
-		}
-	}
+	// `return f(args)` used to become an LLVM tail call, which lets the native frame be reused. That
+	// optimisation is gone on purpose: the interpreter counts a tail call as one more level of call
+	// depth, so a tail-recursive function that runs deeper than lang.MaxCallDepth must be refused by
+	// both engines, and a reused frame would silently bypass the counter the callee maintains at its
+	// entry. The depth cap bounds the native recursion anyway, so nothing is lost by nesting frames.
 	v, vt := e.compileExpr(st.x)
 	v = e.coerceTo(v, vt, e.curRet)
+	e.emitDepthLeave()
 	e.emitInstr("ret %s %s", e.ir(e.curRet), v)
 	e.funcReturned = true
 }
 
 // compileArgs compiles call arguments and applies implicit conversions per the callee signature (int → float).
-// Returns a list of "type register" strings; the second return value reports whether all arguments are tail-call safe
-// (with by-reference passing and an argument cell inside the caller's frame, a tail call would invalidate the pointer, so TCO must be disabled).
-func (e *emitter) compileArgs(c *callExpr) ([]string, bool) {
+func (e *emitter) compileArgs(c *callExpr) []string {
 	sig := e.sigs[c.name]
 	out := make([]string, 0, len(c.args))
-	tailSafe := true
 	for i, a := range c.args {
 		want := "?"
 		if sig != nil && i < len(sig.params) {
 			want = sig.params[i].typ
 		}
 		if sig != nil && sig.byRef && !c.byValArgs {
-			p, pt, safe := e.compileArgAddr(a, want)
-			if !safe {
-				tailSafe = false
-			}
+			p, pt := e.compileArgAddr(a, want)
 			out = append(out, e.ir(pt)+"* "+p)
 			continue
 		}
@@ -1557,20 +1686,17 @@ func (e *emitter) compileArgs(c *callExpr) ([]string, bool) {
 		// Variadic (printf style) is not covered here; every IR function in this backend has fixed arity
 		out = append(out, e.ir(want)+" "+v)
 	}
-	return out, tailSafe
+	return out
 }
 
-// compileArgAddr prepares storage for an argument passed by reference; returns (address, language type, tail safety).
+// compileArgAddr prepares storage for an argument passed by reference; returns (address, language type).
 //   - lvalue argument (variable/field/List index) with an exactly matching type → use its own storage (writes back to the caller);
 //   - everything else (literal, arithmetic result, needs an int→float conversion, needs boxing) → a caller temporary cell,
 //     where the callee's writes are not written back (consistent with the interpreter's "non-lvalue arguments are temporary cells").
-//
-// tailSafe reports whether that address is stable for the whole call (heap object/caller storage = safe;
-// an alloca temporary cell in the current frame = invalidated by a tail call).
-func (e *emitter) compileArgAddr(x *expr, want string) (string, string, bool) {
+func (e *emitter) compileArgAddr(x *expr, want string) (string, string) {
 	if x != nil && x.ifaceBox == "" {
-		if p, t, safe, ok := e.lvalueAddr(x); ok && (want == "" || want == "?" || t == want) {
-			return p, t, safe
+		if p, t, ok := e.lvalueAddr(x); ok && (want == "" || want == "?" || t == want) {
+			return p, t
 		}
 	}
 	v, vt := e.compileExpr(x)
@@ -1582,40 +1708,38 @@ func (e *emitter) compileArgAddr(x *expr, want string) (string, string, bool) {
 	slot := e.newReg()
 	e.emitInstr("%s = alloca %s, align %d", slot, llt, e.alignOf(want))
 	e.emitInstr("store %s %s, %s* %s", llt, v, llt, slot)
-	return slot, want, false
+	return slot, want
 }
 
-// lvalueAddr tries to take the lvalue address of an expression (returns address, language type, tail-call safety).
+// lvalueAddr tries to take the lvalue address of an expression (returns address, language type, ok).
 // Only the three lvalue kinds the backend already has are supported: variable, struct field, List index (the same set as the interpreter's evalArg).
-func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
+func (e *emitter) lvalueAddr(x *expr) (string, string, bool) {
 	switch x.kind {
 	case kIdent:
 		info, ok := e.vars[x.s]
 		if !ok || info.param || info.direct {
-			return "", "", false, false // SSA passthrough/register variables have no mutable storage
+			return "", "", false // SSA passthrough/register variables have no mutable storage
 		}
-		// ref=true: the storage belongs to the caller (or the heap), tail-call safe; a local alloca is not
-		return info.reg, info.typ, info.ref, true
+		return info.reg, info.typ, true
 	case kField:
 		if x.field == nil || x.field.recv == nil {
-			return "", "", false, false
+			return "", "", false
 		}
 		obj, otyp := e.compileExpr(x.field.recv)
 		if !e.isStruct(otyp) {
-			return "", "", false, false
+			return "", "", false
 		}
 		for i, f := range e.structs[otyp] {
 			if f.name == x.field.name {
 				g := e.newReg()
 				e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d", g, e.irElem(otyp), e.irElem(otyp), obj, i)
-				// A struct instance is either on the heap or belongs to the caller → the address is stable
-				return g, f.typ, true, true
+				return g, f.typ, true
 			}
 		}
-		return "", "", false, false
+		return "", "", false
 	case kIndex:
 		if x.idx == nil || x.idx.recv == nil {
-			return "", "", false, false
+			return "", "", false
 		}
 		lo, lt := e.compileExpr(x.idx.recv)
 		if lt == "List<String>" {
@@ -1628,10 +1752,10 @@ func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
 			i64 := e.toI64(idx)
 			g := e.newReg()
 			e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g, p, i64)
-			return g, "String", true, true
+			return g, "String", true
 		}
 		if !isListType(lt) {
-			return "", "", false, false
+			return "", "", false
 		}
 		head, size := e.listHeadSize(lo)
 		i, it := e.compileExpr(x.idx.i)
@@ -1643,9 +1767,9 @@ func (e *emitter) lvalueAddr(x *expr) (string, string, bool, bool) {
 		i64 := e.toI64(idx)
 		g2 := e.newReg()
 		e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, p, i64)
-		return g2, "int", true, true // the buffer is on the heap
+		return g2, "int", true // the buffer is on the heap
 	}
-	return "", "", false, false
+	return "", "", false
 }
 
 // sigRet returns the return type of the callee (assumed i32 when there is no signature).
@@ -3034,7 +3158,7 @@ func (e *emitter) emitBitBoundsCheck(i32idx string, width, line int) {
 // emitBitAssign writes one bit of raw bits: the lvalue is read, the bit is replaced and stored back
 // (spec §3.3).
 func (e *emitter) emitBitAssign(st *bitAssignStmt) {
-	addr, typ, _, ok := e.lvalueAddr(st.recv)
+	addr, typ, ok := e.lvalueAddr(st.recv)
 	if !ok {
 		e.emitInstr("; b[i] = v needs an addressable raw-bits target")
 		return
@@ -3129,7 +3253,8 @@ func (e *emitter) compileCall(x *expr) (string, string) {
 		return e.emitClock(), "int"
 	}
 	ret := e.sigRet(c.name)
-	args, _ := e.compileArgs(c)
+	args := e.compileArgs(c)
+	e.emitCallLine(x.line)
 	if ret == "void" {
 		e.body.WriteString("  call void @" + c.name + "(" + strings.Join(args, ", ") + ")\n")
 		return "0", "void"
@@ -3201,6 +3326,7 @@ func (e *emitter) compileMemoCall(x *expr) string {
 		callArgs = append(callArgs, "i32* "+cell)
 	}
 	r := e.newReg()
+	e.emitCallLine(x.line)
 	e.body.WriteString(r + " = call i32 @" + c.name + "(" + strings.Join(callArgs, ", ") + ")\n")
 	e.emitInstr("call void @ql_memo_put(i8* %s, i32 %d, i32* %s, i32 %s)", handle, n, kp, r)
 	e.emitInstr("br label %%%s", doneB)
@@ -3880,7 +4006,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 				args = append(args, e.ir(want)+" "+e.valueOfCell(v, want))
 				continue
 			}
-			p, pt, _ := e.compileArgAddr(a, want)
+			p, pt := e.compileArgAddr(a, want)
 			args = append(args, e.ir(pt)+"* "+p)
 		}
 		ret := e.sigRet(m.sig)
@@ -3925,7 +4051,7 @@ func (e *emitter) compileIfaceCall(x *expr) (string, string) {
 			continue
 		}
 		// remaining arguments: the language level passes by reference → pass the value cell address (the thunk forwards it unchanged to the concrete method)
-		p, pt, _ := e.compileArgAddr(a, want)
+		p, pt := e.compileArgAddr(a, want)
 		pty = append(pty, e.ir(pt)+"*")
 		callArgs = append(callArgs, e.ir(pt)+"* "+p)
 	}
@@ -3936,6 +4062,7 @@ func (e *emitter) compileIfaceCall(x *expr) (string, string) {
 	fnty := retIR + " (" + strings.Join(pty, ", ") + ")*"
 	fn := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to %s", fn, fp, fnty)
+	e.emitCallLine(x.line)
 	if retIR == "void" {
 		e.body.WriteString("  call void " + fn + "(" + strings.Join(callArgs, ", ") + ")\n")
 		return "0", "void"

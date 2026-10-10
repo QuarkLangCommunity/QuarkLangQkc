@@ -24,6 +24,7 @@ type parser struct {
 	toks []Token
 	i    int
 
+	depth     int               // expression/statement nesting of the current descent (see enterNesting)
 	prog      *Program          // the current program (anonymous struct/interface used as a type annotation is registered as a synthesized named type)
 	anonByKey map[string]string // anonymous type structural key → synthesized name (the same structure reuses the same name)
 	anonSeq   int
@@ -1090,7 +1091,19 @@ func (p *parser) parseBlock() (*Block, error) {
 	return b, nil
 }
 
+// parseStmt is the guarded statement entry: nested blocks, branches and loops recurse through it, so it
+// counts the nesting depth exactly like parseExpr does for expressions.
 func (p *parser) parseStmt() (Stmt, error) {
+	if err := p.enterNesting(); err != nil {
+		return nil, err
+	}
+	st, err := p.parseStmtBody()
+	p.depth--
+	return st, err
+}
+
+// parseStmtBody parses one statement without the nesting guard (see parseStmt, its only caller).
+func (p *parser) parseStmtBody() (Stmt, error) {
 	// break;  leaves a loop (inside a while/for body)
 	if p.curIs(TIdent) && p.cur().Text == "break" {
 		bp := Pos{Line: p.cur().Line, Col: p.cur().Col}
@@ -1420,7 +1433,28 @@ func (p *parser) parseForStep() (Stmt, error) {
 
 // ---- expressions ----
 
-func (p *parser) parseExpr() (Expr, error) { return p.parseOr() }
+// parseExpr is the guarded expression entry: a nesting deeper than MaxExprDepth would exhaust the Go
+// stack through the recursive descent, so it is refused with a position instead (same limit as the type
+// checker, which walks the same tree afterwards).
+func (p *parser) parseExpr() (Expr, error) {
+	if err := p.enterNesting(); err != nil {
+		return nil, err
+	}
+	x, err := p.parseOr()
+	p.depth--
+	return x, err
+}
+
+// enterNesting counts one level of parser recursion and refuses the level that passes MaxExprDepth.
+func (p *parser) enterNesting() error {
+	p.depth++
+	if p.depth > MaxExprDepth {
+		p.depth--
+		tok := p.cur()
+		return p.errf(tok, msg("nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements", MaxExprDepth))
+	}
+	return nil
+}
 
 func (p *parser) parseOr() (Expr, error)  { return p.parseBin(p.parseAnd, TOr) }
 func (p *parser) parseAnd() (Expr, error) { return p.parseBin(p.parseCmp, TAnd) }
