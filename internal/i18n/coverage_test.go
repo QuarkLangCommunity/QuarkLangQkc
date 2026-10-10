@@ -278,6 +278,34 @@ func TestEnglishSourceRatchet(t *testing.T) {
 	t.Logf("Chinese-source wired templates: %d (limit %d)", n, allowed)
 }
 
+// TestCatalogDirectionFollowsTheSourceLanguage pins the per-language index to the direction of each
+// table entry. A table maps the call-site template to the other language, so the entry's direction is
+// a property of its key; indexing every table as if the key were Chinese put the Chinese value behind
+// the English one, which is what made an English-source diagnostic render Chinese on the runners.
+func TestCatalogDirectionFollowsTheSourceLanguage(t *testing.T) {
+	for _, domain := range stdCatalog.Domains() {
+		for template, translated := range stdCatalog.Domain(domain) {
+			en, _ := stdCatalog.Lookup(template, EN)
+			zh, _ := stdCatalog.Lookup(template, ZH)
+			if hanRe.MatchString(template) { // legacy Chinese source: EN carries the translation
+				if en != translated {
+					t.Errorf("%s: %q renders %q under EN, want its translation %q", domain, truncate(template), truncate(en), truncate(translated))
+				}
+				if zh != template {
+					t.Errorf("%s: %q renders %q under ZH, want the template itself", domain, truncate(template), truncate(zh))
+				}
+				continue
+			}
+			if en != template { // English source: EN is the template, ZH carries the translation
+				t.Errorf("%s: English-source %q renders %q under EN, want the template itself", domain, truncate(template), truncate(en))
+			}
+			if zh != translated {
+				t.Errorf("%s: English-source %q renders %q under ZH, want its translation %q", domain, truncate(template), truncate(zh), truncate(translated))
+			}
+		}
+	}
+}
+
 func truncate(s string) string {
 	s = strings.ReplaceAll(s, "\n", "\\n")
 	if len(s) > 90 {
