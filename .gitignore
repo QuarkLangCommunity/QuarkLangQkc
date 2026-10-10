@@ -8,6 +8,8 @@
 out.txt
 out2.txt
 *.out
+# 例外：parity 用例的解释器基线（cgen/parity_test.go 按同名 .out 逐字节比对，缺失即失败），必须入库
+!compiler/testdata/cases/*.out
 
 # docs worktree（独立分支，不并入 main）
 /docs/
@@ -33,3 +35,9 @@ QuarkLangNpm/
 QuarkLangPlayground/
 QuarkLangQk*/
 QuarkLangQuark/
+
+# Local Go workspace: wires the sibling checkouts above into one build while the parser and this
+# repository change together. Per-machine state, never tracked — CI and consumers always build the
+# revision pinned in go.mod.
+go.work
+go.work.sum

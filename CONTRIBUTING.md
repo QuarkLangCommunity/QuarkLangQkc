@@ -41,6 +41,23 @@ go test ./...                                    # interpreter + toolchain (incl
 go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # dogfood the linter
 ```
 
+### The syntax layer is a separate repository
+
+`go.mod` pins [`QuarkLangQkparser`](https://github.com/QuarkLangCommunity/QuarkLangQkparser) to one exact
+commit, so a fresh clone needs **nothing extra**: `go test ./...` downloads it like any other dependency,
+and so does anyone importing this module.
+
+To change the parser and this repository together, keep the sibling checkout the `.gitignore` already
+expects (`QuarkLangQkparser/`) and wire it in with a per-machine Go workspace; the pin stays untouched, so
+CI keeps building the published revision:
+
+```sh
+git clone https://github.com/QuarkLangCommunity/QuarkLangQkparser   # → ./QuarkLangQkparser
+go work init . ./compiler ./QuarkLangQkparser                       # go.work is per-machine, not tracked
+```
+
+When a parser change lands, bump the pin in both modules: `go get github.com/QuarkLangCommunity/QuarkLangQkparser@<commit>`.
+
 When you add a language feature, **all four of these must be updated together**:
 
 1. `SYNTAX.md` — the single canonical syntax reference (English; Chinese: `SYNTAX.zh-CN.md`; numbered M/K/E/S/O/T/P entries);

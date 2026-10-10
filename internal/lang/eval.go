@@ -562,7 +562,7 @@ func (in *interp) registerProgramMode(prog *Program, replace bool) error {
 		}
 		obj := &libObj{name: lb.Name, lib: lb.Lib, methods: map[string]*Func{}}
 		for _, fn := range lb.Methods {
-			obj.methods[fn.Name] = fn
+			obj.methods[fn.Name] = &Func{Name: fn.Name, TypeParams: fn.TypeParams, Params: fn.Params, Ret: fn.Ret, Pos: fn.Pos}
 		}
 		in.libObjs[lb.Name] = obj
 	}
@@ -1824,17 +1824,7 @@ func isLValueExpr(e Expr) bool {
 // lvalues (the common case: literals, arithmetic, nested calls) it skips evalArg's lvalue probe and
 // evaluates each argument directly — same values, one dispatch less per argument.
 func (in *interp) evalCallArgs(c *CallExpr, sc *scope, ctx *execCtx) ([]Value, error) {
-	if !c.argsClassified {
-		c.plainArgs = true
-		for _, a := range c.Args {
-			if isLValueExpr(a) {
-				c.plainArgs = false
-				break
-			}
-		}
-		c.argsClassified = true
-	}
-	if !c.plainArgs {
+	if !c.PlainArgs(isLValueExpr) {
 		return in.evalArgs(c.Args, sc, ctx) // fallback: the general path with lvalue/reference handling
 	}
 	start := len(ctx.argArena)

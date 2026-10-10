@@ -3553,7 +3553,7 @@ func (l *lowerer) libRetType(libName, method string) string {
 func (fc *funcCtx) libCall(c *lang.CallExpr, me *lang.MemberExpr, libName string) (*expr, error) {
 	l := fc.l
 	ld := l.libs[libName]
-	var fn *lang.Func
+	var fn *lang.FuncDecl
 	for _, f := range ld.Methods {
 		if f.Name == me.Name {
 			fn = f
