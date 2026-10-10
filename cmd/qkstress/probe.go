@@ -97,7 +97,7 @@ func runBounded(argv []string, env []string, timeout time.Duration, memCapKB int
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	hardDeadline := start.Add(timeout + killGrace)
-	var peakKB int64
+	var peakKB int64 = -1 // stays -1 while no sample and no process state supplied a figure
 	for {
 		select {
 		case err := <-waited:

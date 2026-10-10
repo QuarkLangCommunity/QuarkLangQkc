@@ -9,6 +9,9 @@ import (
 	"syscall"
 )
 
+// rssProbeSupported reports whether this platform can sample the resident set of a process group.
+const rssProbeSupported = true
+
 // processGroupRSSKB sums the resident set size of every process in a group: the compiler drives clang,
 // the linker and the linked program as group members, so charging only the direct child would hide the
 // memory a case really costs.
