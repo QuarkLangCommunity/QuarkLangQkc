@@ -232,6 +232,62 @@ func TestUndocumentedFailureNamesEveryNewFinding(t *testing.T) {
 	}
 }
 
+// TestSummarySeparatesNonFatalDisagreements pins the summary's reporting contract: the cases that can
+// fail a run and the wording-only disagreements are printed under their own headings, with truthful
+// counts, so a run whose only difference is wording cannot read as one that found defects.
+func TestSummarySeparatesNonFatalDisagreements(t *testing.T) {
+	rep := runReport{Cases: []caseResult{
+		{Name: "clean_case", Verdict: VerdictAgree},
+		{Name: "panic_case", Doc: "a deliberate panic", Verdict: VerdictPanic,
+			Interp:   engineResult{Front: probeResult{Exit: 0}, Run: probeResult{Exit: 2, Panicked: true, Stderr: "panic: deliberate\n"}, Accepted: true},
+			Compiler: engineResult{Front: probeResult{Exit: 0}, Run: probeResult{Exit: 0}, Accepted: true}},
+		{Name: "known_case", Doc: "a documented timeout", Verdict: VerdictTimeout, Known: true},
+		{Name: "reject_diff_case", Doc: "wording only", Verdict: VerdictRejectDiff,
+			Interp:   engineResult{Front: probeResult{Exit: 1, Stderr: "error: LexError: nope at line 1\n"}},
+			Compiler: engineResult{Front: probeResult{Exit: 1, Stderr: "error: compiler: nope\n"}}},
+	}}
+	var b strings.Builder
+	printSummary(&b, rep)
+	got := b.String()
+
+	if !strings.Contains(got, "4 cases: AGREE 1, PANIC 1, REJECT_DIFF 1, TIMEOUT 1") {
+		t.Errorf("the verdict histogram is not truthful:\n%s", got)
+	}
+	loudAt := strings.Index(got, "2 loud findings:")
+	nonFatalAt := strings.Index(got, "1 non-fatal disagreement (both engines refused, wording differs):")
+	if loudAt < 0 || nonFatalAt < 0 {
+		t.Fatalf("the summary does not carry both headings:\n%s", got)
+	}
+	if loudAt > nonFatalAt {
+		t.Errorf("the loud findings must be printed before the disagreements:\n%s", got)
+	}
+	if loud := got[loudAt:nonFatalAt]; strings.Contains(loud, "reject_diff_case") {
+		t.Errorf("a REJECT_DIFF case is still reported as a loud finding:\n%s", loud)
+	}
+	if loud := got[loudAt:nonFatalAt]; !strings.Contains(loud, "panic_case") ||
+		!strings.Contains(loud, "panic: deliberate") || !strings.Contains(loud, "TIMEOUT (known)") {
+		t.Errorf("the loud block lost a case, its diagnostic or its known label:\n%s", loud)
+	}
+	if nonFatal := got[nonFatalAt:]; !strings.Contains(nonFatal, "reject_diff_case") ||
+		!strings.Contains(nonFatal, "error: compiler: nope") {
+		t.Errorf("the non-fatal block does not show the disagreement it reports:\n%s", nonFatal)
+	}
+
+	// A run whose only result is a wording difference must not announce findings at all.
+	var quiet strings.Builder
+	printSummary(&quiet, runReport{Cases: []caseResult{rep.Cases[0], rep.Cases[3]}})
+	quietText := quiet.String()
+	if !strings.Contains(quietText, "no loud findings: every case either agreed") {
+		t.Errorf("a run with no loud case must say so:\n%s", quietText)
+	}
+	if !strings.Contains(quietText, "1 non-fatal disagreement (both engines refused, wording differs):") {
+		t.Errorf("a single disagreement must be counted in the singular:\n%s", quietText)
+	}
+	if strings.Contains(quietText, "loud finding:") {
+		t.Errorf("a run with no loud case still prints a loud-findings heading:\n%s", quietText)
+	}
+}
+
 // TestStaleKnownFailuresAreListed checks that a fixed case is reported instead of silently staying on.
 func TestStaleKnownFailuresAreListed(t *testing.T) {
 	rep := assembleReport(options{timeout: time.Second, memCapMB: 1024}, []caseResult{

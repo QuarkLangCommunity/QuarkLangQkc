@@ -274,6 +274,20 @@ func (r caseResult) anyMemCap() bool {
 // loud reports whether the verdict fails a run that has no matching known-failure entry.
 func (r caseResult) loud() bool { return loudVerdicts[r.Verdict] }
 
+// findings splits a report into the loud cases that can fail a run and the non-fatal disagreements, which
+// are verdicts the run reports but never fails on, so no summary can present them as one category.
+func (rep runReport) findings() (loud, nonFatal []caseResult) {
+	for _, r := range rep.Cases {
+		switch {
+		case r.loud():
+			loud = append(loud, r)
+		case r.Verdict == VerdictRejectDiff:
+			nonFatal = append(nonFatal, r)
+		}
+	}
+	return loud, nonFatal
+}
+
 // exitPair renders both engines' run exit statuses for the table and the progress line.
 func (r caseResult) exitPair() string {
 	return fmt.Sprintf("%d/%d", r.Interp.Run.Exit, r.Compiler.Run.Exit)
@@ -462,28 +476,52 @@ func printCounts(w io.Writer, rep runReport) {
 	}
 }
 
-// printFindings writes one block per loud or informative case, so a failure is readable without the report.
+// printFindings writes the run's two result blocks — the loud findings that can fail it, and the
+// non-fatal disagreements that cannot — so a clean run cannot be read as if it had defects.
 func printFindings(w io.Writer, rep runReport) {
-	interesting := make([]caseResult, 0, len(rep.Cases))
-	for _, r := range rep.Cases {
-		if r.loud() || r.Verdict == VerdictRejectDiff {
-			interesting = append(interesting, r)
+	loud, nonFatal := rep.findings()
+	if len(loud) == 0 {
+		fmt.Fprintln(w, "\nno loud findings: every case either agreed between the two engines or was rejected cleanly by both")
+	} else {
+		fmt.Fprintf(w, "\n%s:\n", countOf(len(loud), "loud finding"))
+		for _, r := range loud {
+			printLoudFinding(w, r)
 		}
 	}
-	if len(interesting) == 0 {
-		fmt.Fprintln(w, "\nno findings: every case agreed, or was rejected cleanly by both engines")
-		return
-	}
-	fmt.Fprintf(w, "\n%d findings:\n", len(interesting))
-	for _, r := range interesting {
-		fmt.Fprintf(w, "  %-15s %-24s %s\n", verdictLabel(r), r.Name, r.Doc)
-		fmt.Fprintf(w, "      interp: exit %d in %ss\tqkc: exit %d in %ss (gen %ss)\n",
-			r.Interp.Run.Exit, r.Interp.Run.seconds(), r.Compiler.Run.Exit, r.Compiler.Run.seconds(), r.Compiler.Front.seconds())
-		if line := firstLine(r.Interp.Run.Stderr); line != "" {
-			fmt.Fprintf(w, "      interp says: %s\n", quoteOf(line))
-		}
-		if line := firstLine(r.Compiler.Run.Stderr); line != "" {
-			fmt.Fprintf(w, "      qkc says:    %s\n", quoteOf(line))
+	if len(nonFatal) > 0 {
+		fmt.Fprintf(w, "\n%s (both engines refused, wording differs):\n", countOf(len(nonFatal), "non-fatal disagreement"))
+		for _, r := range nonFatal {
+			printDisagreement(w, r)
 		}
 	}
+}
+
+// countOf renders a count with its noun pluralised, so a one-item block does not read as a typo.
+func countOf(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// printLoudFinding writes one case that can fail the run: what each engine did, and the diagnostic behind
+// the verdict.
+func printLoudFinding(w io.Writer, r caseResult) {
+	fmt.Fprintf(w, "  %-15s %-24s %s\n", verdictLabel(r), r.Name, r.Doc)
+	fmt.Fprintf(w, "      interp: exit %d in %ss\tqkc: exit %d in %ss (gen %ss)\n",
+		r.Interp.Run.Exit, r.Interp.Run.seconds(), r.Compiler.Run.Exit, r.Compiler.Run.seconds(), r.Compiler.Front.seconds())
+	if line := firstLine(r.Interp.Run.Stderr); line != "" {
+		fmt.Fprintf(w, "      interp says: %s\n", quoteOf(line))
+	}
+	if line := firstLine(r.Compiler.Run.Stderr); line != "" {
+		fmt.Fprintf(w, "      qkc says:    %s\n", quoteOf(line))
+	}
+}
+
+// printDisagreement writes one non-fatal disagreement: both front ends refused the source, so their
+// diagnostics are the whole difference and neither can fail the run.
+func printDisagreement(w io.Writer, r caseResult) {
+	fmt.Fprintf(w, "  %-15s %-24s %s\n", verdictLabel(r), r.Name, r.Doc)
+	fmt.Fprintf(w, "      interp says: %s\n", quoteOf(firstLine(r.Interp.Front.Stderr)))
+	fmt.Fprintf(w, "      qkc says:    %s\n", quoteOf(firstLine(r.Compiler.Front.Stderr)))
 }

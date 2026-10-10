@@ -6,8 +6,9 @@ do when the input is absurd?" for the interpreter (`quark`) and the native compi
 Two rules shape everything here:
 
 1. **Nothing is weakened to make a case pass.** A panic, a hang, a runaway allocation or a disagreement
-   between the two engines is a *finding*: it is written down in [known-failures.txt](known-failures.txt)
-   and in [REPORT.md](REPORT.md), never deleted or skipped.
+   between the two engines about accepting or running the input is a *finding*: it is written down in
+   [known-failures.txt](known-failures.txt) and in [REPORT.md](REPORT.md), never deleted or skipped. Two
+   engines rejecting the same input in different words is a disagreement about wording, not a finding.
 2. **Nothing is generated into the repository.** Cases, binaries, caches and intermediate output land in
    the gitignored `/stress-out/` tree; only the generator, the runner, the report and the known-failure
    list are tracked.
@@ -105,8 +106,12 @@ The verdict vocabulary:
 case directory left over from an older revision stops the run instead of producing a wrong report.
 
 A "yes" is loud: the run prints the finding and exits non-zero — unless the case is listed in
-`known-failures.txt`, in which case it is printed as `KNOWN` and does not change the exit status. A
-defect that is not in that file always fails the run, so the list cannot be used to hide anything new.
+`known-failures.txt`, in which case it is printed as `KNOWN` and does not change the exit status. The
+summary keeps the two things a run can print apart, so a clean run cannot be read as a failing one:
+`N loud findings:` are the cases that can fail the run, and `N non-fatal disagreements (both engines
+refused, wording differs):` are the `REJECT_DIFF` cases, reported because the wording is worth knowing
+but never counted as a finding. A defect that is not in that file always fails the run, so the list
+cannot be used to hide anything new.
 An entry that no longer fails is reported as stale (⚠) but does not fail the run: a fixed case should be
 removed from the list by the person who fixed it.
 
