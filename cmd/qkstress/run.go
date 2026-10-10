@@ -134,6 +134,11 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	// A list that names a case the corpus does not have would silently allow-list nothing, so it is
+	// refused before any measurement is taken.
+	if err := checkKnownNames(known); err != nil {
+		return err
+	}
 
 	results := make([]caseResult, 0, len(corpus))
 	for _, c := range corpus {

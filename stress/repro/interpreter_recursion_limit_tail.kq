@@ -1,12 +1,15 @@
-// Minimal reproduction: tail recursion, where the two engines differ even more sharply.
+// Regression fixture: a tail call counts against the depth limit in both engines (fixed).
 //
 //   quark    stress/repro/interpreter_recursion_limit_tail.kq
 //     error: StackOverflowError: recursion depth exceeded 8192 at line 12   (exit 1)
 //   qkc -run stress/repro/interpreter_recursion_limit_tail.kq
-//     9000                                                                (exit 0)
+//     error: StackOverflowError: recursion depth exceeded 8192 at line 12   (exit 1)
 //
-// The native backend turns the self call into a loop, so the depth never grows; the interpreter counts
-// the calls and stops. Tracked as path_recursion_tail.
+// Byte-identical, as above. The native backend used to turn the self call into a loop, so the depth never
+// grew and it printed 9000 while the interpreter counted the calls and stopped at 8192 (path_recursion_tail).
+// The compiler no longer emits an LLVM tail call: a reused native frame cannot carry the depth counter, and
+// the interpreter counts a tail call as one more level, so keeping the optimisation would let this case
+// bypass the limit the two engines share.
 fn up(int n, int acc) int {
   if (n == 0) { return acc; }
   return up(n - 1, acc + 1);
