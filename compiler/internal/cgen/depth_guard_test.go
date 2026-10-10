@@ -76,6 +76,21 @@ func TestDepthGuardShapeIsInTheGeneratedIR(t *testing.T) {
 	}
 }
 
+// TestCallFreeFunctionCarriesNoCounter checks the shape of the call-free exemption: a body that cannot
+// call cannot be the caller of a refused call, so it carries no counter — which is what keeps the two
+// runtime calls (and clang's non-leaf treatment of the function) off arithmetic-only programs.
+func TestCallFreeFunctionCarriesNoCounter(t *testing.T) {
+	ir := transpile(t, "fn pure(int x) int {\n  int a = x + 1;\n  return a * 2;\n}\n\n"+
+		"fn main(IOStream io) {\n  io.println(pure(3));\n}\n")
+	if strings.Contains(ir, "call void @ql_depth_enter()") {
+		t.Error("a call-free function must not carry the depth counter")
+	}
+	recursive := transpile(t, downTestSrc("3"))
+	if !strings.Contains(recursive, "call void @ql_depth_enter()") {
+		t.Error("a function that calls must carry the depth counter")
+	}
+}
+
 // TestGeneratedCallDepthBoundary runs the generated code at the shared limit, one level past it, and
 // for a self tail call past it: the interpreter answers 33550336 / the shared error / the shared error.
 func TestGeneratedCallDepthBoundary(t *testing.T) {

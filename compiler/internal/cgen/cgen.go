@@ -333,6 +333,56 @@ func (e *emitter) emitDepthEnter() {
 	e.emitInstr("call void @ql_depth_enter()")
 }
 
+// callFreeBody reports whether a body provably never hands control to another QL function. Only such a
+// body may skip the depth counter, and it may, exactly: a frame that makes no call is always the
+// innermost one and has returned before the next call, so it can never be the caller of a refused call,
+// and the counter holds the same value at every refusal point with or without it. The predicate is a
+// whitelist — a call, an interface dispatch, an index, a table, a conversion, a print, a loop, a merge,
+// anything this walk does not recognise counts as a call — so a node kind added later can only widen the
+// guard, never narrow it. The gain is real for function-dense programs: 50 000 arithmetic-only functions
+// (the res_few_mb corpus case) used to pay two runtime calls each, which made every one of them a
+// non-leaf function for clang and cost ~60% more compile time.
+func callFreeBody(stmts []stmt) bool {
+	for _, s := range stmts {
+		if !callFreeStmt(s) {
+			return false
+		}
+	}
+	return true
+}
+
+// callFreeStmt reports whether one statement is call-free (see callFreeBody).
+func callFreeStmt(s stmt) bool {
+	switch st := s.(type) {
+	case *exprStmt:
+		return callFreeExpr(st.x)
+	case *returnStmt:
+		return callFreeExpr(st.x)
+	case *declStmt:
+		return callFreeExpr(st.init)
+	case *assignStmt:
+		return callFreeExpr(st.x)
+	case *ifStmt:
+		return callFreeExpr(st.cond) && callFreeBody(st.then) && callFreeBody(st.els)
+	}
+	return false
+}
+
+// callFreeExpr reports whether one expression is call-free: only arithmetic, comparisons, short-circuit
+// logic and reads of already-bound storage qualify (see callFreeBody).
+func callFreeExpr(x *expr) bool {
+	if x == nil {
+		return true
+	}
+	switch x.kind {
+	case kInt, kFloat, kString, kBool, kNull, kIdent:
+		return true
+	case kBin, kCmp, kAndOr:
+		return callFreeExpr(x.l) && callFreeExpr(x.r)
+	}
+	return false
+}
+
 // emitDepthLeave releases the level emitDepthEnter took, so sibling calls do not accumulate depth.
 func (e *emitter) emitDepthLeave() {
 	if e.depthGuarded {
@@ -1169,14 +1219,18 @@ func (e *emitter) emitFunc(fd *funcDef) string {
 	}
 	sig.WriteString(")" + fnAttrs(fd.name, e.fnMeta) + "\n")
 	e.cur = "entry"
-	e.depthGuarded = true // every QL function counts one call level; the generated main is the root and does not
+	// A body that can call counts one call level; a call-free body cannot be a refusal site, so it carries
+	// no counter (see callFreeBody). The generated main is the root and is never counted.
+	e.depthGuarded = !callFreeBody(fd.body)
 	e.body.WriteString("entry:\n")
 	for i, p := range fd.params {
 		if p.copyd {
 			e.bindCopydParam(p, paramRegs[i])
 		}
 	}
-	e.emitDepthEnter()
+	if e.depthGuarded {
+		e.emitDepthEnter()
+	}
 	e.funcReturned = false
 	e.term = false
 	e.emitBlock(fd.body)

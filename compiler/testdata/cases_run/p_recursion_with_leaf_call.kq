@@ -1,0 +1,13 @@
+// A call-free helper inside the recursive body: its frames are never on the stack when the next call is
+// made, so the compiled counter skips them and still refuses at the interpreter's depth (8191 runs,
+// 8192 is refused at this line by both engines).
+fn leaf(int x) int { return x + 1; }
+
+fn down(int n) int {
+  if (n == 0) { return 0; }
+  return leaf(n) + down(n - 1);
+}
+
+fn main(IOStream io) {
+  io.println(down(8192));
+}

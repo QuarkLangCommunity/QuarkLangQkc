@@ -78,6 +78,26 @@ Measured at the boundary, both engines, byte for byte:
 Both corpus cases now report `AGREE`, and `compiler/testdata/compare.sh` fails if the two engines ever
 disagree about the limit again (`cases_run/p_recursion_*.kq`).
 
+One measured detail behind the guard's shape: a function that cannot call carries no counter, and that is
+exact — a frame that makes no call is always the innermost one and has returned before the next call, so it
+can never be the *caller* of a refused call, and the counter holds the same value at every refusal point
+with or without it. The exemption matters for cost: the `res_few_mb` corpus case is 50 000 arithmetic-only
+functions, and guarding each of them makes every one of them a non-leaf function for clang. Measured on
+`res_few_mb` (IR generation, then clang `-O3 -flto=thin`, then `qkc -run`):
+
+| build | IR bytes | clang | `qkc -run` | peak RSS |
+|---|---:|---:|---:|---:|
+| before the guard | 10 147 430 | 3.46 s | 4.51 s | 739 MiB |
+| guard on every function | 13 149 471 | 6.05 s | 7.29 s | 1133 MiB |
+| guard except call-free bodies (shipped) | 10 149 471 | 3.40 s | 3.96 s | 738 MiB |
+
+The predicate is a whitelist over the lowered body — arithmetic, comparisons, short-circuit logic, reads,
+assignments, declarations and branches over those; a call, an interface dispatch, an index, a table, a
+conversion, a print, a loop, a merge or anything the walk does not recognise counts as a call — so a node
+kind added later can only widen the guard, never narrow it. `cases_run/p_recursion_with_leaf_call.kq` is the
+parity case that keeps it honest: the compiled counter must refuse the mixed shape at exactly the depth the
+interpreter refuses.
+
 **What is still different, and why it is not this fix.** A runtime error raised *inside a callee* is not
 caught by the caller's `try` in the compiled engine: `try { g(); } catch (void e) { … }` is caught by the
 interpreter and terminates the compiled binary. That is a property of the compiled error model — `fn g()
@@ -95,7 +115,7 @@ maintainer as a follow-up finding.
 | case | measurement | reading |
 |---|---|---|
 | `path_fn_10k_params` | `qkc -run` 9.18 s across runs, 1660 MiB peak RSS | 10 000 parameters sits *just* inside the 10 s default bound. On a slower or busier machine this case will be reported as `TIMEOUT`, and it is not in the known-failure list on purpose: that report would be a real finding about the bound, not a flake to silence. It is also why the CI job passes an explicit `-timeout 90s` and skips this case (see `.github/workflows/ci.yml`), and why the committed report was produced with `-timeout 60s` |
-| `res_few_mb` | interpreter 0.43 s, `qkc -run` 6.33 s, 1133 MiB peak | a 4 MB valid program is comfortably within the bounds; it is skipped in CI because compile-and-link cost, not a language property, dominates it |
+| `res_few_mb` | interpreter 0.42 s, `qkc -run` 3.96 s, 738 MiB peak | a 4 MB valid program is comfortably within the bounds; it is skipped in CI because compile-and-link cost, not a language property, dominates it (see the table above for what guarding every one of its 50 000 functions would cost) |
 | `scale_call_chain` | `qkc` IR generation 3.17 s | 10 000 chained calls are fine at the front end, costly at codegen |
 | `path_exp_macro` | rejected by both engines in under 1 ms | macro expansion is single pass (M1), so the doubling chain cannot blow up; the case measures a design property, not a defect |
 | `path_recursive_macro` | rejected by both engines | mutual macro recursion terminates; only the wording differs |
