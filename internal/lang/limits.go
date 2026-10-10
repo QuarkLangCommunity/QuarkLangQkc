@@ -1,6 +1,10 @@
 package lang
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkparser"
+)
 
 // The two depth limits of the implementation. Both are **explicit counters**, never a probe of the Go
 // stack: a process stack is a platform-sized resource, so an implementation that lets it decide would
@@ -8,14 +12,22 @@ import "fmt"
 // interpreter and the compiler must agree on the number: the interpreter enforces them directly and the
 // compiler bakes the same numbers into the code it generates.
 
-// MaxExprDepth is the nesting depth the shared front end accepts in one expression. The type checker
-// recurses once per expression node, so without this counter a long chain (a single source line of a
-// few hundred thousand additions) exhausts the Go stack and takes the whole process down instead of
-// producing a diagnostic. The limit is deliberately far above anything a human writes — the largest
-// expression in the repository's stress corpus is ten thousand chained calls — and far below the depth
-// at which the checker's own recursion (measured: ~320 000 nodes) runs the stack out, so refusing is
-// always possible.
-const MaxExprDepth = 65536
+// MaxExprDepth is the nesting depth the shared front end accepts in one expression. It is the parser
+// module's own constant, re-exported rather than restated: qkparser counts the descent's levels and
+// refuses the first one past its MaxExprDepth (limits.go, parseExpr/parseStmt), and this repository used
+// to declare a second number with the same value and the same refusal wording, which nothing kept in
+// step. Declaring it as an alias makes that drift impossible — the parser, the checker, the interpreter
+// and the compiler now read one number.
+//
+// The type checker needs it too: it recurses once per expression node, so without this counter a long
+// chain (a single source line of a few hundred thousand additions) exhausts the Go stack and takes the
+// whole process down instead of producing a diagnostic. The limit is deliberately far above anything a
+// human writes — the largest expression in the repository's stress corpus is ten thousand chained calls
+// — and far below the depth at which the checker's own recursion (measured: ~320 000 nodes) runs the
+// stack out, so refusing is always possible. Note the two counters measure different things — the parser
+// counts recursion levels, the checker counts expression nodes — which is why a deep `+` chain is
+// refused by the checker and a deep parenthesis nest by the parser.
+const MaxExprDepth = qkparser.MaxExprDepth
 
 // MaxCallDepth is the number of nested function calls one program may make: a call made from a frame
 // that is already this deep is refused. The interpreter counts it per call context (so it stays correct
