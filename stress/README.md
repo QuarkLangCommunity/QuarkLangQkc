@@ -40,6 +40,10 @@ go run ./cmd/qkstress run -cases stress-out/cases
 # 4. the committed report is exactly the output of step 3 with the tracked list and notes attached
 go run ./cmd/qkstress run -cases stress-out/cases \
     -known stress/known-failures.txt -notes stress/NOTES.md -report stress/REPORT.md
+
+# 5. a bounded subset, the way CI runs it (see "Where this runs" below)
+go run ./cmd/qkstress run -cases stress-out/cases -timeout 90s \
+    -skip 'path_fn_10k_params|res_few_mb' -known stress/known-failures.txt
 ```
 
 `gen` alone is enough to see the inputs:
@@ -51,6 +55,23 @@ go run ./cmd/qkstress gen -out stress-out/cases && ls stress-out/cases
 Both commands are run from the repository root: every default path is relative to it. Nothing writes to
 `/tmp`: `run` points `TMPDIR` and `QUARK_CACHE` at `stress-out/`, and each compiler case gets a cold
 cache, so the measured compiler time is a full cold compile, link and run.
+
+`-filter <regexp>` selects cases by name and `-skip <regexp>` drops them, which is how a bounded CI job
+keeps its cost predictable without weakening the cases it does run. `-timeout` and `-mem` bound every
+phase (defaults 10s and 2048 MiB); pass a larger explicit `-timeout` when a case's cost sits close to the
+default, as `path_fn_10k_params` does at ~9 s.
+
+## Where this runs
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) has a `stress` job on `ubuntu-latest`,
+`macos-latest` and `windows-latest`: it builds both engines, materialises the corpus and runs the suite
+with an explicit `-timeout 90s`, skipping `path_fn_10k_params` and `res_few_mb` (the two cases whose cost
+is dominated by size rather than by the property under test). Every other case has to pass on every
+platform — a `PANIC`, `TIMEOUT`, `MEMCAP`, `ACCEPT_MISMATCH` or `DIVERGE` fails the job.
+
+The peak-RSS probe is Linux-only (`/proc`); on macOS and Windows the harness records the measurement as
+unavailable and the memory ceiling cannot fire, so the job never depends on `/proc` to pass: it asserts
+exit statuses, output parity and the wall-clock bound.
 
 ## The corpus
 
@@ -94,3 +115,8 @@ removed from the list by the person who fixed it.
 `stress/known-failures.txt` is both the machine-readable allow-list (`<case-name> <reason>` per line,
 `#` starts a comment) and its own documentation; `stress/repro/` holds the minimal source of each entry.
 The runner embeds the file verbatim in the report.
+
+The list is **empty** today: the three defects found by the first full run (`scale_line_1mb`,
+`path_recursion_stack`, `path_recursion_tail`) are fixed, their entries were removed as the rules above
+require, and their reproductions now pass. `stress/NOTES.md` keeps the record of what each one was and
+what the fix measures.

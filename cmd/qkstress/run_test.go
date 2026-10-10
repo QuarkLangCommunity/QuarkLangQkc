@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang/stressgen"
 )
 
 // TestVerdictPrecedence checks that the classifier reports the most serious outcome first, whatever the
@@ -239,5 +241,39 @@ func TestChildEnvOverridesInheritedValues(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("QK_STRESS_PROBE appears %d times, want 1", count)
+	}
+}
+
+// TestSkipSelectsABoundedSubset checks the mechanism a CI job uses to keep its cost predictable: the
+// skipped names are absent, everything else is still selected, and a selection that skips everything
+// is an error rather than a silently empty run.
+func TestSkipSelectsABoundedSubset(t *testing.T) {
+	dir := t.TempDir()
+	for _, c := range stressgen.All() {
+		if err := os.WriteFile(filepath.Join(dir, c.Name+".kq"), c.Source, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all, err := selectCases(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subset, err := selectCases(dir, "", "path_fn_10k_params|res_few_mb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subset) != len(all)-2 {
+		t.Fatalf("subset has %d cases, want %d", len(subset), len(all)-2)
+	}
+	for _, c := range subset {
+		if c.Name == "path_fn_10k_params" || c.Name == "res_few_mb" {
+			t.Errorf("%s was skipped but is still selected", c.Name)
+		}
+	}
+	if _, err := selectCases(dir, "", ".*"); err == nil {
+		t.Error("skipping every case must fail rather than report a clean run")
+	}
+	if _, err := selectCases(dir, "", "["); err == nil {
+		t.Error("an invalid -skip pattern must be refused")
 	}
 }
