@@ -530,6 +530,7 @@ type checker struct {
 	libs       map[string]*LibraryDecl // library: system library binding
 	curRet     *Type
 	loopDepth  int
+	depth      int              // expression recursion depth of the current infer call (see MaxExprDepth)
 	curSubst   map[string]*Type // type-parameter substitution for a generic method body / call site
 	typeVars   map[string]bool  // type parameters of the current scope in a generic function (fn<T,...>)
 }
@@ -1583,7 +1584,21 @@ func join(a, b *Type) *Type {
 	return tAnyV
 }
 
+// infer is the guarded entry to expression inference: it counts the recursion depth, so an expression
+// nested deeper than MaxExprDepth is refused with a positioned diagnostic before the Go stack runs out.
 func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
+	c.depth++
+	if c.depth > MaxExprDepth {
+		c.depth--
+		return nil, c.errf(posOf(e), msg("CompileError: expression nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements", MaxExprDepth))
+	}
+	t, err := c.inferNode(e, sc)
+	c.depth--
+	return t, err
+}
+
+// inferNode infers one expression node without the depth guard (see infer, its only caller).
+func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 	switch x := e.(type) {
 	case *IntLit:
 		return tIntV, nil
