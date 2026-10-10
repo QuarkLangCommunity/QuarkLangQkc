@@ -41,6 +41,19 @@ go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # �
 go run ./scripts/... 2>/dev/null || true         # 发布/基准脚本改动时，跑一次冒烟
 ```
 
+### 格式化（格式化器在独立仓库里）
+
+`qkfmt` 在 [`QuarkLangQkfmt`](https://github.com/QuarkLangCommunity/QuarkLangQkfmt)；**本仓库没有任何门禁会跑它**，所以上面的清单在 `.qk` 文件未格式化时照样全绿。想用它检查自己的改动，就从兄弟目录构建，并按你所用 shell 的写法传入文件清单：
+
+```sh
+qkfmt -l $(git ls-files '*.qk')     # POSIX shell（sh/bash/zsh）；pwsh 下写成：qkfmt -l (git ls-files '*.qk')
+```
+
+两条注意事项都经过实测（`docs/ARCHITECTURE.md` §5.1）：
+
+- **CRLF**：`qkfmt` 的正典输出是 LF，因此在 CRLF 工作区里**每个**文件都会被列为未格式化，而 `qkfmt -w` 会把这些文件改写成 LF。先确认检出状态（`git ls-files --eol '*.qk'`），只传 Git 以 LF 存储的文件。
+- **退出码**：`-l` 只要列出任何文件就退出 1，因此把它接进门禁会把"仅空白差异"变成失败——这该按仓库决定，而不是按贡献者决定。
+
 ### 语法层在独立仓库里
 
 `go.mod` 把 [`QuarkLangQkparser`](https://github.com/QuarkLangCommunity/QuarkLangQkparser) 钉到具体 commit，因此全新克隆**不需要额外步骤**：`go test ./...` 会像普通依赖一样把它下载下来，任何引用本模块的人也一样。

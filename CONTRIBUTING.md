@@ -41,6 +41,24 @@ go test ./...                                    # interpreter + toolchain (incl
 go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # dogfood the linter
 ```
 
+### Formatting (the formatter is a separate repository)
+
+`qkfmt` lives in [`QuarkLangQkfmt`](https://github.com/QuarkLangCommunity/QuarkLangQkfmt); **no gate in this
+repository runs it**, so the checklist above stays green on unformatted `.qk` files. To check your own work
+with it, build it from the sibling checkout and pass the file list the way your shell spells it:
+
+```sh
+qkfmt -l $(git ls-files '*.qk')     # POSIX shell (sh/bash/zsh); under pwsh use: qkfmt -l (git ls-files '*.qk')
+```
+
+Two caveats, both measured (`docs/ARCHITECTURE.md` §5.1):
+
+- **CRLF**: `qkfmt`'s canonical output is LF, so in a CRLF working tree **every** file is listed as
+  unformatted, and `qkfmt -w` rewrites those files to LF. Check the checkout first
+  (`git ls-files --eol '*.qk'`) and only pass files Git stores with LF.
+- **Exit status**: `-l` exits 1 as soon as it lists anything, so wiring it into a gate turns a
+  whitespace-only difference into a failure — decide that per repository, not per contributor.
+
 ### The syntax layer is a separate repository
 
 `go.mod` pins [`QuarkLangQkparser`](https://github.com/QuarkLangCommunity/QuarkLangQkparser) to one exact

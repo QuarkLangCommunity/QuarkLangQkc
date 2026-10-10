@@ -44,6 +44,29 @@ func Transpile(src, filename string) (string, error) {
 	return e.emitProgram(lp), nil
 }
 
+// TranspileTokens is Transpile for a main file whose macros the caller has already expanded: toks is that
+// expanded token stream and src the preprocessed source it was lexed from (positions only).
+//
+// The compiler must reach the parser with those tokens rather than with a printed copy of them: a token
+// holds a literal's value, not its spelling, so a round trip through text drops a string's quotes.
+func TranspileTokens(toks []lang.Token, src, filename string) (string, error) {
+	prog, err := lang.CompileTokensWithImports(toks, src, filename)
+	if err != nil {
+		return "", err
+	}
+	return transpileProgram(prog, src, filename)
+}
+
+// transpileProgram lowers a compiled program and emits its IR (the tail Transpile and TranspileTokens share).
+func transpileProgram(prog *lang.Program, src, filename string) (string, error) {
+	lp, err := lowerProgram(prog, filename, src)
+	if err != nil {
+		return "", err
+	}
+	e := newEmitter(lp)
+	return e.emitProgram(lp), nil
+}
+
 // ---------- cgen IR ----------
 
 type exprKind int

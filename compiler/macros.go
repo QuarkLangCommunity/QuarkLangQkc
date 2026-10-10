@@ -1,65 +1,36 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
 // Macro expansion engineering: the compiler reuses the interpreter's token-level macro system (one logic, two users).
-// Flow: Lex → SplitMacroDefs → ExpandMacros(mode) → tokens rebuilt into source → cgen parses.
+// Flow: Lex → SplitMacroDefs → ExpandMacros(mode) → cgen parses the expanded **tokens**.
+//
+// The compiler may not print that stream back to source text. A token carries a literal's value, not its
+// spelling: a string token's Text is the decoded byte sequence, quotes and escapes excluded
+// (qkparser/token.go, lexString), so `io.println("x")` came back as `io.println(x)` — a ParseError for a
+// macro plus a string, and two empty lines for the committed examples/macro.qk. The interpreter has always
+// parsed the tokens (internal/lang/compile.go); cgen.TranspileTokens is how the compiler now does the same.
 
-// joinTokens rebuilds the token stream into source text (space between identifiers/numbers/strings, punctuation stays tight).
-func joinTokens(toks []lang.Token) string {
-	var sb strings.Builder
-	prevSpace := true
-	for _, t := range toks {
-		if t.Kind == lang.TEOF {
-			break
-		}
-		text := t.Text
-		if text == "" {
-			continue
-		}
-		// Whether a leading space is needed: the previous token did not end as a symbol and the current one is not a symbol
-		curSym := isSymStart(text)
-		if !prevSpace && !curSym && !strings.HasSuffix(sb.String(), " ") {
-			sb.WriteByte(' ')
-		}
-		sb.WriteString(text)
-		prevSpace = curSym
-	}
-	return sb.String()
-}
-
-func isSymStart(s string) bool {
-	if s == "" {
-		return false
-	}
-	c := s[0]
-	return !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '"')
-}
-
-// expandMacros performs token-level macro expansion on source (runtime branch; returns as-is when there is no macro).
-func expandMacros(src string, mode string) (string, error) {
-	// Fast path: skip tokenize + expansion when the source has no macro keyword (saves Lex cost)
-	if !strings.Contains(src, "#macro") {
-		return src, nil
-	}
+// expandMacros lexes already-preprocessed source and returns it as one token stream with every macro call
+// expanded in the given macro state ("compile" for this engine); the macro definitions themselves are
+// dropped, exactly as the interpreter's compile step drops them.
+func expandMacros(src string, mode string) ([]lang.Token, error) {
 	toks, err := lang.Lex(src)
 	if err != nil {
-		return src, nil // Lex failure falls back to as-is (let cgen report the error)
+		return nil, err // not a macro error: cgen would report this same lex failure, so report it once here
 	}
 	macros, rest, err := lang.SplitMacroDefs(toks)
 	if err != nil {
-		return src, nil
+		return nil, err // a #macro definition is malformed: a macro error, not a parse error about ')'
 	}
 	if len(macros) == 0 {
-		return src, nil
+		return rest, nil // no macro in this file: the stream is the file
 	}
 	exp, err := lang.ExpandMacros(rest, macros, mode)
 	if err != nil {
-		return src, nil
+		return nil, err // a macro call could not be expanded: a macro error, not a parse error about ')'
 	}
-	return joinTokens(exp), nil
+	return exp, nil
 }
