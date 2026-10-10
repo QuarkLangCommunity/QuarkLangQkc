@@ -338,6 +338,7 @@ linter 的设计承诺写在 `internal/lang/lint.go:5-9`：作用域规则与类
 | 运行结果等于已入库的 `.out` | 15 个用例，*当 `lli` 存在时* | `parity_test.go:69-73` |
 | 递归上限一致，含尾调用 | 4 个 `p_recursion_*` 用例 | `stress/NOTES.md:68-78` |
 | 未实现构造 ⇒ 拒绝而非错误编译 | `===`、权限引用、`&lvalue`、`p++` | `consistency_test.go:1-16` |
+| 宏展开保持程序不变 | 宏体内**不含字符串字面量**的程序 | `compare.sh`（2026-10-10 实测 32/32） |
 
 **该组合不承诺什么**
 
@@ -347,6 +348,8 @@ linter 的设计承诺写在 `internal/lang/lint.go:5-9`：作用域规则与类
   （`compare.sh:17-18`）——Windows 上不存在这些路径。
 - ✘ 捕获"被调者内部的运行时错误"——解释器捕获，编译出的二进制终止
   （`stress/NOTES.md:102-105`）。
+- ✘ 宏体含**字符串字面量**时，宏展开后的重新解析——见 §5.3；解释器是对的，编译端失败或什么都不输出，
+  而没有任何语料用例覆盖它。
 - ⚠ Go 层的这两条一致性测试**会自我禁用**：缺少 `llvm-as`/`lli` 会把两条承诺变成 skip，
   于是一台没有 LLVM 的机器报绿，而实际上什么都没检查（`parity_test.go:38-40,71-73`）。
 
@@ -425,7 +428,7 @@ linter 的设计承诺写在 `internal/lang/lint.go:5-9`：作用域规则与类
 ### 2.5 C-5 · 格式化器（树外）
 
 **构成**：`QuarkLangQkfmt` 于 `2396137`——独立模块（`quarklang/qkfmt`、`go 1.21`），
-带**自己的扫描器**（`main.go:10-45`），不使用 `qkparser`。它的 README 声称两件事：
+带**自己的扫描器**（`QuarkLangQkfmt/main.go:10-45`），不使用 `qkparser`。它的 README 声称两件事：
 只改空白且第二遍字节一致（幂等），以及 CI 模式 `-l` 对任何未格式化文件退出 1。
 
 **各组合下的不变量**：见 §5.1。决定性事实是**本仓库没有任何东西调用它**：
@@ -520,7 +523,7 @@ R-1…R-3 是仅有的**数值**棘轮，其余都是精确值契约。R-11 是*
 
 ## 5. 实例拆解
 
-两个真实失败，拆成"接口 + 组合"，而不是"某个项目红了"。
+三个真实失败，拆成"接口 + 组合"，而不是"某个项目红了"。
 
 ### 5.1 Windows 格式化门 —— `windows × pwsh × CRLF` 下的 `qkfmt -l`
 
@@ -601,6 +604,66 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
 会让英文机器上出现中文输出，且没有任何东西失败。这才是精确的表述，
 它与"i18n 坏了"是不同的表述。
 
+
+### 5.3 宏重新解析路径 —— `qkc × {带宏且含字符串的程序}` 下的 `joinTokens`
+
+两个引擎用**同一个**函数展开宏（`lang.ExpandMacros`，经 parser 模块共享），所以展开本身完全相同。
+区别在于**结果如何抵达语法器**：解释器保持 token 流并直接解析它，而编译端把它序列化回源码文本——
+程序正是在那一步、而不是在展开那一步被改变的。
+
+```
+ 解释器（internal/lang/compile.go:118-128）            编译端（compiler/macros.go:44-64）
+   Lex → SplitMacroDefs → ExpandMacros("explain")       Lex → SplitMacroDefs → ExpandMacros("compile")
+   → Parse(tokens)                          ← 直接用 token → joinTokens(tokens) → 源码文本 → 再 Parse 一次
+```
+
+**断掉的接口**：`joinTokens`（`compiler/macros.go:13-33`）把自己的承诺写成
+"把 token 流重建为源码文本（标识符/数字/字符串之间留空格，标点紧贴）"。
+它用 `Token.Text` 重建每个 token（`macros.go:20,29`）。但词法器存的是字符串 token 的
+**内容而非拼写**——`qkparser/token.go:486` 用解码后的字节构造 `Token{Kind: TStr, Text: string(sb)}`，
+引号不在 `Text` 里，`joinTokens` 也就无法把它们放回去。2026-10-10 在 `compiler/macros.go:13`
+处直接量到：
+
+```
+"io.println(\"FROM-COMPILE\")"  ->  "io.println(FROM-COMPILE)"     // 引号没了
+"io.println(\"run-line\")"      ->  "io.println(run-line)"         // 引号没了
+"int a = 1;"                     ->  "int a=1;"                      // 正常
+```
+
+**组合**：`C = qkc × {程序带 #macro} × {展开区域里有字符串字面量}`。
+
+**它对真实程序做了什么**（两个引擎均以本修订构建）：
+
+| 程序 | 解释器 | `qkc -run` |
+|---|---|---|
+| `examples/macro.qk`（**本仓库已入库**） | `42` / `42`，退出 0 | 两行空行，退出 0 |
+| `#macro id (x) { #return x }` + `io.println("hello world")` | `hello world`，退出 0 | `ParseError: expected ')', got identifier at line 1, col 39`，退出 1 |
+| 同一程序但全文没有 `#macro` | — | `hello world`（`macros.go:46-48` 的快路径原样返回源码） |
+
+**语料为什么看不见它**：`compare.sh:23` 比对的是 `compiler/testdata/cases/*.kq` 与
+`cases_run/*.kq`，而这两个目录里都没有 `#macro`（`grep -l '#macro'` **只**匹配到
+`examples/macro.qk`，而 compare.sh 不跑它）。`TestVMEqualsTreeWalkerOnCorpus`
+（`vm_diff_test.go:160`）**确实**跑了 `examples/`，但它比的是解释器的两个引擎，
+所以 `examples/macro.qk` 在那里是绿的。展示这个特性的那个已入库示例，
+恰恰是唯一失败的文件，而且失败在所有门禁之外。
+
+**三条接口层面的后果，与缺陷本身分开陈述**：
+
+1. `joinTokens` 的承诺（"把 token 流重建为源码文本"）**用它所收到的信息无法实现**。
+   `Token`（`qkparser/token.go:94-100`）只有 `Kind`、`Text`、`Int`、`Flt`、`Line`、`Col`；
+   对 `TStr` 来说拼写确实不在里面，对 `TInt`/`TFlt` 来说十进制拼写也不在里面
+   （`Int`/`Flt` 是已解析的值）。任何建立在它之上的"再解析"路径对字面量都是有损的，
+   不只是字符串——`1_000`、`0x1F`、`1e3` 会被规范化重写，靠的是运气而不是契约。
+   **UNVERIFIED**：我没有测"宏参数里的十六进制或指数字面量是否会改变含义"，
+   因为字符串这条已经先失败了。
+2. `expandMacros` **吞掉所有错误**——`macros.go:47,51,55,58,62` 在 `Lex`、`SplitMacroDefs`
+   或 `ExpandMacros` 失败时都 `return src, nil`，"让 cgen 去报错"。与第 1 条合起来，
+   就解释了为什么实际看到的诊断是关于 `)` 的 `ParseError` 或 `undeclared identifier "COMPILE"`，
+   而不是任何点名"宏展开"的信息。**失败由另一个接口报出来，而不是失败的那个接口。**
+3. 两个引擎在**模式**上也不同，不只是策略上——`"explain"` 对 `"compile"`
+   （`internal/lang/compile.go:123`、`compiler/main.go:334,441`），即 §6.6。
+   两处彼此独立的分歧就挤在同 40 行里。
+
 ---
 
 ## 6. 已知缺口
@@ -629,7 +692,9 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
 
 | # | 缺口 | 证据 |
 |---|---|---|
-| G-6 | **两个引擎今天在 `#when` 上就不一致**：只在解释器出现的宏分支会执行 `#when(compile)` 体，于是 `#when(compile){#return 111}` / `#when(run){#return 222}` 解释执行为 `222`、编译执行为 `111` | 已实测；机制是 `compile.go:123`（`"explain"`）对 `main.go:334,441`（`"compile"`）与 `macro.go:268` 的相互作用——详见 §6.6 |
+| G-6 | **两个引擎今天在 `#when` 上就不一致**：只在解释器出现的宏分支会执行 `#when(compile)` 体，于是 `#when(compile){#return 111}` / `#when(run){#return 222}` 解释执行为 `222`、编译执行为 `111` | 已实测；机制是 `compile.go:123`（`"explain"`）对 `compiler/main.go:334,441`（`"compile"`）与 `macro.go:268` 的相互作用——详见 §6.6 |
+| G-14 | **`joinTokens` 丢掉字符串引号，于是任何"带 `#macro` 且含字符串字面量"的程序在 `qkc` 下失败或什么都不输出**——包括已入库的 `examples/macro.qk` | 已实测；`compiler/macros.go:13-33` 对 `qkparser/token.go:486`；详见 §5.3 |
+| G-15 | `expandMacros` 吞掉全部五条错误路径（`macros.go:47,51,55,58,62`），于是宏展开失败被语法器报成令人困惑的 `ParseError` | `compiler/macros.go:46-63` |
 | G-7 | **格式化器不在本仓库，且没有任何门禁组合它** | `qkfmt` 仅被 `scripts/bench-tools.sh:26,60` 引用；`QuarkLangQkfmt` 的 CI 是 ubuntu 上的 `go build && go vet` |
 | G-8 | parser 模块的模板落在所有 i18n 门禁之外（当前正确，但无人强制） | §5.2 的探针；`coverage_test.go:44` + `:355-361` 的范围 |
 | G-9 | `TestVMCompilesHotShapes` 是一张 4 条白名单，"VM 是否仍被使用"只对 3 个形态检查 | `vm_diff_test.go:137-141` |

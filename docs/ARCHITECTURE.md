@@ -364,6 +364,7 @@ section is that **an invariant belongs to a composition, never to an interface a
 | runner output equals the committed `.out` | 15 cases, *when `lli` exists* | `parity_test.go:69-73` |
 | recursion cap identical, tail calls included | 4 `p_recursion_*` cases | `stress/NOTES.md:68-78` |
 | unimplemented construct ⇒ refusal, not miscompile | `===`, permission refs, `&lvalue`, `p++` | `consistency_test.go:1-16` |
+| macro expansion preserves the program | programs whose macro bodies contain **no string literal** | `compare.sh` (32/32 measured 2026-10-10) |
 
 **What this composition does NOT promise**
 
@@ -374,6 +375,8 @@ section is that **an invariant belongs to a composition, never to an interface a
   (`compare.sh:17-18`) — paths that do not exist on Windows.
 - ✘ A caught `try` around a callee's runtime error — interpreter catches, compiled binary terminates
   (`stress/NOTES.md:102-105`).
+- ✘ Re-parsing after macro expansion when a macro body contains a **string literal** — see §5.3; the
+  interpreter is right and the compiled engine fails or prints nothing, and no corpus case exercises it.
 - ⚠ The Go-level parity tests **self-disable**: a missing `llvm-as`/`lli` turns two contracts into skips,
   so a toolchain-free machine reports green while checking nothing (`parity_test.go:38-40,71-73`).
 
@@ -456,7 +459,7 @@ this repository — a library in a sibling checkout is outside the walk by const
 ### 2.5 C-5 · The formatter (out of tree)
 
 **Made of**: `QuarkLangQkfmt` at `2396137` — a separate module (`quarklang/qkfmt`, `go 1.21`) with its
-**own scanner** (`main.go:10-45`) that does not use `qkparser`. Its README claims two properties:
+**own scanner** (`QuarkLangQkfmt/main.go:10-45`) that does not use `qkparser`. Its README claims two properties:
 whitespace-only changes with a byte-identical second pass (idempotence), and a CI mode `-l` that exits 1
 on any unformatted file.
 
@@ -555,7 +558,7 @@ than a TODO list.
 
 ## 5. Worked example
 
-Two real failures, decomposed into interface + composition instead of a red project.
+Three real failures, decomposed into interface + composition instead of a red project.
 
 ### 5.1 The Windows formatting gate — `qkfmt -l` under `windows × pwsh × CRLF`
 
@@ -642,6 +645,68 @@ because someone transcribed 19 templates by hand, and a parser-module version bu
 produce Chinese output on an English machine with nothing failing. That is the precise statement, and it
 is a different statement from "i18n is broken".
 
+
+### 5.3 The macro re-parse path — `joinTokens` under `qkc × {program with a macro and a string}`
+
+Both engines expand macros with the *same* function (`lang.ExpandMacros`, shared through the parser
+module), so the expansion itself is identical. They differ in how the **result reaches the parser**:
+the interpreter keeps it as a token stream and parses that, while the compiler serialises it back to
+source text — and that serialisation, not the expansion, is where the program changes.
+
+```
+ interpreter (internal/lang/compile.go:118-128)      compiled (compiler/macros.go:44-64)
+   Lex → SplitMacroDefs → ExpandMacros("explain")      Lex → SplitMacroDefs → ExpandMacros("compile")
+   → Parse(tokens)                          ← tokens   → joinTokens(tokens) → source text → Parse again
+```
+
+**The interface that breaks**: `joinTokens` (`compiler/macros.go:13-33`) documents its promise as
+"rebuilds the token stream into source text (space between identifiers/numbers/strings, punctuation
+stays tight)". It reconstructs each token from `Token.Text` (`macros.go:20,29`). But the lexer stores a
+string token's **contents, not its spelling** — `qkparser/token.go:486` builds `Token{Kind: TStr,
+Text: string(sb)}` from the decoded bytes, so the quotes are not in `Text` and `joinTokens` cannot put
+them back. Measured directly at `compiler/macros.go:13` on 2026-10-10:
+
+```
+"io.println(\"FROM-COMPILE\")"  ->  "io.println(FROM-COMPILE)"     // quotes gone
+"io.println(\"run-line\")"      ->  "io.println(run-line)"         // quotes gone
+"int a = 1;"                     ->  "int a=1;"                      // fine
+```
+
+**The composition**: `C = qkc × {program with a #macro} × {string literal in the expanded region}`.
+
+**What it does to real programs** (both engines built from this revision):
+
+| program | interpreter | `qkc -run` |
+|---|---|---|
+| `examples/macro.qk` (**committed in this repository**) | `42` / `42`, exit 0 | two empty lines, exit 0 |
+| `#macro id (x) { #return x }` + `io.println("hello world")` | `hello world`, exit 0 | `ParseError: expected ')', got identifier at line 1, col 39`, exit 1 |
+| the same program with no `#macro` anywhere | — | `hello world` (the fast path at `macros.go:46-48` returns the source untouched) |
+
+**Why the corpus cannot see it**: `compare.sh:23` compares `compiler/testdata/cases/*.kq` and
+`cases_run/*.kq`, and neither directory contains a `#macro`
+(`grep -l '#macro'` matches **only** `examples/macro.qk`, which compare.sh does not run).
+`TestVMEqualsTreeWalkerOnCorpus` (`vm_diff_test.go:160`) *does* run `examples/`, but it compares the
+interpreter's two engines, so `examples/macro.qk` is green there. The committed example that
+demonstrates the feature is the one file that fails, and it fails outside every gate.
+
+**Three interface-level consequences, stated separately from the defect**:
+
+1. `joinTokens`'s promise ("rebuilds the token stream into source text") is **not implementable from
+   the information it receives**. `Token` (`qkparser/token.go:94-100`) carries `Kind`, `Text`, `Int`,
+   `Flt`, `Line`, `Col`; for `TStr` the spelling is genuinely absent, and for `TInt`/`TFlt` the decimal
+   spelling is absent too (`Int`/`Flt` are the parsed values). Any re-parse path built on it is lossy
+   for literals, not only for strings — `1_000`, `0x1F` and `1e3` would be re-emitted in canonical form
+   by luck rather than by contract. **UNVERIFIED**: I did not test whether a hex or exponent literal in a
+   macro argument changes meaning, because the string case already fails first.
+2. `expandMacros` **swallows every error** — `macros.go:47,51,55,58,62` each `return src, nil` when
+   `Lex`, `SplitMacroDefs` or `ExpandMacros` fails, "let cgen report the error". Combined with (1) this
+   is why the observed diagnostics are a `ParseError` about a `)` or an `undeclared identifier
+   "COMPILE"` rather than anything that names macro expansion. The failure is reported by an interface
+   that is not the one that failed.
+3. The two engines differ in **mode** as well as in strategy — `"explain"` vs `"compile"`
+   (`internal/lang/compile.go:123`, `compiler/main.go:334,441`), which is §6.6. Two independent
+   divergences sit in the same 40 lines.
+
 ---
 
 ## 6. Known gaps
@@ -670,7 +735,9 @@ is a different statement from "i18n is broken".
 
 | # | Gap | Evidence |
 |---|---|---|
-| G-6 | **the two engines disagree on `#when` today**: an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
+| G-6 | **the two engines disagree on `#when` today**: an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `compiler/main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
+| G-14 | **`joinTokens` loses string quotes, so `qkc` fails or prints nothing for any program with a `#macro` and a string literal** — including the committed `examples/macro.qk` | measured; `compiler/macros.go:13-33` vs `qkparser/token.go:486`; write-up in §5.3 |
+| G-15 | `expandMacros` swallows all five error paths (`macros.go:47,51,55,58,62`), so a macro-expansion failure is reported by the parser as a confusing `ParseError` | `compiler/macros.go:46-63` |
 | G-7 | **the formatter is not in this repository and no gate composes it** | `qkfmt` referenced only by `scripts/bench-tools.sh:26,60`; `QuarkLangQkfmt` CI is `go build && go vet` on ubuntu |
 | G-8 | the parser module's templates are outside every i18n gate (correct today, unenforced) | probe in §5.2; scope of `coverage_test.go:44` + `:355-361` |
 | G-9 | `TestVMCompilesHotShapes` is a 4-entry whitelist, so "the VM still engages" is checked for 3 shapes only | `vm_diff_test.go:137-141` |
