@@ -107,8 +107,10 @@ The three Go modules in play:
   (`macros.go:53,60`). The macro *logic* is therefore shared and only the *mode* differs.
 - **Verified by**: `internal/lang/eval_test.go:574` `TestMacroWhenCompileDropped` pins the interpreter
   to `run-line` for a macro carrying both branches; `macroinsert_test.go` covers `#insert`/`#ast`;
-  `TestMacroErrorDirective` (`eval_test.go:594`) covers `#error`. `compiler/macros_test.go` exists only
-  on the unmerged branch `chore/install-sh` and is **not** in `67ce88c`.
+  `TestMacroErrorDirective` (`eval_test.go:594`) covers `#error`. There is **no committed test of the
+  compiler's macro path**: `compiler/macros_test.go` exists, but only as an untracked file in the
+  developer's working copy (`git status` in the main checkout reports `?? compiler/macros_test.go`), on
+  no branch and in no commit reachable from `main`.
 - **Failure modes**: `#error` aborts expansion (`macro.go:279`); an unknown `#` command is refused
   (`macro.go:308`); an argument outside the accepted `#when` set fires no branch and is dropped
   **silently** — measured, §6.6.
@@ -237,7 +239,9 @@ The three Go modules in play:
   the `memory.*` builtins (`:1128`, `:2388-2400`), `new`/pointers (`:741`) and `taskm` (`:3353`,
   `:3374`).
 - **Verified by**: `internal/lang/eval_test.go:372` (after `compact`, exactly the persistent thread block
-  remains) and `:708` (after `delete`+`compact`, zero blocks); benchmarks at `bench_test.go:85,130`.
+  remains **provided the merged task has already finished** — see §5.4, this one is scheduling-dependent
+  and has failed on `windows-latest`) and `:708` (after `delete`+`compact`, zero blocks, no concurrent
+  task); benchmarks at `bench_test.go:85,130`.
 - **Failure modes**: **the interpreter is the only engine with this manager.** cgen has no
   `MemoryManager`; the compiled binary's storage story is `calloc` plus the runtime it emits. That is a
   boundary rather than a defect, but it means `memory.Fragmentation()` and friends are engine-specific
@@ -558,7 +562,7 @@ than a TODO list.
 
 ## 5. Worked example
 
-Three real failures, decomposed into interface + composition instead of a red project.
+Four real failures, decomposed into interface + composition instead of a red project.
 
 ### 5.1 The Windows formatting gate — `qkfmt -l` under `windows × pwsh × CRLF`
 
@@ -707,6 +711,56 @@ demonstrates the feature is the one file that fails, and it fails outside every 
    (`internal/lang/compile.go:123`, `compiler/main.go:334,441`), which is §6.6. Two independent
    divergences sit in the same 40 lines.
 
+
+### 5.4 `TestMemoryCompactReclaims` — the memory manager's invariant under `{windows runner} × {goroutine scheduling}`
+
+**The interface**: `MemoryManager.Compact()` promises to reclaim every block nobody occupies and return
+the reclaimed count (`internal/lang/eval.go:292-305`). **The composition**: the program below, run under
+the test harness, on a given OS.
+
+**What the test asserts** (`internal/lang/eval_test.go:348-375`):
+
+```go
+// the function block of merge (owner=pid) has been reclaimed by compact;
+// the thread's own persistent block (owner=0) is kept → 1 remains
+if n := in.mem.BlockCount(); n != 1 {
+    t.Fatalf("expected 1 block (persistent thread block) after compact, got %d", n)
+}
+```
+
+**The race the assertion rests on**: `taskm.spawn()` allocates the thread's block with `owner=0`
+(`eval.go:3353`), and each `t.merge(...)` allocates a second block owned by the task's pid
+(`eval.go:3374`). That second block is released by `ReclaimTask(t.Pid)` (`eval.go:3384`) — which runs
+**inside the task's own goroutine** (`eval.go:3381-3388`), not on the caller's path. The interpreted
+program calls `GlobalMemory.compact()` as its last statement. So the block count the test reads is
+"1 if the worker goroutine finished before the program did, 2 if it did not" — and nothing in the
+program or the harness orders those two events.
+
+**Observed, not hypothesised**: `.github/workflows/ci.yml`'s `tests` job on `windows-latest` failed with
+
+```
+--- FAIL: TestMemoryCompactReclaims (0.00s)
+    eval_test.go:373: expected 1 block (persistent thread block) after compact, got 2
+```
+
+(run [38061536413](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/runs/38061536413/job/114240627738),
+2026-10-10, on a documentation-only pull request — so no code change caused it). The same job passed on
+the re-run of the identical SHA, and passes locally: `go test ./internal/lang/ -run
+TestMemoryCompactReclaims -count=200` is green on linux. **UNVERIFIED**: I did not measure the
+scheduling difference that decides it; the plausible reading is a coarser scheduler quantum on the
+runner, but that is a hypothesis, not a measurement.
+
+**Why this belongs in a composition map rather than a flake report**: the promise
+"`Compact()` reclaims every unoccupied block" is true. The *test's* claim — "exactly one block remains,
+therefore the merge block was reclaimed first" — is a claim about **goroutine scheduling**, and that is
+a property of a composition (harness × OS × load), not of the memory manager. `BlockCount()` is
+deterministic only after the task has provably ended; nothing in `TestMemoryCompactReclaims` establishes
+that. This also refines the interface entry: what `eval_test.go:372` pins is
+"`Compact()` + *a completed task* ⇒ 1 block", not "`Compact()` ⇒ 1 block".
+
+The two other memory-manager assertions are not exposed to this race: `eval_test.go:708` uses `delete`
+followed by `compact` with no concurrent task, and `bench_test.go:85,130` drive `Alloc` directly.
+
 ---
 
 ## 6. Known gaps
@@ -716,7 +770,7 @@ demonstrates the feature is the one file that fails, and it fails outside every 
 | Source | State at `67ce88c` |
 |---|---|
 | `spec/STANDARD.md` §11.1 | `bit`, `bits<N>` (1≤N≤32), `uchar`, the bitwise family, `b[i]` read/write, the three conversion meanings, `===`, permission references, `&lvalue` and `p++` implemented in both engines; `compare.sh` keeps the corpus identical |
-| `spec/STANDARD.md` §11.2 | `bits<N>` with N>32 refused by the shared frontend with one identical message; a width takes a decimal literal only; `float`/`double` reinterpretation refused (this implementation's `float` is 64-bit where §3.2 says `float32`); layout of a `bits<N>` whose width is not 8/16/32 rounds up in compiled structs |
+| `spec/STANDARD.md` §11.2 | `bits<N>` with N>32 refused by the shared frontend with one identical message; a width takes a decimal literal only; `float`/`double` reinterpretation refused (this implementation's `float` is 64-bit where §3.2 says `float32`); layout of a `bits<N>` whose width is not 8/16/32 rounds up in compiled structs; **call depth capped at 8192** (`lang.MaxCallDepth`) and **expression nesting at 65536** (`lang.MaxExprDepth`), both enforced by explicit counters that are never a stack probe, so the three platforms answer alike |
 | `spec/STANDARD.md` §11.3 | **the code does not follow the standard here**: §7.2 macro spelling (`#macro` still accepted, `$` rejected; a conforming change was rolled back); §8 `try`/`catch` still exist although the standard has no exceptions; §9 `List`/`HashTable` still built in, their count frozen by a test |
 | `stress/NOTES.md` | all three findings of the first full run are **closed**; the 3 fixed defects are the front-end crash, the quadratic VM compilation, and the engines disagreeing at the recursion limit |
 | `stress/known-failures.txt` | empty, with the rules for adding an entry, and the reason a stale entry is itself reported as a warning |
@@ -736,6 +790,7 @@ demonstrates the feature is the one file that fails, and it fails outside every 
 | # | Gap | Evidence |
 |---|---|---|
 | G-6 | **the two engines disagree on `#when` today**: an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `compiler/main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
+| G-16 | **`TestMemoryCompactReclaims` is scheduling-dependent and has already failed on `windows-latest`** (`expected 1 block … got 2`) while passing on the re-run of the same SHA and locally | measured; `eval_test.go:373` vs the goroutine at `eval.go:3381-3388`; write-up in §5.4 |
 | G-14 | **`joinTokens` loses string quotes, so `qkc` fails or prints nothing for any program with a `#macro` and a string literal** — including the committed `examples/macro.qk` | measured; `compiler/macros.go:13-33` vs `qkparser/token.go:486`; write-up in §5.3 |
 | G-15 | `expandMacros` swallows all five error paths (`macros.go:47,51,55,58,62`), so a macro-expansion failure is reported by the parser as a confusing `ParseError` | `compiler/macros.go:46-63` |
 | G-7 | **the formatter is not in this repository and no gate composes it** | `qkfmt` referenced only by `scripts/bench-tools.sh:26,60`; `QuarkLangQkfmt` CI is `go build && go vet` on ubuntu |
@@ -832,10 +887,22 @@ Consequences stated as interfaces:
   dropped **silently** — verified, `#when(bogus){#return 999}` alongside `#when(run){#return 222}`
   prints `222` with no diagnostic.
 
+**An abandoned fix attempt exists, and it has not been carried forward.** The untracked file
+`compiler/macros_test.go` in the developer's checkout (mtime 2026-10-08 22:51, ~40 minutes after the
+committed tip `d3ee8cc` of that branch) is described in its own header as "the compiler expands macros in
+the compile state, the interpreter in the run state" and adds a test named
+`TestExpandMacrosCompileStateNoWhenBranchIsHardError`, which would make the compiler **refuse** a macro
+whose `#when` branches all miss — turning today's silent divergence into a hard error. It cannot run now:
+it imports `quarklang/internal/lang`, and that module path was renamed to the public
+`github.com/QuarkLangCommunity/...` one by `6dad203` (2026-10-09 19:47), after the file was written.
+`go test ./...` in the compiler module does not see it (untracked), so the suite stays green. So the
+intended fix was *diagnosed before this document*; the choice among the three readings below was the part
+left open.
+
 **UNVERIFIED**: whether the intended fix is to pass `"compile"` from the interpreter, to retitle the mode
-set as `explain|run`, or to drop `#when` in favour of the standard's `#ifdef` family. All three are
-consistent with *some* artefact in the tree, which is why this is reported as a contradiction rather than
-a defect with a known fix.
+set as `explain|run`, to drop `#when` in favour of the standard's `#ifdef` family, or the abandoned
+attempt's "hard error when every branch misses". All are consistent with *some* artefact in the tree,
+which is why this is reported as a contradiction rather than a defect with a known fix.
 
 ---
 

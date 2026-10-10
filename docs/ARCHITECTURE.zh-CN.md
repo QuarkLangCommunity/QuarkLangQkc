@@ -103,8 +103,9 @@
   也就是说宏**逻辑**是共享的，仅**模式**不同。
 - **如何验证**：`internal/lang/eval_test.go:574` 的 `TestMacroWhenCompileDropped` 把解释器钉在
   `run-line`（宏同时带两个分支时）；`macroinsert_test.go` 覆盖 `#insert`/`#ast`；
-  `TestMacroErrorDirective`（`eval_test.go:594`）覆盖 `#error`。`compiler/macros_test.go`
-  只存在于未合并分支 `chore/install-sh`，**不在** `67ce88c` 里。
+  `TestMacroErrorDirective`（`eval_test.go:594`）覆盖 `#error`。**编译端的宏路径没有任何已入库测试**：
+  `compiler/macros_test.go` 确实存在，但只是开发者工作副本里的未跟踪文件
+  （主检出 `git status` 报 `?? compiler/macros_test.go`），不在任何分支、也不在任何可达 `main` 的提交里。
 - **失效方式**：`#error` 中止展开（`macro.go:279`）；未知的 `#` 命令被拒绝（`macro.go:308`）；
   而 `#when` 参数落在可接受集合之外时**不执行任何分支且静默丢弃**——已实测，见 §6.6。
 
@@ -217,8 +218,9 @@
   排序的最小堆跟踪（`eval.go:210-215`）。
 - **谁在组合它**：只有解释器——`interp.mem`（`eval.go:397`，`:424` 初始化），
   用于 `memory.*` 内建（`:1128`、`:2388-2400`）、`new`/指针（`:741`）与 `taskm`（`:3353`、`:3374`）。
-- **如何验证**：`internal/lang/eval_test.go:372`（`compact` 之后恰好剩下线程的常驻块）与
-  `:708`（`delete`+`compact` 之后块数为 0）；基准在 `bench_test.go:85,130`。
+- **如何验证**：`internal/lang/eval_test.go:372`（`compact` 之后恰好剩下线程的常驻块——**前提是被 merge 的任务已经结束**；
+  见 §5.4，这一条依赖调度，且已在 `windows-latest` 上失败过）与 `:708`
+  （`delete`+`compact` 之后块数为 0，无并发任务）；基准在 `bench_test.go:85,130`。
 - **失效方式**：**只有解释器拥有这个管理器。** cgen 没有 `MemoryManager`；编译出的二进制的存储
   由 `calloc` 加它自己发出的运行时承担。这是边界而不是缺陷，但它意味着
   `memory.Fragmentation()` 之类是**引擎专属面**，一致性用例必须避开它们。
@@ -523,7 +525,7 @@ R-1…R-3 是仅有的**数值**棘轮，其余都是精确值契约。R-11 是*
 
 ## 5. 实例拆解
 
-三个真实失败，拆成"接口 + 组合"，而不是"某个项目红了"。
+四个真实失败，拆成"接口 + 组合"，而不是"某个项目红了"。
 
 ### 5.1 Windows 格式化门 —— `windows × pwsh × CRLF` 下的 `qkfmt -l`
 
@@ -664,6 +666,52 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
    （`internal/lang/compile.go:123`、`compiler/main.go:334,441`），即 §6.6。
    两处彼此独立的分歧就挤在同 40 行里。
 
+
+### 5.4 `TestMemoryCompactReclaims` —— `{windows runner} × {goroutine 调度}` 下内存管理器的不变量
+
+**接口**：`MemoryManager.Compact()` 承诺回收所有无人占用的块并返回回收数量
+（`internal/lang/eval.go:292-305`）。**组合**：下面这段程序，在测试骨架下、在某个操作系统上运行。
+
+**测试断言的是什么**（`internal/lang/eval_test.go:348-375`）：
+
+```go
+// the function block of merge (owner=pid) has been reclaimed by compact;
+// the thread's own persistent block (owner=0) is kept → 1 remains
+if n := in.mem.BlockCount(); n != 1 {
+    t.Fatalf("expected 1 block (persistent thread block) after compact, got %d", n)
+}
+```
+
+**这条断言所依赖的竞态**：`taskm.spawn()` 用 `owner=0` 分配线程自己的块（`eval.go:3353`），
+每次 `t.merge(...)` 再分配第二个块、归属该任务的 pid（`eval.go:3374`）。第二个块由
+`ReclaimTask(t.Pid)` 释放（`eval.go:3384`）——而它跑在**任务自己的 goroutine 里**
+（`eval.go:3381-3388`），不在调用方路径上。被解释的程序把 `GlobalMemory.compact()` 作为最后一条语句。
+于是测试读到的块数是"worker goroutine 在程序结束前跑完就是 1，没跑完就是 2"——
+程序与骨架都没有为这两件事定序。
+
+**这是观察到的，不是假设**：`.github/workflows/ci.yml` 的 `tests` 作业在 `windows-latest` 上失败：
+
+```
+--- FAIL: TestMemoryCompactReclaims (0.00s)
+    eval_test.go:373: expected 1 block (persistent thread block) after compact, got 2
+```
+
+（run [38061536413](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/runs/38061536413/job/114240627738)，
+2026-10-10，发生在一个**只改文档**的拉取请求上——所以没有任何代码改动导致它。）
+同一 SHA 重跑时该作业通过，本机也通过：`go test ./internal/lang/ -run TestMemoryCompactReclaims
+-count=200` 在 linux 上全绿。**UNVERIFIED**：我没有测量决定它的那个调度差异；
+合理猜测是 runner 上的调度时间片更粗，但那是假设而不是测量。
+
+**为什么这属于组合地图，而不是一条"flake 报告"**：承诺"`Compact()` 回收所有无人占用的块"是真的。
+测试的断言——"恰好剩 1 块，因此 merge 的块先被回收了"——是关于 **goroutine 调度**的断言，
+而调度是组合（骨架 × OS × 负载）的性质，不是内存管理器的性质。只有在任务**可证明已结束**之后，
+`BlockCount()` 才是确定的；`TestMemoryCompactReclaims` 里没有任何东西确立这一点。
+这也细化了接口条目：`eval_test.go:372` 钉住的是"`Compact()` + **已完成的任务** ⇒ 1 块"，
+而不是"`Compact()` ⇒ 1 块"。
+
+内存管理器另外两处断言不暴露在这个竞态下：`eval_test.go:708` 用 `delete` 后再 `compact`，
+没有并发任务；`bench_test.go:85,130` 直接驱动 `Alloc`。
+
 ---
 
 ## 6. 已知缺口
@@ -673,7 +721,7 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
 | 来源 | `67ce88c` 时的状态 |
 |---|---|
 | `spec/STANDARD.md` §11.1 | `bit`、`bits<N>`（1≤N≤32）、`uchar`、位运算族、`b[i]` 读写、三种转换含义、`===`、权限引用、`&lvalue` 与 `p++` 在两个引擎里都已实现；`compare.sh` 让语料保持一致 |
-| `spec/STANDARD.md` §11.2 | N>32 的 `bits<N>` 由共享前端拒绝，两个引擎同一条消息；位宽只接受十进制字面量；`float`/`double` 的重解释被拒绝（本实现的 `float` 是 64 位，而 §3.2 写的是 `float32`）；宽度不是 8/16/32 的 `bits<N>` 在编译结构体里布局上取整 |
+| `spec/STANDARD.md` §11.2 | N>32 的 `bits<N>` 由共享前端拒绝，两个引擎同一条消息；位宽只接受十进制字面量；`float`/`double` 的重解释被拒绝（本实现的 `float` 是 64 位，而 §3.2 写的是 `float32`）；宽度不是 8/16/32 的 `bits<N>` 在编译结构体里布局上取整；**调用深度上限 8192**（`lang.MaxCallDepth`）、**表达式嵌套上限 65536**（`lang.MaxExprDepth`），二者都由显式计数器强制、绝不探测栈，所以三个平台给出相同答案 |
 | `spec/STANDARD.md` §11.3 | **代码在此不遵循标准**：§7.2 宏拼写（仍接受 `#macro`、拒绝 `$`；一次合规改造被回滚）；§8 `try`/`catch` 仍在，尽管标准里没有异常；§9 `List`/`HashTable` 仍是内建，其数量被一条测试冻结 |
 | `stress/NOTES.md` | 首轮全量运行的三项发现**全部关闭**；三个已修缺陷是前端崩溃、VM 编译的二次复杂度、以及两引擎在递归上限上的分歧 |
 | `stress/known-failures.txt` | 为空，并写明"如何新增条目"的规则，以及为什么过期条目本身会被报成警告 |
@@ -693,6 +741,7 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
 | # | 缺口 | 证据 |
 |---|---|---|
 | G-6 | **两个引擎今天在 `#when` 上就不一致**：只在解释器出现的宏分支会执行 `#when(compile)` 体，于是 `#when(compile){#return 111}` / `#when(run){#return 222}` 解释执行为 `222`、编译执行为 `111` | 已实测；机制是 `compile.go:123`（`"explain"`）对 `compiler/main.go:334,441`（`"compile"`）与 `macro.go:268` 的相互作用——详见 §6.6 |
+| G-16 | **`TestMemoryCompactReclaims` 依赖调度，并且已经在 `windows-latest` 上失败过**（`expected 1 block … got 2`），而同一 SHA 重跑通过、本机也通过 | 已实测；`eval_test.go:373` 对 `eval.go:3381-3388` 的 goroutine；详见 §5.4 |
 | G-14 | **`joinTokens` 丢掉字符串引号，于是任何"带 `#macro` 且含字符串字面量"的程序在 `qkc` 下失败或什么都不输出**——包括已入库的 `examples/macro.qk` | 已实测；`compiler/macros.go:13-33` 对 `qkparser/token.go:486`；详见 §5.3 |
 | G-15 | `expandMacros` 吞掉全部五条错误路径（`macros.go:47,51,55,58,62`），于是宏展开失败被语法器报成令人困惑的 `ParseError` | `compiler/macros.go:46-63` |
 | G-7 | **格式化器不在本仓库，且没有任何门禁组合它** | `qkfmt` 仅被 `scripts/bench-tools.sh:26,60` 引用；`QuarkLangQkfmt` 的 CI 是 ubuntu 上的 `go build && go vet` |
@@ -786,9 +835,19 @@ $ ./qkc -run when3.qk     → 111
 - 也没有任何引擎校验模式集合：集合之外的参数不执行任何分支并被**静默**丢弃——
   已实测，`#when(bogus){#return 999}` 与 `#when(run){#return 222}` 并存时输出 `222`，没有任何诊断。
 
+**存在一次被遗弃的修复尝试，且没有被带过来。** 开发者工作副本里未跟踪的 `compiler/macros_test.go`
+（mtime 2026-10-08 22:51，比该分支当时已提交的顶端 `d3ee8cc` 晚约 40 分钟）在自己的文件头里写着
+"编译器在 compile 态展开宏、解释器在 run 态"，并新增了一个名为
+`TestExpandMacrosCompileStateNoWhenBranchIsHardError` 的测试，意图是让编译器**直接拒绝**所有 `#when`
+分支都不命中的宏——把今天的静默分歧变成硬错误。它现在跑不起来：它 import 的是 `quarklang/internal/lang`，
+而该模块路径已在 `6dad203`（2026-10-09 19:47）改名为公开的
+`github.com/QuarkLangCommunity/...`，晚于这个文件写成的时间。编译器模块的 `go test ./...` 看不到它
+（未跟踪），所以测试套件依然全绿。也就是说，修法**在本文之前就已经被诊断过**；悬而未决的是下面三种
+读法里选哪一种。
+
 **UNVERIFIED**：正确的修法究竟是从解释器传 `"compile"`、把模式集合改称 `explain|run`、
-还是按标准的 `#ifdef` 家族彻底去掉 `#when`。三种都能与树里的**某个**产物自洽，
-所以这里报告的是矛盾，而不是给出确定修法的缺陷。
+按标准的 `#ifdef` 家族彻底去掉 `#when`，还是采纳那次被遗弃尝试的"全部分支不命中即硬错误"。
+每一种都能与树里的**某个**产物自洽，所以这里报告的是矛盾，而不是给出确定修法的缺陷。
 
 ---
 
