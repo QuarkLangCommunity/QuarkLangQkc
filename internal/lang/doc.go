@@ -239,8 +239,8 @@ func funcSignature(f *FuncDecl) string {
 	return "fn" + typeParams(f.TypeParams) + " " + f.Name + "(" + paramsText(f.Params) + ") " + retText(f.Ret)
 }
 
-// libFuncSignature: a library binding symbol is an already-compiled Func (with no body).
-func libFuncSignature(f *Func) string {
+// libFuncSignature renders a library binding symbol, which the parser records as a body-less FuncDecl.
+func libFuncSignature(f *FuncDecl) string {
 	return "fn" + typeParams(f.TypeParams) + " " + f.Name + "(" + paramsText(f.Params) + ") " + retText(f.Ret)
 }
 

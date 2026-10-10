@@ -41,6 +41,19 @@ go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # �
 go run ./scripts/... 2>/dev/null || true         # 发布/基准脚本改动时，跑一次冒烟
 ```
 
+### 语法层在独立仓库里
+
+`go.mod` 把 [`QuarkLangQkparser`](https://github.com/QuarkLangCommunity/QuarkLangQkparser) 钉到具体 commit，因此全新克隆**不需要额外步骤**：`go test ./...` 会像普通依赖一样把它下载下来，任何引用本模块的人也一样。
+
+若要同时改解析器和本仓库，把 `.gitignore` 已经预留的兄弟目录（`QuarkLangQkparser/`）放在仓库根，再用本机 Go workspace 接上；`go.mod` 里的钉版不动，CI 始终按已发布 revision 构建：
+
+```sh
+git clone https://github.com/QuarkLangCommunity/QuarkLangQkparser   # → ./QuarkLangQkparser
+go work init . ./compiler ./QuarkLangQkparser                       # go.work 只属于本机，不入库
+```
+
+解析器的改动合入后，两个模块都用 `go get github.com/QuarkLangCommunity/QuarkLangQkparser@<commit>` 提升钉版。
+
 新增语言特性时，**必须同时更新**：
 
 1. `SYNTAX.zh-CN.md`（唯一正典语法清单，逐编号 M/K/E/S/O/T/P；英文版 `SYNTAX.md`）；

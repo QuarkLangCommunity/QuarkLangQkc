@@ -30,3 +30,9 @@ QuarkLangNpm/
 QuarkLangPlayground/
 QuarkLangQk*/
 QuarkLangQuark/
+
+# Local Go workspace: wires the sibling checkouts above into one build while the parser and this
+# repository change together. Per-machine state, never tracked — CI and consumers always build the
+# revision pinned in go.mod.
+go.work
+go.work.sum
