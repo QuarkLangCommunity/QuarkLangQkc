@@ -666,6 +666,19 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
    （`internal/lang/compile.go:123`、`compiler/main.go:334,441`），即 §6.6。
    两处彼此独立的分歧就挤在同 40 行里。
 
+**已修复**（本分支）：编译器不再序列化 token 流。`expandMacros` 返回 `[]lang.Token`，
+cgen 经 `lang.CompileTokensWithImports` 直接解析它——导入合并也在 token 层完成，并与文本路径
+共用同一套 import 遍历（`program` 声明规则、行号映射、SrcMap），所以诊断位置没有移动；
+`joinTokens` 与 `isSymStart` 一并删除。第 2 条同时修好：每个宏失败都按宏错误返回
+（`#error("…")` 报自己，畸形的 `#macro` 点名定义处，参数个数不符点名宏），
+只有词法失败仍交给语法器——它报的是同一条 `LexError`。第 3 条**未动**：§6.6 的模式问题仍然开放。
+
+本次工作还测出上表的一处归因需要更正：`examples/macro.qk` 在 `qkc -run` 下打印两行空行，
+原因是**状态**分歧，而不是序列化。它的宏体只有 `#when (run)`；把同一个宏去掉字符串
+（`#macro add (a, b) { #when (run) { #return a + b } }` + `io.println(add(10, 32));`），
+解释器打印 `42`、`qkc -run` 打印一行空行，而那个程序里根本不存在 `TStr` token。
+去掉序列化改不了它，只有 §6.6 的决策能。
+
 
 ### 5.4 `TestMemoryCompactReclaims` —— `{windows runner} × {goroutine 调度}` 下内存管理器的不变量
 
@@ -712,6 +725,12 @@ if n := in.mem.BlockCount(); n != 1 {
 内存管理器另外两处断言不暴露在这个竞态下：`eval_test.go:708` 用 `delete` 后再 `compact`，
 没有并发任务；`bench_test.go:85,130` 直接驱动 `Alloc`。
 
+**已修复**（本分支）：测试程序现在在 compact 之前等待任务结束——`taskm.block(t.pid())`
+只在 goroutine 关闭其 done channel 之后返回，而关 channel 发生在 `ReclaimTask` 之后
+（`eval.go:3381-3388`），所以这是排序而不是睡眠，且严格断言（`n != 1`）未动。
+本机用一个加宽的窗口复现并关闭：worker 在 `ch.send` 之后继续跑时，
+不等待会得到 `blocks=2`，等待后得到 `blocks=1`；已入库的测试 `-count=200` 全绿（`-count=2000` 也全绿）。
+
 ---
 
 ## 6. 已知缺口
@@ -741,9 +760,9 @@ if n := in.mem.BlockCount(); n != 1 {
 | # | 缺口 | 证据 |
 |---|---|---|
 | G-6 | **两个引擎今天在 `#when` 上就不一致**：只在解释器出现的宏分支会执行 `#when(compile)` 体，于是 `#when(compile){#return 111}` / `#when(run){#return 222}` 解释执行为 `222`、编译执行为 `111` | 已实测；机制是 `compile.go:123`（`"explain"`）对 `compiler/main.go:334,441`（`"compile"`）与 `macro.go:268` 的相互作用——详见 §6.6 |
-| G-16 | **`TestMemoryCompactReclaims` 依赖调度，并且已经在 `windows-latest` 上失败过**（`expected 1 block … got 2`），而同一 SHA 重跑通过、本机也通过 | 已实测；`eval_test.go:373` 对 `eval.go:3381-3388` 的 goroutine；详见 §5.4 |
-| G-14 | **`joinTokens` 丢掉字符串引号，于是任何"带 `#macro` 且含字符串字面量"的程序在 `qkc` 下失败或什么都不输出**——包括已入库的 `examples/macro.qk` | 已实测；`compiler/macros.go:13-33` 对 `qkparser/token.go:486`；详见 §5.3 |
-| G-15 | `expandMacros` 吞掉全部五条错误路径（`macros.go:47,51,55,58,62`），于是宏展开失败被语法器报成令人困惑的 `ParseError` | `compiler/macros.go:46-63` |
+| G-16 | **`TestMemoryCompactReclaims` 依赖调度，并且已经在 `windows-latest` 上失败过**（`expected 1 block … got 2`），而同一 SHA 重跑通过、本机也通过 | 已实测；`eval_test.go:373` 对 `eval.go:3381-3388` 的 goroutine；详见 §5.4。**已关闭**（本分支）：程序在 compact 前 `taskm.block` 等待任务，断言保持严格，`-count=200` 全绿 |
+| G-14 | **`joinTokens` 丢掉字符串引号，于是任何"带 `#macro` 且含字符串字面量"的程序在 `qkc` 下失败或什么都不输出**——包括已入库的 `examples/macro.qk` | 已实测；`compiler/macros.go:13-33` 对 `qkparser/token.go:486`；详见 §5.3。**已关闭**（本分支）：`joinTokens` 已删除，编译器直接解析展开后的 token；字符串与转义用例在两个引擎下一致，由 `compiler/testdata/cases/m_macro_literals.kq` 与 `compiler/macros_test.go` 覆盖；`examples/macro.qk` 的空输出属 G-6 的状态问题，不是这条 |
+| G-15 | `expandMacros` 吞掉全部五条错误路径（`macros.go:47,51,55,58,62`），于是宏展开失败被语法器报成令人困惑的 `ParseError` | `compiler/macros.go:46-63`。**已关闭**（本分支）：`expandMacros` 把错误返回给调用方；只有词法失败仍交给语法器，报的是同一条 `LexError` |
 | G-7 | **格式化器不在本仓库，且没有任何门禁组合它** | `qkfmt` 仅被 `scripts/bench-tools.sh:26,60` 引用；`QuarkLangQkfmt` 的 CI 是 ubuntu 上的 `go build && go vet` |
 | G-8 | parser 模块的模板落在所有 i18n 门禁之外（当前正确，但无人强制） | §5.2 的探针；`coverage_test.go:44` + `:355-361` 的范围 |
 | G-9 | `TestVMCompilesHotShapes` 是一张 4 条白名单，"VM 是否仍被使用"只对 3 个形态检查 | `vm_diff_test.go:137-141` |

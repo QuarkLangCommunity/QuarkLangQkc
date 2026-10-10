@@ -711,6 +711,22 @@ demonstrates the feature is the one file that fails, and it fails outside every 
    (`internal/lang/compile.go:123`, `compiler/main.go:334,441`), which is §6.6. Two independent
    divergences sit in the same 40 lines.
 
+**Fixed** (this branch): the compiler no longer serialises the stream. `expandMacros` returns
+`[]lang.Token` and cgen parses it through `lang.CompileTokensWithImports`, which merges imports at token
+level and shares the text path's one import walk (program-declaration rule, line mapping, SrcMap), so
+diagnostics did not move; `joinTokens` is gone, and so is `isSymStart`. Consequence 2 is fixed with it:
+every macro failure is returned as a macro error (`#error("…")` reports itself, a malformed `#macro`
+names the definition, a wrong argument count names the macro), and only a lex failure still defers to the
+parser, which reports the identical `LexError`. Consequence 3 is **not** touched — the mode question in
+§6.6 stays open.
+
+One correction this work measured, because the table above attributes it to `joinTokens`:
+`examples/macro.qk` printing two empty lines under `qkc -run` is the **state** divergence, not the
+serialisation. Its body is `#when (run)` only; with a string-free copy of the same macro
+(`#macro add (a, b) { #when (run) { #return a + b } }` + `io.println(add(10, 32));`) the interpreter prints
+`42` and `qkc -run` prints one empty line, and no `TStr` token exists in that program. Removing the
+serialisation cannot change it; only the §6.6 decision can.
+
 
 ### 5.4 `TestMemoryCompactReclaims` — the memory manager's invariant under `{windows runner} × {goroutine scheduling}`
 
@@ -761,6 +777,13 @@ that. This also refines the interface entry: what `eval_test.go:372` pins is
 The two other memory-manager assertions are not exposed to this race: `eval_test.go:708` uses `delete`
 followed by `compact` with no concurrent task, and `bench_test.go:85,130` drive `Alloc` directly.
 
+**Fixed** (this branch): the test's program now waits for the task before it compacts —
+`taskm.block(t.pid())` returns only after the goroutine has closed its done channel, which happens after
+`ReclaimTask` (`eval.go:3381-3388`), so the wait is ordering rather than a sleep and the strict assertion
+(`n != 1`) is unchanged. Reproduced and closed locally with a widened window: a worker that keeps running
+after `ch.send` gives `blocks=2` without the wait and `blocks=1` with it, and the committed test is green
+under `-count=200` (also `-count=2000`).
+
 ---
 
 ## 6. Known gaps
@@ -790,9 +813,9 @@ followed by `compact` with no concurrent task, and `bench_test.go:85,130` drive 
 | # | Gap | Evidence |
 |---|---|---|
 | G-6 | **the two engines disagree on `#when` today**: an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `compiler/main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
-| G-16 | **`TestMemoryCompactReclaims` is scheduling-dependent and has already failed on `windows-latest`** (`expected 1 block … got 2`) while passing on the re-run of the same SHA and locally | measured; `eval_test.go:373` vs the goroutine at `eval.go:3381-3388`; write-up in §5.4 |
-| G-14 | **`joinTokens` loses string quotes, so `qkc` fails or prints nothing for any program with a `#macro` and a string literal** — including the committed `examples/macro.qk` | measured; `compiler/macros.go:13-33` vs `qkparser/token.go:486`; write-up in §5.3 |
-| G-15 | `expandMacros` swallows all five error paths (`macros.go:47,51,55,58,62`), so a macro-expansion failure is reported by the parser as a confusing `ParseError` | `compiler/macros.go:46-63` |
+| G-16 | **`TestMemoryCompactReclaims` is scheduling-dependent and has already failed on `windows-latest`** (`expected 1 block … got 2`) while passing on the re-run of the same SHA and locally | measured; `eval_test.go:373` vs the goroutine at `eval.go:3381-3388`; write-up in §5.4 — **closed** (this branch): the program waits for the task (`taskm.block`) before it compacts, the assertion stayed strict, `-count=200` green |
+| G-14 | **`joinTokens` loses string quotes, so `qkc` fails or prints nothing for any program with a `#macro` and a string literal** — including the committed `examples/macro.qk` | measured; `compiler/macros.go:13-33` vs `qkparser/token.go:486`; write-up in §5.3 — **closed** (this branch): `joinTokens` is gone and the compiler parses the expanded tokens; string and escape cases agree in both engines, covered by `compiler/testdata/cases/m_macro_literals.kq` and `compiler/macros_test.go`; the empty output of `examples/macro.qk` is the G-6 state question, not this one |
+| G-15 | `expandMacros` swallows all five error paths (`macros.go:47,51,55,58,62`), so a macro-expansion failure is reported by the parser as a confusing `ParseError` | `compiler/macros.go:46-63` — **closed** (this branch): `expandMacros` returns its errors; only a lex failure still defers to the parser, which reports the identical `LexError` |
 | G-7 | **the formatter is not in this repository and no gate composes it** | `qkfmt` referenced only by `scripts/bench-tools.sh:26,60`; `QuarkLangQkfmt` CI is `go build && go vet` on ubuntu |
 | G-8 | the parser module's templates are outside every i18n gate (correct today, unenforced) | probe in §5.2; scope of `coverage_test.go:44` + `:355-361` |
 | G-9 | `TestVMCompilesHotShapes` is a 4-entry whitelist, so "the VM still engages" is checked for 3 shapes only | `vm_diff_test.go:137-141` |
