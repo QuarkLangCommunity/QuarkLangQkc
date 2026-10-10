@@ -1,0 +1,10 @@
+// Tail recursion past the limit: the compiler must count the tail call the interpreter counts, so the
+// two engines refuse the same level (a tail-call optimisation that reuses the frame must not bypass it).
+fn up(int n, int acc) int {
+  if (n == 0) { return acc; }
+  return up(n - 1, acc + 1);
+}
+
+fn main(IOStream io) {
+  io.println(up(9000, 0));
+}
