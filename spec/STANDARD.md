@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.1 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -301,6 +301,19 @@ differ, the code is wrong.
   `float32`, so the widths cannot be trusted to agree yet.
 - layout: a `bits<N>` whose width is not 8, 16 or 32 occupies the next storage size in compiled structs
   and is aligned to that type rather than to 1 as §3.1 requires. Values are exact; only layout rounds up.
+- call depth is capped at 8192 (`lang.MaxCallDepth`). A call made from a frame that deep is refused with
+  `StackOverflowError: recursion depth exceeded 8192` and the line of the refused call. The interpreter
+  counts the depth per call context and the compiler bakes the same counter into the generated code, so
+  both engines stop at the same depth — including a self tail call, which the compiler counts although it
+  needs no new native frame.
+- expression nesting is capped at 65536 levels (`lang.MaxExprDepth`, the parser module's
+  `qkparser.MaxExprDepth`). The depth is measured differently on the two paths that enforce it: the
+  parser counts recursion levels and refuses a deep parenthesis nest as a positioned `ParseError`,
+  `nesting is deeper than 65536 levels, the limit of this implementation: split the expression into
+  smaller statements`, while the type checker counts expression nodes and refuses a long operator chain
+  as `CompileError: expression nesting is deeper than 65536 levels, the limit of this implementation:
+  split the expression into smaller statements`. Both limits are explicit counters, never a probe of the
+  Go stack, so the three platforms answer alike.
 
 ### 11.3 The code does not follow the standard here
 
@@ -321,6 +334,7 @@ differ, the code is wrong.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.1 | 2026-10-10 | §11.2 records the two depth limits a user can hit, with the numbers and what they see: call depth 8192 (`lang.MaxCallDepth`, `StackOverflowError: recursion depth exceeded 8192`, counted identically in the interpreter and in generated code) and expression nesting 65536 (`lang.MaxExprDepth`/`qkparser.MaxExprDepth`, refused by the parser as `nesting is deeper than …` and by the type checker as `expression nesting is deeper than …`). Status-section facts only; no normative content changed and no language surface added |
 | 0.8 | 2026-10-10 | **Memory and lifetime became part of the standard** (§10): no garbage collector, `delete` is a deterministic release that runs `__delete__()` and returns the storage to a free pool without wiping it, allocation reuses the least-occupied block so a tide of temporary data keeps a stable block set, `memory.setBlock`/`compact`/`Fragmentation` are the knobs and the inspection point, and a task's blocks become reclaimable when it ends. The section after it moved to §11 and the change policy to §12. Freeze restarts: review after 2026-11-10 |
 | 0.7.2 | 2026-10-09 | Reorganization and status correction: §6.5/§6.6 became §7 "Program shape and runtime" with subsections, the following sections were renumbered, and a new §10 "Implementation status" was added — the old note still claimed `bit`/`bits<N>`/`uchar` were unimplemented, while both engines have had them since PR #60. §10 now lists what is implemented, the implementation's limits, and the three places where the code does not yet follow the standard (§7.2 macro spelling, §8 no exceptions, §9 built-in containers). No normative content changed |
 | 0.7.1 | 2026-10-08 | `uchar` added: the unsigned 8-bit view over `bits<8>` (`0 … 255`), the octet type and the element type for raw data — there is no signed 8-bit view. §3.1 now states explicitly that every basic type is *implemented from* `bit`/`bits<N>`. Value conversions narrow by keeping the low bits |
