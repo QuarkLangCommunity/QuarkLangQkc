@@ -11,7 +11,7 @@ out2.txt
 # 例外：parity 用例的解释器基线（cgen/parity_test.go 按同名 .out 逐字节比对，缺失即失败），必须入库
 !compiler/testdata/cases/*.out
 
-# docs worktree（独立分支，不并入 main）
+# docs worktree（独立分支，不并入 main）—— 例外见文末
 /docs/
 
 # 抗压测试生成物：极端输入、二进制、缓存与运行中间产物（用例由 cmd/qkstress 生成，不入库）
@@ -41,3 +41,7 @@ QuarkLangQuark/
 # revision pinned in go.mod.
 go.work
 go.work.sum
+
+# docs/ 整体不并入 main；仅这份接口清单与组合地图例外（见 docs/ARCHITECTURE.md §0）
+!docs/ARCHITECTURE.md
+!docs/ARCHITECTURE.zh-CN.md
