@@ -48,7 +48,8 @@ func cacheDir() string {
 
 // engineVersion is the compiler/runtime generation: it must be bumped on any cgen/macro-expansion behavior change,
 // to keep the IR/binary cache from returning artifacts of an old engine (a past trap: the macro-expansion mode and the done-bool fix were swallowed by the cache).
-const engineVersion = "13"
+// 14: the macro step hands cgen its tokens instead of printed source, so a string literal inside a macro keeps its quotes.
+const engineVersion = "14"
 
 // version is the release version: injected at build time via -ldflags "-X main.version=vX.Y.Z".
 var version = "dev" // 13: T&/pointer T nullable references (new T + auto-dereference + nil semantics)
@@ -337,7 +338,7 @@ func main() {
 				os.Exit(1)
 			}
 			cgen.SetLibMode(true) // library: main is exempt and main is not emitted
-			libIR, terr := cgen.Transpile(ex, srcFile)
+			libIR, terr := cgen.TranspileTokens(ex, pre, srcFile)
 			cgen.SetLibMode(false)
 			if terr != nil {
 				fmt.Fprintln(os.Stderr, "error:", terr)
@@ -443,7 +444,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error:", xerr)
 			os.Exit(1)
 		}
-		ir, err = cgen.Transpile(expanded, srcFile)
+		ir, err = cgen.TranspileTokens(expanded, pre, srcFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)

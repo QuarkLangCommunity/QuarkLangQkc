@@ -125,7 +125,18 @@ func compileSlow(src string) (*Program, error) {
 			return nil, err
 		}
 	}
-	prog, err := Parse(rest)
+	return compileTokens(rest, src)
+}
+
+// compileTokens is the tail every entry point shares once macro expansion is done: parse the token
+// stream, type-check it, and resolve slots and call indices. The stream is parsed as **tokens**, never
+// re-serialised to source text: a token's Text holds a literal's value, not its spelling (a string
+// token carries the decoded bytes, quotes excluded), so printing the stream back would rewrite
+// `io.println("x")` into `io.println(x)`. The compiler's entry point
+// (CompileTokensWithImports) reaches the same tail with the stream its own macro step produced.
+// src is kept for diagnostics only (Program.Src).
+func compileTokens(toks []Token, src string) (*Program, error) {
+	prog, err := Parse(toks)
 	if err != nil {
 		return nil, err
 	}

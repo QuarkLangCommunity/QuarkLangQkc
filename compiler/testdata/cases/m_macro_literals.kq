@@ -1,0 +1,24 @@
+// Macro literals parity: a macro argument or body holding a string literal must reach the parser as the
+// literal it is. The compiler expands macros into a token stream and parses **that**; printing the stream
+// back to source first would drop the quotes (a string token carries its value, not its spelling), so this
+// case compared as `ParseError: expected ')', got identifier` before it compared as output.
+#macro id (x) {
+    #return x
+}
+
+#macro greet () {
+    #return "hello from the body"
+}
+
+#macro add (a, b) {
+    #return a + b
+}
+
+fn main(IOStream io) {
+    io.println(id("hello world"));
+    io.println(greet());
+    io.println(id("tab\there \"quoted\" back\\slash"));
+    io.println(id(`raw, no escapes`));
+    io.println(add(20, 22));
+    io.println(add(0x1F, 3));
+}
