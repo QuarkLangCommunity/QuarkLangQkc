@@ -63,8 +63,8 @@ func TestRunBoundedKillsOnMemoryCeiling(t *testing.T) {
 		if res.MemCapped {
 			t.Errorf("a platform without an RSS probe cannot have measured the ceiling: %+v", res)
 		}
-		if res.Exit == 0 {
-			t.Errorf("the killed run must still report an exit status, got 0: %+v", res)
+		if res.Exit <= 128 {
+			t.Errorf("the run must report the group's death by signal as 128+signal, got %d: %+v", res.Exit, res)
 		}
 		if res.PeakRSSKB != -1 {
 			t.Errorf("without an RSS probe the peak must stay the -1 sentinel, got %d", res.PeakRSSKB)
