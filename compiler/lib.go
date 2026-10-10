@@ -237,6 +237,14 @@ func mergeLibIR(consumerIR, libIR string) string {
 	for _, m := range symRe.FindAllStringSubmatch(consumerIR, -1) {
 		haveSym[m[1]] = true
 	}
+	// Global variables the consumer defines: the library only declares the ones it shares with the
+	// program (the call-depth counter and its line, which the whole linked program must share), and a
+	// declaration next to the consumer's definition is an invalid redefinition in one module.
+	globalRe := regexp.MustCompile(`^@([A-Za-z0-9_.]+)\s*=`)
+	haveGlobal := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^@([A-Za-z0-9_.]+)\s*=`).FindAllStringSubmatch(consumerIR, -1) {
+		haveGlobal[m[1]] = true
+	}
 
 	// Symbols the library will **define**: same-named declares in the consumer must be deleted
 	// (since clang 22, "declare then define a function of the same name" is rejected as invalid redefinition; minimal repro verified)
@@ -276,6 +284,9 @@ func mergeLibIR(consumerIR, libIR string) string {
 			}
 			keep = append(keep, ln)
 			continue
+		}
+		if m := globalRe.FindStringSubmatch(t); m != nil && strings.Contains(t, " external ") && haveGlobal[m[1]] {
+			continue // the consumer defines this global: keep its definition, drop the library's declaration
 		}
 		if strings.HasPrefix(t, "attributes ") || strings.HasPrefix(t, "!") {
 			continue // attribute group/metadata: drop (avoid group-number mismatch)

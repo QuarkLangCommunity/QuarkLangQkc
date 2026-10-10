@@ -1,0 +1,18 @@
+# Known failures of the QuarkLang stress suite (slice 1)
+#
+# Every line below is "<case-name><TAB><why it is not a regression>". `qkstress run -known` reads this
+# file: the listed cases are printed as KNOWN and do not change the exit status, so a defect that is NOT
+# in here always fails the run. The list is also embedded verbatim in stress/REPORT.md, which keeps the
+# report and the allow-list from drifting apart.
+#
+# Rules for this file:
+#   * never delete a case or weaken a check to silence a finding — document it here instead;
+#   * never add an entry without a minimal reproduction under stress/repro/ or, when the input is too
+#     large to commit, a one-line command that materialises it (see
+#     stress/repro/expression_chain_stack_overflow.sh);
+#   * when the implementation is fixed, remove the entry: the runner reports such a stale entry as a
+#     warning, and a stale entry that is left behind would hide the next real failure of that case.
+#
+# The first full run of this suite found three defects, all three fixed: the empty list below is
+# deliberate, not an oversight. See the "closed findings" section of stress/NOTES.md for what each one
+# was, how it was fixed, and the minimal reproduction that now passes.

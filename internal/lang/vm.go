@@ -85,6 +85,7 @@ type vmCompiler struct {
 	code      []vmInstr
 	slots     map[string]int
 	types     map[string]string // slot name -> declared type: the VM only emits int/bool operations
+	typeCache map[Expr]string   // expression node -> typeOf answer (memoised: see typeOf)
 	slotNames []string          // slot -> name
 	nSlots    int
 	ioSlot    int
@@ -109,7 +110,7 @@ func (in *interp) vmFor(fn *Func) *vmProg {
 	if len(fn.TypeParams) > 0 || fn.Body == nil {
 		return nil
 	}
-	c := &vmCompiler{in: in, fn: fn, slots: map[string]int{}, types: map[string]string{}, ioSlot: -1}
+	c := &vmCompiler{in: in, fn: fn, slots: map[string]int{}, types: map[string]string{}, typeCache: map[Expr]string{}, ioSlot: -1}
 	c.slotNames = make([]string, 0, len(fn.Params)+4)
 	for i, p := range fn.Params {
 		c.slots[p.Name] = i
@@ -407,8 +408,20 @@ func (c *vmCompiler) callValue(call *CallExpr) (bool, bool) {
 
 // typeOf is the VM's static type view: it only needs to prove that an expression is int or bool,
 // because those are the only operations the bytecode implements. Anything it cannot prove makes the
-// whole function fall back to the tree-walker.
+// whole function fall back to the tree-walker. The answer for a node never changes while one function
+// is compiled, so it is memoised per node: without the cache a left-deep chain of n nodes re-walks the
+// whole subtree at every node and VM compilation costs O(n²) visits instead of O(n).
 func (c *vmCompiler) typeOf(e Expr) string {
+	if t, ok := c.typeCache[e]; ok {
+		return t
+	}
+	t := c.typeOfNode(e)
+	c.typeCache[e] = t
+	return t
+}
+
+// typeOfNode computes the type of one node, recursing through the memoised typeOf for its children.
+func (c *vmCompiler) typeOfNode(e Expr) string {
 	switch x := e.(type) {
 	case *IntLit:
 		return "int"

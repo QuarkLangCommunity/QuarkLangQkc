@@ -176,6 +176,11 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 			switch fi.Name() {
 			case ".git", "dist", "dist-ci":
 				return filepath.SkipDir
+			case "stress-out":
+				// Generated stress inputs (cmd/qkstress gen): adversarial sources by construction, so
+				// linting them says nothing about this corpus — and walking untracked build output at all
+				// is what let a 1 MiB single-line case overflow the type checker's stack here.
+				return filepath.SkipDir
 			case "lintbench", "bench":
 				// Benchmark/performance fixtures: lintbench is gated by TestLintBenchmark against its own manifest;
 				// bench/tools holds benchmark inputs (including third-party library copies) and is not part of corpus review.

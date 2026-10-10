@@ -208,3 +208,24 @@ func BenchmarkStringProcessing1M(b *testing.B) {
 		})
 	}
 }
+
+// Chain-compilation benchmark: a left-deep expression chain is the shape that made VM compilation
+// quadratic before the per-node type cache in vm.go, because typeOf re-walked each node's whole
+// subtree. The comparison that must stay linear is 20k against 60k: the times should roughly double.
+func BenchmarkVMCompileChain(b *testing.B) {
+	for _, n := range []int{20000, 60000} {
+		b.Run(itoaTest(n)+"_additions", func(b *testing.B) {
+			src := chainSource(n)
+			for i := 0; i < b.N; i++ {
+				prog, err := Compile(src)
+				if err != nil {
+					b.Fatal(err)
+				}
+				var out strings.Builder
+				if err := Run(prog, "chain.qk", nil, strings.NewReader(""), &out); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

@@ -1588,8 +1588,8 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 	if len(args) != len(fn.Params) {
 		return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(args)), Pos: pos}
 	}
-	if parentDepth >= 8192 {
-		return NilV(), &RunError{Msg: "StackOverflowError: recursion depth exceeded 8192", Pos: pos}
+	if parentDepth >= MaxCallDepth {
+		return NilV(), &RunError{Msg: MaxCallDepthMessage, Pos: pos}
 	}
 	// Parameter binding (the only canonical form):
 	//   ① plain parameter → an lvalue argument binds by reference (the reference lives in the slot; reads/writes go through to the caller);

@@ -72,7 +72,12 @@ type Catalog struct {
 	keys    []string                     // sorted, for diagnostics and tests
 }
 
-// Load assembles the catalog from the per-domain tables compiled into the binary.
+// Load assembles the catalog from the per-domain tables compiled into the binary. Each table maps the
+// template written at the call site to the same message in the other language, so the direction is a
+// property of the key: the legacy entries are Chinese-source and carry their English translation, the
+// migrated ones are English-source and carry their Chinese translation. Reading the direction off the
+// key is what keeps an English-source message English under EN — indexing every table as if its key
+// were the Chinese text rendered the Chinese value of exactly the messages that were already migrated.
 // The result is immutable; callers may share it freely.
 func Load() *Catalog {
 	c := &Catalog{
@@ -88,8 +93,13 @@ func Load() *Catalog {
 				c.byKey[template] = m
 				c.keys = append(c.keys, template)
 			}
-			m[EN] = translated
-			m[ZH] = template // the template itself is the Chinese text
+			if needsTranslation(template) { // Chinese source: the value is its English translation
+				m[EN] = translated
+				m[ZH] = template
+			} else { // English source: the value is its Chinese translation
+				m[EN] = template
+				m[ZH] = translated
+			}
 		}
 	}
 	sort.Strings(c.keys)
