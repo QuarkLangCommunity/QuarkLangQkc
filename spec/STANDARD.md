@@ -1,8 +1,8 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.7.2 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
-**Frozen:** 2026-10-08 · **Review after:** 2026-11-08
+**Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
 factual errors are allowed; new features are not. Anything not described here is *not* part of the
 standard — it is either a standard-library facility or a work in progress.
@@ -256,15 +256,36 @@ The difference between the two, spelled out:
   compatibility, not standard; they are being migrated onto the views of §3.2 — a `char` used as a narrow
   integer becomes `uchar`.
 - **Legacy built-ins still present** (`List`, `HashTable`): scheduled for migration onto library types.
-  Their presence is frozen by a test — the count may only go down. See §10.3.
+  Their presence is frozen by a test — the count may only go down. See §11.3.
 
-## 10. Implementation status
+## 10. Memory and lifetime
 
-This section is **not normative**: it records how far the code has caught up with §1–§9, so a reader can
+QuarkLang has **no garbage collector**. Storage is released explicitly and the release is
+deterministic: nothing is collected behind your back, and no allocation ever waits for a collection.
+
+| Primitive | Meaning |
+|---|---|
+| `delete x;` | release `x`'s storage: run `__delete__()` if the type declares it, then return the storage to the free pool. The payload is **not** wiped — wiping is `clear`'s job, so a released block never hands another value's bytes to the next user |
+| `memory.setBlock(n)` | set the block size, the unit the runtime allocates and reuses |
+| `memory.compact()` | free the blocks nobody occupies; it does not return |
+| `memory.Fragmentation()` | the unused space inside live blocks, as a ratio (inspection) |
+
+**Reuse is the point.** Allocation prefers the least-occupied block that has room, so a workload whose
+temporary data arrives in *tides* — allocate, use, delete, repeat — reuses a small, stable set of blocks
+instead of growing the heap. The reference implementation measures 99.96% reuse, 0.195% fragmentation and
+a block count that converges to a constant on the tide benchmark; those numbers are measurements, not
+promises, but the policy above is normative. When a task ends, the blocks it owns become reclaimable.
+
+Releasing storage that something still refers to is a programming error: the runtime does not detect it,
+and the permission system of §4 is what keeps it visible at compile time.
+
+## 11. Implementation status
+
+This section is **not normative**: it records how far the code has caught up with §1–§10, so a reader can
 tell the specification from the implementation. The standard is the source of truth — where the two
 differ, the code is wrong.
 
-### 10.1 Implemented, in both engines
+### 11.1 Implemented, in both engines
 
 - `bit`, `bits<N>` for `1 ≤ N ≤ 32`, and `uchar`: the bitwise family, `b[i]` read and write, the three
   conversion meanings of §3.4, and unsigned decimal printing. `compare.sh` keeps the interpreter and the
@@ -272,7 +293,7 @@ differ, the code is wrong.
 - the bitwise family on int views, hex literals, `===` storage identity, permission references, `&lvalue`
   and the reference move `p++`.
 
-### 10.2 Limits of the current implementation
+### 11.2 Limits of the current implementation
 
 - `bits<N>` with `N > 32` is refused by the shared frontend, with one identical message in both engines.
 - a width takes a decimal literal only, not an arbitrary constant expression.
@@ -281,7 +302,7 @@ differ, the code is wrong.
 - layout: a `bits<N>` whose width is not 8, 16 or 32 occupies the next storage size in compiled structs
   and is aligned to that type rather than to 1 as §3.1 requires. Values are exact; only layout rounds up.
 
-### 10.3 The code does not follow the standard here
+### 11.3 The code does not follow the standard here
 
 - **§7.2 macro spelling.** The standard says `macro x($a $b) { … }`. The implementation still accepts
   `#macro name (params) { body }` and rejects `$`. A change that made the code conform was proposed and
@@ -291,7 +312,7 @@ differ, the code is wrong.
   `Option<T>` and `Result<T, E>` are the only way to carry failure.
 - **§9 core minus containers.** `List` and `HashTable` are still built in; their count is frozen by a test.
 
-## 11. Change policy and revision log
+## 12. Change policy and revision log
 
 - Corrections of **factual errors** in this document, and fixes that make the implementation match it,
   are allowed at any time.
@@ -300,6 +321,7 @@ differ, the code is wrong.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8 | 2026-10-10 | **Memory and lifetime became part of the standard** (§10): no garbage collector, `delete` is a deterministic release that runs `__delete__()` and returns the storage to a free pool without wiping it, allocation reuses the least-occupied block so a tide of temporary data keeps a stable block set, `memory.setBlock`/`compact`/`Fragmentation` are the knobs and the inspection point, and a task's blocks become reclaimable when it ends. The section after it moved to §11 and the change policy to §12. Freeze restarts: review after 2026-11-10 |
 | 0.7.2 | 2026-10-09 | Reorganization and status correction: §6.5/§6.6 became §7 "Program shape and runtime" with subsections, the following sections were renumbered, and a new §10 "Implementation status" was added — the old note still claimed `bit`/`bits<N>`/`uchar` were unimplemented, while both engines have had them since PR #60. §10 now lists what is implemented, the implementation's limits, and the three places where the code does not yet follow the standard (§7.2 macro spelling, §8 no exceptions, §9 built-in containers). No normative content changed |
 | 0.7.1 | 2026-10-08 | `uchar` added: the unsigned 8-bit view over `bits<8>` (`0 … 255`), the octet type and the element type for raw data — there is no signed 8-bit view. §3.1 now states explicitly that every basic type is *implemented from* `bit`/`bits<N>`. Value conversions narrow by keeping the low bits |
 | 0.7 | 2026-10-08 | The storage family is measured in **bits**: `byte`/`bytes<N>` became `bit`/`bits<N>`. A view's name now states its own width (`int32` is `bits<32>`, `float64` is `bits<64>`), layout is `⌈N/8⌉` bytes with the bits past `N` zero, and `b[i]` reads or writes the i-th bit. Freeze restarts: review after 2026-11-08 |
