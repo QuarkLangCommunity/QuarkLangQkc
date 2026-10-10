@@ -107,8 +107,10 @@ The three Go modules in play:
   (`macros.go:53,60`). The macro *logic* is therefore shared and only the *mode* differs.
 - **Verified by**: `internal/lang/eval_test.go:574` `TestMacroWhenCompileDropped` pins the interpreter
   to `run-line` for a macro carrying both branches; `macroinsert_test.go` covers `#insert`/`#ast`;
-  `TestMacroErrorDirective` (`eval_test.go:594`) covers `#error`. `compiler/macros_test.go` exists only
-  on the unmerged branch `chore/install-sh` and is **not** in `67ce88c`.
+  `TestMacroErrorDirective` (`eval_test.go:594`) covers `#error`. There is **no committed test of the
+  compiler's macro path**: `compiler/macros_test.go` exists, but only as an untracked file in the
+  developer's working copy (`git status` in the main checkout reports `?? compiler/macros_test.go`), on
+  no branch and in no commit reachable from `main`.
 - **Failure modes**: `#error` aborts expansion (`macro.go:279`); an unknown `#` command is refused
   (`macro.go:308`); an argument outside the accepted `#when` set fires no branch and is dropped
   **silently** — measured, §6.6.
@@ -716,7 +718,7 @@ demonstrates the feature is the one file that fails, and it fails outside every 
 | Source | State at `67ce88c` |
 |---|---|
 | `spec/STANDARD.md` §11.1 | `bit`, `bits<N>` (1≤N≤32), `uchar`, the bitwise family, `b[i]` read/write, the three conversion meanings, `===`, permission references, `&lvalue` and `p++` implemented in both engines; `compare.sh` keeps the corpus identical |
-| `spec/STANDARD.md` §11.2 | `bits<N>` with N>32 refused by the shared frontend with one identical message; a width takes a decimal literal only; `float`/`double` reinterpretation refused (this implementation's `float` is 64-bit where §3.2 says `float32`); layout of a `bits<N>` whose width is not 8/16/32 rounds up in compiled structs |
+| `spec/STANDARD.md` §11.2 | `bits<N>` with N>32 refused by the shared frontend with one identical message; a width takes a decimal literal only; `float`/`double` reinterpretation refused (this implementation's `float` is 64-bit where §3.2 says `float32`); layout of a `bits<N>` whose width is not 8/16/32 rounds up in compiled structs; **call depth capped at 8192** (`lang.MaxCallDepth`) and **expression nesting at 65536** (`lang.MaxExprDepth`), both enforced by explicit counters that are never a stack probe, so the three platforms answer alike |
 | `spec/STANDARD.md` §11.3 | **the code does not follow the standard here**: §7.2 macro spelling (`#macro` still accepted, `$` rejected; a conforming change was rolled back); §8 `try`/`catch` still exist although the standard has no exceptions; §9 `List`/`HashTable` still built in, their count frozen by a test |
 | `stress/NOTES.md` | all three findings of the first full run are **closed**; the 3 fixed defects are the front-end crash, the quadratic VM compilation, and the engines disagreeing at the recursion limit |
 | `stress/known-failures.txt` | empty, with the rules for adding an entry, and the reason a stale entry is itself reported as a warning |
@@ -832,10 +834,22 @@ Consequences stated as interfaces:
   dropped **silently** — verified, `#when(bogus){#return 999}` alongside `#when(run){#return 222}`
   prints `222` with no diagnostic.
 
+**An abandoned fix attempt exists, and it has not been carried forward.** The untracked file
+`compiler/macros_test.go` in the developer's checkout (mtime 2026-10-08 22:51, ~40 minutes after the
+committed tip `d3ee8cc` of that branch) is described in its own header as "the compiler expands macros in
+the compile state, the interpreter in the run state" and adds a test named
+`TestExpandMacrosCompileStateNoWhenBranchIsHardError`, which would make the compiler **refuse** a macro
+whose `#when` branches all miss — turning today's silent divergence into a hard error. It cannot run now:
+it imports `quarklang/internal/lang`, and that module path was renamed to the public
+`github.com/QuarkLangCommunity/...` one by `6dad203` (2026-10-09 19:47), after the file was written.
+`go test ./...` in the compiler module does not see it (untracked), so the suite stays green. So the
+intended fix was *diagnosed before this document*; the choice among the three readings below was the part
+left open.
+
 **UNVERIFIED**: whether the intended fix is to pass `"compile"` from the interpreter, to retitle the mode
-set as `explain|run`, or to drop `#when` in favour of the standard's `#ifdef` family. All three are
-consistent with *some* artefact in the tree, which is why this is reported as a contradiction rather than
-a defect with a known fix.
+set as `explain|run`, to drop `#when` in favour of the standard's `#ifdef` family, or the abandoned
+attempt's "hard error when every branch misses". All are consistent with *some* artefact in the tree,
+which is why this is reported as a contradiction rather than a defect with a known fix.
 
 ---
 

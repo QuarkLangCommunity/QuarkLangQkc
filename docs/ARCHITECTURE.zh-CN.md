@@ -103,8 +103,9 @@
   也就是说宏**逻辑**是共享的，仅**模式**不同。
 - **如何验证**：`internal/lang/eval_test.go:574` 的 `TestMacroWhenCompileDropped` 把解释器钉在
   `run-line`（宏同时带两个分支时）；`macroinsert_test.go` 覆盖 `#insert`/`#ast`；
-  `TestMacroErrorDirective`（`eval_test.go:594`）覆盖 `#error`。`compiler/macros_test.go`
-  只存在于未合并分支 `chore/install-sh`，**不在** `67ce88c` 里。
+  `TestMacroErrorDirective`（`eval_test.go:594`）覆盖 `#error`。**编译端的宏路径没有任何已入库测试**：
+  `compiler/macros_test.go` 确实存在，但只是开发者工作副本里的未跟踪文件
+  （主检出 `git status` 报 `?? compiler/macros_test.go`），不在任何分支、也不在任何可达 `main` 的提交里。
 - **失效方式**：`#error` 中止展开（`macro.go:279`）；未知的 `#` 命令被拒绝（`macro.go:308`）；
   而 `#when` 参数落在可接受集合之外时**不执行任何分支且静默丢弃**——已实测，见 §6.6。
 
@@ -673,7 +674,7 @@ parser 模块根本不在本仓库里——它从模块缓存解析——因此�
 | 来源 | `67ce88c` 时的状态 |
 |---|---|
 | `spec/STANDARD.md` §11.1 | `bit`、`bits<N>`（1≤N≤32）、`uchar`、位运算族、`b[i]` 读写、三种转换含义、`===`、权限引用、`&lvalue` 与 `p++` 在两个引擎里都已实现；`compare.sh` 让语料保持一致 |
-| `spec/STANDARD.md` §11.2 | N>32 的 `bits<N>` 由共享前端拒绝，两个引擎同一条消息；位宽只接受十进制字面量；`float`/`double` 的重解释被拒绝（本实现的 `float` 是 64 位，而 §3.2 写的是 `float32`）；宽度不是 8/16/32 的 `bits<N>` 在编译结构体里布局上取整 |
+| `spec/STANDARD.md` §11.2 | N>32 的 `bits<N>` 由共享前端拒绝，两个引擎同一条消息；位宽只接受十进制字面量；`float`/`double` 的重解释被拒绝（本实现的 `float` 是 64 位，而 §3.2 写的是 `float32`）；宽度不是 8/16/32 的 `bits<N>` 在编译结构体里布局上取整；**调用深度上限 8192**（`lang.MaxCallDepth`）、**表达式嵌套上限 65536**（`lang.MaxExprDepth`），二者都由显式计数器强制、绝不探测栈，所以三个平台给出相同答案 |
 | `spec/STANDARD.md` §11.3 | **代码在此不遵循标准**：§7.2 宏拼写（仍接受 `#macro`、拒绝 `$`；一次合规改造被回滚）；§8 `try`/`catch` 仍在，尽管标准里没有异常；§9 `List`/`HashTable` 仍是内建，其数量被一条测试冻结 |
 | `stress/NOTES.md` | 首轮全量运行的三项发现**全部关闭**；三个已修缺陷是前端崩溃、VM 编译的二次复杂度、以及两引擎在递归上限上的分歧 |
 | `stress/known-failures.txt` | 为空，并写明"如何新增条目"的规则，以及为什么过期条目本身会被报成警告 |
@@ -786,9 +787,19 @@ $ ./qkc -run when3.qk     → 111
 - 也没有任何引擎校验模式集合：集合之外的参数不执行任何分支并被**静默**丢弃——
   已实测，`#when(bogus){#return 999}` 与 `#when(run){#return 222}` 并存时输出 `222`，没有任何诊断。
 
+**存在一次被遗弃的修复尝试，且没有被带过来。** 开发者工作副本里未跟踪的 `compiler/macros_test.go`
+（mtime 2026-10-08 22:51，比该分支当时已提交的顶端 `d3ee8cc` 晚约 40 分钟）在自己的文件头里写着
+"编译器在 compile 态展开宏、解释器在 run 态"，并新增了一个名为
+`TestExpandMacrosCompileStateNoWhenBranchIsHardError` 的测试，意图是让编译器**直接拒绝**所有 `#when`
+分支都不命中的宏——把今天的静默分歧变成硬错误。它现在跑不起来：它 import 的是 `quarklang/internal/lang`，
+而该模块路径已在 `6dad203`（2026-10-09 19:47）改名为公开的
+`github.com/QuarkLangCommunity/...`，晚于这个文件写成的时间。编译器模块的 `go test ./...` 看不到它
+（未跟踪），所以测试套件依然全绿。也就是说，修法**在本文之前就已经被诊断过**；悬而未决的是下面三种
+读法里选哪一种。
+
 **UNVERIFIED**：正确的修法究竟是从解释器传 `"compile"`、把模式集合改称 `explain|run`、
-还是按标准的 `#ifdef` 家族彻底去掉 `#when`。三种都能与树里的**某个**产物自洽，
-所以这里报告的是矛盾，而不是给出确定修法的缺陷。
+按标准的 `#ifdef` 家族彻底去掉 `#when`，还是采纳那次被遗弃尝试的"全部分支不命中即硬错误"。
+每一种都能与树里的**某个**产物自洽，所以这里报告的是矛盾，而不是给出确定修法的缺陷。
 
 ---
 
