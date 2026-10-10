@@ -639,6 +639,11 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 
 // Constructs the backend does not lower yet must produce an explicit, position-carrying "not yet supported" error,
 // not a parse error, and must never silently miscompile.
+//
+// The expectations below are the Chinese renderings of these messages, not their English templates: cgen pins the
+// Chinese locale (locale_test.go), and every message here is English-source, so the catalog's Chinese value is what
+// the user sees. They used to spell the English templates, which only matched because T() ignored the catalog for
+// any language but EN — a regression test for that bug lives in internal/i18n.
 func TestUnsupportedConstructs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -650,13 +655,13 @@ func TestUnsupportedConstructs(t *testing.T) {
 			src: "fn main(IOStream io) {\n" +
 				"    try { int a = 1 / 0; } catch (void e) { io.println(\"caught: \" + e); }\n" +
 				"}\n",
-			want: "inside a catch body is not supported",
+			want: "暂未支持在 catch 体内使用",
 		},
 		{
 			name: "IOStream 形参（仅 main 入口绑定）",
 			src: "fn f(int n, IOStream io) void { io.println(n); }\n" +
 				"fn main(IOStream io) { f(1, io); }\n",
-			want: "IOStream 参数 is not supported",
+			want: "暂未支持 IOStream 参数",
 		},
 		// String builtin methods are already lowered (see the interpreter/compiler comparison in testdata/cases_run/s_string_methods.kq)
 		// List.toString is already lowered (see testdata/cases_run/t_list_methods.kq)
@@ -667,31 +672,31 @@ func TestUnsupportedConstructs(t *testing.T) {
 				"    return l;\n" +
 				"}\n" +
 				"fn main(IOStream io) { io.println(1); }\n",
-			want: "return type \"List<String>\" is not supported",
+			want: "暂未支持返回类型 \"List<String>\"",
 		},
 		{
 			name: "List<float> 字面量（只 lower List<int> / List<String>）",
 			src:  "fn main(IOStream io) { List<float> l = [1.0]; io.println(1); }\n",
-			want: "variable type \"List<float>\" is not supported",
+			want: "暂未支持 variable 类型 \"List<float>\"",
 		},
 		{
 			name: "指针成员访问",
 			src: "type struct { int v; } P;\n" +
 				"fn main(IOStream io) { P& p = new P; io.println(p.v); }\n",
-			want: "v is not supported by the compiler",
+			want: "暂未支持成员访问 P&.v",
 		},
 		{
 			name: "打印 struct 值（解释器字段序不确定）",
 			src: "type struct { int a; } P;\n" +
 				"fn main(IOStream io) { P p; io.println(p); }\n",
-			want: "printing a value of type P is not supported",
+			want: "暂未支持打印 P 类型的值",
 		},
 		// float modulo is already lowered
 		{
 			name: "含 log 的函数返回值被使用",
 			src: "fn f(int n) int { log n; return n; }\n" +
 				"fn main(IOStream io) { io.println(f(7)); }\n",
-			want: "log-containing function",
+			want: "暂未支持在表达式中使用含 log 的函数 f 的返回值",
 		},
 	}
 	for _, c := range cases {

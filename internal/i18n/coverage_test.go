@@ -206,7 +206,9 @@ func TestVerbSetsMatch(t *testing.T) {
 }
 
 // TestNoSilentFallback: every catalog entry must resolve under EN, and an unknown template must be
-// counted — otherwise the miss counter cannot be trusted as an engineering gate.
+// counted — otherwise the miss counter cannot be trusted as an engineering gate. The counter follows
+// the requested language in both directions: a template only falls back visibly when the text it falls
+// back to is written in the language the other one asked for.
 func TestNoSilentFallback(t *testing.T) {
 	L := New(stdCatalog, EN)
 	Misses() // clear
@@ -222,6 +224,13 @@ func TestNoSilentFallback(t *testing.T) {
 	L.T("这条模板故意没有登记：%s", "x") // negative control: a Chinese template with no entry
 	if n := MissTotal(); n != 1 {
 		t.Fatalf("miss counter did not record the unknown Chinese template (got %d)", n)
+	}
+	Misses()
+	// The mirror image: English is the source language for migrated messages, so an English template
+	// with no entry renders English to a reader who asked for Chinese.
+	New(stdCatalog, ZH).T("this template is deliberately not registered: %s", "x")
+	if n := MissTotal(); n != 1 {
+		t.Fatalf("miss counter did not record the unknown English template under ZH (got %d)", n)
 	}
 	Misses()
 }
@@ -276,6 +285,31 @@ func TestEnglishSourceRatchet(t *testing.T) {
 		}
 	}
 	t.Logf("Chinese-source wired templates: %d (limit %d)", n, allowed)
+}
+
+// TestTRendersTheCatalogForTheRequestedLanguage: T must consult the catalog for the localizer's own
+// language. The lookup used to be gated on EN, so every English-source entry — whose Chinese text is
+// the catalog value — rendered its English template under QK_LANG=zh while Lookup(key, ZH) answered
+// correctly: the translation existed and was simply never reached.
+func TestTRendersTheCatalogForTheRequestedLanguage(t *testing.T) {
+	renderers := map[Lang]Localizer{EN: New(stdCatalog, EN), ZH: New(stdCatalog, ZH)}
+	checked := 0
+	for _, domain := range stdCatalog.Domains() {
+		for template := range stdCatalog.Domain(domain) {
+			for lang, L := range renderers {
+				want, ok := stdCatalog.Lookup(template, lang)
+				if !ok {
+					t.Fatalf("%s: %q has no %s rendering", domain, truncate(template), lang)
+				}
+				if got := L.T(template); got != want {
+					t.Errorf("%s: T(%s) of %q rendered %q, want the catalog's %q",
+						domain, lang, truncate(template), truncate(got), truncate(want))
+				}
+				checked++
+			}
+		}
+	}
+	t.Logf("rendered %d catalog entries through T() in both languages", checked)
 }
 
 // TestCatalogDirectionFollowsTheSourceLanguage pins the per-language index to the direction of each

@@ -10,8 +10,8 @@
 //     TestTemplatesRegistered fails when they do.
 //   - Localizer is a value type (catalog + language). Pass it down instead of reaching for a
 //     package-level variable: `L := i18n.Default()` once per tool interpreter, then `L.T(...)`.
-//     An unknown template under EN is counted (Misses) rather than silently ignored, so tests
-//     can assert "no silent fallback" instead of trusting a source scan.
+//     A template that has to fall back to the other language is counted (Misses) rather than
+//     silently ignored, so tests can assert "no silent fallback" instead of trusting a source scan.
 //
 // The package-level T/SetLocale/Locale functions exist for call sites written before the
 // Localizer existed; they delegate to Default. New code should carry a Localizer.
@@ -191,18 +191,20 @@ func (L Localizer) Lang() Lang {
 	return L.lang
 }
 
-// T renders a template: under EN it uses the registered translation, otherwise the template
-// itself. An unknown template under EN is counted (see Misses) so the fallback is visible.
+// T renders a template in the localizer's language: the catalog's entry for that language when there
+// is one, otherwise the template itself. The lookup is not English-only — an English-source message
+// (the migration's direction) carries its Chinese text in the catalog, so asking for EN only would
+// render that message in English under QK_LANG=zh.
+//
+// A template that falls back to the language it was written in renders correctly and needs no entry;
+// one that falls back to the *other* language is a missing translation and is counted (see Misses).
 func (L Localizer) T(template string, args ...any) string {
 	format := template
-	if L.Lang() == EN {
-		if translated, ok := L.catalog().Lookup(template, EN); ok {
-			format = translated
-		} else if needsTranslation(template) {
-			// A template that is already English needs no entry; only a Chinese one that fell
-			// back to Chinese counts as a missing translation.
-			countMiss(template)
-		}
+	lang := L.Lang()
+	if translated, ok := L.catalog().Lookup(template, lang); ok {
+		format = translated
+	} else if sourceLang(template) != lang {
+		countMiss(template)
 	}
 	if len(args) == 0 {
 		return format
@@ -222,6 +224,16 @@ func needsTranslation(s string) bool {
 		}
 	}
 	return false
+}
+
+// sourceLang reports the language a template is written in: the same property that decides the
+// direction of a catalog entry (see Load), so a call site and its translation are read the same way
+// wherever the language of a bare template matters.
+func sourceLang(template string) Lang {
+	if needsTranslation(template) {
+		return ZH
+	}
+	return EN
 }
 
 func (L Localizer) catalog() *Catalog {
