@@ -182,35 +182,21 @@ func Lex(src string) ([]Token, error) { return qkparser.Lex(src) }
 // LexWithComments tokenizes source and returns its comments in order of appearance.
 func LexWithComments(src string) ([]Token, []Comment, error) { return qkparser.LexWithComments(src) }
 
-// Parse builds the AST from tokens (spec §2), refusing a nest deeper than MaxExprDepth (see nesting.go).
-func Parse(toks []Token) (*Program, error) {
-	if err := refuseOverDeepNesting(toks); err != nil {
-		return nil, err
-	}
-	return qkparser.Parse(toks)
-}
+// Parse builds the AST from tokens (spec §2). A descent deeper than the limit is refused by the parser
+// itself, in qkparser: that module owns the one implementation of the nesting limit (its limits.go), so
+// there is no counter here to keep in step with it.
+func Parse(toks []Token) (*Program, error) { return qkparser.Parse(toks) }
 
 // ParseSource does the frontend only — lexing, macro expansion, parsing — with no import resolution and no type checking.
-func ParseSource(src string) (*Program, error) {
-	if err := refuseOverDeepNestingInSource(src); err != nil {
-		return nil, err
-	}
-	return qkparser.ParseSource(src)
-}
+func ParseSource(src string) (*Program, error) { return qkparser.ParseSource(src) }
 
 // ParseSourceWithComments is ParseSource plus the comments in the source, in order of appearance.
 func ParseSourceWithComments(src string) (*Program, []Comment, error) {
-	if err := refuseOverDeepNestingInSource(src); err != nil {
-		return nil, nil, err
-	}
 	return qkparser.ParseSourceWithComments(src)
 }
 
 // ParseSourceAll is ParseSourceWithComments plus the #macro definitions, which are cut out before parsing and so are absent from the AST.
 func ParseSourceAll(src string) (*Program, []Comment, []*MacroDef, error) {
-	if err := refuseOverDeepNestingInSource(src); err != nil {
-		return nil, nil, nil, err
-	}
 	return qkparser.ParseSourceAll(src)
 }
 
