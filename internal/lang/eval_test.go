@@ -346,6 +346,13 @@ fn main(IOStream io) {
 // ============ real memory system ============
 
 func TestMemoryCompactReclaims(t *testing.T) {
+	// The contract the assertion below pins is "compact() plus a **completed task** leaves one block": the
+	// block merge() allocates is owned by the pid and released by ReclaimTask, which runs inside the task's
+	// own goroutine (eval.go:3381-3388) — not on this program's path. Without a wait, compact() races that
+	// goroutine and the count is 1 or 2 depending on the scheduler: that is exactly how this test failed on
+	// windows-latest in run 38061536413 (`got 2`) while passing on the re-run and 200 times locally.
+	// taskm.block returns only after the goroutine has closed its done channel, which happens after
+	// ReclaimTask, so the wait is ordering, not a sleep, and the assertion stays strict.
 	src := `
 fn worker(Channel ch) void {
     ch.send(1);
@@ -357,6 +364,7 @@ fn main(IOStream io) {
     t.talk(ch);
     t.merge(worker, ch);
     void x = ch.recv();
+    taskm.block(t.pid());
     GlobalMemory.compact();
 }`
 	prog, err := Compile(src)
