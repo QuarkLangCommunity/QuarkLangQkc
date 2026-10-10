@@ -9,6 +9,8 @@ package main
 // compiler does the same and that a macro error reaches the user as a macro error.
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -87,6 +89,33 @@ func TestTranspileTokensKeepsMacroStringLiterals(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTranspileTokensMergesImports covers the compiler's token path with an import: the imported file's
+// program declaration is stripped at token level, its lines are renumbered into merged coordinates, and
+// both the macro literal and the imported function must reach the IR.
+func TestTranspileTokensMergesImports(t *testing.T) {
+	dir := t.TempDir()
+	lib := "program library;\n\npub fn shout(String s) String {\n    return s;\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "greet.qk"), []byte(lib), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mainPath := filepath.Join(dir, "main.qk")
+	const src = "import \"greet\";\n\n#macro id (x) {\n    #return x\n}\n\n" +
+		"fn main(IOStream io) {\n    io.println(id(\"hi from the macro\"));\n    io.println(shout(\"hi from the import\"));\n}\n"
+	toks, err := expandMacros(src, "compile")
+	if err != nil {
+		t.Fatalf("expandMacros: %v", err)
+	}
+	ir, err := cgen.TranspileTokens(toks, src, mainPath)
+	if err != nil {
+		t.Fatalf("TranspileTokens with an import: %v", err)
+	}
+	for _, want := range []string{"hi from the macro", "hi from the import"} {
+		if !strings.Contains(ir, want) {
+			t.Fatalf("the IR does not carry %q", want)
+		}
 	}
 }
 
