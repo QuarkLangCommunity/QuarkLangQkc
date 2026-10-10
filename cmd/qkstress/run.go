@@ -209,14 +209,16 @@ func runCase(opt options, self string, c stressgen.Case) caseResult {
 	_ = os.Remove(irPath)
 	tmp := filepath.Join(opt.work, "tmp")
 	memCapKB := opt.memCapMB * kibPerMiB
-	runEnv := childEnv(map[string]string{"TMPDIR": tmp, "QK_LANG": "en"})
-	compEnv := childEnv(map[string]string{"TMPDIR": tmp, "QUARK_CACHE": cacheDir, "QK_LANG": "en"})
+	// The children get slash-separated paths: they quote them back in their diagnostics, which must read
+	// the same on every platform for the report to be comparable across the three jobs.
+	runEnv := childEnv(map[string]string{"TMPDIR": childPath(tmp), "QK_LANG": "en"})
+	compEnv := childEnv(map[string]string{"TMPDIR": childPath(tmp), "QUARK_CACHE": childPath(cacheDir), "QK_LANG": "en"})
 
 	r := caseResult{Name: c.Name, Category: c.Category, Doc: c.Doc, Bytes: len(c.Source)}
-	r.Interp.Front = runBounded([]string{self, "frontend", path}, runEnv, opt.timeout, memCapKB)
-	r.Interp.Run = runBounded([]string{opt.interp, path}, runEnv, opt.timeout, memCapKB)
-	r.Compiler.Front = runBounded([]string{opt.compiler, path, "-o", irPath}, compEnv, opt.timeout, memCapKB)
-	r.Compiler.Run = runBounded([]string{opt.compiler, "-run", path}, compEnv, opt.timeout, memCapKB)
+	r.Interp.Front = runBounded([]string{self, "frontend", childPath(path)}, runEnv, opt.timeout, memCapKB)
+	r.Interp.Run = runBounded([]string{opt.interp, childPath(path)}, runEnv, opt.timeout, memCapKB)
+	r.Compiler.Front = runBounded([]string{opt.compiler, childPath(path), "-o", childPath(irPath)}, compEnv, opt.timeout, memCapKB)
+	r.Compiler.Run = runBounded([]string{opt.compiler, "-run", childPath(path)}, compEnv, opt.timeout, memCapKB)
 	r.Interp.Accepted = r.Interp.Front.Exit == 0
 	r.Compiler.Accepted = r.Compiler.Front.Exit == 0
 	r.Verdict = verdictOf(r)
@@ -248,9 +250,10 @@ func verdictOf(r caseResult) string {
 }
 
 // sameOutcome compares two phases the way the project's own parity script does: exit status plus the
-// merged stdout and stderr streams.
+// merged stdout and stderr streams, with the platform's line ending folded away. The whole content is
+// still compared, so any real divergence — a different word, a missing line, an extra byte — fails.
 func sameOutcome(a, b probeResult) bool {
-	return a.Exit == b.Exit && a.merged() == b.merged()
+	return a.Exit == b.Exit && a.platformNormal() == b.platformNormal()
 }
 
 // anyPanic reports whether either engine crashed with a Go runtime error.

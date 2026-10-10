@@ -82,6 +82,50 @@ func TestSameOutcomeUsesTheParityRule(t *testing.T) {
 	}
 }
 
+// TestSameOutcomeFoldsThePlatformLineEnding checks the comparison across the two runtimes: the
+// interpreter writes LF and a linked case writes through the C runtime, which turns every LF into CRLF
+// in text mode on Windows. The same text must therefore agree across both spellings, while every real
+// difference — an extra byte, a missing line, a lone CR — is still a divergence.
+func TestSameOutcomeFoldsThePlatformLineEnding(t *testing.T) {
+	lf := probeResult{Exit: 0, Stdout: "7\nhello\n"}
+	if !sameOutcome(lf, probeResult{Exit: 0, Stdout: "7\r\nhello\r\n"}) {
+		t.Error("the same text with Windows line endings must agree")
+	}
+	if !sameOutcome(
+		probeResult{Exit: 0, Stdout: "7\n", Stderr: "warning\n"},
+		probeResult{Exit: 0, Stdout: "7\r\n", Stderr: "warning\r\n"},
+	) {
+		t.Error("both streams must be folded, not just stdout")
+	}
+	if !sameOutcome(lf, probeResult{Exit: 0, Stdout: "7\r\nhello\n"}) {
+		t.Error("a stream mixing both endings must fold to the same content")
+	}
+	if sameOutcome(lf, probeResult{Exit: 0, Stdout: "7\nhello"}) {
+		t.Error("a missing trailing newline is a content difference and must not agree")
+	}
+	if sameOutcome(lf, probeResult{Exit: 0, Stdout: "7\rhello\r"}) {
+		t.Error("a lone CR is content, not a line ending, and must not agree")
+	}
+	if sameOutcome(lf, probeResult{Exit: 0, Stdout: "7\nhello!\n"}) {
+		t.Error("an extra byte must not agree")
+	}
+	if sameOutcome(lf, probeResult{Exit: 1, Stdout: "7\r\nhello\r\n"}) {
+		t.Error("a different exit status must not agree, whatever the streams say")
+	}
+}
+
+// TestChildPathsUseForwardSlashes checks that the paths handed to the engines are spelled the same way
+// everywhere, so a diagnostic quoting one reads stress-out/cases/x.kq and not stress-out\cases\x.kq.
+func TestChildPathsUseForwardSlashes(t *testing.T) {
+	got := childPath(filepath.Join("stress-out", "cases", "bad_unbalanced_ifdef.kq"))
+	if got != "stress-out/cases/bad_unbalanced_ifdef.kq" {
+		t.Errorf("child path = %q, want stress-out/cases/bad_unbalanced_ifdef.kq", got)
+	}
+	if strings.Contains(got, `\`) {
+		t.Errorf("child path carries the host separator: %q", got)
+	}
+}
+
 // TestPositionDetection checks both engines' position spellings, since the report answers "does the
 // diagnostic tell the user where the problem is?" from exactly this.
 func TestPositionDetection(t *testing.T) {

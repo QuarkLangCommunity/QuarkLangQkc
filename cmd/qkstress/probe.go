@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -39,6 +40,15 @@ type probeResult struct {
 
 // merged is the stream pair the project's own parity script compares: stdout and stderr in order.
 func (r probeResult) merged() string { return r.Stdout + r.Stderr }
+
+// platformNormal is the merged stream with the host's newline convention folded to LF. The two engines
+// print the same text on every platform, but they do not print the same bytes: the interpreter is a Go
+// program, whose writes carry LF, while a linked case writes through the C runtime, which translates LF
+// to CRLF in text mode on Windows. Folding the ending keeps the comparison on what was said — the whole
+// content is still compared byte for byte — instead of on which runtime wrote it.
+func (r probeResult) platformNormal() string {
+	return strings.ReplaceAll(r.merged(), "\r\n", "\n")
+}
 
 // seconds renders the wall time the way the report table wants it: seconds with two decimals.
 func (r probeResult) seconds() string {
@@ -121,6 +131,10 @@ func runBounded(argv []string, env []string, timeout time.Duration, memCapKB int
 		}
 	}
 }
+
+// childPath renders a path for a child process's argv with forward slashes, so a diagnostic that quotes
+// it reads the same on every platform instead of carrying the host's separator (stress-out\cases\x.kq).
+func childPath(p string) string { return filepath.ToSlash(p) }
 
 // looksLikePanic reports whether a stderr stream carries a Go runtime crash rather than a diagnostic.
 func looksLikePanic(stderr string) bool {
