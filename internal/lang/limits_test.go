@@ -70,6 +70,38 @@ func TestExpressionUnderTheDepthLimitIsAccepted(t *testing.T) {
 	}
 }
 
+// TestOverDeepNestingIsRefusedByTheParser checks the shape the type checker never sees: a nest of
+// parentheses (or blocks) is consumed by the parser's recursive descent, so the parser carries the same
+// limit — a 300 000-deep nest used to exhaust the Go stack before the checker was ever reached.
+func TestOverDeepNestingIsRefusedByTheParser(t *testing.T) {
+	deep := strings.Repeat("(", 2*MaxExprDepth)
+	src := "fn main(IOStream io) {\n  io.println(" + deep + "1" + strings.Repeat(")", 2*MaxExprDepth) + ");\n}\n"
+	_, err := Compile(src)
+	if err == nil {
+		t.Fatal("a nest past MaxExprDepth must be refused")
+	}
+	var pe *ParseError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected a positioned parse error, got %T: %v", err, err)
+	}
+	if pe.Line != 2 {
+		t.Errorf("diagnostic line = %d, want 2 (the line the nest is on)", pe.Line)
+	}
+	if !strings.Contains(err.Error(), "nesting is deeper than") {
+		t.Errorf("diagnostic does not name the limit: %v", err)
+	}
+}
+
+// TestNestingUnderTheLimitIsAccepted checks that the parser limit leaves real nesting alone: the corpus
+// case is ten thousand nested parentheses, well inside the budget.
+func TestNestingUnderTheLimitIsAccepted(t *testing.T) {
+	deep := strings.Repeat("(", 10000)
+	src := "fn main(IOStream io) {\n  io.println(" + deep + "1" + strings.Repeat(")", 10000) + ");\n}\n"
+	if _, err := Compile(src); err != nil {
+		t.Fatalf("ten thousand nested parentheses must compile: %v", err)
+	}
+}
+
 // TestRecursionAtTheCallDepthLimitRuns checks the accepted side of the call-depth boundary.
 func TestRecursionAtTheCallDepthLimitRuns(t *testing.T) {
 	out, err := runSrc(t, downSource(MaxCallDepth-1))
