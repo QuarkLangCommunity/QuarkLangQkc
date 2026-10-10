@@ -245,15 +245,7 @@ func sortedKeys(m map[string]int) []string {
 
 // writeFindings renders one block per loud case plus the informative reject-difference cases.
 func writeFindings(b *strings.Builder, rep runReport) {
-	var loud, info []caseResult
-	for _, r := range rep.Cases {
-		switch {
-		case r.loud():
-			loud = append(loud, r)
-		case r.Verdict == VerdictRejectDiff:
-			info = append(info, r)
-		}
-	}
+	loud, info := rep.findings()
 	fmt.Fprintf(b, "## Findings\n\n")
 	if len(loud) == 0 {
 		fmt.Fprintf(b, "No loud findings: every case either agreed between the two engines or was rejected cleanly by both.\n\n")
