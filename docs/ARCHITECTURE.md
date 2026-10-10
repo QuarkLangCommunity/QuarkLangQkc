@@ -239,7 +239,9 @@ The three Go modules in play:
   the `memory.*` builtins (`:1128`, `:2388-2400`), `new`/pointers (`:741`) and `taskm` (`:3353`,
   `:3374`).
 - **Verified by**: `internal/lang/eval_test.go:372` (after `compact`, exactly the persistent thread block
-  remains) and `:708` (after `delete`+`compact`, zero blocks); benchmarks at `bench_test.go:85,130`.
+  remains **provided the merged task has already finished** — see §5.4, this one is scheduling-dependent
+  and has failed on `windows-latest`) and `:708` (after `delete`+`compact`, zero blocks, no concurrent
+  task); benchmarks at `bench_test.go:85,130`.
 - **Failure modes**: **the interpreter is the only engine with this manager.** cgen has no
   `MemoryManager`; the compiled binary's storage story is `calloc` plus the runtime it emits. That is a
   boundary rather than a defect, but it means `memory.Fragmentation()` and friends are engine-specific
@@ -560,7 +562,7 @@ than a TODO list.
 
 ## 5. Worked example
 
-Three real failures, decomposed into interface + composition instead of a red project.
+Four real failures, decomposed into interface + composition instead of a red project.
 
 ### 5.1 The Windows formatting gate — `qkfmt -l` under `windows × pwsh × CRLF`
 
@@ -709,6 +711,56 @@ demonstrates the feature is the one file that fails, and it fails outside every 
    (`internal/lang/compile.go:123`, `compiler/main.go:334,441`), which is §6.6. Two independent
    divergences sit in the same 40 lines.
 
+
+### 5.4 `TestMemoryCompactReclaims` — the memory manager's invariant under `{windows runner} × {goroutine scheduling}`
+
+**The interface**: `MemoryManager.Compact()` promises to reclaim every block nobody occupies and return
+the reclaimed count (`internal/lang/eval.go:292-305`). **The composition**: the program below, run under
+the test harness, on a given OS.
+
+**What the test asserts** (`internal/lang/eval_test.go:348-375`):
+
+```go
+// the function block of merge (owner=pid) has been reclaimed by compact;
+// the thread's own persistent block (owner=0) is kept → 1 remains
+if n := in.mem.BlockCount(); n != 1 {
+    t.Fatalf("expected 1 block (persistent thread block) after compact, got %d", n)
+}
+```
+
+**The race the assertion rests on**: `taskm.spawn()` allocates the thread's block with `owner=0`
+(`eval.go:3353`), and each `t.merge(...)` allocates a second block owned by the task's pid
+(`eval.go:3374`). That second block is released by `ReclaimTask(t.Pid)` (`eval.go:3384`) — which runs
+**inside the task's own goroutine** (`eval.go:3381-3388`), not on the caller's path. The interpreted
+program calls `GlobalMemory.compact()` as its last statement. So the block count the test reads is
+"1 if the worker goroutine finished before the program did, 2 if it did not" — and nothing in the
+program or the harness orders those two events.
+
+**Observed, not hypothesised**: `.github/workflows/ci.yml`'s `tests` job on `windows-latest` failed with
+
+```
+--- FAIL: TestMemoryCompactReclaims (0.00s)
+    eval_test.go:373: expected 1 block (persistent thread block) after compact, got 2
+```
+
+(run [38061536413](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/runs/38061536413/job/114240627738),
+2026-10-10, on a documentation-only pull request — so no code change caused it). The same job passed on
+the re-run of the identical SHA, and passes locally: `go test ./internal/lang/ -run
+TestMemoryCompactReclaims -count=200` is green on linux. **UNVERIFIED**: I did not measure the
+scheduling difference that decides it; the plausible reading is a coarser scheduler quantum on the
+runner, but that is a hypothesis, not a measurement.
+
+**Why this belongs in a composition map rather than a flake report**: the promise
+"`Compact()` reclaims every unoccupied block" is true. The *test's* claim — "exactly one block remains,
+therefore the merge block was reclaimed first" — is a claim about **goroutine scheduling**, and that is
+a property of a composition (harness × OS × load), not of the memory manager. `BlockCount()` is
+deterministic only after the task has provably ended; nothing in `TestMemoryCompactReclaims` establishes
+that. This also refines the interface entry: what `eval_test.go:372` pins is
+"`Compact()` + *a completed task* ⇒ 1 block", not "`Compact()` ⇒ 1 block".
+
+The two other memory-manager assertions are not exposed to this race: `eval_test.go:708` uses `delete`
+followed by `compact` with no concurrent task, and `bench_test.go:85,130` drive `Alloc` directly.
+
 ---
 
 ## 6. Known gaps
@@ -738,6 +790,7 @@ demonstrates the feature is the one file that fails, and it fails outside every 
 | # | Gap | Evidence |
 |---|---|---|
 | G-6 | **the two engines disagree on `#when` today**: an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `compiler/main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
+| G-16 | **`TestMemoryCompactReclaims` is scheduling-dependent and has already failed on `windows-latest`** (`expected 1 block … got 2`) while passing on the re-run of the same SHA and locally | measured; `eval_test.go:373` vs the goroutine at `eval.go:3381-3388`; write-up in §5.4 |
 | G-14 | **`joinTokens` loses string quotes, so `qkc` fails or prints nothing for any program with a `#macro` and a string literal** — including the committed `examples/macro.qk` | measured; `compiler/macros.go:13-33` vs `qkparser/token.go:486`; write-up in §5.3 |
 | G-15 | `expandMacros` swallows all five error paths (`macros.go:47,51,55,58,62`), so a macro-expansion failure is reported by the parser as a confusing `ParseError` | `compiler/macros.go:46-63` |
 | G-7 | **the formatter is not in this repository and no gate composes it** | `qkfmt` referenced only by `scripts/bench-tools.sh:26,60`; `QuarkLangQkfmt` CI is `go build && go vet` on ubuntu |
