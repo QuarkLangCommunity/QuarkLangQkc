@@ -6,6 +6,16 @@ Analysed from the code at `67ce88c` (the tip of `main` when this document was wr
 Every claim carries a `file:line` reference. A claim that could not be verified from source
 or by running a gate is marked **UNVERIFIED** — there are no inferred-but-unchecked statements.
 
+> **Provenance and what has moved since (2026-10-11).** The analysis below is pinned to `67ce88c`; the
+> file:line references describe *that* revision and several of them no longer resolve (`#when` is gone
+> from the parser module, `compiler/preproc.go` no longer exists, the parser module's macro expander
+> takes two arguments). The owner's ruling on `#when` — it is a legacy leftover, and the runtime the
+> standard defines is the `#if` family — is carried out by the `lang/if-family-shared` branch and its
+> parser-module counterpart, and §6.6 below is kept as the record of what was wrong rather than
+> rewritten. Read §6.6 as history: its measurements were true at `67ce88c` and the divergence it
+> measures no longer exists. What changed, and what is still missing (`#expand`, `#run`), is stated in
+> **§6.7** and **§6.8**.
+
 This document describes QuarkLang as a set of **interfaces** and the **compositions** that
 consume them. It never says "project X is red" or "the project does X". It says:
 
@@ -39,6 +49,7 @@ The three Go modules in play:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ module github.com/QuarkLangCommunity/QuarkLangQkc            (root)     │
 │   go.mod:6-7    requires qkparser @ v0.0.0-20261010115438-20ae746ffdee  │
+│                 (at 67ce88c; c97fcebe3baa since the ruling, see §6.7)   │
 │   internal/lang        interpreter, typecheck, linter, VM, docs, REPL   │
 │   internal/i18n        catalog + localizer                              │
 │   cmd/{qkcheck,qkdoc,qkrepl,qklsp,qkstress,quarkwasm}                    │
@@ -63,7 +74,7 @@ The three Go modules in play:
 | `I-k` | Interface | Location | Verifier | Failure mode |
 |---|---|---|---|---|
 | I-1 | Lexer | `qkparser/token.go` | `lintcorpus_test.go:148` | `\r` is whitespace; positions stay line-ending independent |
-| I-2 | Macro / preprocessor | `qkparser/macro.go` | `eval_test.go:574`, `macroinsert_test.go` | **mode mismatch across engines** (§6.6) |
+| I-2 | Macro / preprocessor | `qkparser/macro.go`, `qkparser/preproc.go` | `preproc_test.go`, `macroinsert_test.go` | one shared preprocessor; a spelling the language does not have is refused by name (§6.7) |
 | I-3 | Parser | `qkparser/parser.go` | `parser_test.go`, `parser_limits_test.go` | refuses nesting > `MaxExprDepth` |
 | I-4 | AST + positions | `qkparser/ast.go:4-8` | every downstream test | `Stmt`/`Expr` sealed by unexported methods |
 | I-5 | Type checker | `internal/lang/typecheck.go` | typecheck tests in `internal/lang` | explicit depth counter, not a stack probe |
@@ -92,28 +103,31 @@ The three Go modules in play:
   Width beyond the supported set is the parser's check, not the lexer's
   (`parser.go:99` `isBuiltinTypeName`).
 
-### I-2 · Macro / preprocessor — behaviour diverges, see §6.6
+### I-2 · Macro / preprocessor — one shared stage, in two halves (§6.6 is history, §6.7 is current)
 
-- **Location**: `qkparser/macro.go`; entries `SplitMacroDefs` (`:22`), `ExpandMacros` (`:149`),
-  `expandBody` (`:211`).
-- **Contract (as implemented)**: `ExpandMacros(toks, macros, mode)` rewrites macro calls. `mode`
-  selects the `#when` operation time: `expandBody:268` fires a branch when
-  `args[0].Text == mode || (mode == "explain" && args[0].Text == "run")`. The refusal message
-  advertises the accepted set as `compile|run` (`macro.go:255`, catalogued at
-  `internal/i18n/table_macro.go:18`).
-- **Who composes it**: the interpreter passes `"explain"` (`internal/lang/compile.go:123`); the
-  compiler passes `"compile"` (`compiler/main.go:334`, `:441`) through its own wrapper
-  (`compiler/macros.go:44`), which delegates to the same `lang.SplitMacroDefs` / `lang.ExpandMacros`
-  (`macros.go:53,60`). The macro *logic* is therefore shared and only the *mode* differs.
-- **Verified by**: `internal/lang/eval_test.go:574` `TestMacroWhenCompileDropped` pins the interpreter
-  to `run-line` for a macro carrying both branches; `macroinsert_test.go` covers `#insert`/`#ast`;
-  `TestMacroErrorDirective` (`eval_test.go:594`) covers `#error`. There is **no committed test of the
-  compiler's macro path**: `compiler/macros_test.go` exists, but only as an untracked file in the
-  developer's working copy (`git status` in the main checkout reports `?? compiler/macros_test.go`), on
-  no branch and in no commit reachable from `main`.
-- **Failure modes**: `#error` aborts expansion (`macro.go:279`); an unknown `#` command is refused
-  (`macro.go:308`); an argument outside the accepted `#when` set fires no branch and is dropped
-  **silently** — measured, §6.6.
+- **Location**: `qkparser/macro.go` (token-level: `SplitMacroDefs`, `ExpandMacros`, `expandBody`) and
+  `qkparser/preproc.go` (line-level: `Context`, `NewContext`, `Process`/`ProcessMapped`, `LineMap`).
+- **Contract (as implemented, after the ruling)**: the preprocessor decides which lines a program is
+  *before* any lexer sees them — `#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif`, `#define`/`#undef`,
+  `#include`, `#error` — and `ExpandMacros(toks, macros)` then rewrites macro calls. There is **no mode
+  parameter**: an engine defines its own symbol (`COMPILE` in the compiler, `EXPLAIN` in the interpreter,
+  spec §7.2) and neither the preprocessor nor the expander branches on which engine is running.
+- **Who composes it**: both engines, through the same module. The compiler builds its context with
+  `lang.NewPreproc("COMPILE")` and keeps its `--target-os` / `--target-arch` overrides; the interpreter
+  creates one context per compilation (`internal/lang/compile.go`, `internal/lang/lib.go`) with
+  `EXPLAIN`. The tools (qkcheck / qklsp / qkdoc / qkrepl) preprocess through `internal/lang`'s
+  `ParseSource*` with `Context.Aligned`, which keeps the line numbering so their positions stay in the
+  file the author wrote.
+- **Verified by**: `qkparser/preproc_test.go` (the compiler's four original preprocessor tests, moved,
+  plus the engine symbol, a guarded macro body, `#include` defines, host defaults, nested conditions,
+  `#undef`, aligned output, and the unknown-directive rule); `internal/lang/eval_test.go`,
+  `macroinsert_test.go` for the macro half; `compiler/macros_test.go` for the compiler's; and the parity
+  cases `compiler/testdata/cases/x_if_*` / `x_engine_symbol.kq` through `compare.sh`.
+- **Failure modes**: `#error` aborts preprocessing; `#else`/`#elif`/`#endif` without an open `#if` and an
+  unclosed `#if` are refused; `#include` of a missing file is refused; a `#` spelling that is neither a
+  macro command nor a line-level directive is refused **by name** (it is no longer dropped silently,
+  which is how `#when` used to reach one engine's output); an unknown *conditional expression* is a
+  preprocessing error.
 
 ### I-3 · Parser
 
@@ -812,7 +826,7 @@ under `-count=200` (also `-count=2000`).
 
 | # | Gap | Evidence |
 |---|---|---|
-| G-6 | **the two engines disagree on `#when` today**: an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `compiler/main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
+| G-6 | **the two engines disagree on `#when`** (at `67ce88c`; closed since, see §6.7): an interpreter-only macro branch executes `#when(compile)` bodies, so `#when(compile){#return 111}` / `#when(run){#return 222}` prints `222` interpreted and `111` compiled | measured; mechanism is `compile.go:123` (`"explain"`) vs `compiler/main.go:334,441` (`"compile"`) against `macro.go:268` — full write-up in §6.6 |
 | G-16 | **`TestMemoryCompactReclaims` is scheduling-dependent and has already failed on `windows-latest`** (`expected 1 block … got 2`) while passing on the re-run of the same SHA and locally | measured; `eval_test.go:373` vs the goroutine at `eval.go:3381-3388`; write-up in §5.4 — **closed** (this branch): the program waits for the task (`taskm.block`) before it compacts, the assertion stayed strict, `-count=200` green |
 | G-14 | **`joinTokens` loses string quotes, so `qkc` fails or prints nothing for any program with a `#macro` and a string literal** — including the committed `examples/macro.qk` | measured; `compiler/macros.go:13-33` vs `qkparser/token.go:486`; write-up in §5.3 — **closed** (this branch): `joinTokens` is gone and the compiler parses the expanded tokens; string and escape cases agree in both engines, covered by `compiler/testdata/cases/m_macro_literals.kq` and `compiler/macros_test.go`; the empty output of `examples/macro.qk` is the G-6 state question, not this one |
 | G-15 | `expandMacros` swallows all five error paths (`macros.go:47,51,55,58,62`), so a macro-expansion failure is reported by the parser as a confusing `ParseError` | `compiler/macros.go:46-63` — **closed** (this branch): `expandMacros` returns its errors; only a lex failure still defers to the parser, which reports the identical `LexError` |
@@ -867,7 +881,11 @@ deliberate regime change the help text did not follow: `aba7e20` (2026-09-27) ma
 and read **only** `QK_LANG`; `981abe1`/`6234e82` (same day) made the language follow the system locale
 with English as the default; `65495e4` (same day) rewrote the message layer. **Stated, not resolved.**
 
-### 6.6 Contradiction · `#when` is unspecified, and the two engines disagree about it
+### 6.6 Contradiction · `#when` is unspecified, and the two engines disagree about it — **historical**
+
+> Kept as the record of what was wrong, not as a description of the code today. Every measurement below
+> was true at `67ce88c`, where the analysis is pinned; the divergence it measures was closed by the
+> ruling and the work in §6.7, and `#when` is accepted nowhere now.
 
 `spec/STANDARD.md:211-233` (§7.2) defines the runtime directives as `#expand`, `#run` and the conditional
 family `#ifdef`/`#ifndef`/`#if`/`#ifn`/`#endif`, with the worked example using `#ifdef COMPILE` /
@@ -926,6 +944,102 @@ left open.
 set as `explain|run`, to drop `#when` in favour of the standard's `#ifdef` family, or the abandoned
 attempt's "hard error when every branch misses". All are consistent with *some* artefact in the tree,
 which is why this is reported as a contradiction rather than a defect with a known fix.
+
+---
+
+### 6.7 Closed · the ruling on `#when`, and what replaced it
+
+**The ruling.** `#when` is a legacy leftover; the runtime the standard actually defines is the `#if`
+family (`#ifdef` `#ifndef` `#if` `#ifn` `#endif`, §7.2) plus `#expand`/`#run`. A previous pass proved the
+two were not equivalent and stopped rather than choose; the choice is now made, and §6.6 is kept as the
+record of what was wrong.
+
+**What was moved.** The line-level preprocessor was the compiler's (`compiler/preproc.go`, run before
+lexing) and the interpreter had none, so in the interpreter all eight spellings were a `ParseError` —
+including `#ifdef` inside a macro body. The preprocessor now lives in the syntax layer both engines
+consume (`qkparser/preproc.go`), so there is exactly one implementation of the directives and no engine
+branch anywhere in it. The compiler's behaviour for every spelling it accepted is preserved, and the
+compiler-side tests moved with the code (`qkparser/preproc_test.go`); `compiler/preproc_test.go` no
+longer exists.
+
+**The predefined symbols**, exactly as §7.2's own example pairs them:
+
+| Engine | Symbol | The example's branch |
+|---|---|---|
+| compiler (`qkc`) | `COMPILE` | `#ifdef COMPILE` → `#expand main in program` |
+| interpreter (`quark`) | `EXPLAIN` | `#ifdef EXPLAIN` → `#run main` |
+
+A user `#define` adds to that set and `#undef` removes from it, carried in one context per program, so a
+switch defined in one file is visible in the next.
+
+**Parity.** The idiom is output-neutral: the guards select, and the program they leave is the same one.
+Five cases in `compiler/testdata/cases/` measure it in both engines through `compare.sh` (and through
+`internal/cgen/parity_test.go` against the interpreter-generated `.out`): `x_if_family.kq` (the family at
+top level), `x_if_macro_body.kq` (`#ifdef` inside a macro body), `x_if_pair.kq` (the §7.2 pairing),
+`x_if_complement.kq` (a branch the other engine defines cannot leak in) and `x_engine_symbol.kq` (the
+macro from §6.6's measurement, now in the standard's spelling: one body, one answer). `compare.sh`
+prints `all identical (interpreter == compiler)`.
+
+**What was deleted.** `#when`'s branch in the shared expander, its two refusal messages, the
+`(when/return/error)` wording, and every user: `examples/macro.qk:2`, the macro tests, the stress
+generator, `SYNTAX.md` / `SYNTAX.zh-CN.md`, both READMEs, and three i18n entries. A `#` spelling that is
+neither a macro command nor a line-level directive is now refused by name
+(`#when is not a QuarkLang preprocessor directive`, catalogued at `internal/i18n/table_macro.go`), and
+`compiler/testdata/when_rejected.qk.rejected` plus `compiler/macros_test.go` pin it: both engines print
+the same message at the same line for the program that used to print `222` interpreted and `111`
+compiled.
+
+**Still open, and reported rather than implemented**: §6.8.
+
+### 6.8 Gap · `#expand` and `#run` exist in neither engine
+
+§7.2 specifies two directives besides the conditional family, and neither engine implements either. This
+is stated as a proposal, with **no code**: the standard describes them in one worked example, and an
+implementation invented from that alone would be guessing at the language surface.
+
+What the standard says (`spec/STANDARD.md:194-212`):
+
+| Directive | The standard's words | The example's use |
+|---|---|---|
+| `#expand <node> in <node>` | "expand a node into a node: `#expand main in program` puts the `main` function node into the program node" | inside `#ifdef COMPILE` |
+| `#run <node>` | "run a node directly: `#run main` — the interpretation-time entry" | inside `#ifdef EXPLAIN` |
+
+What is missing, precisely:
+
+- **No engine recognises either spelling.** In the preprocessor they are lines it does not own, so they
+  survive; in the lexer they are `#` + an identifier; in the macro expander they are refused by name
+  outside a macro body and dropped inside one. A program written to §7.2's example therefore fails to
+  compile in both engines today, at the `#expand` line.
+- **There is no notion of "a node" to expand or run.** The AST has no addressable node metadata: a
+  `FuncDecl` is reached through `Program.Funcs` / `FnIndex` (`internal/lang/compile.go`), which is a
+  table built after type checking, not a source-level node a directive can name. `#expand main in
+  program` has nothing to operate on before that table exists.
+- **`#run` collides with the entry-point rule.** The interpreter already runs `main` once after loading
+  (`internal/lang/eval.go`), and `program lib;` makes "not running" a property of the declaration. A
+  directive that runs a node "now" needs a stated interaction with that rule — does `#run` replace the
+  automatic entry, run a second time, or select among several candidates? The standard does not say.
+- **No symbol was predefined before this branch**, so `#ifdef COMPILE` in the example selected nothing in
+  either engine. That half is now fixed (§6.7); the directives it guards are not.
+
+Where it would have to live, and what it would touch:
+
+| Piece | Where | Why there |
+|---|---|---|
+| Directive recognition + node argument parsing | `qkparser/preproc.go` (line level) or the parser (node level) | it is the stage that already owns `#` lines, and a node argument is only meaningful once something can name nodes |
+| A node-name → declaration table available *before* lowering | `internal/lang` (the type checker already builds `FnIndex`) | `#expand`/`#run` would consume it, and it must exist before the entry point is chosen |
+| Entry-point policy for `#run` | `internal/lang/eval.go`, `compiler/internal/cgen` | "run this node instead of / in addition to `main`" is an engine policy, and both engines must state the same one |
+| A parity case | `compiler/testdata/cases/` + `compare.sh` | §7.2's example is the only specification, so the case *is* the contract |
+
+The smallest honest step is not code: it is a decision on the two questions the example leaves open —
+which node namespace `#expand`/`#run` name, and how `#run` composes with the existing automatic entry
+point — after which the directive becomes implementable in one place with a parity case.
+
+**A second, smaller gap in the same table.** §7.2's conditional family lists `#ifn`
+(`spec/STANDARD.md:217`) and defines what it does nowhere else in the document. No engine ever
+implemented it, and this branch preserved that exactly rather than inventing a meaning: `#ifn` is a line
+the preprocessor does not own, so it survives preprocessing and is refused by the lexer/parser like any
+other unknown `#` spelling. If it is meant to be the complement of `#ifndef`, or a "not" form of `#if`,
+the standard has to say which.
 
 ---
 

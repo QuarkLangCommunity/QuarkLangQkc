@@ -6,6 +6,14 @@
 引用。既无法从源码核实、也无法通过运行门禁核实的断言，一律标注 **UNVERIFIED**——
 文中没有"推测但未核对"的陈述。
 
+> **出处，以及此后发生了什么（2026-10-11）。** 下面的分析钉在 `67ce88c`；那些 `file:line`
+> 引用描述的是**那个**修订，其中若干已不再能解析（`#when` 已从语法层模块中删除、
+> `compiler/preproc.go` 已不存在、语法层的宏展开器现在只收两个参数）。关于 `#when` 的owner裁定
+> ——它是遗留拼写，标准真正定义的运行时是 `#if` 族——已由 `lang/if-family-shared` 分支及其
+> 语法层对应分支落实；下面 §6.6 **作为"当时错在哪里"的记录保留，不做改写**。请把 §6.6 当历史读：
+> 它的实测在 `67ce88c` 成立，而它所测量的那种不一致已不复存在。变了什么、以及仍缺什么
+> （`#expand`、`#run`），写在 **§6.7** 与 **§6.8**。
+
 本文把 QuarkLang 描述为一组**接口**以及消费这些接口的**组合**。全文不写"某项目红了"，
 也不写"项目做了 X"。它写的是：
 
@@ -89,25 +97,27 @@
 - **失效方式**：字符串或原始字符串未闭合时返回 `LexError`（`token.go:104-112`）。
   位宽超出支持范围是语法器的检查而不是词法器的（`parser.go:99` `isBuiltinTypeName`）。
 
-### I-2 · 宏 / 预处理器 —— 行为有分歧，见 §6.6
+### I-2 · 宏 / 预处理器 —— 一个共享阶段，分两半（§6.6 是历史，§6.7 是现状）
 
-- **位置**：`qkparser/macro.go`；入口 `SplitMacroDefs`（`:22`）、`ExpandMacros`（`:149`）、
-  `expandBody`（`:211`）。
-- **承诺（按实现）**：`ExpandMacros(toks, macros, mode)` 重写宏调用。`mode` 决定 `#when` 的
-  发生时机：`expandBody:268` 在 `args[0].Text == mode || (mode == "explain" && args[0].Text == "run")`
-  时执行分支。拒绝信息把可接受集合写成 `compile|run`（`macro.go:255`，目录条目
-  `internal/i18n/table_macro.go:18`）。
-- **谁在组合它**：解释器传 `"explain"`（`internal/lang/compile.go:123`）；编译器传 `"compile"`
-  （`compiler/main.go:334`、`:441`），经它自己的包装（`compiler/macros.go:44`），
-  而该包装转发给同一个 `lang.SplitMacroDefs` / `lang.ExpandMacros`（`macros.go:53,60`）。
-  也就是说宏**逻辑**是共享的，仅**模式**不同。
-- **如何验证**：`internal/lang/eval_test.go:574` 的 `TestMacroWhenCompileDropped` 把解释器钉在
-  `run-line`（宏同时带两个分支时）；`macroinsert_test.go` 覆盖 `#insert`/`#ast`；
-  `TestMacroErrorDirective`（`eval_test.go:594`）覆盖 `#error`。**编译端的宏路径没有任何已入库测试**：
-  `compiler/macros_test.go` 确实存在，但只是开发者工作副本里的未跟踪文件
-  （主检出 `git status` 报 `?? compiler/macros_test.go`），不在任何分支、也不在任何可达 `main` 的提交里。
-- **失效方式**：`#error` 中止展开（`macro.go:279`）；未知的 `#` 命令被拒绝（`macro.go:308`）；
-  而 `#when` 参数落在可接受集合之外时**不执行任何分支且静默丢弃**——已实测，见 §6.6。
+- **位置**：`qkparser/macro.go`（token 级：`SplitMacroDefs`、`ExpandMacros`、`expandBody`）
+  与 `qkparser/preproc.go`（行级：`Context`、`NewContext`、`Process`/`ProcessMapped`、`LineMap`）。
+- **承诺（裁定后的实现）**：预处理器在任何词法器看到程序**之前**决定这个程序由哪些行组成
+  ——`#ifdef`/`#ifndef`/`#if`/`#elif`/`#else`/`#endif`、`#define`/`#undef`、`#include`、`#error`；
+  随后 `ExpandMacros(toks, macros)` 重写宏调用。**没有 mode 参数**：每个引擎定义自己的符号
+  （编译器 `COMPILE`、解释器 `EXPLAIN`，标准 §7.2），预处理器与展开器都不按"谁在跑"分支。
+- **谁在组合它**：两个引擎经同一个模块。编译器用 `lang.NewPreproc("COMPILE")` 建上下文，
+  并保留 `--target-os` / `--target-arch` 覆盖；解释器每次编译建一个上下文
+  （`internal/lang/compile.go`、`internal/lang/lib.go`）并定义 `EXPLAIN`。工具
+  （qkcheck / qklsp / qkdoc / qkrepl）经 `internal/lang` 的 `ParseSource*` 预处理，带
+  `Context.Aligned`：行号保持，因此诊断位置仍在作者写的那一行。
+- **如何验证**：`qkparser/preproc_test.go`（编译器原有的四个预处理测试**迁移**而来，另加引擎符号、
+  受保护的宏体、`#include` 定义、宿主默认值、嵌套条件、`#undef`、对齐输出、未知拼写规则）；
+  宏那一半由 `internal/lang/eval_test.go`、`macroinsert_test.go` 覆盖，编译端由
+  `compiler/macros_test.go` 覆盖；一致性由 `compiler/testdata/cases/x_if_*` 与 `x_engine_symbol.kq`
+  经 `compare.sh` 测量。
+- **失效方式**：`#error` 中止预处理；没有配对 `#if` 的 `#else`/`#elif`/`#endif`、以及未闭合的 `#if`
+  被拒绝；`#include` 找不到文件被拒绝；既不是宏命令、也不是行级指令的 `#` 拼写**按名字拒绝**
+  （不再静默丢弃——`#when` 正是这样进到某一个引擎的输出里的）；无法识别的条件表达式是预处理错误。
 
 ### I-3 · 语法器
 
@@ -759,7 +769,7 @@ if n := in.mem.BlockCount(); n != 1 {
 
 | # | 缺口 | 证据 |
 |---|---|---|
-| G-6 | **两个引擎今天在 `#when` 上就不一致**：只在解释器出现的宏分支会执行 `#when(compile)` 体，于是 `#when(compile){#return 111}` / `#when(run){#return 222}` 解释执行为 `222`、编译执行为 `111` | 已实测；机制是 `compile.go:123`（`"explain"`）对 `compiler/main.go:334,441`（`"compile"`）与 `macro.go:268` 的相互作用——详见 §6.6 |
+| G-6 | **两个引擎在 `#when` 上不一致**（`67ce88c` 时；此后已关闭，见 §6.7）：只在解释器出现的宏分支会执行 `#when(compile)` 体，于是 `#when(compile){#return 111}` / `#when(run){#return 222}` 解释执行为 `222`、编译执行为 `111` | 已实测；机制是 `compile.go:123`（`"explain"`）对 `compiler/main.go:334,441`（`"compile"`）与 `macro.go:268` 的相互作用——详见 §6.6 |
 | G-16 | **`TestMemoryCompactReclaims` 依赖调度，并且已经在 `windows-latest` 上失败过**（`expected 1 block … got 2`），而同一 SHA 重跑通过、本机也通过 | 已实测；`eval_test.go:373` 对 `eval.go:3381-3388` 的 goroutine；详见 §5.4。**已关闭**（本分支）：程序在 compact 前 `taskm.block` 等待任务，断言保持严格，`-count=200` 全绿 |
 | G-14 | **`joinTokens` 丢掉字符串引号，于是任何"带 `#macro` 且含字符串字面量"的程序在 `qkc` 下失败或什么都不输出**——包括已入库的 `examples/macro.qk` | 已实测；`compiler/macros.go:13-33` 对 `qkparser/token.go:486`；详见 §5.3。**已关闭**（本分支）：`joinTokens` 已删除，编译器直接解析展开后的 token；字符串与转义用例在两个引擎下一致，由 `compiler/testdata/cases/m_macro_literals.kq` 与 `compiler/macros_test.go` 覆盖；`examples/macro.qk` 的空输出属 G-6 的状态问题，不是这条 |
 | G-15 | `expandMacros` 吞掉全部五条错误路径（`macros.go:47,51,55,58,62`），于是宏展开失败被语法器报成令人困惑的 `ParseError` | `compiler/macros.go:46-63`。**已关闭**（本分支）：`expandMacros` 把错误返回给调用方；只有词法失败仍交给语法器，报的是同一条 `LexError` |
@@ -814,7 +824,11 @@ if n := in.mem.BlockCount(); n != 1 {
 `981abe1`/`6234e82`（同一天）改为跟随系统 locale、默认英文；`65495e4`（同一天）重写了消息层。
 **指出矛盾，不擅自裁决。**
 
-### 6.6 矛盾 · `#when` 未被规范，且两个引擎对它不一致
+### 6.6 矛盾 · `#when` 未被规范，且两个引擎对它不一致 —— **历史章节**
+
+> 保留它，是作为"当时错在哪里"的记录，而不是对今天代码的描述。下面每一条实测在 `67ce88c`
+> （本文钉住的修订）都成立；它所测量的那种不一致已由裁定与 §6.7 的工作关闭，且 `#when`
+> 现在在任何地方都不被接受。
 
 `spec/STANDARD.md:211-233`（§7.2）把运行时指令定义为 `#expand`、`#run`，
 以及条件族 `#ifdef`/`#ifndef`/`#if`/`#ifn`/`#endif`，示例用的是 `#ifdef COMPILE` / `#ifdef EXPLAIN`。
@@ -867,6 +881,89 @@ $ ./qkc -run when3.qk     → 111
 **UNVERIFIED**：正确的修法究竟是从解释器传 `"compile"`、把模式集合改称 `explain|run`、
 按标准的 `#ifdef` 家族彻底去掉 `#when`，还是采纳那次被遗弃尝试的"全部分支不命中即硬错误"。
 每一种都能与树里的**某个**产物自洽，所以这里报告的是矛盾，而不是给出确定修法的缺陷。
+
+---
+
+### 6.7 已关闭 · 关于 `#when` 的裁定，以及取代它的东西
+
+**裁定。** `#when` 是遗留拼写；标准真正定义的运行时是 `#if` 族（`#ifdef` `#ifndef` `#if` `#ifn`
+`#endif`，§7.2）加上 `#expand`/`#run`。上一轮已证明两者**不等价**并按指示止步；本轮做出选择，
+而 §6.6 作为"当时错在哪里"的记录原样保留。
+
+**移动了什么。** 行级预处理器原本属于编译器（`compiler/preproc.go`，在词法之前运行），解释器
+则完全没有，于是解释器里八种拼写全是 `ParseError`——连宏体里的 `#ifdef` 也是。现在预处理器
+住在两个引擎共用的语法层（`qkparser/preproc.go`），指令只有一份实现，其中没有任何按引擎分支。
+编译器对每一种它原先接受的拼写保持原行为，编译端测试随代码一起迁移
+（`qkparser/preproc_test.go`），`compiler/preproc_test.go` 已不复存在。
+
+**预定义符号**，与 §7.2 自己的示例一一对应：
+
+| 引擎 | 符号 | 示例中的分支 |
+|---|---|---|
+| 编译器（`qkc`） | `COMPILE` | `#ifdef COMPILE` → `#expand main in program` |
+| 解释器（`quark`） | `EXPLAIN` | `#ifdef EXPLAIN` → `#run main` |
+
+用户 `#define` 往集合里加、`#undef` 从中删；一个程序一个上下文，因此一个文件里的开关在下一个
+文件里可见。
+
+**一致性。** 这个惯用法是输出中性的：卫哨负责选择，选出来的程序是同一个，因此两个引擎逐字节相同。
+`compiler/testdata/cases/` 里五个用例经 `compare.sh`（以及 `internal/cgen/parity_test.go` 对解释器
+生成的 `.out`）在两个引擎中测量：`x_if_family.kq`（顶层条件族）、`x_if_macro_body.kq`（宏体里的
+`#ifdef`）、`x_if_pair.kq`（§7.2 的配对）、`x_if_complement.kq`（另一个引擎定义的分支不能泄漏进来）、
+`x_engine_symbol.kq`（§6.6 实测里那个宏，改用标准拼写：一个体、一个答案）。`compare.sh` 打印
+`all identical (interpreter == compiler)`。
+
+**删除了什么。** 共享展开器里 `#when` 的分支、它两条拒绝信息、`(when/return/error)` 措辞，
+以及全部使用者：`examples/macro.qk:2`、宏测试、stress 生成器、`SYNTAX.md` / `SYNTAX.zh-CN.md`、
+两个 README、三条 i18n 目录项。既不是宏命令、也不是行级指令的 `#` 拼写现在**按名字拒绝**
+（`#when is not a QuarkLang preprocessor directive`，目录条目在 `internal/i18n/table_macro.go`），
+并由 `compiler/testdata/when_rejected.qk.rejected` 与 `compiler/macros_test.go` 钉住：
+对那段过去"解释执行为 `222`、编译执行为 `111`"的程序，两个引擎在同一行打印同一条信息。
+
+**仍开放，且只报告不实现**：§6.8。
+
+### 6.8 缺口 · `#expand` 与 `#run` 在两个引擎里都不存在
+
+§7.2 除条件族外还规定了两条指令，而两个引擎都没有实现它们。这里以**提案**形式陈述，**不含代码**：
+标准只用一段示例描述它们，仅凭示例去实现等于在猜语言表面。
+
+标准怎么说的（`spec/STANDARD.md:194-212`）：
+
+| 指令 | 标准原文 | 示例中的用法 |
+|---|---|---|
+| `#expand <node> in <node>` | "把一个节点展开进另一个节点：`#expand main in program` 把 `main` 函数节点放进 program 节点" | 位于 `#ifdef COMPILE` 内 |
+| `#run <node>` | "直接运行一个节点：`#run main`——解释期的入口" | 位于 `#ifdef EXPLAIN` 内 |
+
+缺的究竟是什么：
+
+- **两个引擎都不认识这两种拼写。** 在预处理器里它们是不属于它的行，于是被保留；在词法器里它们是
+  `#` 加一个标识符；在宏展开器里，宏体外按名字拒绝、宏体内被丢弃。因此今天按 §7.2 示例写出的程序
+  在两个引擎里都编译不过，失败点在 `#expand` 那一行。
+- **没有"节点"这个概念可供展开或运行。** AST 没有任何可寻址的节点元数据：`FuncDecl` 只能经
+  `Program.Funcs` / `FnIndex`（`internal/lang/compile.go`）到达，而那是类型检查**之后**建立的表，
+  不是源码级、可被指令指名的节点。`#expand main in program` 在那张表存在之前无事可做。
+- **`#run` 与入口点规则冲突。** 解释器本来就在加载后运行一次 `main`（`internal/lang/eval.go`），
+  而 `program lib;` 让"不运行"成为声明的性质。一条"现在就运行某节点"的指令必须说明它与该规则的
+  关系——`#run` 是取代自动入口、再跑一次，还是在多个候选里挑一个？标准没有说。
+- **本轮之前没有任何地方预定义符号**，所以示例里的 `#ifdef COMPILE` 在两个引擎里都选不中任何分支。
+  这一半现在修好了（§6.7）；它守护的那两条指令没有。
+
+它必须落在哪里、会牵动什么：
+
+| 部件 | 位置 | 为什么在那里 |
+|---|---|---|
+| 指令识别 + 节点参数解析 | `qkparser/preproc.go`（行级）或语法器（节点级） | 它属于已经拥有 `#` 行的阶段；而节点参数只有在"能指名节点"之后才有意义 |
+| 节点名 → 声明的表，且必须在 lowering **之前**可用 | `internal/lang`（类型检查器本来就在建 `FnIndex`） | `#expand`/`#run` 要消费它，而它必须在入口点被选定之前就存在 |
+| `#run` 的入口策略 | `internal/lang/eval.go`、`compiler/internal/cgen` | "运行这个节点，而不是／另外再运行 `main`"是引擎策略，两个引擎必须给出同一条 |
+| 一致性用例 | `compiler/testdata/cases/` + `compare.sh` | §7.2 的示例是唯一的规范，所以用例**就是**契约 |
+
+最诚实的第一步不是代码，而是对示例留下的两个问题做决定——`#expand`/`#run` 指名的是哪个节点命名空间，
+以及 `#run` 如何与既有的自动入口点组合——之后这条指令就能在一处实现，并配一个一致性用例。
+
+**同一张表里还有第二个更小的缺口。** §7.2 的条件族列出了 `#ifn`（`spec/STANDARD.md:217`），
+而全文再没有定义它做什么。任何引擎都从未实现过它，本轮如实保持原状而没有臆造含义：`#ifn` 是预处理
+器不拥有的一行，因此穿过预处理后被词法器／语法器当作其它未知 `#` 拼写拒绝。如果它的意思是
+`#ifndef` 的补集，或 `#if` 的取反形式，标准需要说明是哪一种。
 
 ---
 
