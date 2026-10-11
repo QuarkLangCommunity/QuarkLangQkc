@@ -10,7 +10,7 @@
 
 - [ ] `go test ./...` passes
 - [ ] `(cd compiler && go test ./...)` passes
-- [ ] `(cd compiler && ./testdata/compare.sh)` prints "全部一致" (dual-path parity)
+- [ ] `(cd compiler && ./testdata/compare.sh)` prints "all identical" (dual-path parity)
 - [ ] Syntax/semantics changes: updated `SYNTAX.md` and the parity cases in `compiler/testdata`
 - [ ] Static-analysis changes: updated the labelled cases in `internal/lang/testdata/lintbench/` (the FP/FN gate runs them)
 - [ ] Release/CI changes: ran the corresponding script locally as a smoke test

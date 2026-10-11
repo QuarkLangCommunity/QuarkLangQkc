@@ -1,4 +1,4 @@
-# QuarkLang stress / robustness suite (抗压测试)
+# QuarkLang stress / robustness suite
 
 Extreme inputs, a bounded runner and a measured report: the suite answers "what does the implementation
 do when the input is absurd?" for the interpreter (`quark`) and the native compiler (`qkc -run`) at once.
