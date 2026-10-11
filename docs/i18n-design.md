@@ -700,6 +700,10 @@ all identical (interpreter: origin/main == this tree), en and zh  [18 runs]
 * ⚠ **`go.work` is not committed** (it is in `.gitignore` by design, for the sibling-checkout workflow).
   The prototype's local run used one to point the generator at the module branch; CI and a fresh clone
   resolve the pin from `go.mod` with no workspace file, which is the configuration that must be green.
+* ⚠ **The pinned revision is pre-merge.** `go.mod` pins a pseudo-version of the module branch's commit,
+  so this branch is green against a revision that is not on `main` yet. The merge order is therefore
+  load bearing (module first, then this repository's pin), and a post-merge repin is part of landing
+  this, not a follow-up.
 * ⚠ **CI wall-clock cost** of the generation check is unmeasured. It shells out to `go list -m`, which is
   cheap with a warm module cache and needs the module downloaded with a cold one — and the module is
   already a dependency, so a cold cache pays for it once either way.
