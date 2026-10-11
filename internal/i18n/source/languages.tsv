@@ -1,0 +1,17 @@
+# The languages this repository ships, in order.
+#
+# This file is the metadata the old catalog could not carry: which language a message is written in
+# was inferred by sniffing the key for Han characters (internal/i18n/i18n.go:220-237), which is how an
+# English-source message came to render its Chinese value under QK_LANG=en (6a37193) and how 105
+# translations became unreachable under QK_LANG=zh (43bbff6). Direction is data here, never a guess.
+#
+# Columns, tab-separated:
+#   lang   the code used by QK_LANG / the catalog
+#   dir    "source" for the one language messages are written in, "translation" for the rest
+#
+# Exactly one language must be marked source, and it is the language of the text in every
+# messages.tsv row. The generator fails the build otherwise.
+#
+# lang	dir
+en	source
+zh	translation

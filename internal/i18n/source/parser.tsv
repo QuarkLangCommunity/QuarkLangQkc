@@ -1,0 +1,50 @@
+# The syntax layers' messages: every ID the pinned qkparser module ships through its msg() surface,
+# plus this repository's own parser diagnostics.
+#
+# Columns, tab-separated:
+#   id     dotted <domain>.<snake_case>, stable forever, never renumbered, never recycled
+#   owner  "import" when the pinned qkparser module owns the ID, "local" when this repository does
+#   ctx    where the message is raised, for the translator
+#   note   what it means, for the translator
+#   src    what the owning module currently ships as this ID's text, verbatim. For an imported ID the
+#          generator checks this against the module at the version go.mod pins and fails the build when
+#          it drifts — that is how a new or rephrased message in the syntax layer reaches this
+#          repository's build instead of a user's terminal. For a local ID it repeats the source value.
+#   en     this repository's English rendering — the value a reader who asked for English gets
+#   zh     this repository's Chinese rendering
+#
+# `src` is the module's text today, which for a message still awaiting migration is Chinese; `en` is
+# the English translation the catalog already carries. They converge as the migration proceeds, and the
+# design keeps both columns rather than assuming they are equal (docs/i18n-design.md §6.1).
+#
+# One row per message, one column per shipped language: a language that is not shipped has no column,
+# so a message that is missing a translation cannot be written down at all.
+#
+# Regenerate with:  go generate ./internal/i18n
+#
+# id	owner	ctx	note	src	en	zh
+parser.macro_unbalanced_delimiters	import	macro	unbalanced () [] {} while reading a macro	"ParseError: 分隔符不配对，第 %d 行"	"ParseError: unbalanced delimiters, line %d"	"ParseError: 分隔符不配对，第 %d 行"
+parser.macro_arg_count_mismatch	import	macro	a macro was called with the wrong argument count	"ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）"	"ParseError: macro %s expects %d parameters but the call passed %d, line %d"	"ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）"
+parser.macro_expand_failed	import	macro	expanding a macro definition failed	"宏 %s 展开失败：%v"	"macro %s failed to expand: %v"	"宏 %s 展开失败：%v"
+parser.pp_sharp_needs_command	import	preproc	a '#' that is not followed by a directive	"第 %d 行：# 后必须是预处理命令（return/error）"	"line %d: '#' must be followed by a preprocessor command (return/error)"	"第 %d 行：# 后必须是预处理命令（return/error）"
+parser.pp_unknown_directive	import	preproc	'#' with a name that is not a preprocessor directive	"第 %d 行：#%s 不是 QuarkLang 预处理指令"	"line %d: #%s is not a QuarkLang preprocessor directive"	"第 %d 行：#%s 不是 QuarkLang 预处理指令"
+parser.pp_requires_parens	import	preproc	a directive that requires ( ... )	"第 %d 行：#%s 需要 ( ... )"	"line %d: #%s requires ( ... )"	"第 %d 行：#%s 需要 ( ... )"
+parser.pp_error_needs_message	import	preproc	#error without a ("message") argument	"第 %d 行：#error 需要 (\"消息\")"	"line %d: #error requires (\"message\")"	"第 %d 行：#error 需要 (\"消息\")"
+parser.pp_error_directive	import	preproc	an #error directive was reached	"第 %d 行：预处理错误 #error(%s)"	"line %d: #error(%s)"	"第 %d 行：预处理错误 #error(%s)"
+parser.pp_insert_not_macro_param	import	preproc	#insert(#ast(x)) where x is not a macro parameter	"第 %d 行：#insert(#ast(%s))：%s 不是宏参数名"	"line %d: #insert(#ast(%s)): %s is not a macro parameter name"	"第 %d 行：#insert(#ast(%s))：%s 不是宏参数名"
+parser.pp_execute_needs_name	import	preproc	#execute without a name	"第 %d 行：#execute 需要 (名字)"	"line %d: #execute requires (name)"	"第 %d 行：#execute 需要 (名字)"
+parser.pp_unknown_command	import	preproc	an unknown preprocessor command	"第 %d 行：未知预处理命令 #%s"	"line %d: unknown preprocessor command #%s"	"第 %d 行：未知预处理命令 #%s"
+parser.pp_insert_needs_ast	import	preproc	#insert without the (#ast(name)) form	"#insert 需要 (#ast(名字)) 形式"	"#insert requires the (#ast(name)) form"	"#insert 需要 (#ast(名字)) 形式"
+parser.macro_needs_name	import	macro	#macro without a name	"ParseError: #macro 需要名字，第 %d 行"	"ParseError: #macro needs a name, line %d"	"ParseError: #macro 需要名字，第 %d 行"
+parser.macro_missing_param_list	import	macro	#macro name without a parameter list	"ParseError: #macro %s 缺少参数列表，第 %d 行"	"ParseError: #macro %s is missing its parameter list, line %d"	"ParseError: #macro %s 缺少参数列表，第 %d 行"
+parser.macro_param_list_delimiters	import	macro	a macro parameter list that is not () [] {}	"ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行"	"ParseError: #macro %s parameter list must use () [] or {}, line %d"	"ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行"
+parser.macro_params_must_be_names	import	macro	a macro parameter that is not a name	"ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行"	"ParseError: #macro %s parameters must be names (comma-separated, any count), line %d"	"ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行"
+parser.macro_missing_body	import	macro	#macro name without a body	"ParseError: #macro %s 缺少主体，第 %d 行"	"ParseError: #macro %s is missing its body, line %d"	"ParseError: #macro %s 缺少主体，第 %d 行"
+parser.macro_body_delimiters	import	macro	a macro body that is not () [] {}	"ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行"	"ParseError: #macro %s body must use () [] or {}, line %d"	"ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行"
+parser.pp_include_too_deep	import	preproc	#include nesting past the depth limit	"预处理 #include 层数过深（>16）：%s"	"#include nesting too deep (>16): %s"	"预处理 #include 层数过深（>16）：%s"
+parser.pp_elif_without_if	import	preproc	#elif without a matching #if	"%s:%d: #elif 没有对应的 #if"	"%s:%d: #elif without a matching #if"	"%s:%d: #elif 没有对应的 #if"
+parser.pp_branch_without_if	import	preproc	#else/#endif without a matching #if	"%s:%d: #%s 没有对应的 #if"	"%s:%d: #%s without a matching #if"	"%s:%d: #%s 没有对应的 #if"
+parser.pp_include_failed	import	preproc	an #include that could not be read	"%s:%d: #include 失败：%v"	"%s:%d: #include failed: %v"	"%s:%d: #include 失败：%v"
+parser.pp_unclosed_if	import	preproc	an #if left open at the end of the file	"%s: 有 %d 个 #if 未闭合（缺 #endif）"	"%s: %d unclosed #if block(s) (missing #endif)"	"%s: 有 %d 个 #if 未闭合（缺 #endif）"
+parser.pp_unrecognized_condition	import	preproc	an #if condition the preprocessor cannot read	"无法识别的条件表达式：%q"	"unrecognized condition expression: %q"	"无法识别的条件表达式：%q"
+parser.nesting_too_deep	import	parser	an expression nested past MaxExprDepth	"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements"	"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements"	"嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句"

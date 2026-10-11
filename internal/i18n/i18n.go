@@ -152,7 +152,6 @@ func domainTables() map[string]map[string]string {
 		"docgen":    docgenTable,
 		"lexer":     lexerTable,
 		"lint":      lintTable,
-		"macro":     macroTable,
 		"repl":      replTable,
 		"runtime":   runtimeTable,
 		"shared":    sharedTable,
@@ -214,6 +213,23 @@ func (L Localizer) T(template string, args ...any) string {
 
 // Has reports whether a template is registered.
 func (L Localizer) Has(template string) bool { return L.catalog().Has(template) }
+
+// Msg renders a generated message in the localizer's language. The message is an ID and the value is
+// read out of the generated blob by index (msg_gen.go): no map keyed by the text, no direction sniff,
+// no fallback to count. It is the interface the syntax layer renders its messages through
+// (qkparser.Localizer), so a module's messages are localized by this catalog without the module
+// knowing anything about it.
+func (L Localizer) Msg(id Msg, args ...any) string {
+	text := msgText(id, langBlock(string(L.Lang())))
+	if len(args) == 0 {
+		return text
+	}
+	return fmt.Sprintf(text, args...)
+}
+
+// MsgSourceText returns a generated message's source-language text, which is what a caller with no
+// localizer should fall back to.
+func MsgSourceText(id Msg) string { return msgText(id, msgSourceBlock) }
 
 // needsTranslation reports whether a template contains Han characters, i.e. whether rendering it
 // under English without a catalog entry would leak Chinese to the user.
