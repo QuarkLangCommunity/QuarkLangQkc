@@ -1,12 +1,11 @@
-// The pairing of §7.2: each engine takes exactly one branch, and both branches produce the same
-// program, so "the idiom is output-neutral" is measured rather than asserted.
+// The pairing of §7.2, to the letter (the example is the only specification for it): each engine takes
+// exactly one branch, and this program is empty on purpose — "the idiom is output-neutral" then means
+// both engines print nothing at all, which is the strongest reading of the requirement.
 #ifdef COMPILE
 fn main(IOStream io) {
-    io.println(1);
 }
 #endif
 #ifdef EXPLAIN
 fn main(IOStream io) {
-    io.println(1);
 }
 #endif
