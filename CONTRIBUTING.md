@@ -1,7 +1,5 @@
 # Contributing to QuarkLang
 
-**English** · [简体中文](CONTRIBUTING.zh-CN.md)
-
 Thanks for spending time on QuarkLang. This document only covers **how to get your change merged fastest**;
 everything else lives in the code and the docs.
 
@@ -78,7 +76,7 @@ When a parser change lands, bump the pin in both modules: `go get github.com/Qua
 
 When you add a language feature, **all four of these must be updated together**:
 
-1. `SYNTAX.md` — the single canonical syntax reference (English; Chinese: `SYNTAX.zh-CN.md`; numbered M/K/E/S/O/T/P entries);
+1. `SYNTAX.md` — the single canonical syntax reference (numbered M/K/E/S/O/T/P entries);
 2. **both backends** (interpreter and compiler — they share the front end, but semantics must match);
 3. `compiler/testdata/compare.sh` — the parity cases;
 4. for static-analysis changes, the labelled cases under `internal/lang/testdata/lintbench/` (the FP/FN gate runs them).

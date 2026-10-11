@@ -1,7 +1,5 @@
 # tree-sitter-quarklang
 
-**English** · [简体中文](README.zh-CN.md)
-
 The [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for QuarkLang (a toolchain member).
 Canonical syntax lives in the main repo's `SYNTAX.md`.
 

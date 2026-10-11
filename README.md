@@ -1,7 +1,5 @@
 # QuarkLang (qkc)
 
-**English** · [简体中文](README.zh-CN.md)
-
 [![CI](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/ci.yml)
 [![Release](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/release.yml/badge.svg)](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/release.yml)
 [![Download](https://img.shields.io/github/v/release/QuarkLangCommunity/QuarkLangQkc?label=download&sort=semver)](https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest)
@@ -484,7 +482,7 @@ Key optimizations (all profile-driven):
 
 ## Language features (v2 syntax)
 
-> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md) (English) — Chinese: [`SYNTAX.zh-CN.md`](SYNTAX.zh-CN.md).
+> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md).
 
 <details>
 <summary>Full feature list</summary>

@@ -1,7 +1,5 @@
 # QuarkLang · compiler
 
-**English** · [简体中文](README.zh-CN.md)
-
 **Cross-platform compiler branch**. Backend: **LLVM IR** (no C transpilation) — `qkc` emits textual LLVM IR and `clang` produces native code for any LLVM-supported platform.
 
 ## Architecture: a single syntax source

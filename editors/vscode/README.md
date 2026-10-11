@@ -1,7 +1,5 @@
 # QuarkLang for VS Code
 
-**English** · [简体中文](README.zh-CN.md)
-
 QuarkLang language support extension (a toolchain member): **syntax highlighting** (TextMate) + **language service** (diagnostics / go-to-definition / completion / hover / outline).
 
 ## Install (local development)

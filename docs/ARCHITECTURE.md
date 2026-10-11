@@ -1,7 +1,5 @@
 # QuarkLang — Interface Inventory and Composition Map
 
-English | [中文](ARCHITECTURE.zh-CN.md)
-
 Analysed from the code at `67ce88c` (the tip of `main` when this document was written).
 Every claim carries a `file:line` reference. A claim that could not be verified from source
 or by running a gate is marked **UNVERIFIED** — there are no inferred-but-unchecked statements.

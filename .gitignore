@@ -44,4 +44,3 @@ go.work.sum
 
 # docs/ 整体不并入 main；仅这份接口清单与组合地图例外（见 docs/ARCHITECTURE.md §0）
 !docs/ARCHITECTURE.md
-!docs/ARCHITECTURE.zh-CN.md
