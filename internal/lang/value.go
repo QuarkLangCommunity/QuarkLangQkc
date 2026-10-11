@@ -382,7 +382,7 @@ func (v Value) String() string {
 	return "<unknown>"
 }
 
-// ---- rolling List<T> (spec §4) ----
+// ---- rolling List<T> (spec §9: a legacy built-in, see §11.3) ----
 
 // List is a rolling two-pointer buffer: visible elements live in [head, tail).
 // mem/blockID hook into the global memory manager (a write marks the owning block dirty).
@@ -526,7 +526,7 @@ func (l *List) sortInPlace() error {
 	return sortErr
 }
 
-// ---- HashTable<K,V> (spec §3.6) ----
+// ---- HashTable<K,V> (spec §9: a legacy built-in, see §11.3) ----
 
 type HashTable struct {
 	m map[string]Value
@@ -587,7 +587,7 @@ func (h *HashTable) Keys() []Value {
 // hashKey builds a stable structural key for any Value.
 func hashKey(v Value) string { return v.TypeName() + ":" + v.String() }
 
-// ---- FuncBuffer (spec §5) ----
+// ---- FuncBuffer (interpreter-internal; not a language surface) ----
 
 // Func is a compiled QuarkLang function. Ret != "" means the call yields the
 // value of `return expr;`; otherwise the call yields the whole FuncBuffer.
@@ -714,11 +714,10 @@ func (in *interp) putCtx(ctx *execCtx) {
 	}
 }
 
-// ---- IO objects (spec §10) ----
+// ---- IO objects (spec §9) ----
 
-// IOStream is the default main() parameter: input + output + redirectable.
-// mu implements the execution table (spec §14.2): FIFO by arrival time, reads (RLock)
-// have priority over writes (Lock).
+// IOStream is the default main() parameter: input + output + redirectable, with mu serialising the
+// stream — reads share it, writes and redirections take it exclusively.
 type IOStream struct {
 	In  io.Reader
 	Out io.Writer
@@ -762,7 +761,7 @@ var globalMemory = &Memory{BlockSize: 4096}
 
 // TaskManager is the coroutine manager; taskm is a GLOBAL VARIABLE, so the
 // correct call syntax is taskm.spawn(...) / taskm.block(pid) / taskm.done(pid)
-// / taskm.merge(pid) / taskm.channel([n]) (spec §14.2).
+// / taskm.merge(pid) / taskm.channel([n]) (spec §9: taskm is a core facility).
 type TaskManager struct{}
 
 func (t *TaskManager) TypeName() string { return "taskm" }

@@ -196,7 +196,7 @@ type signDef struct {
 
 type builtinFn func(args []Value, pos Pos, ctx *execCtx) (Value, error)
 
-// MemBlock is an allocation block of the global memory manager (spec §14.1).
+// MemBlock is an allocation block of the global memory manager (spec §10).
 type MemBlock struct {
 	ID          int
 	Size        int
@@ -2127,7 +2127,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			in.taskMu.Unlock()
 			return BoolV(idle), nil // done = whether the thread is idle (no function occupying it)
 		case "channel":
-			cap := 1024 // default capacity (spec §14.2)
+			cap := 1024 // default capacity (spec §9: taskm channels are a core facility)
 			if len(args) == 1 {
 				if !args[0].IsInt() || args[0].Int() < 1 || args[0].Int() > 1<<20 {
 					return NilV(), &RunError{Msg: "TypeError: taskm.channel(n) requires 0 < n <= 1048576", Pos: pos, Ctx: ctx}
@@ -2397,7 +2397,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
 				return NilV(), err
 			}
-			// compact() never returns at all (spec §14.1); it actually cleans blocks nobody occupies
+			// compact() never returns at all (spec §10); it actually cleans blocks nobody occupies
 			in.mem.Compact()
 			return NilV(), nil
 		case "setBlock":

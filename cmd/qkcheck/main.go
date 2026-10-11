@@ -7,7 +7,7 @@
 //	-no-typecheck  Syntax + static checks only, no type checking
 //	-L dir         Append an import search directory (repeatable; same directory takes priority)
 //	-exit0         Exit 0 even with diagnostics (report only, never blocks)
-//	--lang           Output language zh|en (default Chinese; QK_LANG also works)
+//	--lang           Output language zh|en (QK_LANG, then LC_ALL/LC_MESSAGES/LANG; English if none is set)
 //	--version      Print version
 //
 // Exit codes: 0 = no diagnostics; 1 = errors or warnings; 2 = usage error.
