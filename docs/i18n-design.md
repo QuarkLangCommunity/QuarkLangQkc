@@ -767,6 +767,81 @@ move. And the two largest domains are in the `compiler` module, which pins this 
 `replace`; their tables are read from this repository's `internal/i18n`, so they migrate here, but every
 gate for them has to run in both modules.
 
+### 7.5 The prerequisite step 4 was hiding: a message in a struct field
+
+`typecheck` and `compiler` cannot be migrated by moving rows. Their tables' rows are referenced by message
+literals written **straight into struct fields**:
+
+```go
+return &RunError{Msg: fmt.Sprintf("CompileError: duplicate declaration %q", name)}
+```
+
+A field value is not an argument to any callee, so every gate in this repository misses it: the coverage
+scanner reads literals *passed to* a boundary (`msg`, `T`, `warn`, `errf`, `replyErr`), the ratchets count
+what that scanner sees, and the no-boundary scan has no call to look at. Grep the shape, not the callee:
+
+```
+$ grep -rn 'Msg: *"'            internal/lang compiler | grep -v _test.go   # 57
+$ grep -rn 'Msg: *fmt.Sprintf'  internal/lang compiler | grep -v _test.go   # 89
+$ grep -rn 'Msg: *"[^"]*" *+'   internal/lang compiler | grep -v _test.go   # 15
+```
+
+(The step-4 handoff's block reported 61 and 67 for the first two patterns. Re-run on `2be5f34` they are 57
+and 89, so those three-grep counts describe a different tree; the counts below come from a parse of this
+one, and every number in this section was produced by the commands quoted beside it.)
+
+The pass that opens `typecheck` and `compiler` is therefore a **struct-field pass**, and it is its own
+commit with its own proof. Measured on this revision, by parsing the tree rather than by a regex over it:
+
+| Quantity | Value |
+|---|---|
+| message-shaped field sites (`Msg`, and the same shape elsewhere) | 245 |
+| of those, holding a literal rather than a variable or a call | 124 |
+| distinct literals | 94 |
+| of those, English-only | 93 |
+| of those, written in Chinese (the mirror defect) | 1 |
+
+**Two instruments, and they disagree by exactly one — which is the interesting part.** A probe that asks
+the *text-keyed* catalog (`Catalog.Lookup(literal, ZH)`) finds Chinese for **26** of the 93. A probe that
+also reads the *generated* tables finds **27**: `CompileError: undeclared identifier %q` is already a row
+(`runtime.compileerror_undeclared_identifier_q`), so its Chinese exists and its call site
+(`internal/lang/eval.go:190`) bypasses it. The first instrument is the one the step-4 handoff used, and its
+26 is a count of *new rows*; 27 is the count of *messages whose Chinese already ships*. Both are true, and
+the difference is a message that needs no row at all — only a call site pointed at the row that exists.
+The lesson is §9's, again: the number depends on the instrument, so measure with both.
+
+The remaining **66 have no Chinese anywhere** — not in the tables, not in the generated blob, not in the
+pinned module. Their Chinese has to come from a speaker; the design does not write one, and
+`TestProofUntranslatedFieldMessagesAreCounted` freezes the number so it can only shrink. §7.6 records the
+commit that did both halves.
+
+Three things this pass found that the handoff did not know:
+
+1. **The flagship example belongs to the other half.** `IndexOutOfBoundsError: index %d out of range
+   [0,%d)` (`internal/lang/value.go:470` and `:483`) is the live defect §7.4's commit message quoted:
+
+   ```
+   $ QK_LANG=zh ./quark index.qk    error: IndexOutOfBoundsError: index 9 out of range [0,1) at line 3
+   $ QK_LANG=en ./quark index.qk    error: IndexOutOfBoundsError: index 9 out of range [0,1) at line 3
+   ```
+
+   The two runs are byte-identical because the site never consults a table. But **no Chinese for this
+   message exists anywhere in either repository** — the nearest rows are `StringIndexOutOfBoundsError` and
+   `IndexOutOfRangeError`, which are different messages with different verbs. It is therefore frozen, not
+   wired: the fix that is available today is an ID and an English source, and the Chinese still has to come
+   from a speaker. Wiring it would have meant inventing one.
+2. **One literal is written in Chinese, and it is a live leak in the other direction.**
+   `internal/lang/eval.go:1073` builds `"badAlloc: new " + x.Typ + " 申请大小非法"` by concatenation and
+   puts it in a field, so `QK_LANG=en` renders Chinese to an English reader and no gate sees it. It has no
+   English text anywhere, so unlike the 26 it cannot be wired from an existing row — its English source is
+   authored here and declared as a P3 exception, the same way step 3 declared its eight.
+3. **The two rows step 4 wired from a struct field are English-only, and its commit message said
+   otherwise.** `runtime.typeerror` and `runtime.typeerror_complement` were created with their `zh` column
+   repeating the English source, because the catalog rows that looked like their translations carry
+   `, got %s` and are *different templates* (`table_typecheck.go:23-24`). The Chinese for these two is
+   backlog too, and the ratchet counts them: saying "the catalog held their Chinese translation" would have
+   been wrong, and it is corrected here rather than left standing.
+
 ---
 
 ## 8. Evidence index
