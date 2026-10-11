@@ -19,6 +19,7 @@ const (
 	CategoryPathological = "pathological" // legal-looking shapes that are adversarial to compile or run
 	CategoryMalformed    = "malformed"    // inputs no front end may ever accept
 	CategoryResource     = "resource"     // the multi-megabyte parse / compile / link cost case
+	CategoryFixable      = "fixable"      // valid programs carrying diagnostics qkcheck -fix corrects
 )
 
 // Corpus sizes, exported so the generator test can assert the documented magnitudes.
@@ -80,6 +81,14 @@ func All() []Case {
 		ctor("bad_crlf_mixed", CategoryMalformed, "a program whose line endings alternate between CRLF and LF", crlfMixed()),
 		ctor("bad_only_directives", CategoryMalformed, "a file that holds preprocessor directives and no code", onlyDirectives()),
 		ctor("bad_unbalanced_ifdef", CategoryMalformed, "an #ifdef that is never closed", unbalancedIfdef()),
+		// ── fixable: valid programs whose diagnostics carry a mechanical correction ──
+		//
+		// These cases are what makes `qkcheck -fix` part of this suite: a correction applied to them must
+		// leave the program's output identical under both engines (scripts/fix-preserves-behaviour.sh),
+		// so the claim "a correction cannot change what a program does" is measured rather than argued.
+		ctor("fix_self_assign", CategoryFixable, "self-assignments and a self-comparison: QK108/QK114 delete and replace", selfAssignCorpus()),
+		ctor("fix_dead_store", CategoryFixable, "a dead store overwritten before any read: QK113 deletes the earlier write", deadStoreCorpus()),
+		ctor("fix_self_assign_crlf", CategoryFixable, "the same defects in a CRLF checkout: the rewrite must keep every ending", crlfSelfAssignCorpus()),
 		// ── resource: the measured multi-megabyte case ──
 		ctor("res_few_mb", CategoryResource, "a valid multi-megabyte program ("+itoa(ResourceFuncs)+" functions)", fewMegabyteProgram()),
 	}
@@ -319,4 +328,33 @@ func fewMegabyteProgram() []byte {
 		fmt.Fprintf(&b, "fn g%d(int x) int {\n  int a = x + %d;\n  int c = a * 2;\n  return c - %d;\n}\n", i, i, i)
 	}
 	return program(b.String(), "  io.println(g0(1));")
+}
+
+// selfAssignCorpus is a valid program whose diagnostics qkcheck corrects: two self-assignments, one of
+// them on a list element, and a standalone self-comparison. Every corrected line is deleted or
+// replaced, and the program's output must not move.
+func selfAssignCorpus() []byte {
+	return program("", `  int a = 1;
+  a = a;
+  List<int> l = [1, 2];
+  l[0] = l[0];
+  a != a;
+  io.println(a, l.size());`)
+}
+
+// deadStoreCorpus is a valid program with a write whose value nobody reads before it is overwritten:
+// the earlier assignment is a plain assignment of a pure expression, so deleting it is the correction.
+func deadStoreCorpus() []byte {
+	return program("", `  int a = 1;
+  io.println(a);
+  a = 4;
+  a = 5;
+  io.println(a);`)
+}
+
+// crlfSelfAssignCorpus is selfAssignCorpus written with CRLF endings, which is what a Windows checkout
+// stores. The rewrite must delete the whole line, terminator included, and leave every other ending
+// exactly as it was.
+func crlfSelfAssignCorpus() []byte {
+	return []byte(strings.ReplaceAll(string(selfAssignCorpus()), "\n", "\r\n"))
 }

@@ -33,7 +33,7 @@ decision is not a defect in the fixer: it is a diagnostic whose correction is th
 | QK111 | unused import | Pos of the `import` keyword | The import contributes no used symbol, so removing the statement cannot change what the program does (imports merge text; they have no side-effect form). | **fixable** — delete the import line, when that line holds exactly that one import |
 | QK112 | local shadows a global function | Pos of the declaration | Renaming is the author's choice, as QK104. | report-only — naming |
 | QK113 | dead store (overwritten) | Pos of the **earlier** assignment | When the earlier assignment is a plain assignment `x = <pure>;`, deleting it cannot change behaviour. When it is a declaration initializer (`int c = 1;`) deletion would remove the declaration; when the right-hand side calls a function, deletion would drop the call. | **fixable** — only for a pure, non-declaring earlier assignment; otherwise report-only with the reason |
-| QK114 | self-comparison | Pos of the binary operator | `x == x` is `true` and `x != x` is `false` for every value the operand can hold, including `NaN` (a variable holds one value, and that value equals itself). | **fixable** — replace with the literal, when the comparison is a standalone statement whose operand evaluation cannot be dropped |
+| QK114 | self-comparison | Pos of the binary operator | `x == x` is `true` and `x != x` is `false` for every value the operand can hold, including `NaN` (a variable holds one value, and that value equals itself) — **but only when `==` is the language's own comparison**: `==` is overloadable through `__eq__` (spec `STANDARD.md` §5), and for a type that defines it the comparison runs user code, which the constant would skip. | **fixable** — replace with the literal, when the comparison is a standalone statement, its operand is a plain read the file reads elsewhere, and the operand's declared type is one whose equality cannot be a user `__eq__`; otherwise report-only with the reason |
 | QK115 | uncalled function | Pos of the function | The function may be intended as API, or about to be wired up. | report-only — intent |
 
 The `-exit0` gate, the exit codes, and every diagnostic's severity are unchanged: an unfixed
@@ -79,21 +79,42 @@ When two fixes target the same line, the higher-priority one is applied and the 
 with that as its reason. Priority: `QK113` (delete the dead write) > `QK108` (delete the no-op
 statement) > `QK111` (delete the import) > `QK114` (replace).
 
-## 4. Modes
+## 4. Modes and flags
 
-| Invocation | Behaviour | Exit code with findings |
+| Flag | Behaviour | Exit code with findings |
 |---|---|---|
-| `qkcheck file` | reports every diagnostic; a fixable one prints its proposed change beneath it | 1, unchanged |
-| `qkcheck -check file` | reports, **writes nothing**, exits non-zero when a fix is pending (CI form; the same as `-dry-run`, and `-dry-run` is accepted as an alias) | 3 |
-| `qkcheck -fix file` | applies every applicable fix in place, then re-checks the result and reports what remains | 1 |
-| `qkcheck -fix -exit0 file` | as above, always exit 0 (the report-only form) | 0 |
+| *(none)* | reports every diagnostic; a fixable one prints the corrected line beneath it, and a diagnostic that is mechanically fixable but not here prints the reason it was left alone | 1, unchanged |
+| `-check` | reports, **writes nothing**, and exits non-zero when a correction is pending — the CI form | 3 when a correction is pending, otherwise 1 |
+| `-dry-run` | the same mode, under the name that reads better in a pipeline | as `-check` |
+| `-fix` | applies every applicable correction in place, then re-checks the file it rewrote and reports what remains | 1 |
+| `-json` | the same report as JSON; each finding carries `fix` (the correction) or `no_fix` (why it has none) | unchanged |
+| `-exit0` | report only, never blocks | 0 |
+| `-params` · `-no-typecheck` · `-L dir` · `--lang` | unchanged from before this feature | unchanged |
 
-Exit codes: `0` no findings · `1` findings remain · `2` usage or I/O error · `3` fixes pending and
+`-fix` and `-check` together are a usage error (exit 2) rather than a silent choice between them.
+
+Exit codes: `0` no findings · `1` findings remain · `2` usage or I/O error · `3` corrections pending and
 nothing was written.
 
-`-fix` re-checks the file it just rewrote and repeats while a fix still applies, because a fix can
-expose another one (deleting `x = x;` between two writes can make the mark it carried dead too).
-The rewrite is bounded by a small pass limit; reaching it is reported rather than looped on.
+`-fix` re-checks the file it just rewrote and repeats while a correction still applies, because a
+correction can expose another one (deleting `x = x;` between two writes can make the value the earlier
+write carried dead as well). The rewrite is bounded by a small pass limit; reaching it is reported
+rather than looped on.
+
+What the report prints for each case:
+
+```
+$ qkcheck -check service.qk
+service.qk:12:9: warning: the assignment to retries is overwritten on line 13 before any read [QK113]
+  fix: delete this line (the value it computes is overwritten before any read)
+  fix: -check does not write this; run qkcheck -fix to apply it
+service.qk:20:9: warning: self-assignment: len assigned to itself (has no effect) [QK108]
+  no fix: the statement shares its line with other code, so deleting the line would remove something else
+```
+
+A diagnostic is never dropped, and a diagnostic is never printed as fixed unless a `-fix` run will
+actually change its line: when two corrections name one line, only one of them reaches the file, and
+the other says so.
 
 ## 5. Why behaviour preservation is provable here
 
@@ -105,12 +126,44 @@ effect is provably nil:
   no call, so no side effect disappears with it. Both engines' observable output is unchanged.
 * **QK111** removes an import that contributes no symbol the file uses. Imports merge text into the
   compiled unit; they are not executed, so nothing runs at import time and nothing else changes.
-* **QK114** replaces a comparison of a value with itself. `==` on one value against itself is `true`
-  (and `!=` is `false`) for every type the language has, including a `NaN` float and a reference,
-  because the operand is read once per side from the same storage. The purity and liveness gates make
-  sure the rewrite neither drops a read nor creates an unused variable.
+* **QK114** replaces a comparison of a value with itself. `x == x` is `true` and `x != x` is `false`
+  for every value the operand can hold, including a `NaN` float, because the operand is read once per
+  side from the same storage — *provided `==` is the language's own comparison*. It is not always: a
+  type may overload `==` through `__eq__` (spec `STANDARD.md` §5), and then `x == x` runs user code
+  whose result the constant would not reproduce. The correction is therefore withheld unless the
+  operand's declared type is a builtin one and no `impl` in the file defines `__eq__` for it. The
+  purity and liveness gates make sure the rewrite neither drops a read nor creates a new QK101.
 
-The corpus proof in `internal/lang/lintfix_test.go` and `cmd/qkcheck/fixcorpus_test.go` checks all
-three claims empirically over the stress corpus, `examples/` and `testdata/`: the second `-fix` run is
-a no-op, every fixed program produces byte-identical output under `quark` and `qkc -run` to its
-unfixed original, and no line other than an intended one changes.
+### 5.1 The corpus proof
+
+The argument above is what decides which diagnostics may carry a correction. It is not what makes the
+claim true, and the difference matters: an argument can be wrong about the language. So the properties
+are also measured, over every source file of `examples/`, `compiler/testdata/`, `internal/lang/testdata/`
+and the generated stress corpus:
+
+```bash
+go run ./cmd/qkstress gen -out /tmp/stress/cases
+scripts/fix-preserves-behaviour.sh ./qkcheck ./quark ./qkc \
+    examples compiler/testdata internal/lang/testdata /tmp/stress/cases
+```
+
+For every file that has a pending correction the script runs the program under `quark` and under
+`qkc -run`, records stdout+stderr and the exit code, applies the corrections, runs both engines again,
+and requires the two observations to be byte-identical; then it applies the corrections a second time
+and requires the file to be unchanged. A program that did not run before the correction is not evidence
+and is counted as such, so the script reports how many files were actually compared.
+
+Three Go tests cover the same ground where it is cheap enough to run in CI, over the corpus:
+`TestLintFixIsIdempotentOverTheCorpus`, `TestLintFixPreservesBehaviourOverTheCorpus` and
+`TestLintFixKeepsEveryLineOtherwiseUntouched` (`internal/lang/lintfixcorpus_test.go`). Each asserts that
+the corpus still exercises the corrections, so a corpus that quietly stops producing them fails the
+test instead of making it vacuous.
+
+The stress corpus carries three cases of its own for this (`internal/lang/stressgen`: `fix_self_assign`,
+`fix_dead_store` and `fix_self_assign_crlf`), so the corrections are exercised against the same extreme
+inputs as the rest of the robustness suite — including one written with CRLF endings, where a rewrite
+that normalised the file would be visible.
+
+The negative cases live in `cmd/qkcheck/fix_test.go`: a diagnostic whose correction is the program's
+design, an already-correct file, a CRLF checkout, two corrections naming one line, and the file mode of
+the file a `-fix` run rewrites.
