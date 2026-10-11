@@ -6,7 +6,7 @@
 //	-html      Emit self-contained HTML (default Markdown)
 //	-all       Include non-pub symbols (default exports pub only; exports everything when the file has no pub)
 //	-title T   Title (defaults to the file name)
-//	--lang       Output language zh|en (default Chinese; QK_LANG also works)
+//	--lang       Output language zh|en (QK_LANG, then LC_ALL/LC_MESSAGES/LANG; English if none is set)
 //	--version  Print version
 //
 // Documentation source: the `//` / `/* */` comment block immediately above a declaration; when there is none, the trailing comment on the same line is used.

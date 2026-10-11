@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8.1 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.2 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -263,6 +263,9 @@ The difference between the two, spelled out:
 QuarkLang has **no garbage collector**. Storage is released explicitly and the release is
 deterministic: nothing is collected behind your back, and no allocation ever waits for a collection.
 
+**Scope.** This section describes the contract of the compiled artifact; the reference interpreter
+implements that policy as a layer over its host runtime's allocator.
+
 | Primitive | Meaning |
 |---|---|
 | `delete x;` | release `x`'s storage: run `__delete__()` if the type declares it, then return the storage to the free pool. The payload is **not** wiped — wiping is `clear`'s job, so a released block never hands another value's bytes to the next user |
@@ -334,6 +337,7 @@ differ, the code is wrong.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.2 | 2026-10-11 | §10 gains one scope sentence: the section describes the contract of the compiled artifact, and the reference interpreter implements that policy as a layer over its host runtime's allocator. The corresponding doc comment in `internal/lang/value.go` said memory "is backed by the host Go GC" and cited a `§14` that does not exist; it now describes what the reference interpreter does (its `MemoryManager` implements the block policy as a logical layer above the host allocator) and cites §10. Scope wording and a stale citation only; no normative content changed and no language surface added |
 | 0.8.1 | 2026-10-10 | §11.2 records the two depth limits a user can hit, with the numbers and what they see: call depth 8192 (`lang.MaxCallDepth`, `StackOverflowError: recursion depth exceeded 8192`, counted identically in the interpreter and in generated code) and expression nesting 65536 (`lang.MaxExprDepth`/`qkparser.MaxExprDepth`, refused by the parser as `nesting is deeper than …` and by the type checker as `expression nesting is deeper than …`). Status-section facts only; no normative content changed and no language surface added |
 | 0.8 | 2026-10-10 | **Memory and lifetime became part of the standard** (§10): no garbage collector, `delete` is a deterministic release that runs `__delete__()` and returns the storage to a free pool without wiping it, allocation reuses the least-occupied block so a tide of temporary data keeps a stable block set, `memory.setBlock`/`compact`/`Fragmentation` are the knobs and the inspection point, and a task's blocks become reclaimable when it ends. The section after it moved to §11 and the change policy to §12. Freeze restarts: review after 2026-11-10 |
 | 0.7.2 | 2026-10-09 | Reorganization and status correction: §6.5/§6.6 became §7 "Program shape and runtime" with subsections, the following sections were renumbered, and a new §10 "Implementation status" was added — the old note still claimed `bit`/`bits<N>`/`uchar` were unimplemented, while both engines have had them since PR #60. §10 now lists what is implemented, the implementation's limits, and the three places where the code does not yet follow the standard (§7.2 macro spelling, §8 no exceptions, §9 built-in containers). No normative content changed |

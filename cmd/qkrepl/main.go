@@ -4,7 +4,7 @@
 //
 //	-e code    Evaluate a snippet and exit (repeatable; exits 1 on failure)
 //	-q         Quiet mode (no banner or prompt)
-//	--lang       Output language zh|en (default Chinese; QK_LANG also works)
+//	--lang       Output language zh|en (QK_LANG, then LC_ALL/LC_MESSAGES/LANG; English if none is set)
 //	--version  Print version
 //
 // Interactive mode (stdin is a terminal): `qk> ` prompt; an unfinished block continues automatically (`..> `).

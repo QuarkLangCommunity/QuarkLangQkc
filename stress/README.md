@@ -106,7 +106,8 @@ The verdict vocabulary:
 case directory left over from an older revision stops the run instead of producing a wrong report.
 
 A "yes" is loud: the run prints the finding and exits non-zero — unless the case is listed in
-`known-failures.txt`, in which case it is printed as `KNOWN` and does not change the exit status. The
+`known-failures.txt`, in which case its verdict is printed with a ` (known)` suffix (as in
+`TIMEOUT (known)`) and does not change the exit status. The
 summary keeps the two things a run can print apart, so a clean run cannot be read as a failing one:
 `N loud findings:` are the cases that can fail the run, and `N non-fatal disagreements (both engines
 refused, wording differs):` are the `REJECT_DIFF` cases, reported because the wording is worth knowing

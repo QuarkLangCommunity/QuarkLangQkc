@@ -84,7 +84,7 @@
 | ID | Syntax | Notes |
 |---|---|---|
 | M1 | `#macro name (a, b) { body }` | named-parameter macro; `()`/`[]`/`{}` delimiters are interchangeable; single-pass expansion, not recursive |
-| M2 | `#when (run) { ... }` / `#when (compile) { ... }` | state selection (the interpreter takes `run`) |
+| M2 | `#when (run) { ... }` / `#when (compile) { ... }` | state selection: the interpreter passes `explain` (which also fires `run`), the compiler passes `compile` |
 | M3 | `#error("msg")` `#return <expr>` `#insert(...)` `#execute(name)` | preprocessor commands |
 | M4 | custom commands starting with `#` | see the internal macro table |
 | M5 | `library name { fn sym(int a, String b) int; }` | FFI library binding (parameters like functions, types first); the method name is the symbol name |
