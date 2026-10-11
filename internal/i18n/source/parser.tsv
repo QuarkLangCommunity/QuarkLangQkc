@@ -1,50 +1,83 @@
-# The syntax layers' messages: every ID the pinned qkparser module ships through its msg() surface,
-# plus this repository's own parser diagnostics.
+# The syntax layer's messages: every ID the pinned qkparser module ships.
 #
 # Columns, tab-separated:
 #   id     dotted <domain>.<snake_case>, stable forever, never renumbered, never recycled
 #   owner  "import" when the pinned qkparser module owns the ID, "local" when this repository does
 #   ctx    where the message is raised, for the translator
 #   note   what it means, for the translator
-#   src    what the owning module currently ships as this ID's text, verbatim. For an imported ID the
-#          generator checks this against the module at the version go.mod pins and fails the build when
-#          it drifts — that is how a new or rephrased message in the syntax layer reaches this
-#          repository's build instead of a user's terminal. For a local ID it repeats the source value.
-#   en     this repository's English rendering — the value a reader who asked for English gets
-#   zh     this repository's Chinese rendering
+#   src    the text the pinned module ships for this ID; generation fails when it drifts
+#   en     the English rendering
+#   zh     the Chinese rendering
 #
-# `src` is the module's text today, which for a message still awaiting migration is Chinese; `en` is
-# the English translation the catalog already carries. They converge as the migration proceeds, and the
-# design keeps both columns rather than assuming they are equal (docs/i18n-design.md §6.1).
+# The row order is the module's row order, and it is load bearing: a message's Msg constant is its
+# position here, and internal/lang converts a qkparser.ID - also a position - to it. Appending to the
+# module's table appends here, in the same order.
 #
-# One row per message, one column per shipped language: a language that is not shipped has no column,
-# so a message that is missing a translation cannot be written down at all.
-#
-# Regenerate with:  go generate ./internal/i18n
-#
-# id	owner	ctx	note	src	en	zh
-parser.macro_unbalanced_delimiters	import	macro	unbalanced () [] {} while reading a macro	"ParseError: 分隔符不配对，第 %d 行"	"ParseError: unbalanced delimiters, line %d"	"ParseError: 分隔符不配对，第 %d 行"
-parser.macro_arg_count_mismatch	import	macro	a macro was called with the wrong argument count	"ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）"	"ParseError: macro %s expects %d parameters but the call passed %d, line %d"	"ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）"
-parser.macro_expand_failed	import	macro	expanding a macro definition failed	"宏 %s 展开失败：%v"	"macro %s failed to expand: %v"	"宏 %s 展开失败：%v"
-parser.pp_sharp_needs_command	import	preproc	a '#' that is not followed by a directive	"第 %d 行：# 后必须是预处理命令（return/error）"	"line %d: '#' must be followed by a preprocessor command (return/error)"	"第 %d 行：# 后必须是预处理命令（return/error）"
-parser.pp_unknown_directive	import	preproc	'#' with a name that is not a preprocessor directive	"第 %d 行：#%s 不是 QuarkLang 预处理指令"	"line %d: #%s is not a QuarkLang preprocessor directive"	"第 %d 行：#%s 不是 QuarkLang 预处理指令"
-parser.pp_requires_parens	import	preproc	a directive that requires ( ... )	"第 %d 行：#%s 需要 ( ... )"	"line %d: #%s requires ( ... )"	"第 %d 行：#%s 需要 ( ... )"
-parser.pp_error_needs_message	import	preproc	#error without a ("message") argument	"第 %d 行：#error 需要 (\"消息\")"	"line %d: #error requires (\"message\")"	"第 %d 行：#error 需要 (\"消息\")"
-parser.pp_error_directive	import	preproc	an #error directive was reached	"第 %d 行：预处理错误 #error(%s)"	"line %d: #error(%s)"	"第 %d 行：预处理错误 #error(%s)"
-parser.pp_insert_not_macro_param	import	preproc	#insert(#ast(x)) where x is not a macro parameter	"第 %d 行：#insert(#ast(%s))：%s 不是宏参数名"	"line %d: #insert(#ast(%s)): %s is not a macro parameter name"	"第 %d 行：#insert(#ast(%s))：%s 不是宏参数名"
-parser.pp_execute_needs_name	import	preproc	#execute without a name	"第 %d 行：#execute 需要 (名字)"	"line %d: #execute requires (name)"	"第 %d 行：#execute 需要 (名字)"
-parser.pp_unknown_command	import	preproc	an unknown preprocessor command	"第 %d 行：未知预处理命令 #%s"	"line %d: unknown preprocessor command #%s"	"第 %d 行：未知预处理命令 #%s"
-parser.pp_insert_needs_ast	import	preproc	#insert without the (#ast(name)) form	"#insert 需要 (#ast(名字)) 形式"	"#insert requires the (#ast(name)) form"	"#insert 需要 (#ast(名字)) 形式"
-parser.macro_needs_name	import	macro	#macro without a name	"ParseError: #macro 需要名字，第 %d 行"	"ParseError: #macro needs a name, line %d"	"ParseError: #macro 需要名字，第 %d 行"
-parser.macro_missing_param_list	import	macro	#macro name without a parameter list	"ParseError: #macro %s 缺少参数列表，第 %d 行"	"ParseError: #macro %s is missing its parameter list, line %d"	"ParseError: #macro %s 缺少参数列表，第 %d 行"
-parser.macro_param_list_delimiters	import	macro	a macro parameter list that is not () [] {}	"ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行"	"ParseError: #macro %s parameter list must use () [] or {}, line %d"	"ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行"
-parser.macro_params_must_be_names	import	macro	a macro parameter that is not a name	"ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行"	"ParseError: #macro %s parameters must be names (comma-separated, any count), line %d"	"ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行"
-parser.macro_missing_body	import	macro	#macro name without a body	"ParseError: #macro %s 缺少主体，第 %d 行"	"ParseError: #macro %s is missing its body, line %d"	"ParseError: #macro %s 缺少主体，第 %d 行"
-parser.macro_body_delimiters	import	macro	a macro body that is not () [] {}	"ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行"	"ParseError: #macro %s body must use () [] or {}, line %d"	"ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行"
-parser.pp_include_too_deep	import	preproc	#include nesting past the depth limit	"预处理 #include 层数过深（>16）：%s"	"#include nesting too deep (>16): %s"	"预处理 #include 层数过深（>16）：%s"
-parser.pp_elif_without_if	import	preproc	#elif without a matching #if	"%s:%d: #elif 没有对应的 #if"	"%s:%d: #elif without a matching #if"	"%s:%d: #elif 没有对应的 #if"
-parser.pp_branch_without_if	import	preproc	#else/#endif without a matching #if	"%s:%d: #%s 没有对应的 #if"	"%s:%d: #%s without a matching #if"	"%s:%d: #%s 没有对应的 #if"
-parser.pp_include_failed	import	preproc	an #include that could not be read	"%s:%d: #include 失败：%v"	"%s:%d: #include failed: %v"	"%s:%d: #include 失败：%v"
-parser.pp_unclosed_if	import	preproc	an #if left open at the end of the file	"%s: 有 %d 个 #if 未闭合（缺 #endif）"	"%s: %d unclosed #if block(s) (missing #endif)"	"%s: 有 %d 个 #if 未闭合（缺 #endif）"
-parser.pp_unrecognized_condition	import	preproc	an #if condition the preprocessor cannot read	"无法识别的条件表达式：%q"	"unrecognized condition expression: %q"	"无法识别的条件表达式：%q"
+# A row whose zh value equals its en value is not translated yet. Those are the messages that shipped
+# English-only before step 3 of docs/i18n-design.md, when they had no ID and no catalog entry at all:
+# they rendered English under QK_LANG=zh and nothing counted them. The migration may not invent a
+# translation, because the rendering has to stay byte-identical across it, so the column repeats the
+# source and the gap is now visible in the table instead of invisible in the code.
+parser.macro_unbalanced_delimiters	import	macro	unbalanced () [] {} while reading a macro	"ParseError: unbalanced delimiters, line %d"	"ParseError: unbalanced delimiters, line %d"	"ParseError: 分隔符不配对，第 %d 行"
+parser.macro_arg_count_mismatch	import	macro	a macro was called with the wrong argument count	"ParseError: macro %s expects %d parameters but the call passed %d, line %d"	"ParseError: macro %s expects %d parameters but the call passed %d, line %d"	"ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）"
+parser.macro_expand_failed	import	macro	expanding a macro definition failed	"macro %s failed to expand: %v"	"macro %s failed to expand: %v"	"宏 %s 展开失败：%v"
+parser.pp_sharp_needs_command	import	preproc	a '#' that is not followed by a directive	"line %d: '#' must be followed by a preprocessor command (return/error)"	"line %d: '#' must be followed by a preprocessor command (return/error)"	"第 %d 行：# 后必须是预处理命令（return/error）"
+parser.pp_unknown_directive	import	preproc	'#' with a name that is not a preprocessor directive	"line %d: #%s is not a QuarkLang preprocessor directive"	"line %d: #%s is not a QuarkLang preprocessor directive"	"第 %d 行：#%s 不是 QuarkLang 预处理指令"
+parser.pp_requires_parens	import	preproc	a directive that requires ( ... )	"line %d: #%s requires ( ... )"	"line %d: #%s requires ( ... )"	"第 %d 行：#%s 需要 ( ... )"
+parser.pp_error_needs_message	import	preproc	#error without a ("message") argument	"line %d: #error requires (\"message\")"	"line %d: #error requires (\"message\")"	"第 %d 行：#error 需要 (\"消息\")"
+parser.pp_error_directive	import	preproc	an #error directive was reached	"line %d: #error(%s)"	"line %d: #error(%s)"	"第 %d 行：预处理错误 #error(%s)"
+parser.pp_insert_not_macro_param	import	preproc	#insert(#ast(x)) where x is not a macro parameter	"line %d: #insert(#ast(%s)): %s is not a macro parameter name"	"line %d: #insert(#ast(%s)): %s is not a macro parameter name"	"第 %d 行：#insert(#ast(%s))：%s 不是宏参数名"
+parser.pp_execute_needs_name	import	preproc	#execute without a name	"line %d: #execute requires (name)"	"line %d: #execute requires (name)"	"第 %d 行：#execute 需要 (名字)"
+parser.pp_unknown_command	import	preproc	an unknown preprocessor command	"line %d: unknown preprocessor command #%s"	"line %d: unknown preprocessor command #%s"	"第 %d 行：未知预处理命令 #%s"
+parser.pp_insert_needs_ast	import	preproc	#insert without the (#ast(name)) form	"#insert requires the (#ast(name)) form"	"#insert requires the (#ast(name)) form"	"#insert 需要 (#ast(名字)) 形式"
+parser.macro_needs_name	import	macro	#macro without a name	"ParseError: #macro needs a name, line %d"	"ParseError: #macro needs a name, line %d"	"ParseError: #macro 需要名字，第 %d 行"
+parser.macro_missing_param_list	import	macro	#macro name without a parameter list	"ParseError: #macro %s is missing its parameter list, line %d"	"ParseError: #macro %s is missing its parameter list, line %d"	"ParseError: #macro %s 缺少参数列表，第 %d 行"
+parser.macro_param_list_delimiters	import	macro	a macro parameter list that is not () [] {}	"ParseError: #macro %s parameter list must use () [] or {}, line %d"	"ParseError: #macro %s parameter list must use () [] or {}, line %d"	"ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行"
+parser.macro_params_must_be_names	import	macro	a macro parameter that is not a name	"ParseError: #macro %s parameters must be names (comma-separated, any count), line %d"	"ParseError: #macro %s parameters must be names (comma-separated, any count), line %d"	"ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行"
+parser.macro_missing_body	import	macro	#macro name without a body	"ParseError: #macro %s is missing its body, line %d"	"ParseError: #macro %s is missing its body, line %d"	"ParseError: #macro %s 缺少主体，第 %d 行"
+parser.macro_body_delimiters	import	macro	a macro body that is not () [] {}	"ParseError: #macro %s body must use () [] or {}, line %d"	"ParseError: #macro %s body must use () [] or {}, line %d"	"ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行"
+parser.pp_include_too_deep	import	preproc	#include nesting past the depth limit	"#include nesting too deep (>16): %s"	"#include nesting too deep (>16): %s"	"预处理 #include 层数过深（>16）：%s"
+parser.pp_elif_without_if	import	preproc	#elif without a matching #if	"%s:%d: #elif without a matching #if"	"%s:%d: #elif without a matching #if"	"%s:%d: #elif 没有对应的 #if"
+parser.pp_branch_without_if	import	preproc	#else/#endif without a matching #if	"%s:%d: #%s without a matching #if"	"%s:%d: #%s without a matching #if"	"%s:%d: #%s 没有对应的 #if"
+parser.pp_include_failed	import	preproc	an #include that could not be read	"%s:%d: #include failed: %v"	"%s:%d: #include failed: %v"	"%s:%d: #include 失败：%v"
+parser.pp_unclosed_if	import	preproc	an #if left open at the end of the file	"%s: %d unclosed #if block(s) (missing #endif)"	"%s: %d unclosed #if block(s) (missing #endif)"	"%s: 有 %d 个 #if 未闭合（缺 #endif）"
+parser.pp_unrecognized_condition	import	preproc	an #if condition the preprocessor cannot read	"unrecognized condition expression: %q"	"unrecognized condition expression: %q"	"无法识别的条件表达式：%q"
 parser.nesting_too_deep	import	parser	an expression nested past MaxExprDepth	"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements"	"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements"	"嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句"
+parser.named_struct_requires_type	import	decl	a named struct written without 'type'	"a named struct requires 'type': type struct { ... } %s;"	"a named struct requires 'type': type struct { ... } %s;"	"实名结构体必须写 type：type struct { ... } %s;"
+parser.named_interface_requires_type	import	decl	a named interface written without 'type'	"a named interface requires 'type': type interface { ... } %s;"	"a named interface requires 'type': type interface { ... } %s;"	"实名接口必须写 type：type interface { ... } %s;"
+parser.library_body_signatures_only	import	decl	a library body that is not a fn symbol signature	"a library body may only contain fn symbol signatures"	"a library body may only contain fn symbol signatures"	"library 体内只能有 fn 符号签名"
+parser.program_only_main_or_library	import	decl	a program declaration other than main / library	"program declarations support only main / library (lib)"	"program declarations support only main / library (lib)"	"program 声明只支持 main / library（lib）"
+parser.duplicate_program_macro	import	decl	a second program declaration in one file	"duplicate program preprocessor macro"	"duplicate program preprocessor macro"	"重复的 program 预制宏"
+parser.anon_struct_has_no_name	import	decl	pub on an anonymous struct, which has no name to export	"an anonymous struct has no name to export: pub type struct { ... } Name;"	"an anonymous struct has no name to export: pub type struct { ... } Name;"	"pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;"
+parser.anon_interface_has_no_name	import	decl	pub on an anonymous interface, which has no name to export	"an anonymous interface has no name to export: pub type interface { ... } Name;"	"an anonymous interface has no name to export: pub type interface { ... } Name;"	"pub 的匿名接口没有名字可导出：pub type interface { ... } Name;"
+parser.pub_type_only_struct_or_interface	import	decl	pub type on something that is neither struct nor interface	"pub type supports only struct / interface"	"pub type supports only struct / interface"	"pub type 只支持 struct / interface"
+parser.pub_prefix_restricted	import	decl	pub on a declaration that cannot be exported	"pub may only prefix fn or type struct/interface (named types require 'type')"	"pub may only prefix fn or type struct/interface (named types require 'type')"	"pub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）"
+parser.function_keyword_is_fn	import	decl	func where the language wants fn	"the function keyword is 'fn': write fn main(...) rather than func main(...)"	"the function keyword is 'fn': write fn main(...) rather than func main(...)"	"函数声明关键字是 fn：func main(...) 应写为 fn main(...)"
+parser.function_needs_return_type	import	decl	a function whose return type is missing	"a function must declare its return type: fn %s(...) <return type> { ... }"	"a function must declare its return type: fn %s(...) <return type> { ... }"	"函数必须声明返回类型：fn %s(...) 返回类型 { ... }"
+parser.anon_struct_no_generics	import	decl	generic parameters on an anonymous struct	"an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)"	"an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)"	"匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）"
+parser.anon_interface_no_generics	import	decl	generic parameters on an anonymous interface	"an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)"	"an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)"	"匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）"
+parser.expected_got	import	parser	an unexpected token where a specific one was required	"expected %s, got %s"	"expected %s, got %s"	"expected %s, got %s"
+parser.unterminated_type_arguments	import	parser	type arguments that never close	"unterminated type arguments in %q"	"unterminated type arguments in %q"	"unterminated type arguments in %q"
+parser.unterminated_struct_body	import	parser	a struct body that never closes	"unterminated struct body (missing '}')"	"unterminated struct body (missing '}')"	"unterminated struct body (missing '}')"
+parser.unterminated_space_body	import	parser	a space body that never closes	"unterminated space body"	"unterminated space body"	"unterminated space body"
+parser.unterminated_library_body	import	parser	a library body that never closes	"unterminated library body"	"unterminated library body"	"unterminated library body"
+parser.unterminated_interface_body	import	parser	an interface body that never closes	"unterminated interface body (missing '}')"	"unterminated interface body (missing '}')"	"unterminated interface body (missing '}')"
+parser.unterminated_impl_body	import	parser	an impl body that never closes	"unterminated impl body (missing '}')"	"unterminated impl body (missing '}')"	"unterminated impl body (missing '}')"
+parser.unterminated_function_type	import	parser	a function type that never closes	"unterminated function type"	"unterminated function type"	"unterminated function type"
+parser.unterminated_block	import	parser	a block that never closes	"unterminated block (missing '}')"	"unterminated block (missing '}')"	"unterminated block (missing '}')"
+parser.unexpected_token_in_expression	import	parser	a token that cannot start or continue an expression	"unexpected token %s in expression"	"unexpected token %s in expression"	"unexpected token %s in expression"
+parser.signature_must_follow_call	import	parser	an @ signature before a function call	"@ signature must follow a function call"	"@ signature must follow a function call"	"@ signature must follow a function call"
+parser.scope_requires_identifier	import	parser	'::' with something that is not an identifier on its left	"'::' requires an identifier on the left"	"'::' requires an identifier on the left"	"'::' requires an identifier on the left"
+parser.int_literal_out_of_range	import	lexer	an int literal that does not fit the 32-bit int	"int literal %d out of 32-bit range (int is 32-bit, like C)"	"int literal %d out of 32-bit range (int is 32-bit, like C)"	"int literal %d out of 32-bit range (int is 32-bit, like C)"
+parser.expected_fn	import	parser	a function declaration that does not start with fn	"expected 'fn'"	"expected 'fn'"	"expected 'fn'"
+parser.expected_top_level_declaration	import	parser	a top-level token that starts no declaration	"expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %s"	"expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %s"	"expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %s"
+parser.duplicate_signature	import	parser	a second @ signature on one call	"duplicate signature on one call"	"duplicate signature on one call"	"duplicate signature on one call"
+parser.unterminated_block_comment	import	lexer	an unterminated /* comment	"unterminated block comment"	"unterminated block comment"	"unterminated block comment"
+parser.unexpected_character	import	lexer	a byte that is not part of any token	"unexpected character %q"	"unexpected character %q"	"unexpected character %q"
+parser.invalid_hex_literal_no_digits	import	lexer	0x with no hex digits after it	"invalid hex literal %q (no digits after 0x)"	"invalid hex literal %q (no digits after 0x)"	"invalid hex literal %q (no digits after 0x)"
+parser.invalid_hex_literal	import	lexer	a malformed hex literal	"invalid hex literal %q"	"invalid hex literal %q"	"invalid hex literal %q"
+parser.invalid_float_literal	import	lexer	a malformed float literal	"invalid float literal %q"	"invalid float literal %q"	"invalid float literal %q"
+parser.invalid_int_literal	import	lexer	a malformed int literal	"invalid int literal %q"	"invalid int literal %q"	"invalid int literal %q"
+parser.unterminated_raw_string	import	lexer	an unterminated raw string	"unterminated raw string"	"unterminated raw string"	"unterminated raw string"
+parser.unterminated_string_literal	import	lexer	an unterminated string literal	"unterminated string literal"	"unterminated string literal"	"unterminated string literal"
+parser.unterminated_escape_sequence	import	lexer	a string ending inside an escape sequence	"unterminated escape sequence"	"unterminated escape sequence"	"unterminated escape sequence"

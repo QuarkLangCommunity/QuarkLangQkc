@@ -578,7 +578,7 @@ point. Steps 0-2 are this branch.
 | **0 ✔ done** | `cmd/qki18n`, `internal/i18ngen`, `source/languages.tsv`, generator tests. No call site touched. | nothing | revert the commit |
 | **1 ✔ done** | Migrate the syntax layer's `msg()` surface: 25 rows in `source/parser.tsv`, `internal/i18n/msg_gen.go`, the module's own IDs and blob, the `Localizer` seam, `proof/byte_identical.sh`. | nothing observable: the 25 renderings removed from `table_macro.go`, `table_compiler.go` and `table_lexer.go` are byte-identical to the values the blob now carries, which the corpus checks | revert the commit; the tables come back with it |
 | **2 ✔ done (module branch pushed)** | **qkparser** gains `i18n/source/messages.tsv`, `cmd/mkmsg`, `messages_gen.go` and the ID-based `Localizer`; this repository's generator reads that table at the pinned revision and checks its IDs. | the pin moves, so `compiler/go.mod` follows; **the module must merge first**, and the pin bump is the second PR | revert the pin bump. ⚠ A revision without `i18n/source/messages.tsv` makes `go list` succeed but `Load` fail on the missing file — a hard failure, which is the honest behaviour, but it means the pin and the module must move together. When the module's `Localizer` interface changed from text-keyed `T` to `Msg(ID, …)`, this repository's `internal/lang` had to change in the same commit: there is no deprecation window in the prototype, and the final design owes one (§9) |
-| **3** | The rest of the syntax layer: the 32 `errf(…)` templates in `qkparser` (the lexer's 9 `lx.errf` messages among them — those are English-only today and have no catalog entry, so migrating them *adds* coverage rather than moving it), then this repository's 13 `table_lexer.go` messages, whose call sites are all in the module. | the module's `errf` becomes `errfID`; every `src` value in `parser.tsv` moves to its English text as the module migrates, and a `src` that no longer matches the pin fails generation — which is the intended coupling | per-commit revert |
+| **3 ✔ done (module + consumer)** | The rest of the syntax layer: the `errf(…)` templates in `qkparser`, then this repository's 13 `table_lexer.go` messages, whose call sites are all in the module. Measured surface, not the estimate this row used to carry: **40 call sites, 38 distinct templates** — 13 written in Chinese and 25 English-only. See §7.2 and §7.3. | the module's `errf` becomes `errfID` and the two `errf` methods are deleted, so there is no text-keyed path left in the module; every `src` value in `parser.tsv` moves to its English text, and a `src` that no longer matches the pin fails generation — which is the intended coupling | per-commit revert |
 | **4** | The eight in-repository domains: `shared` (1), `docgen` (7), `repl` (13), `lint` (22), `cli` (27), `runtime` (65), `typecheck` (142), `compiler` (252). One commit each, largest last. | each commit deletes that domain's rows; unmigrated domains keep working through `T` | per-domain revert |
 | **5** | Delete the shim: `Localizer.T`, `i18n.T`, `Load`, `Catalog`, `miss.go`, the `table_*.go` files, and the retired ratchets (§4). Point `TestCatalogIntegrity`/`TestVerbSetsMatch` at the generated data. | any out-of-tree consumer of `i18n.T` — none: the package is `internal/`, so it is unreachable outside this module | revert |
 
@@ -642,15 +642,69 @@ but is never selected. Measured surface at `926d24a`:
 | Quantity | Value |
 |---|---|
 | `errf(` call sites in `qkparser` (excluding the two definitions) | 40 |
-| distinct `errf` templates | 29 |
+| distinct `errf` templates | 38 |
 | of those, Han-containing (dead `table_lexer.go` keys today) | 13 |
-| of those, English-only (migrating *adds* coverage) | 16 |
+| of those, English-only (migrating *adds* coverage) | 25 |
 | `errfID(` call sites before step 3 | 1 |
 
 The scanner cannot see any of this, because the templates live in the pinned module rather than in this
 repository, and the miss counter does not fire, because a template that renders identically in both
 languages looks like a message that was never translated *from* anywhere rather than one that is
 missing a translation.
+
+A first pass counted 29 templates because the extraction pattern assumed `errf(tok, "…")` and the
+lexer's nine are `lx.errf(line, col, "…")`. The count above comes from the conversion itself, which had
+to name every call site, and 31 + 9 = 40 is what it found. The lesson is the same one §9 keeps making:
+the number you get depends on the pattern you asked with.
+
+### 7.3 What step 3 did, and the numbers either side of it
+
+Two pull requests, module first: `QuarkLangQkparser#4` gives every `errf` call site an ID and the
+module an English source, and this repository's pin bump carries the 63 IDs and deletes the 13 dead
+`table_lexer.go` rows.
+
+| Quantity | Before | After |
+|---|---|---|
+| `errf(` call sites in the module | 40 | 0 |
+| `errf` methods in the module | 2 | 0 (deleted; a call site cannot name a text) |
+| `errfID(` call sites | 1 | 41 |
+| rows in the module's `i18n/source/messages.tsv` | 25 | 63 |
+| of those, whose text is English | 1 | 63 |
+| rows in `internal/i18n/source/parser.tsv` | 25 | 63 |
+| text-keyed catalog entries | 542 | 529 |
+| rows deleted from `table_lexer.go` | — | 13 |
+| P2 `(message, language)` pairs that fail generation when dropped | 25 | 63 |
+| P2 imported IDs checked against the pin | 25 | 63 |
+| P3 corpus runs | 18 | 50 (8 of them a declared EN fix) |
+| `TestEnglishSourceRatchet` (R-2) | 277 | 277 — **did not move; see §7.1** |
+| `TestDecouplingRatchet` | 25 | 25 |
+| imported rows whose `zh` repeats the source | 25 (uncounted) | 25, ratcheted by `TestProofUntranslatedImportsAreCounted` |
+
+Three things the design did not predict, recorded rather than smoothed over:
+
+1. **R-2 did not move, and so was not lowered.** §7.1 expected it to fall in step 3. It measures Han
+   templates at call sites *in this repository*, and the 13 templates step 3 deleted had their call
+   sites in the module, so the scanner never counted them: 277 before, 277 after. Lowering it to
+   anything else would have been a number no run produced, which §7.1 forbids. The count it was taken
+   for is now `TestProofUntranslatedImportsAreCounted`, which measures the catalog instead of the call
+   sites and has a backlog to count.
+2. **P3 cannot be byte-identical under `en` for the 13.** The whole point is that the English rendering
+   changes: the reader stops getting Chinese. `proof/byte_identical.sh` therefore asserts identity under
+   `zh` for every case and, under `en`, identity except for a table of eight declared fixes — and for
+   those it checks the leak *and* the fix by name: the baseline's English run must contain the Chinese
+   template and the new run must be the baseline's with that template replaced by the English text
+   `table_lexer.go` already shipped, byte for byte and with no other change.
+3. **`//go:generate` was never committed.** §3.4 and §8.1's run log both show
+   `go generate ./internal/i18n`, but no file carried the directive, so it silently did nothing and the
+   only way to regenerate was to know the command. Step 3 adds it
+   (`internal/i18n/generate.go`), with the flags spelled relative to the package directory because that
+   is where `go generate` runs the command.
+
+The 25 English-only templates gained an ID and a row whose `zh` value repeats its `en` value. That is
+deliberate and it is the honest state: they shipped English-only, there was no Chinese translation to
+move, and inventing one would have changed what a Chinese reader sees, which P3 forbids. The difference
+is that the gap is now a row in a table, an ID in the catalog and a number in a ratchet, instead of a
+silent English string in a Go file two repositories away.
 
 ---
 
@@ -675,6 +729,20 @@ missing a translation.
 | P3 | `internal/i18n/proof/byte_identical.sh` | `all identical (interpreter: origin/main == this tree), en and zh  [18 runs]` |
 | P4 | `go test ./internal/i18n/ -run 'TestProofRuntime|TestProofMigrated' -v` | `the 25 generated messages are absent from the 542 text-keyed entries` |
 | determinism | `go test ./internal/i18n/ -run TestGeneratedCatalogIsDeterministic -v` | pass (6 generations, identical bytes) |
+
+Rows below re-measured after step 3 (the numbers above them are the prototype's, kept for comparison):
+
+| Claim | Command | Result |
+|---|---|---|
+| the leak, on the revision before step 3 | `QK_LANG=en ./quark errf_func_keyword.qk` vs `QK_LANG=zh …` | byte-identical: both printed `函数声明关键字是 fn：…`, with `the function keyword is 'fn': …` in `table_lexer.go` and never selected |
+| the fix | same corpus, this tree | 8 of the 13 render English under `en` and the same Chinese under `zh`; the other 25 render identically in both |
+| P2 after step 3 | `go test ./internal/i18n/ -run 'TestProofMissingLanguage|TestProofModule|TestModuleIDs' -v` | `checked 63 (message, language) pairs: every one fails generation when its value is removed`; `63 imported messages share their number with the pinned module` |
+| P3 after step 3 | `internal/i18n/proof/byte_identical.sh` | `all identical (interpreter: origin/main == this tree), en and zh  [50 runs, 8 of them a declared EN fix]` |
+| P4 after step 3 | `go test ./internal/i18n/ -run 'TestProofRuntime|TestProofMigrated' -v` | `the 63 generated messages are absent from the 529 text-keyed entries` |
+| the module's own source is English | `go test ./... -run TestNoMessageIsWrittenInChinese -v` (in `qkparser`) | 63 messages checked, no Han rune |
+| the untranslated backlog | `go test ./internal/i18n/ -run TestProofUntranslatedImportsAreCounted -v` | `imported messages whose zh repeats the source: 25 (limit 25)` |
+| the module's generator agrees with its table | `go run ./cmd/mkmsg -check` (in `qkparser`) | `messages_gen.go is up to date (63 messages)` |
+| step 3 gates | root + compiler `go build ./... && go test ./... -count=1` under `LANG=C.UTF-8` and `LANG=zh_CN.UTF-8`; `compiler/testdata/compare.sh`; `gofmt -l internal compiler cmd`; `cmd/qkstress run … -skip 'path_fn_10k_params|res_few_mb'` | all pass; `all identical (interpreter == compiler)`; gofmt empty; `25 cases: AGREE 11, REJECT_AGREE 11, REJECT_DIFF 3`, exit 0, no loud findings |
 
 ### 8.1 Prototype run log
 
@@ -722,12 +790,14 @@ all identical (interpreter: origin/main == this tree), en and zh  [18 runs]
 5. **The numeric ID is positional**, so inserting a row renumbers the blob; frozen by convention and by
    the append-only source file. A hash-derived ID would need an ID→index map, which is what this design
    removes.
-6. **Text-keyed `T` survives during the migration**, so D-1/D-3 remain live for the 542 unmigrated
+6. **Text-keyed `T` survives during the migration**, so D-1/D-3 remain live for the 529 unmigrated
    entries. That is the deliberate price of not doing a big-bang rewrite.
-7. **`errf` call sites are not migrated** in step 1-2: 32 of the module's messages still reach the
-   localizer as text. They are visible to the module's own table (all 54 templates are recorded) but
-   their rendering is unchanged. Step 3 is where they move, and until then the module is only half
-   migrated — said here rather than left to be discovered.
+7. **`errf` call sites were the second half of the module's surface, and step 3 closed it.** The 40 call
+   sites now name IDs and the two `errf` methods are gone, so the module has one message path. 25 of the
+   38 templates had no Chinese translation to move — they were English-only and rendered English under
+   both locales — so their rows repeat the source in the `zh` column and
+   `TestProofUntranslatedImportsAreCounted` freezes the backlog at 25. This is the one place where the
+   migration deliberately leaves work behind, and it is now a number rather than a silence.
 
 **Unverified / open — marked, not hidden:**
 
