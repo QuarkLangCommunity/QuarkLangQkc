@@ -218,6 +218,7 @@ func TestDecouplingRatchet(t *testing.T) {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, slash)
+		rel = filepath.ToSlash(rel) // Windows separates with a backslash, and this comparison is a path
 		if rel == "internal/i18n/coverage_test.go" {
 			return nil // this file names them in order to look for them
 		}
