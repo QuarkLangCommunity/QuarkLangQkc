@@ -1,0 +1,14 @@
+// #ifdef inside a macro body, in both engines: the preprocessor keeps the directive lines it does
+// not own, the macro expander drops them, and the call expands to the same expression either way.
+#macro add (a, b) {
+#ifdef COMPILE
+    #return a + b
+#endif
+#ifdef EXPLAIN
+    #return a + b
+#endif
+}
+
+fn main(IOStream io) {
+    io.println(add(10, 32));
+}

@@ -1,0 +1,15 @@
+// The macro from the recorded divergence, in the standard spelling: `#when(compile)` returned 111 to
+// the compiler and `#when(run)` returned 222 to the interpreter. #when is gone, so this source has
+// one body and one answer; both engines must print the same line.
+#macro pick (x) {
+#ifdef COMPILE
+    #return 111
+#endif
+#ifdef EXPLAIN
+    #return 111
+#endif
+}
+
+fn main(IOStream io) {
+    io.println(pick(0));
+}

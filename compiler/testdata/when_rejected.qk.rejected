@@ -1,0 +1,12 @@
+// The recorded divergence, as a case: `#when` was the implementation's own operation-time switch, the
+// spelling the standard never defines. It is gone, and both engines refuse it with the same message
+// ("#when is not a QuarkLang preprocessor directive") at the same line — where this source used to
+// print 222 interpreted and 111 compiled.
+#macro pick (x) {
+    #when (run) { #return 222 }
+    #when (compile) { #return 111 }
+}
+
+fn main(IOStream io) {
+    io.println(pick(0));
+}

@@ -1,7 +1,7 @@
 #macro add (a, b) {
-    #when (run) {
-        #return a + b
-    }
+#ifdef EXPLAIN
+    #return a + b
+#endif
 }
 
 fn main(IOStream io) {

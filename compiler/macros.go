@@ -5,7 +5,7 @@ import (
 )
 
 // Macro expansion engineering: the compiler reuses the interpreter's token-level macro system (one logic, two users).
-// Flow: Lex → SplitMacroDefs → ExpandMacros(mode) → cgen parses the expanded **tokens**.
+// Flow: preprocess (COMPILE) → Lex → SplitMacroDefs → ExpandMacros → cgen parses the expanded **tokens**.
 //
 // The compiler may not print that stream back to source text. A token carries a literal's value, not its
 // spelling: a string token's Text is the decoded byte sequence, quotes and escapes excluded
@@ -14,9 +14,9 @@ import (
 // parsed the tokens (internal/lang/compile.go); cgen.TranspileTokens is how the compiler now does the same.
 
 // expandMacros lexes already-preprocessed source and returns it as one token stream with every macro call
-// expanded in the given macro state ("compile" for this engine); the macro definitions themselves are
-// dropped, exactly as the interpreter's compile step drops them.
-func expandMacros(src string, mode string) ([]lang.Token, error) {
+// expanded; the macro definitions themselves are dropped, exactly as the interpreter's compile step drops
+// them. Which engine is expanding was decided before this call, by the preprocessor's symbol.
+func expandMacros(src string) ([]lang.Token, error) {
 	toks, err := lang.Lex(src)
 	if err != nil {
 		return nil, err // not a macro error: cgen would report this same lex failure, so report it once here
@@ -28,7 +28,7 @@ func expandMacros(src string, mode string) ([]lang.Token, error) {
 	if len(macros) == 0 {
 		return rest, nil // no macro in this file: the stream is the file
 	}
-	exp, err := lang.ExpandMacros(rest, macros, mode)
+	exp, err := lang.ExpandMacros(rest, macros)
 	if err != nil {
 		return nil, err // a macro call could not be expanded: a macro error, not a parse error about ')'
 	}

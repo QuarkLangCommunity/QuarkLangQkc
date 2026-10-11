@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/compiler/internal/cgen"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -272,15 +273,17 @@ func main() {
 	if compileOnly && outPath == "" {
 		outPath = strings.TrimSuffix(filepath.Base(srcFile), filepath.Ext(srcFile))
 	}
-	// Preprocessor context (cross-platform): the target platform affects preprocessing results → it **must go into the cache key**
-	pp := newPreprocCtx()
+	// Preprocessor context (cross-platform): the target platform affects preprocessing results → it **must go into the cache key**.
+	// The context is the shared one (qkparser, spec §7.2); the compiler's part is only the symbol that names this
+	// engine — `#ifdef COMPILE` is what selects a branch for the compiler, with no mode flag anywhere.
+	pp := lang.NewPreproc("COMPILE")
 	if targetOS != "" {
-		pp.os = targetOS
+		pp.OS = targetOS
 	}
 	if targetArch != "" {
-		pp.arch = targetArch
+		pp.Arch = targetArch
 	}
-	ppTag := pp.os + "-" + pp.arch
+	ppTag := pp.OS + "-" + pp.Arch
 	if os.Getenv("QKC_DEBUG_PP") != "" {
 		fmt.Fprintln(os.Stderr, msg("qkc[debug]: 预处理目标 ="), ppTag)
 	}
@@ -322,17 +325,17 @@ func main() {
 		rawSrc, _ := os.ReadFile(srcFile)
 		for _, tgt := range targets {
 			osName, archName, _ := strings.Cut(tgt, "-")
-			pctx := newPreprocCtx()
-			pctx.os = osName
+			pctx := lang.NewPreproc("COMPILE")
+			pctx.OS = osName
 			if archName != "" {
-				pctx.arch = archName
+				pctx.Arch = archName
 			}
 			pre, perr := pctx.Process(string(rawSrc), srcFile)
 			if perr != nil {
 				fmt.Fprintln(os.Stderr, "error:", perr)
 				os.Exit(1)
 			}
-			ex, xerr := expandMacros(pre, "compile")
+			ex, xerr := expandMacros(pre)
 			if xerr != nil {
 				fmt.Fprintln(os.Stderr, "error:", xerr)
 				os.Exit(1)
@@ -439,7 +442,7 @@ func main() {
 		if len(decls) > 0 { // inject library declarations (the way a referenced library is written)
 			pre = strings.Join(decls, "\n") + pre
 		}
-		expanded, xerr := expandMacros(pre, "compile")
+		expanded, xerr := expandMacros(pre)
 		if xerr != nil {
 			fmt.Fprintln(os.Stderr, "error:", xerr)
 			os.Exit(1)

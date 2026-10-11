@@ -1,0 +1,12 @@
+// The complement: COMPILE is defined in one engine and not in the other, and both leave the same
+// program, which is what makes one source serve both.
+#ifdef COMPILE
+fn main(IOStream io) {
+    io.println(9);
+}
+#endif
+#ifndef COMPILE
+fn main(IOStream io) {
+    io.println(9);
+}
+#endif
