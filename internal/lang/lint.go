@@ -38,11 +38,25 @@ const (
 )
 
 // Diag is one static-analysis diagnostic.
+//
+// Fix, when set, is the diagnostic's mechanical correction: the corrected form is determined by the
+// diagnostic alone, cannot change what the program does, and is idempotent. A diagnostic without a
+// fix is one whose correction needs a human decision - the tool reports it and says why (see
+// cmd/qkcheck/README.md for the inventory and LintFixes for the plan).
 type Diag struct {
 	Pos  Pos
 	Code string
 	Sev  string // "warning"
 	Msg  string
+	Fix  *Fix
+}
+
+// pendingWrite is an assignment whose value has not been read yet (the state QK113 reports on): which
+// statement wrote it, and whether that statement was a declaration initializer.
+type pendingWrite struct {
+	Pos  Pos
+	RHS  Expr
+	Decl bool
 }
 
 func (d Diag) String() string {
@@ -66,9 +80,10 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 		funcs:     map[string][]*FuncDecl{},
 		spaces:    map[string]map[string]*FuncDecl{},
 		globals:   map[string]string{},
-		pending:   map[string]Pos{},
+		pending:   map[string]*pendingWrite{},
 		usesNames: map[string]bool{},
 		refVars:   map[string]bool{},
+		reads:     map[string]int{},
 	}
 	for _, f := range prog.Funcs {
 		l.funcs[f.Name] = append(l.funcs[f.Name], f)
@@ -118,17 +133,27 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 	l.checkImports(prog)
 	l.checkUnusedFuncs(prog)
 
-	sort.SliceStable(l.diags, func(i, j int) bool {
-		a, b := l.diags[i], l.diags[j]
-		if a.Pos.Line != b.Pos.Line {
-			return a.Pos.Line < b.Pos.Line
-		}
-		if a.Pos.Col != b.Pos.Col {
-			return a.Pos.Col < b.Pos.Col
-		}
-		return a.Code < b.Code
-	})
-	return l.diags
+	// Attach the mechanical corrections last: that is where the gates that need the whole file live
+	// (the liveness of a read, and a second correction on the same line), and where the diagnostics
+	// take their final position order.
+	return LintFixes(prog.Src, l.diags, l.cands, l.reads)
+}
+
+// LintFixes attaches the mechanical corrections its candidates provide to diags, returns the
+// diagnostics in position order together with the plan of what applying them would rewrite.
+//
+// It is exported because a caller that already has the source (the qkcheck CLI, which needs to write
+// the result) can decide and apply in one step, and because a test can ask what a program's corrected
+// form would be without writing a file.
+func LintFixes(src string, diags []Diag, cands []fixCandidate, reads map[string]int) []Diag {
+	out, _ := LintFixPlan(src, diags, cands, reads)
+	return out
+}
+
+// LintFixPlan is LintFixes plus the plan: the per-line rewrites, and why any correction was withheld.
+func LintFixPlan(src string, diags []Diag, cands []fixCandidate, reads map[string]int) ([]Diag, *FixPlan) {
+	sorted, plan := attachFixes(diags, cands, splitSource(src), reads)
+	return sorted, plan
 }
 
 // LintSource is a convenience entry point: parse the source and lint it (a parse failure returns the error plus whatever diagnostics were found).
@@ -169,13 +194,15 @@ type linter struct {
 	curFn *FuncDecl
 
 	// State for the newly added checks
-	globals   map[string]string // global symbol name → kind (fn/type/space/library/macro/alias)
-	pending   map[string]Pos    // variable → the most recent assignment position not yet read (QK113)
-	tryDepth  int               // try block depth (QK110 exemption: a division by zero inside try is deliberate error handling)
-	inFn      bool              // whether we are inside a function body (QK112 reports shadowing of a global only inside a function)
-	usesNames map[string]bool   // identifiers that appear in this file (QK111 import-usage decision)
-	loopDepth int               // loop body depth (QK113 exemption: an assignment in a loop body is read by the next iteration)
-	refVars   map[string]bool   // reference-type variables (T& / pointer T: `p = v` writes through, it is not a rebinding)
+	globals   map[string]string        // global symbol name → kind (fn/type/space/library/macro/alias)
+	pending   map[string]*pendingWrite // variable → the most recent assignment position not yet read (QK113)
+	tryDepth  int                      // try block depth (QK110 exemption: a division by zero inside try is deliberate error handling)
+	inFn      bool                     // whether we are inside a function body (QK112 reports shadowing of a global only inside a function)
+	usesNames map[string]bool          // identifiers that appear in this file (QK111 import-usage decision)
+	loopDepth int                      // loop body depth (QK113 exemption: an assignment in a loop body is read by the next iteration)
+	refVars   map[string]bool          // reference-type variables (T& / pointer T: `p = v` writes through, it is not a rebinding)
+	reads     map[string]int           // reads per variable name (the liveness gate of a QK114 rewrite)
+	cands     []fixCandidate           // corrections found during the walk, decided once the file is known
 }
 
 // warnID records a diagnostic whose message is a generated ID, rendered in the requested language. It is
@@ -269,6 +296,7 @@ func (l *linter) use(name string) {
 	if v := l.lookup(name); v != nil {
 		v.reads++
 	}
+	l.reads[name]++
 	delete(l.pending, name)
 }
 
@@ -300,7 +328,7 @@ func (l *linter) checkBody(f *FuncDecl, body *Block, implType string) {
 	prevFn, prevVars, prevScope := l.curFn, l.fnVars, l.scope
 	prevInFn, prevPending := l.inFn, l.pending
 	l.curFn, l.fnVars, l.scope = f, nil, nil
-	l.inFn, l.pending = true, map[string]Pos{}
+	l.inFn, l.pending = true, map[string]*pendingWrite{}
 	l.push()
 	for _, p := range f.Params {
 		l.declare(p.Name, p.Pos, "param", p.Type)
@@ -427,12 +455,16 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 			l.refVars[t.Name] = true // reference type: `p = v` writes through to the pointer target, not a rebinding
 		}
 		if t.Init != nil && l.loopDepth == 0 && !l.refVars[t.Name] {
-			l.pending[t.Name] = t.Pos // QK113: if the initial value is overwritten by a later assignment with no read in between → dead store
+			// QK113: if the initial value is overwritten by a later assignment with no read in between → dead store.
+			// Decl marks it: the correction of a dead store deletes the earlier write, and deleting a
+			// declaration initializer would delete the declaration itself, so that case is report-only.
+			l.pending[t.Name] = &pendingWrite{Pos: t.Pos, RHS: t.Init, Decl: true}
 		}
 		return false, false
 	case *AssignStmt:
 		// QK108: self assignment x = x (including the structurally equivalent p.x / l[i] forms)
 		if sameExpr(t.Target, t.X) {
+			l.cands = append(l.cands, selfAssignFix(t.Pos, t.Pos.Col))
 			l.warnID(t.Pos, CodeSelfAssign, i18n.MsgLintSelfAssignment, exprText(t.Target))
 		}
 		// Evaluate the right-hand side and the target subexpressions first: a read in `x = x + 1` clears the "assigned but unread" record,
@@ -443,11 +475,12 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 			// QK113: the previous assignment to the same variable (including its declaration initializer) was never read → dead store.
 			// Two exemptions (prefer a missed report over a false one): write-through of reference types; assignments inside loops are read on the next round.
 			if prev, ok := l.pending[tg.Name]; ok && !l.refVars[tg.Name] && l.loopDepth == 0 {
-				l.warnID(prev, CodeDeadStore, i18n.MsgLintDeadStoreOverwritten, tg.Name, t.Pos.Line)
+				l.warnID(prev.Pos, CodeDeadStore, i18n.MsgLintDeadStoreOverwritten, tg.Name, t.Pos.Line)
+				l.cands = append(l.cands, deadStoreFix(Diag{Pos: prev.Pos, Code: CodeDeadStore}, prev))
 			}
 			l.write(tg.Name)
 			if l.loopDepth == 0 && !l.refVars[tg.Name] {
-				l.pending[tg.Name] = t.Pos
+				l.pending[tg.Name] = &pendingWrite{Pos: t.Pos, RHS: t.X}
 			} else {
 				delete(l.pending, tg.Name)
 			}
@@ -561,6 +594,7 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 		// QK114: self comparison x == x / x != x (only for addressable forms: identifier/member/index)
 		if (t.Op == "==" || t.Op == "!=") && isRefLike(t.L) && sameExpr(t.L, t.R) {
 			name := exprText(t.L)
+			l.cands = append(l.cands, selfCompareFix(Diag{Pos: t.Pos, Code: CodeSelfCompare}, t.Op, t.L))
 			if t.Op == "==" {
 				l.warnID(t.Pos, CodeSelfCompare, i18n.MsgLintSelfComparisonTrue, name, name)
 			} else {
@@ -1083,6 +1117,7 @@ func (l *linter) checkImports(prog *Program) {
 		if i < len(prog.ImportPos) {
 			pos = prog.ImportPos[i]
 		}
+		l.cands = append(l.cands, unusedImportFix(Pos{Line: pos.Line, Col: pos.Col}, imp))
 		l.warnID(pos, CodeUnusedImport, i18n.MsgLintUnusedImport, imp)
 	}
 }
