@@ -78,10 +78,18 @@ func main() {
 		scanRoot = wd
 	}
 
+	// A bare `qki18n -check` — the command the gates and the document itself tell a reviewer to run —
+	// has to check both generated artefacts, or a stale document would pass it. -doc overrides the
+	// default location, and an empty -doc still means "generate no document" when writing.
+	docFile := *doc
+	if docFile == "" && *check {
+		docFile = filepath.Join(scanRoot, filepath.FromSlash(i18ngen.BacklogDocPath))
+	}
+
 	problems := i18ngen.Run(i18ngen.Options{
 		SourceDir:    *source,
 		OutFile:      *out,
-		DocFile:      *doc,
+		DocFile:      docFile,
 		Root:         scanRoot,
 		ModuleDir:    moduleDir,
 		ModuleSource: i18ngen.DefaultModuleSource,
@@ -99,7 +107,7 @@ func main() {
 		verb = "checked"
 	}
 	fmt.Printf("qki18n: %s %s\n", verb, *out)
-	if *doc != "" {
-		fmt.Printf("qki18n: %s %s\n", verb, *doc)
+	if docFile != "" {
+		fmt.Printf("qki18n: %s %s\n", verb, docFile)
 	}
 }
