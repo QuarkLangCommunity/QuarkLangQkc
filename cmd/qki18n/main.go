@@ -50,9 +50,11 @@ func pinnedModuleDir() (string, error) {
 }
 
 func main() {
-	check := flag.Bool("check", false, "fail when the committed catalog is out of date instead of writing it")
+	check := flag.Bool("check", false, "fail when the committed catalog (or document) is out of date instead of writing it")
 	source := flag.String("source", filepath.Join("internal", "i18n", "source"), "authored message tables")
 	out := flag.String("out", filepath.Join("internal", "i18n", "msg_gen.go"), "generated catalog")
+	doc := flag.String("doc", "", "generated review document, e.g. docs/i18n-backlog.md (empty: do not generate one)")
+	root := flag.String("root", "", "checkout the call sites and the alternate-Chinese scan are measured in (empty: the working directory)")
 	module := flag.String("module", "", "pinned qkparser source directory (default: resolved from go.mod)")
 	flag.Parse()
 
@@ -66,9 +68,29 @@ func main() {
 		moduleDir = dir
 	}
 
+	scanRoot := *root
+	if scanRoot == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "qki18n:", err)
+			os.Exit(1)
+		}
+		scanRoot = wd
+	}
+
+	// A bare `qki18n -check` — the command the gates and the document itself tell a reviewer to run —
+	// has to check both generated artefacts, or a stale document would pass it. -doc overrides the
+	// default location, and an empty -doc still means "generate no document" when writing.
+	docFile := *doc
+	if docFile == "" && *check {
+		docFile = filepath.Join(scanRoot, filepath.FromSlash(i18ngen.BacklogDocPath))
+	}
+
 	problems := i18ngen.Run(i18ngen.Options{
 		SourceDir:    *source,
 		OutFile:      *out,
+		DocFile:      docFile,
+		Root:         scanRoot,
 		ModuleDir:    moduleDir,
 		ModuleSource: i18ngen.DefaultModuleSource,
 		Check:        *check,
@@ -85,4 +107,7 @@ func main() {
 		verb = "checked"
 	}
 	fmt.Printf("qki18n: %s %s\n", verb, *out)
+	if docFile != "" {
+		fmt.Printf("qki18n: %s %s\n", verb, docFile)
+	}
 }
