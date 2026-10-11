@@ -261,6 +261,20 @@ for lang in en zh; do
 done
 fail=$((fail + shared_fail))
 
+# ---- the repl domain: the interactive session's echo -------------------------------------------------
+#
+# The session's messages are not reachable from a process-level corpus: `qkrepl` reads stdin, and the
+# echo comes back through the session API. check_repl.py writes one test program, builds it against both
+# revisions (it has to sit next to the package it tests, because it uses an internal import) and requires
+# byte-identical output under both languages. Both languages are identical, so nothing is declared.
+repl_fail=0
+if python3 "$here/check_repl.py" "$base_tree" "$root" "$work"; then
+  total=$((total + 2))
+else
+  repl_fail=1
+fi
+fail=$((fail + repl_fail))
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
