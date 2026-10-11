@@ -22,6 +22,6 @@ import (
 
 func TestMain(m *testing.M) {
 	i18n.SetLocale(i18n.EN)
-	lang.SetLocalizer(i18n.New(nil, i18n.EN)) // interpreter/linter diagnostics follow the same language
+	lang.SetLocalizer(i18n.New(i18n.EN)) // interpreter/linter diagnostics follow the same language
 	os.Exit(m.Run())
 }

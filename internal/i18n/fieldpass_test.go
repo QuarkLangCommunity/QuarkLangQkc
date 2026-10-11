@@ -150,47 +150,11 @@ func TestProofNoMessageLiteralIsWrittenIntoAField(t *testing.T) {
 	t.Logf("message literals written into a struct field: %d (limit %d)", len(literals), allowed)
 }
 
-// TestProofFieldMessagesRenderBothLanguages walks the field table and renders every row in both
-// languages. A row is a claim about what a reader sees, and an ID that does not resolve is a message
-// that disappears, so the table is checked rather than trusted.
-func TestProofFieldMessagesRenderBothLanguages(t *testing.T) {
-	src, err := i18ngen.Load(i18ngen.Options{
-		SourceDir:    "source",
-		OutFile:      "msg_gen.go",
-		ModuleSource: i18ngen.DefaultModuleSource,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	en, zh := src.Table.Languages[0].Code, src.Table.Languages[1].Code
-	ids := map[string]Msg{}
-	for n, key := range MsgKeys() {
-		ids[key] = Msg(n) // a message's number is its position in the concatenated tables
-	}
-	checked := 0
-	for _, m := range src.Table.Messages {
-		if !strings.HasPrefix(m.ID, "field.") {
-			continue
-		}
-		id, ok := ids[m.ID]
-		if !ok {
-			t.Errorf("%s: the authored row has no generated ID", m.ID)
-			continue
-		}
-		if got, want := New(stdCatalog, EN).Msg(id), src.Value(m.ID, en); got != want {
-			t.Errorf("%s: the English rendering is %q, want the authored %q", m.ID, truncate(got), truncate(want))
-		}
-		if got, want := New(stdCatalog, ZH).Msg(id), src.Value(m.ID, zh); got != want {
-			t.Errorf("%s: the Chinese rendering is %q, want the authored %q", m.ID, truncate(got), truncate(want))
-		}
-		checked++
-	}
-	if checked == 0 {
-		t.Fatal("the field table has no rows, so this proof is vacuous")
-	}
-	t.Logf("rendered %d field messages in both languages", checked)
-}
-
+// TestProofFieldMessagesRenderBothLanguages moved to coverage_test.go as
+// TestEveryGeneratedMessageRendersItsAuthoredText, which walks every table rather than this one: the
+// field table is no longer special, and a per-table copy of the same proof is a second place for it to
+// drift.
+//
 // TestProofFieldMessagesAreReachableFromASite is the "never migrate a dead row" gate, mechanised: a
 // row whose constant no call site names is a row that can never render, and it would sit in the table
 // looking like work that was done.

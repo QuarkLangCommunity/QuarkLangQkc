@@ -49,7 +49,7 @@ fn main(IOStream io) { int m = 0; m = m | 4; m = m | 1; io.println(m & 5); }`, "
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			got, err := runSrc(t, tc.src)
 			if err != nil {
 				t.Fatalf("run error: %v", err)
@@ -83,7 +83,7 @@ fn main(IOStream io) { String s = "a"; io.println(~s); }`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			_, err := runSrc(t, tc.src)
 			if err == nil {
 				t.Fatalf("expected a type error, got none")

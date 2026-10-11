@@ -114,7 +114,7 @@ func vmFirstLine(s string) string {
 func TestVMEqualsTreeWalker(t *testing.T) {
 	for _, tc := range vmDiffPrograms {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			vmOut, vmRes := runWithVM(t, tc.src, true)
 			twOut, twRes := runWithVM(t, tc.src, false)
 			if vmRes != twRes {
@@ -130,7 +130,7 @@ func TestVMEqualsTreeWalker(t *testing.T) {
 // TestVMCompilesHotShapes checks that the VM is actually used (a silent permanent fallback would make
 // the optimization pointless while every semantic test above still passed).
 func TestVMCompilesHotShapes(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	cases := map[string]bool{
 		"recursion":            true,
 		"while_loop_slots":     true,
@@ -156,7 +156,7 @@ func TestVMCompilesHotShapes(t *testing.T) {
 
 // TestVMEqualsTreeWalkerOnCorpus runs the real programs in the repository through both engines.
 func TestVMEqualsTreeWalkerOnCorpus(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	roots := []string{"../../examples", "../../compiler/testdata/cases"}
 	found := 0
 	for _, root := range roots {

@@ -1,20 +1,34 @@
 package i18n
 
-// Engineering gates for the message catalog. They are data-driven on purpose: an earlier version
-// scanned sources with regular expressions and missed trailing comments, CRLF checkouts and
-// helper-passed format strings — this one parses Go with go/ast and inspects the catalog itself.
+// Engineering gates for the generated catalog, after step 5 of docs/i18n-design.md deleted the
+// text-keyed one. They are data-driven on purpose: an earlier version scanned sources with regular
+// expressions and missed trailing comments, CRLF checkouts and helper-passed format strings — this one
+// reads the authored tables (through internal/i18ngen, the same code the generator runs) and the file
+// the generator wrote, and it asserts the properties a translator depends on.
+//
+// Three gates that used to live here are deleted rather than weakened, because their subject is gone:
+//
+//   - TestTemplatesRegistered (R-1) counted templates handed to a boundary that had no catalog entry.
+//     There is no text-keyed boundary and no catalog; a message with no English or Chinese value cannot
+//     be generated at all (TestProofMissingLanguageFails walks every (message, language) pair and shows
+//     it), so the check moved from "count afterwards" to "refuse before a file exists".
+//   - TestEnglishSourceRatchet (R-2) counted Chinese-source templates at call sites. It reached 0 in the
+//     commit that migrated the last domain — the intermediate step the design asked for — and the
+//     property it measured (a message's direction) is now a column of the authored table.
+//   - TestNoSilentFallback counted misses in the fallback path. There is no fallback: an ID selects a
+//     block of the blob and both blocks are required to exist.
 
 import (
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18ngen"
 )
 
 var hanRe = regexp.MustCompile(`[\p{Han}]`)
@@ -30,315 +44,217 @@ func formatVerbs(s string) map[string]int {
 	return out
 }
 
-// templateIndex maps a called name to the argument position carrying the format template.
-// -1 means "any argument": the first Chinese string literal wins.
-var templateIndex = map[string]int{
-	"T": -1, "Msgf": -1, "msg": -1, // msg is the per-package facade name
-	"errf": 1, "warn": 2, "errAt": 0, "replyErr": 2,
-}
-
-// wiredTemplates parses every Go source in the repository (this package excluded) and returns the
-// Chinese templates handed to an i18n boundary, keyed by template with the files that use them.
-func wiredTemplates(t *testing.T) map[string][]string {
+// authored loads the authored tables the way the generator does, so a gate and the generated file can
+// never be looking at different data.
+func authored(t *testing.T) *i18ngen.Sources {
 	t.Helper()
-	root := filepath.Join("..", "..")
-	out := map[string][]string{}
-	fset := token.NewFileSet()
-
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if skipNestedRepo(path, info, root) {
-			return filepath.SkipDir
-		}
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		slash := filepath.ToSlash(path)
-		if !strings.HasSuffix(slash, ".go") || strings.HasSuffix(slash, "_test.go") ||
-			strings.Contains(slash, "/internal/i18n/") || strings.Contains(slash, "/.git/") {
-			return nil // test files hold fixtures and assertion wording, not wired messages
-		}
-		rel, _ := filepath.Rel(root, slash)
-		f, perr := parser.ParseFile(fset, path, nil, 0)
-		if perr != nil {
-			t.Errorf("parse %s: %v", rel, perr)
-			return nil
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			idx, known := calleeTemplateIndex(call.Fun)
-			if !known {
-				return true
-			}
-			for i, arg := range call.Args {
-				if idx >= 0 && i != idx {
-					continue
-				}
-				lit, ok := arg.(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					continue
-				}
-				raw := lit.Value
-				if len(raw) > 0 && raw[0] == '"' {
-					if unq, uerr := strconv.Unquote(raw); uerr == nil {
-						raw = unq
-					}
-				} else if len(raw) >= 2 && raw[0] == '`' {
-					raw = raw[1 : len(raw)-1] // raw strings carry no escapes
-				}
-				// Every wired template is collected, English-source ones included: they need a Chinese
-				// catalog value for QK_LANG=zh, so they cannot be skipped by a Han filter.
-				out[raw] = append(out[raw], rel)
-				if idx == -1 {
-					return true
-				}
-			}
-			return true
-		})
-		return nil
+	src, err := i18ngen.Load(i18ngen.Options{
+		SourceDir:    "source",
+		OutFile:      "msg_gen.go",
+		ModuleSource: i18ngen.DefaultModuleSource,
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("loading the authored tables: %v", err)
+	}
+	if len(src.Table.Messages) == 0 {
+		t.Fatal("the authored tables are empty, so these gates would pass vacuously")
+	}
+	return src
+}
+
+// msgIDs maps every authored ID to the number the generated file gives it.
+func msgIDs() map[string]Msg {
+	out := map[string]Msg{}
+	for n, key := range MsgKeys() {
+		out[key] = Msg(n)
 	}
 	return out
 }
 
-// calleeTemplateIndex resolves a called name ("pkg.T", "x.errf", "errf") to the argument position
-// that carries the template; known=false means the call is not an i18n boundary.
-func calleeTemplateIndex(fun ast.Expr) (idx int, known bool) {
-	switch f := fun.(type) {
-	case *ast.SelectorExpr:
-		pos, ok := templateIndex[f.Sel.Name]
-		return pos, ok
-	case *ast.Ident:
-		pos, ok := templateIndex[f.Name]
-		return pos, ok
-	}
-	return 0, false
-}
-
-// TestTemplatesRegistered: every Chinese template reaching an i18n boundary must exist in the
-// catalog — the "no Chinese leaking through an unwired message" gate.
-func TestTemplatesRegistered(t *testing.T) {
-	wired := wiredTemplates(t)
-	// Every wired template must have a translation, including the English-source ones: English is the
-	// source language, so a message written in English needs a Chinese catalog value for QK_LANG=zh.
-	missing := missingEntries(sortedKeys(wired))
-	// Ratchet, not a cliff: every message needs a Chinese catalog value (English is the source
-	// language, so QK_LANG=zh renders the translation). The scanner used to skip English templates —
-	// that is how this backlog was found — and the 108 it then reported are translated, so the ratchet
-	// is at zero: a new wired message without a catalog value fails here instead of rendering English
-	// to a reader who asked for Chinese.
-	const allowedMissing = 0
-	if len(missing) > allowedMissing {
-		t.Errorf("%d wired templates have no translation (limit %d): an English message needs a Chinese catalog value for QK_LANG=zh", len(missing), allowedMissing)
-		for i, m := range missing {
-			if i == 25 {
-				t.Errorf("  … and %d more", len(missing)-i)
-				break
-			}
-			t.Errorf("  %q   <- %s", m, strings.Join(wired[m], ", "))
+// TestEveryGeneratedMessageRendersItsAuthoredText renders every row of every table in both languages and
+// requires the authored value back. It is the gate that makes "the tables are the source of truth" a
+// checkable claim rather than an assertion about the generator, and it subsumes the per-domain proofs
+// the migration landed one at a time (the field table's included).
+func TestEveryGeneratedMessageRendersItsAuthoredText(t *testing.T) {
+	src := authored(t)
+	ids := msgIDs()
+	en, zh := src.Table.Languages[0].Code, src.Table.Languages[1].Code
+	checked := 0
+	for _, m := range src.Table.Messages {
+		id, ok := ids[m.ID]
+		if !ok {
+			t.Errorf("%s: the authored row has no generated ID", m.ID)
+			continue
 		}
-	}
-	t.Logf("wired templates: %d, without a translation: %d (limit %d)", len(wired), len(missing), allowedMissing)
-}
-
-// missingEntries reports wired templates with no catalog entry at all. The Han filter used to live
-// here, which let English-source messages through without a Chinese translation — they then stayed
-// English under QK_LANG=zh, which is exactly what an internationalized catalog must avoid.
-func missingEntries(keys []string) []string {
-	var out []string
-	for _, k := range keys {
-		if !stdCatalog.Has(k) {
-			out = append(out, k)
+		if got, want := New(EN).Msg(id), src.Value(m.ID, en); got != want {
+			t.Errorf("%s: the English rendering is %q, want the authored %q", m.ID, truncate(got), truncate(want))
 		}
+		if got, want := New(ZH).Msg(id), src.Value(m.ID, zh); got != want {
+			t.Errorf("%s: the Chinese rendering is %q, want the authored %q", m.ID, truncate(got), truncate(want))
+		}
+		checked++
 	}
-	return out
+	t.Logf("rendered %d authored messages in both languages", checked)
 }
 
-func sortedKeys(m map[string][]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// TestCatalogIntegrity: no empty entries, no template owned by two domains, and no translation
-// that is a verbatim copy of its Chinese source (a classic copy-paste bug).
+// TestCatalogIntegrity: no empty ID or value, and no ID twice. A duplicate ID is the mistake a
+// hand-edited table makes, and the generator would otherwise resolve it to whichever row came first.
 func TestCatalogIntegrity(t *testing.T) {
-	seen := map[string]string{}
-	for _, domain := range stdCatalog.Domains() {
-		for template, translated := range stdCatalog.Domain(domain) {
-			if strings.TrimSpace(template) == "" || strings.TrimSpace(translated) == "" {
-				t.Errorf("%s: empty template or translation (%q -> %q)", domain, template, translated)
+	src := authored(t)
+	seen := map[string]int{}
+	for n, m := range src.Table.Messages {
+		if strings.TrimSpace(m.ID) == "" {
+			t.Errorf("row %d has an empty id", n+1)
+		}
+		if prev, dup := seen[m.ID]; dup {
+			t.Errorf("%s is authored twice (rows %d and %d): the second would be unreachable", m.ID, prev+1, n+1)
+		}
+		seen[m.ID] = n
+		for i, v := range m.Values {
+			if strings.TrimSpace(v) == "" {
+				t.Errorf("%s: empty %s value", m.ID, src.Table.Languages[i].Code)
 			}
-			if prev, dup := seen[template]; dup {
-				t.Errorf("template owned by two domains: %s and %s (%q)", prev, domain, truncate(template))
-			}
-			seen[template] = domain
-			if translated == template && hanRe.MatchString(template) {
-				t.Errorf("%s: translation identical to the Chinese source: %q", domain, truncate(template))
-			}
+		}
+		if strings.TrimSpace(m.Source) == "" {
+			t.Errorf("%s: empty src value", m.ID)
 		}
 	}
 }
 
 // TestVerbSetsMatch: a translation must consume exactly the same fmt verbs as its source, which is
-// what silently breaks when a placeholder is dropped or reordered while translating.
+// what silently breaks when a placeholder is dropped or reordered while translating. It reads the
+// authored table now — the same data the blob is packed from — rather than a Go map.
 func TestVerbSetsMatch(t *testing.T) {
-	for _, domain := range stdCatalog.Domains() {
-		for template, translated := range stdCatalog.Domain(domain) {
-			want, got := formatVerbs(template), formatVerbs(translated)
-			if len(want) != len(got) {
-				t.Errorf("%s: verb kinds differ\n  zh: %q -> %v\n  en: %q -> %v", domain, truncate(template), want, truncate(translated), got)
-				continue
+	src := authored(t)
+	en, zh := src.Table.Languages[0].Code, src.Table.Languages[1].Code
+	for _, m := range src.Table.Messages {
+		source, translated := src.Value(m.ID, en), src.Value(m.ID, zh)
+		want, got := formatVerbs(source), formatVerbs(translated)
+		if len(want) != len(got) {
+			t.Errorf("%s: verb kinds differ\n  en: %q -> %v\n  zh: %q -> %v", m.ID, truncate(source), want, truncate(translated), got)
+			continue
+		}
+		for verb, n := range want {
+			if got[verb] != n {
+				t.Errorf("%s: verb %%%s count differs (%d vs %d)\n  en: %q\n  zh: %q",
+					m.ID, verb, n, got[verb], truncate(source), truncate(translated))
 			}
-			for verb, n := range want {
-				if got[verb] != n {
-					t.Errorf("%s: verb %%%s count differs (%d vs %d)\n  zh: %q\n  en: %q",
-						domain, verb, n, got[verb], truncate(template), truncate(translated))
+		}
+	}
+}
+
+// TestVerbSequenceMatches is the ordered counterpart of TestVerbSetsMatch: call sites pass their
+// arguments positionally, so a translation with the right verbs in the wrong order still passes the set
+// check and then renders nonsense at run time.
+//
+// IT IS A RATCHET AGAIN, AND RE-POINTING IT AT THE AUTHORED TABLES IS WHY. The check used to read the
+// text-keyed catalog, which by the end held nothing; over all 635 authored rows it finds **11** messages
+// whose Chinese reorders the verbs, and they are real: `using %q on %s is not supported` renders its
+// type where the operator belongs under QK_LANG=zh. Nothing could see them before, because the rows that
+// carry them moved out of the text-keyed catalog one domain at a time and the check was reading the
+// other store.
+//
+// They are frozen rather than fixed here. Reordering the verbs inside a Chinese sentence rewrites the
+// sentence (`不支持在 %s 上使用 %q` -> `不支持对 %s 使用 %q`), which is authoring a translation, and this
+// migration does not invent Chinese: the same rule that leaves 64 field rows with an English zh column
+// applies. The count may only shrink, and the fix has to come from a speaker.
+func TestVerbSequenceMatches(t *testing.T) {
+	const allowed = 11 // measured by this test's first run over the authored tables; fix with a speaker
+	src := authored(t)
+	re := regexp.MustCompile("%[a-zA-Z]")
+	en, zh := src.Table.Languages[0].Code, src.Table.Languages[1].Code
+	bad := 0
+	for _, m := range src.Table.Messages {
+		a, b := re.FindAllString(src.Value(m.ID, en), -1), re.FindAllString(src.Value(m.ID, zh), -1)
+		if len(a) != len(b) {
+			continue // the set check reports the count mismatch
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				bad++
+				if bad > allowed {
+					t.Errorf("%s: order differs at #%d\n  en: %v\n  zh: %v", m.ID, i+1, a, b)
+				} else {
+					t.Logf("%s: order differs at #%d\n  en: %v\n  zh: %v", m.ID, i+1, a, b)
 				}
+				break
 			}
 		}
 	}
+	if bad > allowed {
+		t.Fatalf("%d authored messages reorder their placeholders (limit %d); the translation must follow the source order", bad, allowed)
+	}
+	t.Logf("authored messages with reordered placeholders: %d (limit %d)", bad, allowed)
 }
 
-// TestNoSilentFallback: every catalog entry must resolve under EN, and an unknown template must be
-// counted — otherwise the miss counter cannot be trusted as an engineering gate. The counter follows
-// the requested language in both directions: a template only falls back visibly when the text it falls
-// back to is written in the language the other one asked for.
-func TestNoSilentFallback(t *testing.T) {
-	L := New(stdCatalog, EN)
-	Misses() // clear
-	for _, key := range stdCatalog.Keys() {
-		if !L.Has(key) {
-			t.Fatalf("catalog key not resolvable: %q", truncate(key))
-		}
-		L.T(key)
-	}
-	if misses := Misses(); len(misses) != 0 {
-		t.Fatalf("rendering the whole catalog produced %d misses: %v", len(misses), misses)
-	}
-	L.T("这条模板故意没有登记：%s", "x") // negative control: a Chinese template with no entry
-	if n := MissTotal(); n != 1 {
-		t.Fatalf("miss counter did not record the unknown Chinese template (got %d)", n)
-	}
-	Misses()
-	// The mirror image: English is the source language for migrated messages, so an English template
-	// with no entry renders English to a reader who asked for Chinese.
-	New(stdCatalog, ZH).T("this template is deliberately not registered: %s", "x")
-	if n := MissTotal(); n != 1 {
-		t.Fatalf("miss counter did not record the unknown English template under ZH (got %d)", n)
-	}
-	Misses()
+// textKeyedEntryPoints are the names of the machinery step 5 deleted. None may come back: a text-keyed
+// entry point is what made a message's identity its own wording, and that is the defect the whole
+// migration removed (D-3 in docs/i18n-design.md).
+var textKeyedEntryPoints = []string{
+	"i18n.T(", ".T(", "i18n.Load(", "i18n.Catalog", "Catalog{", ".byKey",
+	"i18n.Has(", "Untranslated(", "i18n.Misses(", "MissTotal(", "countMiss(",
+	"needsTranslation(", "sourceLang(", "domainTables(", "msg(template",
 }
 
-// TestDecouplingRatchet freezes the number of direct package-level T() calls: new code must carry a
-// Localizer or go through a choke point, so the count may only go down.
+// TestDecouplingRatchet is R-3, strengthened into an exact contract rather than a limit.
+//
+// It used to freeze the number of direct T() calls ("the shim must not grow"). The shim is gone, so the
+// claim is now the stronger one the design asked for: there are no text-keyed entry points at all, in
+// any package. It scans this module and the compiler module, which shares these packages through a
+// relative replace.
 func TestDecouplingRatchet(t *testing.T) {
-	const allowed = 0 // lowered from 29: the cli domain migrated in step 4, so no call site reaches i18n.T any more
-	n := 0
 	root := filepath.Join("..", "..")
+	found := map[string][]string{}
+	scanned := 0
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		slash := filepath.ToSlash(path)
-		if err != nil || info.IsDir() || !strings.HasSuffix(slash, ".go") ||
-			strings.Contains(slash, "/internal/i18n/") || strings.Contains(slash, "/.git/") {
+		if err != nil || info.IsDir() {
 			return nil
 		}
-		if src, rerr := os.ReadFile(path); rerr == nil {
-			n += strings.Count(string(src), "i18n.T(")
+		if skipNestedRepo(path, info, root) {
+			return nil
+		}
+		if !strings.HasSuffix(slash, ".go") || strings.Contains(slash, "/.git/") {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, slash)
+		if rel == "internal/i18n/coverage_test.go" {
+			return nil // this file names them in order to look for them
+		}
+		src, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return nil
+		}
+		scanned++
+		for _, name := range textKeyedEntryPoints {
+			if strings.Contains(string(src), name) {
+				found[name] = append(found[name], rel)
+			}
 		}
 		return nil
 	})
-	if n > allowed {
-		t.Errorf("direct i18n.T( call sites grew to %d (limit %d): carry a Localizer instead", n, allowed)
+	if scanned == 0 {
+		t.Fatal("no files were scanned, so this contract would hold vacuously")
 	}
-	t.Logf("direct i18n.T( call sites: %d (limit %d)", n, allowed)
+	if len(found) > 0 {
+		names := make([]string, 0, len(found))
+		for name := range found {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			t.Errorf("%q is a text-keyed entry point and came back in: %s", name, strings.Join(found[name], ", "))
+		}
+	}
+	t.Logf("text-keyed entry points: %d (scanned %d Go files in both modules)", len(found), scanned)
 }
 
-// TestEnglishSourceRatchet freezes the number of Chinese-source wired templates.
-//
-// English is the source language for an internationalized project: a new message is written in English
-// and the catalog carries the Chinese translation (so `QK_LANG=zh` still renders Chinese). The legacy
-// set was written the other way round, which also made Chinese the *default* rendering; the count may
-// only go down as those messages are migrated.
-func TestEnglishSourceRatchet(t *testing.T) {
-	const allowed = 0 // lowered from 129: the compiler domain was the last, and no call site passes a template any more
-	wired := wiredTemplates(t)
-	n := 0
-	var sample []string
-	for tpl, files := range wired {
-		if !hanRe.MatchString(tpl) {
-			continue
-		}
-		n++
-		if len(sample) < 5 {
-			sample = append(sample, truncate(tpl)+"  <- "+strings.Join(files, ", "))
-		}
-	}
-	if n > allowed {
-		t.Errorf("Chinese-source wired templates grew to %d (limit %d): write new messages in English and put the Chinese in the catalog", n, allowed)
-		for _, s := range sample {
-			t.Errorf("  %s", s)
-		}
-	}
-	t.Logf("Chinese-source wired templates: %d (limit %d)", n, allowed)
-}
-
-// TestTRendersTheCatalogForTheRequestedLanguage: T must consult the catalog for the localizer's own
-// language. The lookup used to be gated on EN, so every English-source entry — whose Chinese text is
-// the catalog value — rendered its English template under QK_LANG=zh while Lookup(key, ZH) answered
-// correctly: the translation existed and was simply never reached.
-func TestTRendersTheCatalogForTheRequestedLanguage(t *testing.T) {
-	renderers := map[Lang]Localizer{EN: New(stdCatalog, EN), ZH: New(stdCatalog, ZH)}
-	checked := 0
-	for _, domain := range stdCatalog.Domains() {
-		for template := range stdCatalog.Domain(domain) {
-			for lang, L := range renderers {
-				want, ok := stdCatalog.Lookup(template, lang)
-				if !ok {
-					t.Fatalf("%s: %q has no %s rendering", domain, truncate(template), lang)
-				}
-				if got := L.T(template); got != want {
-					t.Errorf("%s: T(%s) of %q rendered %q, want the catalog's %q",
-						domain, lang, truncate(template), truncate(got), truncate(want))
-				}
-				checked++
-			}
-		}
-	}
-	t.Logf("rendered %d catalog entries through T() in both languages", checked)
-}
-
-// TestCatalogDirectionFollowsTheSourceLanguage pins the per-language index to the direction of each
-// table entry. A table maps the call-site template to the other language, so the entry's direction is
-// a property of its key; indexing every table as if the key were Chinese put the Chinese value behind
-// the English one, which is what made an English-source diagnostic render Chinese on the runners.
-func TestCatalogDirectionFollowsTheSourceLanguage(t *testing.T) {
-	for _, domain := range stdCatalog.Domains() {
-		for template, translated := range stdCatalog.Domain(domain) {
-			en, _ := stdCatalog.Lookup(template, EN)
-			zh, _ := stdCatalog.Lookup(template, ZH)
-			if hanRe.MatchString(template) { // legacy Chinese source: EN carries the translation
-				if en != translated {
-					t.Errorf("%s: %q renders %q under EN, want its translation %q", domain, truncate(template), truncate(en), truncate(translated))
-				}
-				if zh != template {
-					t.Errorf("%s: %q renders %q under ZH, want the template itself", domain, truncate(template), truncate(zh))
-				}
-				continue
-			}
-			if en != template { // English source: EN is the template, ZH carries the translation
-				t.Errorf("%s: English-source %q renders %q under EN, want the template itself", domain, truncate(template), truncate(en))
-			}
-			if zh != translated {
-				t.Errorf("%s: English-source %q renders %q under ZH, want its translation %q", domain, truncate(template), truncate(zh), truncate(translated))
-			}
-		}
+// TestGeneratedFileIsParsable reads the artefact the runtime actually ships: a truncated or hand-edited
+// blob fails here rather than at the first message.
+func TestGeneratedFileIsParsable(t *testing.T) {
+	fset := token.NewFileSet()
+	if _, err := parser.ParseFile(fset, "msg_gen.go", nil, 0); err != nil {
+		t.Fatalf("msg_gen.go does not parse: %v", err)
 	}
 }
 

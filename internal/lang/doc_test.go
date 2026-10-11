@@ -162,7 +162,7 @@ func TestDocModelExtraction(t *testing.T) {
 }
 
 func TestDocMarkdownPubFilter(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
+	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	d, _ := buildFixtureDoc(t)
 	md := d.Markdown(DocOptions{Path: "mathlib.qk"})
 	if !strings.Contains(md, "# mathlib.qk") {
@@ -211,7 +211,7 @@ func TestDocHTML(t *testing.T) {
 	// the environment. They used to pass under any process language, because the kind labels and section
 	// titles were Chinese string literals in the renderer; now that they are messages, a test that asserts
 	// Chinese has to say so, the way TestDocMarkdownPubFilter already does.
-	withLocalizer(t, i18n.New(nil, i18n.ZH))
+	withLocalizer(t, i18n.New(i18n.ZH))
 	d, _ := buildFixtureDoc(t)
 	h := d.HTML(DocOptions{Path: "mathlib.qk"})
 	for _, want := range []string{"<!doctype html>", "<title>mathlib.qk</title>", "<table>", "<pre><code>fn double(int n) int</code></pre>", "<h2>函数</h2>"} {
@@ -278,7 +278,7 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 func TestDocMacros(t *testing.T) {
 	// Asserts the Chinese section title and kind label, so it pins the language for the same reason
 	// TestDocHTML does: the labels are messages now, not literals.
-	withLocalizer(t, i18n.New(nil, i18n.ZH))
+	withLocalizer(t, i18n.New(i18n.ZH))
 	src := `/* Utility macro library. */
 program library;
 

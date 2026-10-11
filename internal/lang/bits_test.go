@@ -16,7 +16,7 @@ import (
 
 func runBits(t *testing.T, src string) string {
 	t.Helper()
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	out, err := runSrc(t, src)
 	if err != nil {
 		t.Fatalf("run error: %v", err)
@@ -184,7 +184,7 @@ func TestBitsRefusals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			_, err := runSrc(t, "program main;\nfn main(IOStream io) { "+tc.src+" }")
 			if err == nil {
 				t.Fatalf("expected a compile-time error, got none")
@@ -211,7 +211,7 @@ func TestBitsConversionRefusals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			_, err := runSrc(t, "program main;\nfn main(IOStream io) { "+tc.src+" }")
 			if err == nil {
 				t.Fatalf("expected an error, got none")

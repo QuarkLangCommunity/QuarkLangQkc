@@ -146,8 +146,7 @@ fn main(IOStream io) {
 
 // break statement: exits while/for loop bodies; outside a loop it is a compile error
 func TestBreakStatement(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording
-	i18n.Misses()
+	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording
 	out, err := runSrc(t, `fn main(IOStream io) {
     int i = 0;
     while (i < 1000) {

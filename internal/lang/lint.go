@@ -178,13 +178,9 @@ type linter struct {
 	refVars   map[string]bool   // reference-type variables (T& / pointer T: `p = v` writes through, it is not a rebinding)
 }
 
-func (l *linter) warn(pos Pos, code, format string, args ...interface{}) {
-	l.diags = append(l.diags, Diag{Pos: pos, Code: code, Sev: "warning", Msg: msg(format, args...)})
-}
-
 // warnID records a diagnostic whose message is a generated ID, rendered in the requested language. It is
-// the ID-rendering counterpart of warn and is what a migrated lint call site uses; both disappear at
-// step 5, when the text-keyed catalog does.
+// the only way this package reports a finding: the text-keyed warn it replaced went at step 5, with the
+// catalog that made a wording into a key.
 func (l *linter) warnID(pos Pos, code string, id i18n.Msg, args ...interface{}) {
 	l.diags = append(l.diags, Diag{Pos: pos, Code: code, Sev: "warning", Msg: msgID(id, args...)})
 }

@@ -18,6 +18,6 @@ func TestMain(m *testing.M) {
 	// This package renders through its own localizer, so pin that (and the process default, for
 	// messages produced by other packages).
 	i18n.SetLocale(i18n.ZH)
-	SetLocalizer(i18n.New(nil, i18n.ZH))
+	SetLocalizer(i18n.New(i18n.ZH))
 	os.Exit(m.Run())
 }

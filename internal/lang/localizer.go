@@ -37,14 +37,10 @@ func SetLocalizer(L i18n.Localizer) i18n.Localizer {
 // Localizer reports the localizer currently in use.
 func Localizer() i18n.Localizer { return langLocalizer }
 
-// msg renders a message template through the package localizer. It is the only place in this
-// package that talks to i18n, so switching languages stays a single, testable decision.
-func msg(template string, args ...any) string { return langLocalizer.T(template, args...) }
-
-// msgID renders a message of this repository by its stable ID. It is what a migrated call site uses
-// instead of msg: the ID survives a rephrasing, a translation is attached to the message rather than to
-// its current spelling, and the same text in two contexts stays two messages. msg and msgID both
-// disappear at step 5, when the text-keyed catalog does.
+// msgID renders a message of this repository by its stable ID: the ID survives a rephrasing, a
+// translation is attached to the message rather than to its current spelling, and the same text in two
+// contexts stays two messages. It is the only way a message is written here, because step 5 deleted the
+// text-keyed msg and the catalog that made a wording into a key.
 func msgID(id i18n.Msg, args ...any) string { return langLocalizer.Msg(id, args...) }
 
 // The syntax layer renders its messages through the same localizer as the rest of this package, so

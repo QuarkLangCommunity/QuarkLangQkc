@@ -220,6 +220,6 @@ func TestQkreplQuietFlag(t *testing.T) {
 // REPL renders both through the process default and through internal/lang's injected localizer.
 func TestMain(m *testing.M) {
 	lang_i18n.SetLocale(lang_i18n.ZH)
-	lang.SetLocalizer(lang_i18n.New(nil, lang_i18n.ZH))
+	lang.SetLocalizer(lang_i18n.New(lang_i18n.ZH))
 	os.Exit(m.Run())
 }

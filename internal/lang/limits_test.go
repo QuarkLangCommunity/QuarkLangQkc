@@ -49,7 +49,7 @@ func itoaTest(n int) string {
 // diagnostic rather than a crash: the front end refuses the expression and says where it is. The
 // wording is asserted in English, so the language is pinned instead of taken from the environment.
 func TestOverDeepExpressionIsRefusedWithPosition(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	_, err := Compile(chainSource(2 * MaxExprDepth))
 	if err == nil {
 		t.Fatal("an expression nested past MaxExprDepth must be refused")
@@ -79,7 +79,7 @@ func TestExpressionUnderTheDepthLimitIsAccepted(t *testing.T) {
 // limit — a 300 000-deep nest used to exhaust the Go stack before the checker was ever reached. As
 // above, the language is pinned because the assertion is about the English wording.
 func TestOverDeepNestingIsRefusedByTheParser(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	deep := strings.Repeat("(", 2*MaxExprDepth)
 	src := "fn main(IOStream io) {\n  io.println(" + deep + "1" + strings.Repeat(")", 2*MaxExprDepth) + ");\n}\n"
 	_, err := Compile(src)
