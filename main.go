@@ -46,14 +46,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
-	prog, err := lang.CompileWithImports(string(src), file)
+	prog, sm, err := lang.CompileWithImportsMapped(string(src), file)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 	err = runMain(prog, file, rest, os.Stdin, os.Stdout)
 	if err != nil {
-		lang.ReportError(err, os.Stderr)
+		// The position is mapped out of the merged source so that a runtime error raised after a
+		// preprocessor directive names the line the author wrote, not the line of the preprocessed text.
+		lang.ReportError(lang.AtAuthorLine(err, sm), os.Stderr)
 		os.Exit(1)
 	}
 }
