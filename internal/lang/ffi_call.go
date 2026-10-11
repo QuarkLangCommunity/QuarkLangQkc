@@ -10,13 +10,15 @@ import "C"
 import (
 	"fmt"
 	"unsafe"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // callLibMethod calls an exported function of a system library (FFI: dlopen/dlsym + libffi, cross-platform POSIX/Windows).
 func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos, ctx *execCtx) (Value, error) {
 	fn := lib.methods[name]
 	if fn == nil {
-		return NilV(), &RunError{Msg: fmt.Sprintf(msg("LibraryError: 库 %s 没有声明函数 %q"), lib.name, name), Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: fmt.Sprintf(msgID(i18n.MsgRuntimeLibraryerrorLibrarySDoesDeclareFunction), lib.name, name), Pos: pos, Ctx: ctx}
 	}
 	if lib.handle == nil {
 		h, err := dlopenLib(lib.lib)
@@ -39,7 +41,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 	var cstrs []*C.char
 	for i, p := range fn.Params {
 		if i >= len(args) {
-			return NilV(), &RunError{Msg: fmt.Sprintf(msg("LibraryError: %s 参数不足"), name), Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: fmt.Sprintf(msgID(i18n.MsgRuntimeLibraryerrorSTooFewArguments), name), Pos: pos, Ctx: ctx}
 		}
 		a := args[i]
 		if p.Type == "pointer" { // opaque handle: accepts a pointer value or null (void*), round-trippable
@@ -50,7 +52,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 				continue
 			}
 			if !a.IsPtr() {
-				return NilV(), &RunError{Msg: fmt.Sprintf(msg("TypeError: %s 参数 %s 需要 pointer 或 null"), name, p.Name), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(msgID(i18n.MsgRuntimeTypeerrorSArgumentSRequiresPointerNull), name, p.Name), Pos: pos, Ctx: ctx}
 			}
 			types = append(types, ffiPtr)
 			nums = append(nums, 0)
@@ -60,7 +62,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 		switch ffiTypeOf(p.Type) {
 		case ffiInt, ffiBool, ffiLong:
 			if !a.IsInt() && !a.IsBool() {
-				return NilV(), &RunError{Msg: fmt.Sprintf(msg("TypeError: %s 参数 %s 需要 int/bool"), name, p.Name), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(msgID(i18n.MsgRuntimeTypeerrorSArgumentSRequiresIntBool), name, p.Name), Pos: pos, Ctx: ctx}
 			}
 			if a.IsBool() {
 				if a.Bool() {
@@ -79,7 +81,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 			ptrs = append(ptrs, nil)
 		case ffiF32, ffiF64:
 			if !a.IsFloat() && !a.IsInt() {
-				return NilV(), &RunError{Msg: fmt.Sprintf(msg("TypeError: %s 参数 %s 需要 float"), name, p.Name), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(msgID(i18n.MsgRuntimeTypeerrorSArgumentSRequiresFloat), name, p.Name), Pos: pos, Ctx: ctx}
 			}
 			if a.IsInt() {
 				nums = append(nums, float64(a.Int()))
@@ -90,7 +92,7 @@ func (in *interp) callLibMethod(lib *libObj, name string, args []Value, pos Pos,
 			ptrs = append(ptrs, nil)
 		default: // String / pointer
 			if !a.IsStr() {
-				return NilV(), &RunError{Msg: fmt.Sprintf(msg("TypeError: %s 参数 %s 目前仅支持 String/int/float"), name, p.Name), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: fmt.Sprintf(msgID(i18n.MsgRuntimeTypeerrorSArgumentSCurrentlySupports), name, p.Name), Pos: pos, Ctx: ctx}
 			}
 			cs := C.CString(a.Str())
 			cstrs = append(cstrs, cs)

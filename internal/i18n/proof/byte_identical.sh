@@ -515,6 +515,81 @@ lsp_case "lsp_bad_length" 'Content-Length: xyz\r\n\r\n'
 lsp_case "lsp_bad_json"   'Content-Length: 5\r\n\r\nnotjs'
 fail=$((fail + cli_fail))
 
+# ---- the runtime domain: the interpreter's own diagnostics -------------------------------------------
+#
+# These are the messages the evaluator raises while a program runs, so a corpus reaches them by running
+# programs that fail in the specific ways. Both languages are asserted byte-identical: the domain's rows
+# were already wired through msg(), so nothing here is a declared fix.
+#
+# Two of the 65 rows had NO msg() site, and that is the domain's finding: their call sites were
+# `&RunError{Msg: "literal"}` — a message written into a struct field, which no callee-based scanner can
+# see. Both are wired here rather than in a follow-up, because leaving them would mean the catalog kept
+# a Chinese translation that the code never asked for.
+#
+# The corpus is restricted to programs the LINTER accepts, because a message raised before it is a
+# compile error never runs: the first version of this corpus used `string` (the language's type is
+# `String`) and measured 57 identical bytes of "unknown type", which proves nothing about the domain.
+runtime_corpus="$work/runtime"
+rm -rf "$runtime_corpus"
+mkdir -p "$runtime_corpus"
+cat > "$runtime_corpus/index.qk" <<'QK'
+fn main(IOStream io) void {
+    List<int> xs = [1, 2];
+    io.println(xs[9]);
+}
+QK
+cat > "$runtime_corpus/substr.qk" <<'QK'
+fn main(IOStream io) void {
+    string s = "abc";
+    io.println(s.substring(1, 9));
+}
+QK
+cat > "$runtime_corpus/bitwise.qk" <<'QK'
+fn main(IOStream io) void {
+    string s = "a";
+    io.println(s & s);
+}
+QK
+cat > "$runtime_corpus/complement.qk" <<'QK'
+fn main(IOStream io) void {
+    string s = "a";
+    io.println(~s);
+}
+QK
+cat > "$runtime_corpus/divzero.qk" <<'QK'
+fn main(IOStream io) void {
+    int z = 0;
+    io.println(1 / z);
+}
+QK
+cat > "$runtime_corpus/libload.qk" <<'QK'
+library nope;
+fn main(IOStream io) void { }
+QK
+cat > "$runtime_corpus/stringargs.qk" <<'QK'
+fn main(IOStream io) void {
+    string s = "abc";
+    io.println(s.contains(1));
+}
+QK
+
+runtime_fail=0
+for f in "$runtime_corpus"/*.qk; do
+  name="$(basename "$f")"
+  for lang in en zh; do
+    b="$(run "$work/bin/baseline-quark" "$lang" "$f")"
+    p="$(run "$work/bin/prototype-quark" "$lang" "$f")"
+    total=$((total + 1))
+    if [ "$b" != "$p" ]; then
+      runtime_fail=$((runtime_fail + 1))
+      printf '%-3s %-30s DIFFERS\n' "$lang" "runtime/$name"
+      diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | head -10
+    else
+      printf '%-3s %-30s identical (%d bytes)\n' "$lang" "runtime/$name" "$(printf '%s' "$b" | wc -c)"
+    fi
+  done
+done
+fail=$((fail + runtime_fail))
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1

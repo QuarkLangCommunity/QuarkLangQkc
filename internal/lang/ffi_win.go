@@ -12,6 +12,8 @@ import (
 	"errors"
 	"strings"
 	"unsafe"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // Windows FFI: LoadLibrary/GetProcAddress + a hand-written ABI wrapper (4 types x <=4 argument combinations).
@@ -57,7 +59,7 @@ func (lh *libHandle) resolve(sym string) (unsafe.Pointer, error) {
 func ffiCall(fn unsafe.Pointer, paramTypes []int, nums []float64, ptrs []unsafe.Pointer, retType int) (int64, float64, unsafe.Pointer, error) {
 	n := len(paramTypes)
 	if n > 4 {
-		return 0, 0, nil, errors.New(msg("FFIError: windows 自研 ABI 支持 <=4 参数"))
+		return 0, 0, nil, errors.New(msgID(i18n.MsgRuntimeFfierrorWindowsAbiShimSupportsMost))
 	}
 	ctypes := make([]C.int, n)
 	cnums := make([]C.double, n)
