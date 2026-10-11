@@ -84,6 +84,13 @@ w('errf_unexpected_char.qk', 'fn main(IOStream io) void {\n    int x = 1 $ 2;\n}
 w('errf_int_range.qk', 'fn main(IOStream io) void {\n    int x = 99999999999;\n}\n')
 w('errf_top_level.qk', 'int x = 1\n')
 
+# --- the struct-field pass, and the one case in it that changes ENGLISH: a message written in Chinese
+#     inside a struct field. `new T[size]` with a bad size rendered `badAlloc: new int 申请大小非法` in
+#     BOTH languages before the pass, because the site concatenated its own literal and never consulted
+#     a localizer. The pass gives it an ID whose English source is authored here — nothing in either
+#     repository has an English text for it — and whose Chinese value is the shipped text, so the
+#     Chinese reader sees exactly what they saw and the English reader stops seeing Chinese.
+w('badalloc.qk', 'fn main(IOStream io) void {\n    pointer int p = new int[-1];\n    io.println(1);\n}\n')
 PY
 
 # The EN fixes: case name, the Chinese template that leaked, and the English text that was already in
@@ -98,6 +105,7 @@ errf_pub_prefix.qk	pub 只能前缀于 fn 或 type struct/interface（实名类�
 errf_func_keyword.qk	函数声明关键字是 fn：func main(...) 应写为 fn main(...)	the function keyword is 'fn': write fn main(...) rather than func main(...)
 errf_return_type.qk	函数必须声明返回类型：fn %s(...) 返回类型 { ... }	a function must declare its return type: fn %s(...) <return type> { ... }
 errf_library_body.qk	library 体内只能有 fn 符号签名	a library body may only contain fn symbol signatures
+badalloc.qk	badAlloc: new %s 申请大小非法	badAlloc: new %s has an invalid allocation size
 TSV
 
 build() { # build <revision-or-worktree> <output>

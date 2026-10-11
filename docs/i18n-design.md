@@ -842,6 +842,67 @@ Three things this pass found that the handoff did not know:
    backlog too, and the ratchet counts them: saying "the catalog held their Chinese translation" would have
    been wrong, and it is corrected here rather than left standing.
 
+### 7.6 The pass itself: two halves, 93 rows, and a backlog of 64
+
+Two commits, because the halves make different claims. **Wiring** moves a message whose Chinese already
+ships and changes what a Chinese reader sees; **freezing** moves a message that has no Chinese anywhere,
+changes nothing a reader sees in either language, and turns a silence into a number. Separating them keeps
+the first half's proof (a rendering changed, and here is why) from the second's (nothing changed, and here
+is what is left).
+
+| Quantity | Before | After wiring (commit 1) | After freezing (commit 2) |
+|---|---|---|---|
+| rows in `source/fields.tsv` | 0 | 28 | 93 |
+| generated messages | 212 | 240 | 305 |
+| messages rendered through an ID instead of a field literal | 0 | 29 | 94 |
+| — whose Chinese already shipped | — | 29 (28 new rows + 1 row that already existed) | 29 |
+| — frozen, `zh` repeating `en` (the backlog) | — | 0 | 64 |
+| — written in Chinese, English source authored here | — | 0 | 1 |
+| distinct literals written into a `Msg` field | 94 (124 sites) | 65 | 0 |
+| text-keyed catalog entries | 393 | 365 | 365 |
+| wired templates (R-1) | 360 | 332 | 332 |
+| Chinese-source wired templates (R-2) | 164 | 164 | 164 — **did not move** |
+| direct `i18n.T(` (R-3) | 0 | 0 | 0 |
+| P2 `(message, language)` pairs checked against the pin | 212 | 240 | 305 |
+| P3 runs | 106 | 128 | 150 |
+
+Four things this pass found that the plan did not predict:
+
+1. **One of the 29 needed no row at all.** `CompileError: undeclared identifier %q` is
+   `runtime.compileerror_undeclared_identifier_q`, a row step 4 migrated, and another call site already
+   rendered it (`internal/lang/eval.go:1656`). The struct-field site at `:190` was a *second, unwired
+   path* for the same message, not a message without a row. Its fix is one call site pointed at the row
+   that exists, which is why 29 messages cost 28 rows.
+2. **A row cannot move alone.** 28 of the rows are also referenced by `c.errf(pos, "…")` call sites in
+   `internal/lang/typecheck.go` — `errf` *is* in the scanner's callee table, so those sites are wired in
+   the scanner's sense, and deleting the text-keyed entry while they still pass the text makes
+   `TestTemplatesRegistered` fail with `wired templates … without a translation`. The two call paths for
+   one message are the F-3 shape (§6.6) inside one repository, and the pass therefore moved **71 sites**:
+   34 struct-field sites and 37 `errf`/`fmt.Sprintf`/`fmt.Errorf` sites. `(*checker).errfID`, added by
+   step 4 for exactly this, is what they render through.
+3. **The two concatenation templates the probe could not express.** `"internal: unknown operator " + op`
+   is not a catalog key, but the *template* `internal: unknown operator %s` is, with a Chinese value that
+   has shipped since the typecheck table was written. The literal-fragment probe reported it as
+   untranslated; reconstructing the template moves it to the wired half. Two messages, found only because
+   the wiring had to name every site: §7.2's lesson again, that the number depends on the pattern.
+4. **`TestVerbSequenceMatches` improved without being asked to.** It counts reordered placeholders among
+   the text-keyed entries and was sitting at its limit of 12; deleting the 28 migrated rows removed the one
+   entry that reordered, so this run measured 11 and the limit is lowered to it.
+
+The freeze is not a claim that the English is right — it is a claim that the message is now *visible*. All
+94 literals have an id, a context note and a language column after this pass; 64 of them carry their
+English in the Chinese column, `TestProofUntranslatedFieldMessagesAreCounted` freezes that at 64, and
+`TestProofNoMessageLiteralIsWrittenIntoAField` fails if a new message is ever written into a field again.
+The Chinese for those 64 has to come from a speaker: nothing in either repository has it, and inventing one
+would change what a reader sees, which is the one thing this migration forbids.
+
+The declared exceptions, all proved by name in `proof/byte_identical.sh`:
+
+| Change | Direction | Proof |
+|---|---|---|
+| 29 messages render their shipped Chinese instead of English | ZH | `check_zh_fix.py`, 22 corpus cases, the leak and the substitution |
+| `badAlloc: new %s has an invalid allocation size` | EN | `check_en_fix.py`: the baseline's EN run carried the Chinese, the ZH run is unchanged |
+
 ---
 
 ## 8. Evidence index

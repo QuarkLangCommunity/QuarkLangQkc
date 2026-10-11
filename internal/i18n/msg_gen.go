@@ -11,253 +11,318 @@ type Msg uint16
 
 // Message constants, in table order.
 const (
-	MsgParserMacroUnbalancedDelimiters                  Msg = 0
-	MsgParserMacroArgCountMismatch                      Msg = 1
-	MsgParserMacroExpandFailed                          Msg = 2
-	MsgParserPpSharpNeedsCommand                        Msg = 3
-	MsgParserPpUnknownDirective                         Msg = 4
-	MsgParserPpRequiresParens                           Msg = 5
-	MsgParserPpErrorNeedsMessage                        Msg = 6
-	MsgParserPpErrorDirective                           Msg = 7
-	MsgParserPpInsertNotMacroParam                      Msg = 8
-	MsgParserPpExecuteNeedsName                         Msg = 9
-	MsgParserPpUnknownCommand                           Msg = 10
-	MsgParserPpInsertNeedsAst                           Msg = 11
-	MsgParserMacroNeedsName                             Msg = 12
-	MsgParserMacroMissingParamList                      Msg = 13
-	MsgParserMacroParamListDelimiters                   Msg = 14
-	MsgParserMacroParamsMustBeNames                     Msg = 15
-	MsgParserMacroMissingBody                           Msg = 16
-	MsgParserMacroBodyDelimiters                        Msg = 17
-	MsgParserPpIncludeTooDeep                           Msg = 18
-	MsgParserPpElifWithoutIf                            Msg = 19
-	MsgParserPpBranchWithoutIf                          Msg = 20
-	MsgParserPpIncludeFailed                            Msg = 21
-	MsgParserPpUnclosedIf                               Msg = 22
-	MsgParserPpUnrecognizedCondition                    Msg = 23
-	MsgParserNestingTooDeep                             Msg = 24
-	MsgParserNamedStructRequiresType                    Msg = 25
-	MsgParserNamedInterfaceRequiresType                 Msg = 26
-	MsgParserLibraryBodySignaturesOnly                  Msg = 27
-	MsgParserProgramOnlyMainOrLibrary                   Msg = 28
-	MsgParserDuplicateProgramMacro                      Msg = 29
-	MsgParserAnonStructHasNoName                        Msg = 30
-	MsgParserAnonInterfaceHasNoName                     Msg = 31
-	MsgParserPubTypeOnlyStructOrInterface               Msg = 32
-	MsgParserPubPrefixRestricted                        Msg = 33
-	MsgParserFunctionKeywordIsFn                        Msg = 34
-	MsgParserFunctionNeedsReturnType                    Msg = 35
-	MsgParserAnonStructNoGenerics                       Msg = 36
-	MsgParserAnonInterfaceNoGenerics                    Msg = 37
-	MsgParserExpectedGot                                Msg = 38
-	MsgParserUnterminatedTypeArguments                  Msg = 39
-	MsgParserUnterminatedStructBody                     Msg = 40
-	MsgParserUnterminatedSpaceBody                      Msg = 41
-	MsgParserUnterminatedLibraryBody                    Msg = 42
-	MsgParserUnterminatedInterfaceBody                  Msg = 43
-	MsgParserUnterminatedImplBody                       Msg = 44
-	MsgParserUnterminatedFunctionType                   Msg = 45
-	MsgParserUnterminatedBlock                          Msg = 46
-	MsgParserUnexpectedTokenInExpression                Msg = 47
-	MsgParserSignatureMustFollowCall                    Msg = 48
-	MsgParserScopeRequiresIdentifier                    Msg = 49
-	MsgParserIntLiteralOutOfRange                       Msg = 50
-	MsgParserExpectedFn                                 Msg = 51
-	MsgParserExpectedTopLevelDeclaration                Msg = 52
-	MsgParserDuplicateSignature                         Msg = 53
-	MsgParserUnterminatedBlockComment                   Msg = 54
-	MsgParserUnexpectedCharacter                        Msg = 55
-	MsgParserInvalidHexLiteralNoDigits                  Msg = 56
-	MsgParserInvalidHexLiteral                          Msg = 57
-	MsgParserInvalidFloatLiteral                        Msg = 58
-	MsgParserInvalidIntLiteral                          Msg = 59
-	MsgParserUnterminatedRawString                      Msg = 60
-	MsgParserUnterminatedStringLiteral                  Msg = 61
-	MsgParserUnterminatedEscapeSequence                 Msg = 62
-	MsgDocgenFormPrefix                                 Msg = 63
-	MsgDocgenImportsSeparator                           Msg = 64
-	MsgDocgenOverviewHeading                            Msg = 65
-	MsgDocgenFieldsHeading                              Msg = 66
-	MsgDocgenMembersHeading                             Msg = 67
-	MsgDocgenNoExportedSymbols                          Msg = 68
-	MsgDocgenKindFunction                               Msg = 69
-	MsgDocgenKindStruct                                 Msg = 70
-	MsgDocgenKindInterface                              Msg = 71
-	MsgDocgenKindAlias                                  Msg = 72
-	MsgDocgenKindImpl                                   Msg = 73
-	MsgDocgenKindSpace                                  Msg = 74
-	MsgDocgenKindLibrary                                Msg = 75
-	MsgDocgenKindMacro                                  Msg = 76
-	MsgDocgenSectionFunctions                           Msg = 77
-	MsgDocgenSectionTypes                               Msg = 78
-	MsgDocgenSectionImpls                               Msg = 79
-	MsgDocgenSectionSpaces                              Msg = 80
-	MsgDocgenSectionMacros                              Msg = 81
-	MsgDocgenSectionLibraries                           Msg = 82
-	MsgSharedUsageQkcHelp                               Msg = 83
-	MsgReplInternalErrorRecovered                       Msg = 84
-	MsgReplDefinedFunction                              Msg = 85
-	MsgReplDefinedStruct                                Msg = 86
-	MsgReplDefinedInterface                             Msg = 87
-	MsgReplDefinedImpl                                  Msg = 88
-	MsgReplDefinedLibrary                               Msg = 89
-	MsgReplDefinedTypeAlias                             Msg = 90
-	MsgLintShadowOuterVariable                          Msg = 91
-	MsgLintShadowGlobalFunction                         Msg = 92
-	MsgLintAssignedNeverRead                            Msg = 93
-	MsgLintDeclaredNeverUsed                            Msg = 94
-	MsgLintMissingReturnPath                            Msg = 95
-	MsgLintMissingReturnLogPath                         Msg = 96
-	MsgLintUnreachableCode                              Msg = 97
-	MsgLintSelfAssignment                               Msg = 98
-	MsgLintDeadStoreOverwritten                         Msg = 99
-	MsgLintWhileTrueNoBreak                             Msg = 100
-	MsgLintConstantDivisionByZero                       Msg = 101
-	MsgLintSelfComparisonTrue                           Msg = 102
-	MsgLintSelfComparisonFalse                          Msg = 103
-	MsgLintVoidResultUsedMethod                         Msg = 104
-	MsgLintVoidResultUsedFunction                       Msg = 105
-	MsgLintConstantConditionTrue                        Msg = 106
-	MsgLintConstantConditionFalse                       Msg = 107
-	MsgLintUnusedImport                                 Msg = 108
-	MsgLintFunctionNeverCalled                          Msg = 109
-	MsgLintKindLoopVariable                             Msg = 110
-	MsgLintKindCatchVariable                            Msg = 111
-	MsgLintInterfaceNearMiss                            Msg = 112
-	MsgLintKindParameter                                Msg = 113
-	MsgLintKindVariable                                 Msg = 114
-	MsgCliReplLoadNeedsFile                             Msg = 115
-	MsgCliReplUnknownCommand                            Msg = 116
-	MsgCliLspLNeedsDirectory                            Msg = 117
-	MsgCliLspUsage                                      Msg = 118
-	MsgCliLspUnknownArgument                            Msg = 119
-	MsgCliLspDocumentNotOpened                          Msg = 120
-	MsgCliLspInvalidContentLength                       Msg = 121
-	MsgCliLspMissingContentLength                       Msg = 122
-	MsgCliCheckLNeedsDirectory                          Msg = 123
-	MsgCliCheckUnknownArgument                          Msg = 124
-	MsgCliCheckNoFiles                                  Msg = 125
-	MsgCliCheckSummary                                  Msg = 126
-	MsgCliDocONeedsFile                                 Msg = 127
-	MsgCliDocTitleNeedsArgument                         Msg = 128
-	MsgCliDocUnknownArgument                            Msg = 129
-	MsgCliDocWroteFile                                  Msg = 130
-	MsgCliReplENeedsCode                                Msg = 131
-	MsgCliReplUnknownArgument                           Msg = 132
-	MsgCliReplBanner                                    Msg = 133
-	MsgCliDocHelpLine                                   Msg = 134
-	MsgCliReplHelpLine                                  Msg = 135
-	MsgCliQuarklangStaticAnalysisQk101Qk115Unused       Msg = 136
-	MsgCliInterfaceNearMissVoidMisuseSelf               Msg = 137
-	MsgCliCheckUsage                                    Msg = 138
-	MsgCliDocUsage                                      Msg = 139
-	MsgCliReplUsage                                     Msg = 140
-	MsgCliReplHelpText                                  Msg = 141
-	MsgCliLspJsonParseFailedReply                       Msg = 142
-	MsgCliLspMethodNotImplemented                       Msg = 143
-	MsgCliCheckHelpLines                                Msg = 144
-	MsgRuntimeRunerrorErrorRunLibraryProgramLibrary     Msg = 145
-	MsgRuntimeParseerrorQValidInteger                   Msg = 146
-	MsgRuntimeParseerrorQValidFloat                     Msg = 147
-	MsgRuntimeCompileerrorMatchingOverloadQArgument     Msg = 148
-	MsgRuntimeExportlibraryProgramLibraryExportLibrary  Msg = 149
-	MsgRuntimeImporterrorFindQLookedSQkSQlibUnder       Msg = 150
-	MsgRuntimeTypeerrorListIndexInt                     Msg = 151
-	MsgRuntimeTypeerrorIndexedAssignmentSupportedS      Msg = 152
-	MsgRuntimeTypeerrorGetIRequiresIntIndex             Msg = 153
-	MsgRuntimeStringindexoutofboundserrorSubstringDD    Msg = 154
-	MsgRuntimeStringindexoutofboundserrorCharatDOut     Msg = 155
-	MsgRuntimeTypeerrorContainsRequiresStringArgument   Msg = 156
-	MsgRuntimeTypeerrorStartswithRequiresString         Msg = 157
-	MsgRuntimeTypeerrorEndswithRequiresStringArgument   Msg = 158
-	MsgRuntimeTypeerrorIndexofRequiresStringArgument    Msg = 159
-	MsgRuntimeTypeerrorSubstringStartEndRequiresInt     Msg = 160
-	MsgRuntimeTypeerrorSubstringEndInt                  Msg = 161
-	MsgRuntimeTypeerrorSplitRequiresStringSeparator     Msg = 162
-	MsgRuntimeTypeerrorReplaceOldNewRequiresString      Msg = 163
-	MsgRuntimeTypeerrorCharatRequiresIntIndex           Msg = 164
-	MsgRuntimeIoerrorExecuteCommandV                    Msg = 165
-	MsgRuntimeIoerrorStartProgramV                      Msg = 166
-	MsgRuntimeIoerrorCommandFailedV                     Msg = 167
-	MsgRuntimeIoerrorQkpopenOutputExceedsMbLimit        Msg = 168
-	MsgRuntimeIoerrorRequestFailedV                     Msg = 169
-	MsgRuntimeIoerrorFailedReadResponseV                Msg = 170
-	MsgRuntimeIoerrorResponseExceedsMibLimit            Msg = 171
-	MsgRuntimeHttperrorStatusCodeD                      Msg = 172
-	MsgRuntimeTypeerrorQkexecvArgumentListString        Msg = 173
-	MsgRuntimeTypeerrorQkpopenCmdStringRequiresString   Msg = 174
-	MsgRuntimeTypeerrorQkjsonDumpsVRequiresOne          Msg = 175
-	MsgRuntimeLibraryerrorLibrarySDoesDeclareFunction   Msg = 176
-	MsgRuntimeLibraryerrorSTooFewArguments              Msg = 177
-	MsgRuntimeTypeerrorSArgumentSRequiresPointerNull    Msg = 178
-	MsgRuntimeTypeerrorSArgumentSRequiresIntBool        Msg = 179
-	MsgRuntimeTypeerrorSArgumentSRequiresFloat          Msg = 180
-	MsgRuntimeTypeerrorSArgumentSCurrentlySupports      Msg = 181
-	MsgRuntimeFfierrorBuildCgoDisabledFfiSystem         Msg = 182
-	MsgRuntimeFfierrorWindowsAbiShimSupportsMost        Msg = 183
-	MsgRuntimeTypeerrorCallSFirstArgumentPrefix         Msg = 184
-	MsgRuntimeTypeerrorCallSSecondArgumentOutRecord     Msg = 185
-	MsgRuntimeTypeerrorMemorizePrefixMissingWrapped     Msg = 186
-	MsgRuntimeTypeerrorPrefixFnFunction                 Msg = 187
-	MsgRuntimeTypeerrorRecList                          Msg = 188
-	MsgRuntimeTypeerrorThreadTalkRequiresChannel        Msg = 189
-	MsgRuntimeTypeerrorStyleconfigureFileRequiresFile   Msg = 190
-	MsgRuntimeTypeerrorSumSFirstArgumentFunction        Msg = 191
-	MsgRuntimeTypeerrorSumSBeginInt                     Msg = 192
-	MsgRuntimeTypeerrorSumSStopInt                      Msg = 193
-	MsgRuntimeTypeerrorSumSStepNonZeroInt               Msg = 194
-	MsgRuntimeTypeerrorGenerateReturnInt                Msg = 195
-	MsgRuntimeTypeerrorBitwiseRequiresInt               Msg = 196
-	MsgRuntimeTypeerrorBitwiseComplementRequiresInt     Msg = 197
-	MsgRuntimeCompileerrorUndeclaredIdentifierQ         Msg = 198
-	MsgRuntimeIndexoutofrangeerrorReferenceMovePastEnd  Msg = 199
-	MsgRuntimeTypeerrorSDeclaresLiteralElement          Msg = 200
-	MsgRuntimeTypeerrorMovesReferenceVariable           Msg = 201
-	MsgRuntimeTypeerrorNeedsReferenceQS                 Msg = 202
-	MsgRuntimeTypeerrorMovesElementReferencesIQ         Msg = 203
-	MsgRuntimeTypeerrorTakeAddressFieldSStruct          Msg = 204
-	MsgRuntimeTypeerrorTakeAddressElementSList          Msg = 205
-	MsgRuntimeTypeerrorTakeAddressExpressionNeeds       Msg = 206
-	MsgRuntimeTypeerrorTakeAddressUndeclaredIdentifier  Msg = 207
-	MsgRuntimeTypeerrorIoPrintlnNeedsIostreamGotS       Msg = 208
-	MsgRuntimeTypeerrorListIndexIntGotS                 Msg = 209
-	MsgRuntimeTypeerror                                 Msg = 210
-	MsgRuntimeTypeerrorComplement                       Msg = 211
-	MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ Msg = 212
-	MsgFieldTypeerrorForInRequiresListOr                Msg = 213
-	MsgFieldTypeerrorCannotAssignMemberS                Msg = 214
-	MsgFieldTypeerrorNoMemberQOnS                       Msg = 215
-	MsgFieldTypeerrorUnsupportedAssignmentTarget        Msg = 216
-	MsgFieldTypeerrorStarRequiresListOrContainer        Msg = 217
-	MsgFieldTypeerrorUnaryMinusRequiresNumberGot        Msg = 218
-	MsgFieldInternalUnknownUnaryOperatorS               Msg = 219
-	MsgFieldInternalUnknownExpressionNode               Msg = 220
-	MsgFieldTypeerrorSignatureCanOnlyWrapDirect         Msg = 221
-	MsgFieldCompileerrorSExpectsDArgsGot                Msg = 222
-	MsgFieldTypeerrorExpressionNotCallable              Msg = 223
-	MsgFieldCompileerrorUndeclaredFunctionQ             Msg = 224
-	MsgFieldTypeerrorNoMethodQOnPointer                 Msg = 225
-	MsgFieldTypeerrorAppendallRequiresListGotS          Msg = 226
-	MsgFieldTypeerrorTaskmDoneRequiresPidInt            Msg = 227
-	MsgFieldTypeerrorNoMethodQOnS                       Msg = 228
-	MsgFieldCompileerrorSCallExpectsDArgs               Msg = 229
-	MsgFieldTypeerrorMemorizeNoStaticMethodQ            Msg = 230
-	MsgFieldTypeerrorHashtableNoStaticMethodQ           Msg = 231
-	MsgFieldTypeerrorListNoStaticMethodQ                Msg = 232
-	MsgFieldTypeerrorTaskmGlobalVariableUseTaskm        Msg = 233
-	MsgFieldTypeerrorIoSetinSFirstArg                   Msg = 234
-	MsgFieldTypeerrorIoSetoutSFirstArg                  Msg = 235
-	MsgFieldTypeerrorIoNoStaticMethodQ                  Msg = 236
-	MsgFieldCompileerrorUnknownScopeQ                   Msg = 237
-	MsgFieldInternalUnknownOperatorS                    Msg = 238
-	MsgFieldTypeerrorCannotOrderCompareSS               Msg = 239
+	MsgParserMacroUnbalancedDelimiters                   Msg = 0
+	MsgParserMacroArgCountMismatch                       Msg = 1
+	MsgParserMacroExpandFailed                           Msg = 2
+	MsgParserPpSharpNeedsCommand                         Msg = 3
+	MsgParserPpUnknownDirective                          Msg = 4
+	MsgParserPpRequiresParens                            Msg = 5
+	MsgParserPpErrorNeedsMessage                         Msg = 6
+	MsgParserPpErrorDirective                            Msg = 7
+	MsgParserPpInsertNotMacroParam                       Msg = 8
+	MsgParserPpExecuteNeedsName                          Msg = 9
+	MsgParserPpUnknownCommand                            Msg = 10
+	MsgParserPpInsertNeedsAst                            Msg = 11
+	MsgParserMacroNeedsName                              Msg = 12
+	MsgParserMacroMissingParamList                       Msg = 13
+	MsgParserMacroParamListDelimiters                    Msg = 14
+	MsgParserMacroParamsMustBeNames                      Msg = 15
+	MsgParserMacroMissingBody                            Msg = 16
+	MsgParserMacroBodyDelimiters                         Msg = 17
+	MsgParserPpIncludeTooDeep                            Msg = 18
+	MsgParserPpElifWithoutIf                             Msg = 19
+	MsgParserPpBranchWithoutIf                           Msg = 20
+	MsgParserPpIncludeFailed                             Msg = 21
+	MsgParserPpUnclosedIf                                Msg = 22
+	MsgParserPpUnrecognizedCondition                     Msg = 23
+	MsgParserNestingTooDeep                              Msg = 24
+	MsgParserNamedStructRequiresType                     Msg = 25
+	MsgParserNamedInterfaceRequiresType                  Msg = 26
+	MsgParserLibraryBodySignaturesOnly                   Msg = 27
+	MsgParserProgramOnlyMainOrLibrary                    Msg = 28
+	MsgParserDuplicateProgramMacro                       Msg = 29
+	MsgParserAnonStructHasNoName                         Msg = 30
+	MsgParserAnonInterfaceHasNoName                      Msg = 31
+	MsgParserPubTypeOnlyStructOrInterface                Msg = 32
+	MsgParserPubPrefixRestricted                         Msg = 33
+	MsgParserFunctionKeywordIsFn                         Msg = 34
+	MsgParserFunctionNeedsReturnType                     Msg = 35
+	MsgParserAnonStructNoGenerics                        Msg = 36
+	MsgParserAnonInterfaceNoGenerics                     Msg = 37
+	MsgParserExpectedGot                                 Msg = 38
+	MsgParserUnterminatedTypeArguments                   Msg = 39
+	MsgParserUnterminatedStructBody                      Msg = 40
+	MsgParserUnterminatedSpaceBody                       Msg = 41
+	MsgParserUnterminatedLibraryBody                     Msg = 42
+	MsgParserUnterminatedInterfaceBody                   Msg = 43
+	MsgParserUnterminatedImplBody                        Msg = 44
+	MsgParserUnterminatedFunctionType                    Msg = 45
+	MsgParserUnterminatedBlock                           Msg = 46
+	MsgParserUnexpectedTokenInExpression                 Msg = 47
+	MsgParserSignatureMustFollowCall                     Msg = 48
+	MsgParserScopeRequiresIdentifier                     Msg = 49
+	MsgParserIntLiteralOutOfRange                        Msg = 50
+	MsgParserExpectedFn                                  Msg = 51
+	MsgParserExpectedTopLevelDeclaration                 Msg = 52
+	MsgParserDuplicateSignature                          Msg = 53
+	MsgParserUnterminatedBlockComment                    Msg = 54
+	MsgParserUnexpectedCharacter                         Msg = 55
+	MsgParserInvalidHexLiteralNoDigits                   Msg = 56
+	MsgParserInvalidHexLiteral                           Msg = 57
+	MsgParserInvalidFloatLiteral                         Msg = 58
+	MsgParserInvalidIntLiteral                           Msg = 59
+	MsgParserUnterminatedRawString                       Msg = 60
+	MsgParserUnterminatedStringLiteral                   Msg = 61
+	MsgParserUnterminatedEscapeSequence                  Msg = 62
+	MsgDocgenFormPrefix                                  Msg = 63
+	MsgDocgenImportsSeparator                            Msg = 64
+	MsgDocgenOverviewHeading                             Msg = 65
+	MsgDocgenFieldsHeading                               Msg = 66
+	MsgDocgenMembersHeading                              Msg = 67
+	MsgDocgenNoExportedSymbols                           Msg = 68
+	MsgDocgenKindFunction                                Msg = 69
+	MsgDocgenKindStruct                                  Msg = 70
+	MsgDocgenKindInterface                               Msg = 71
+	MsgDocgenKindAlias                                   Msg = 72
+	MsgDocgenKindImpl                                    Msg = 73
+	MsgDocgenKindSpace                                   Msg = 74
+	MsgDocgenKindLibrary                                 Msg = 75
+	MsgDocgenKindMacro                                   Msg = 76
+	MsgDocgenSectionFunctions                            Msg = 77
+	MsgDocgenSectionTypes                                Msg = 78
+	MsgDocgenSectionImpls                                Msg = 79
+	MsgDocgenSectionSpaces                               Msg = 80
+	MsgDocgenSectionMacros                               Msg = 81
+	MsgDocgenSectionLibraries                            Msg = 82
+	MsgSharedUsageQkcHelp                                Msg = 83
+	MsgReplInternalErrorRecovered                        Msg = 84
+	MsgReplDefinedFunction                               Msg = 85
+	MsgReplDefinedStruct                                 Msg = 86
+	MsgReplDefinedInterface                              Msg = 87
+	MsgReplDefinedImpl                                   Msg = 88
+	MsgReplDefinedLibrary                                Msg = 89
+	MsgReplDefinedTypeAlias                              Msg = 90
+	MsgLintShadowOuterVariable                           Msg = 91
+	MsgLintShadowGlobalFunction                          Msg = 92
+	MsgLintAssignedNeverRead                             Msg = 93
+	MsgLintDeclaredNeverUsed                             Msg = 94
+	MsgLintMissingReturnPath                             Msg = 95
+	MsgLintMissingReturnLogPath                          Msg = 96
+	MsgLintUnreachableCode                               Msg = 97
+	MsgLintSelfAssignment                                Msg = 98
+	MsgLintDeadStoreOverwritten                          Msg = 99
+	MsgLintWhileTrueNoBreak                              Msg = 100
+	MsgLintConstantDivisionByZero                        Msg = 101
+	MsgLintSelfComparisonTrue                            Msg = 102
+	MsgLintSelfComparisonFalse                           Msg = 103
+	MsgLintVoidResultUsedMethod                          Msg = 104
+	MsgLintVoidResultUsedFunction                        Msg = 105
+	MsgLintConstantConditionTrue                         Msg = 106
+	MsgLintConstantConditionFalse                        Msg = 107
+	MsgLintUnusedImport                                  Msg = 108
+	MsgLintFunctionNeverCalled                           Msg = 109
+	MsgLintKindLoopVariable                              Msg = 110
+	MsgLintKindCatchVariable                             Msg = 111
+	MsgLintInterfaceNearMiss                             Msg = 112
+	MsgLintKindParameter                                 Msg = 113
+	MsgLintKindVariable                                  Msg = 114
+	MsgCliReplLoadNeedsFile                              Msg = 115
+	MsgCliReplUnknownCommand                             Msg = 116
+	MsgCliLspLNeedsDirectory                             Msg = 117
+	MsgCliLspUsage                                       Msg = 118
+	MsgCliLspUnknownArgument                             Msg = 119
+	MsgCliLspDocumentNotOpened                           Msg = 120
+	MsgCliLspInvalidContentLength                        Msg = 121
+	MsgCliLspMissingContentLength                        Msg = 122
+	MsgCliCheckLNeedsDirectory                           Msg = 123
+	MsgCliCheckUnknownArgument                           Msg = 124
+	MsgCliCheckNoFiles                                   Msg = 125
+	MsgCliCheckSummary                                   Msg = 126
+	MsgCliDocONeedsFile                                  Msg = 127
+	MsgCliDocTitleNeedsArgument                          Msg = 128
+	MsgCliDocUnknownArgument                             Msg = 129
+	MsgCliDocWroteFile                                   Msg = 130
+	MsgCliReplENeedsCode                                 Msg = 131
+	MsgCliReplUnknownArgument                            Msg = 132
+	MsgCliReplBanner                                     Msg = 133
+	MsgCliDocHelpLine                                    Msg = 134
+	MsgCliReplHelpLine                                   Msg = 135
+	MsgCliQuarklangStaticAnalysisQk101Qk115Unused        Msg = 136
+	MsgCliInterfaceNearMissVoidMisuseSelf                Msg = 137
+	MsgCliCheckUsage                                     Msg = 138
+	MsgCliDocUsage                                       Msg = 139
+	MsgCliReplUsage                                      Msg = 140
+	MsgCliReplHelpText                                   Msg = 141
+	MsgCliLspJsonParseFailedReply                        Msg = 142
+	MsgCliLspMethodNotImplemented                        Msg = 143
+	MsgCliCheckHelpLines                                 Msg = 144
+	MsgRuntimeRunerrorErrorRunLibraryProgramLibrary      Msg = 145
+	MsgRuntimeParseerrorQValidInteger                    Msg = 146
+	MsgRuntimeParseerrorQValidFloat                      Msg = 147
+	MsgRuntimeCompileerrorMatchingOverloadQArgument      Msg = 148
+	MsgRuntimeExportlibraryProgramLibraryExportLibrary   Msg = 149
+	MsgRuntimeImporterrorFindQLookedSQkSQlibUnder        Msg = 150
+	MsgRuntimeTypeerrorListIndexInt                      Msg = 151
+	MsgRuntimeTypeerrorIndexedAssignmentSupportedS       Msg = 152
+	MsgRuntimeTypeerrorGetIRequiresIntIndex              Msg = 153
+	MsgRuntimeStringindexoutofboundserrorSubstringDD     Msg = 154
+	MsgRuntimeStringindexoutofboundserrorCharatDOut      Msg = 155
+	MsgRuntimeTypeerrorContainsRequiresStringArgument    Msg = 156
+	MsgRuntimeTypeerrorStartswithRequiresString          Msg = 157
+	MsgRuntimeTypeerrorEndswithRequiresStringArgument    Msg = 158
+	MsgRuntimeTypeerrorIndexofRequiresStringArgument     Msg = 159
+	MsgRuntimeTypeerrorSubstringStartEndRequiresInt      Msg = 160
+	MsgRuntimeTypeerrorSubstringEndInt                   Msg = 161
+	MsgRuntimeTypeerrorSplitRequiresStringSeparator      Msg = 162
+	MsgRuntimeTypeerrorReplaceOldNewRequiresString       Msg = 163
+	MsgRuntimeTypeerrorCharatRequiresIntIndex            Msg = 164
+	MsgRuntimeIoerrorExecuteCommandV                     Msg = 165
+	MsgRuntimeIoerrorStartProgramV                       Msg = 166
+	MsgRuntimeIoerrorCommandFailedV                      Msg = 167
+	MsgRuntimeIoerrorQkpopenOutputExceedsMbLimit         Msg = 168
+	MsgRuntimeIoerrorRequestFailedV                      Msg = 169
+	MsgRuntimeIoerrorFailedReadResponseV                 Msg = 170
+	MsgRuntimeIoerrorResponseExceedsMibLimit             Msg = 171
+	MsgRuntimeHttperrorStatusCodeD                       Msg = 172
+	MsgRuntimeTypeerrorQkexecvArgumentListString         Msg = 173
+	MsgRuntimeTypeerrorQkpopenCmdStringRequiresString    Msg = 174
+	MsgRuntimeTypeerrorQkjsonDumpsVRequiresOne           Msg = 175
+	MsgRuntimeLibraryerrorLibrarySDoesDeclareFunction    Msg = 176
+	MsgRuntimeLibraryerrorSTooFewArguments               Msg = 177
+	MsgRuntimeTypeerrorSArgumentSRequiresPointerNull     Msg = 178
+	MsgRuntimeTypeerrorSArgumentSRequiresIntBool         Msg = 179
+	MsgRuntimeTypeerrorSArgumentSRequiresFloat           Msg = 180
+	MsgRuntimeTypeerrorSArgumentSCurrentlySupports       Msg = 181
+	MsgRuntimeFfierrorBuildCgoDisabledFfiSystem          Msg = 182
+	MsgRuntimeFfierrorWindowsAbiShimSupportsMost         Msg = 183
+	MsgRuntimeTypeerrorCallSFirstArgumentPrefix          Msg = 184
+	MsgRuntimeTypeerrorCallSSecondArgumentOutRecord      Msg = 185
+	MsgRuntimeTypeerrorMemorizePrefixMissingWrapped      Msg = 186
+	MsgRuntimeTypeerrorPrefixFnFunction                  Msg = 187
+	MsgRuntimeTypeerrorRecList                           Msg = 188
+	MsgRuntimeTypeerrorThreadTalkRequiresChannel         Msg = 189
+	MsgRuntimeTypeerrorStyleconfigureFileRequiresFile    Msg = 190
+	MsgRuntimeTypeerrorSumSFirstArgumentFunction         Msg = 191
+	MsgRuntimeTypeerrorSumSBeginInt                      Msg = 192
+	MsgRuntimeTypeerrorSumSStopInt                       Msg = 193
+	MsgRuntimeTypeerrorSumSStepNonZeroInt                Msg = 194
+	MsgRuntimeTypeerrorGenerateReturnInt                 Msg = 195
+	MsgRuntimeTypeerrorBitwiseRequiresInt                Msg = 196
+	MsgRuntimeTypeerrorBitwiseComplementRequiresInt      Msg = 197
+	MsgRuntimeCompileerrorUndeclaredIdentifierQ          Msg = 198
+	MsgRuntimeIndexoutofrangeerrorReferenceMovePastEnd   Msg = 199
+	MsgRuntimeTypeerrorSDeclaresLiteralElement           Msg = 200
+	MsgRuntimeTypeerrorMovesReferenceVariable            Msg = 201
+	MsgRuntimeTypeerrorNeedsReferenceQS                  Msg = 202
+	MsgRuntimeTypeerrorMovesElementReferencesIQ          Msg = 203
+	MsgRuntimeTypeerrorTakeAddressFieldSStruct           Msg = 204
+	MsgRuntimeTypeerrorTakeAddressElementSList           Msg = 205
+	MsgRuntimeTypeerrorTakeAddressExpressionNeeds        Msg = 206
+	MsgRuntimeTypeerrorTakeAddressUndeclaredIdentifier   Msg = 207
+	MsgRuntimeTypeerrorIoPrintlnNeedsIostreamGotS        Msg = 208
+	MsgRuntimeTypeerrorListIndexIntGotS                  Msg = 209
+	MsgRuntimeTypeerror                                  Msg = 210
+	MsgRuntimeTypeerrorComplement                        Msg = 211
+	MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ  Msg = 212
+	MsgFieldTypeerrorForInRequiresListOr                 Msg = 213
+	MsgFieldTypeerrorCannotAssignMemberS                 Msg = 214
+	MsgFieldTypeerrorNoMemberQOnS                        Msg = 215
+	MsgFieldTypeerrorUnsupportedAssignmentTarget         Msg = 216
+	MsgFieldTypeerrorStarRequiresListOrContainer         Msg = 217
+	MsgFieldTypeerrorUnaryMinusRequiresNumberGot         Msg = 218
+	MsgFieldInternalUnknownUnaryOperatorS                Msg = 219
+	MsgFieldInternalUnknownExpressionNode                Msg = 220
+	MsgFieldTypeerrorSignatureCanOnlyWrapDirect          Msg = 221
+	MsgFieldCompileerrorSExpectsDArgsGot                 Msg = 222
+	MsgFieldTypeerrorExpressionNotCallable               Msg = 223
+	MsgFieldCompileerrorUndeclaredFunctionQ              Msg = 224
+	MsgFieldTypeerrorNoMethodQOnPointer                  Msg = 225
+	MsgFieldTypeerrorAppendallRequiresListGotS           Msg = 226
+	MsgFieldTypeerrorTaskmDoneRequiresPidInt             Msg = 227
+	MsgFieldTypeerrorNoMethodQOnS                        Msg = 228
+	MsgFieldCompileerrorSCallExpectsDArgs                Msg = 229
+	MsgFieldTypeerrorMemorizeNoStaticMethodQ             Msg = 230
+	MsgFieldTypeerrorHashtableNoStaticMethodQ            Msg = 231
+	MsgFieldTypeerrorListNoStaticMethodQ                 Msg = 232
+	MsgFieldTypeerrorTaskmGlobalVariableUseTaskm         Msg = 233
+	MsgFieldTypeerrorIoSetinSFirstArg                    Msg = 234
+	MsgFieldTypeerrorIoSetoutSFirstArg                   Msg = 235
+	MsgFieldTypeerrorIoNoStaticMethodQ                   Msg = 236
+	MsgFieldCompileerrorUnknownScopeQ                    Msg = 237
+	MsgFieldInternalUnknownOperatorS                     Msg = 238
+	MsgFieldTypeerrorCannotOrderCompareSS                Msg = 239
+	MsgFieldBadallocNewSInvalidAllocationSize            Msg = 240
+	MsgFieldRuntimeerrorExecctxForSAlreadyExecuted       Msg = 241
+	MsgFieldNullpointererrorAssignmentThroughNullPointer Msg = 242
+	MsgFieldTypeerrorBINeedsWritableRaw                  Msg = 243
+	MsgFieldTypeerrorBitIndexRequiresRawBits             Msg = 244
+	MsgFieldTypeerrorIndexingRequiresListGotS            Msg = 245
+	MsgFieldTypeerrorIndexMustInt                        Msg = 246
+	MsgFieldNullpointererrorDereferenceNullPointer       Msg = 247
+	MsgFieldTypeerrorStyleconfigureFileString            Msg = 248
+	MsgFieldIoerrorS                                     Msg = 249
+	MsgFieldJsonerrorS                                   Msg = 250
+	MsgFieldTypeerrorTaskmMergeFirstArgMust              Msg = 251
+	MsgFieldRuntimeerrorUnknownTaskPidD                  Msg = 252
+	MsgFieldTypeerrorTaskmChannelNRequires0              Msg = 253
+	MsgFieldTypeerrorWriteSString                        Msg = 254
+	MsgFieldTypeerrorSetblockNRequiresPositiveInt        Msg = 255
+	MsgFieldTypeerrorSSStaticMethodCall                  Msg = 256
+	MsgFieldTypeerrorFileNewNameString                   Msg = 257
+	MsgFieldTypeerrorIfstreamRequiresPathStringGot       Msg = 258
+	MsgFieldIoerrorCannotOpenQV                          Msg = 259
+	MsgFieldTypeerrorOfstreamRequiresPathStringGot       Msg = 260
+	MsgFieldIoerrorCannotCreateQV                        Msg = 261
+	MsgFieldPanicerrorS                                  Msg = 262
+	MsgFieldTypeerrorIofstreamRequiresPathStringGot      Msg = 263
+	MsgFieldTypeerrorQkexecCmdStringRetriesInt           Msg = 264
+	MsgFieldTypeerrorQkexecvProgStringArgsList           Msg = 265
+	MsgFieldTypeerrorQkhttpGetUrlStringRetries           Msg = 266
+	MsgFieldTypeerrorQkhttpPostUrlBodyContenttype        Msg = 267
+	MsgFieldJsonerrorV                                   Msg = 268
+	MsgFieldTypeerrorQkjsonLoadsSString                  Msg = 269
+	MsgFieldTypeerrorQkfileReadPathString                Msg = 270
+	MsgFieldIoerrorV                                     Msg = 271
+	MsgFieldTypeerrorQkfileWritePathStringContent        Msg = 272
+	MsgFieldTypeerrorQksignalEmitNodeNameString          Msg = 273
+	MsgFieldRuntimeerrorThreadBusyMergeOnlyWhen          Msg = 274
+	MsgFieldTypeerrorTaskmRequiresTaskOrPid              Msg = 275
+	MsgFieldIndexoutofrangeerrorBitIndexDOutRange        Msg = 276
+	MsgFieldTypeerrorRawBitsAdmitOnlyBitwise             Msg = 277
+	MsgFieldDivisionbyzeroerrorFloatDivisionByZero       Msg = 278
+	MsgFieldTypeerrorPercentRequiresIntOperands          Msg = 279
+	MsgFieldInternalUnknownArithmeticOperatorS           Msg = 280
+	MsgFieldCompileerrorDuplicateDeclarationQ            Msg = 281
+	MsgFieldCompileerrorDuplicateTypeAliasQ              Msg = 282
+	MsgFieldCompileerrorDuplicateStructQ                 Msg = 283
+	MsgFieldCompileerrorDuplicateInterfaceQ              Msg = 284
+	MsgFieldCompileerrorDuplicateLibraryQ                Msg = 285
+	MsgFieldCompileerrorStructSDTypeParameter            Msg = 286
+	MsgFieldCompileerrorStructSNoTypeParameters          Msg = 287
+	MsgFieldCompileerrorDuplicateMethodQOnS              Msg = 288
+	MsgFieldCompileerrorUnknownInterfaceQ                Msg = 289
+	MsgFieldCompileerrorImplSForSMissing                 Msg = 290
+	MsgFieldCompileerrorImplSForSMethod                  Msg = 291
+	MsgFieldCompileerrorMainMustTake13                   Msg = 292
+	MsgFieldTypeerrorCopydModifierNotTypeWrite           Msg = 293
+	MsgFieldCompileerrorEmptyTypeAnnotation              Msg = 294
+	MsgFieldCompileerrorS                                Msg = 295
+	MsgFieldCompileerrorSTakesDTypeArgument              Msg = 296
+	MsgFieldCompileerrorInterfaceSNotGenericBut          Msg = 297
+	MsgFieldCompileerrorUnknownTypeQ                     Msg = 298
+	MsgFieldCompileerrorParameterQSMissingType           Msg = 299
+	MsgFieldIndexoutofboundserrorIndexDOutRange0         Msg = 300
+	MsgFieldRuntimeerrorUnresolvedCallTarget             Msg = 301
+	MsgFieldDivisionbyzeroerrorIntegerDivisionByZero     Msg = 302
+	MsgFieldDivisionbyzeroerrorModuloByZero              Msg = 303
+	MsgFieldTypeerrorUnsupportedIntegerOperation         Msg = 304
 )
 
 // msgLangs are the shipped languages, in blob-block order. The first is the source language.
 var msgLangs = [...]string{"en", "zh"}
 
 // msgOffsets has one entry per (language, message) pair plus a final sentinel: the pair at flat
-// index lang*240+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
+// index lang*305+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
 var msgOffsets = [...]uint32{
 	0,
 	42,
@@ -500,258 +565,388 @@ var msgOffsets = [...]uint32{
 	13012,
 	13041,
 	13082,
-	13125,
-	13201,
-	13225,
-	13285,
-	13334,
-	13365,
-	13402,
-	13441,
-	13495,
-	13532,
-	13570,
-	13606,
-	13650,
-	13703,
-	13772,
-	13861,
-	13908,
-	13971,
-	14016,
-	14048,
-	14078,
-	14105,
-	14149,
-	14184,
-	14266,
-	14321,
-	14376,
-	14415,
-	14462,
-	14489,
-	14564,
-	14639,
-	14676,
-	14756,
-	14823,
-	14887,
-	14969,
-	15057,
-	15076,
-	15109,
-	15147,
-	15170,
-	15195,
-	15236,
-	15272,
-	15298,
-	15330,
-	15363,
-	15402,
-	15441,
-	15499,
-	15512,
-	15598,
-	15629,
-	15655,
-	15678,
-	15721,
-	15743,
-	15767,
-	15789,
-	15812,
-	15839,
-	15867,
-	15887,
-	15904,
-	15971,
+	13129,
+	13174,
+	13223,
+	13271,
+	13328,
+	13371,
+	13399,
+	13444,
+	13483,
+	13494,
+	13507,
+	13559,
+	13592,
+	13645,
+	13671,
+	13728,
+	13788,
+	13821,
+	13871,
+	13898,
+	13948,
+	13977,
+	13991,
+	14042,
+	14086,
+	14147,
+	14195,
+	14252,
+	14265,
+	14298,
+	14333,
+	14344,
+	14396,
+	14451,
+	14514,
+	14561,
+	14632,
+	14694,
+	14737,
+	14773,
+	14813,
+	14854,
+	14891,
+	14924,
+	14960,
+	14994,
+	15105,
+	15173,
+	15212,
+	15246,
+	15293,
+	15371,
+	15443,
+	15539,
+	15574,
+	15590,
+	15640,
+	15717,
+	15746,
+	15807,
+	15858,
+	15894,
+	15939,
+	15974,
 	16014,
 	16057,
-	16090,
-	16096,
-	16105,
-	16111,
-	16123,
-	16129,
-	16135,
-	16144,
-	16147,
-	16153,
-	16159,
-	16165,
-	16171,
-	16174,
-	16183,
-	17420,
-	17457,
-	17470,
-	17498,
-	17529,
-	17568,
+	16133,
+	16157,
+	16217,
+	16266,
+	16297,
+	16334,
+	16373,
+	16427,
+	16464,
+	16502,
+	16538,
+	16582,
+	16635,
+	16704,
+	16793,
+	16840,
+	16903,
+	16948,
+	16980,
+	17010,
+	17037,
+	17081,
+	17116,
+	17198,
+	17253,
+	17308,
+	17347,
+	17394,
+	17421,
+	17496,
+	17571,
 	17608,
-	17630,
-	17691,
-	17763,
-	17796,
-	17823,
-	17921,
-	18030,
-	18088,
-	18133,
-	18198,
-	18263,
-	18347,
-	18380,
-	18413,
-	18489,
-	18568,
-	18616,
-	18665,
-	18730,
-	18800,
-	18812,
-	18824,
-	18894,
-	18900,
-	18906,
-	18936,
-	18975,
-	19002,
-	19060,
-	19075,
-	19096,
-	19127,
-	19159,
-	19195,
-	19220,
-	19258,
-	19307,
-	19341,
-	19373,
-	19396,
-	19431,
-	19460,
-	19484,
-	19560,
-	19643,
-	19726,
-	19853,
-	19984,
-	20071,
-	20140,
-	20180,
-	20601,
-	20629,
-	20657,
-	20916,
-	21003,
-	21036,
-	21072,
-	21137,
-	21211,
-	21282,
-	21318,
-	21357,
-	21392,
-	21452,
-	21505,
-	21545,
-	21587,
-	21627,
-	21666,
-	21717,
-	21759,
-	21799,
-	21848,
-	21883,
-	21915,
-	21947,
-	21979,
-	22019,
-	22045,
-	22077,
-	22110,
-	22133,
-	22180,
-	22238,
-	22283,
-	22325,
-	22354,
-	22401,
-	22440,
-	22476,
-	22532,
-	22592,
-	22638,
-	22689,
-	22743,
-	22794,
-	22827,
-	22859,
-	22906,
-	22961,
-	23021,
-	23059,
-	23096,
-	23139,
-	23175,
-	23230,
-	23281,
-	23319,
-	23401,
-	23460,
-	23522,
-	23564,
-	23643,
-	23706,
-	23763,
-	23849,
-	23903,
-	23952,
-	24000,
-	24059,
-	24120,
-	24168,
-	24255,
-	24294,
-	24334,
-	24369,
-	24436,
-	24482,
+	17688,
+	17755,
+	17819,
+	17901,
+	17989,
+	18008,
+	18041,
+	18079,
+	18102,
+	18127,
+	18168,
+	18204,
+	18230,
+	18262,
+	18295,
+	18334,
+	18373,
+	18431,
+	18444,
+	18530,
+	18561,
+	18587,
+	18610,
+	18653,
+	18675,
+	18699,
+	18721,
+	18744,
+	18771,
+	18799,
+	18819,
+	18836,
+	18903,
+	18946,
+	18989,
+	19022,
+	19028,
+	19037,
+	19043,
+	19055,
+	19061,
+	19067,
+	19076,
+	19079,
+	19085,
+	19091,
+	19097,
+	19103,
+	19106,
+	19115,
+	20352,
+	20389,
+	20402,
+	20430,
+	20461,
+	20500,
+	20540,
+	20562,
+	20623,
+	20695,
+	20728,
+	20755,
+	20853,
+	20962,
+	21020,
+	21065,
+	21130,
+	21195,
+	21279,
+	21312,
+	21345,
+	21421,
+	21500,
+	21548,
+	21597,
+	21662,
+	21732,
+	21744,
+	21756,
+	21826,
+	21832,
+	21838,
+	21868,
+	21907,
+	21934,
+	21992,
+	22007,
+	22028,
+	22059,
+	22091,
+	22127,
+	22152,
+	22190,
+	22239,
+	22273,
+	22305,
+	22328,
+	22363,
+	22392,
+	22416,
+	22492,
+	22575,
+	22658,
+	22785,
+	22916,
+	23003,
+	23072,
+	23112,
+	23533,
+	23561,
+	23589,
+	23848,
+	23935,
+	23968,
+	24004,
+	24069,
+	24143,
+	24214,
+	24250,
+	24289,
+	24324,
+	24384,
+	24437,
+	24477,
 	24519,
-	24553,
-	24603,
-	24651,
-	24689,
-	24724,
-	24766,
-	24810,
-	24863,
-	24903,
-	24953,
-	24994,
-	25036,
-	25073,
-	25216,
-	25285,
-	25355,
-	25390,
-	25425,
-	25456,
-	25502,
+	24559,
+	24598,
+	24649,
+	24691,
+	24731,
+	24780,
+	24815,
+	24847,
+	24879,
+	24911,
+	24951,
+	24977,
+	25009,
+	25042,
+	25065,
+	25112,
+	25170,
+	25215,
+	25257,
+	25286,
+	25333,
+	25372,
+	25408,
+	25464,
+	25524,
+	25570,
+	25621,
+	25675,
+	25726,
+	25759,
+	25791,
+	25838,
+	25893,
+	25953,
+	25991,
+	26028,
+	26071,
+	26107,
+	26162,
+	26213,
+	26251,
+	26333,
+	26392,
+	26454,
+	26496,
+	26575,
+	26638,
+	26695,
+	26781,
+	26835,
+	26884,
+	26932,
+	26991,
+	27052,
+	27100,
+	27187,
+	27226,
+	27266,
+	27301,
+	27368,
+	27414,
+	27451,
+	27485,
+	27535,
+	27583,
+	27621,
+	27656,
+	27698,
+	27742,
+	27795,
+	27835,
+	27885,
+	27926,
+	27968,
+	28005,
+	28148,
+	28217,
+	28287,
+	28322,
+	28357,
+	28388,
+	28434,
+	28469,
+	28514,
+	28563,
+	28611,
+	28668,
+	28711,
+	28739,
+	28784,
+	28823,
+	28834,
+	28847,
+	28899,
+	28932,
+	28985,
+	29011,
+	29068,
+	29128,
+	29161,
+	29211,
+	29238,
+	29288,
+	29317,
+	29331,
+	29382,
+	29426,
+	29487,
+	29535,
+	29592,
+	29605,
+	29638,
+	29673,
+	29684,
+	29736,
+	29791,
+	29854,
+	29901,
+	29972,
+	30034,
+	30077,
+	30113,
+	30153,
+	30194,
+	30231,
+	30264,
+	30300,
+	30334,
+	30445,
+	30513,
+	30552,
+	30586,
+	30633,
+	30711,
+	30783,
+	30879,
+	30914,
+	30930,
+	30980,
+	31057,
+	31086,
+	31147,
+	31198,
+	31234,
+	31279,
+	31314,
+	31354,
 }
 
 // msgBlob is every message in every language, back to back, in language-then-table order.
-const msgBlob = "ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires (\"message\")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> Form: `program  · imports: ## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n| Field | Type | Description |\n|---|---|---|\n| Member | Signature | Description |\n|---|---|---|\n_(no exported symbols)_\nfunctionstructinterfacetype aliasimplspacesystem librarymacroFunctionsTypesImplsSpacesMacrosSystem librariesusage: qkc [options] <file.qk>\n\n  (default)           emit LLVM IR to stdout\n  --emit-ir           same as above (explicit)\n  -run                compile to a native binary and run it\n  -c                  compile to a native binary only (do not run)\n  -o <path>           output path: binary with -c/-run; .qklib with --emit-lib; IR file otherwise\n  --target-os <os>    preprocessor target OS (linux/darwin/windows; defaults to the host)\n  --target-arch <a>   preprocessor target arch (x86_64/arm64; defaults to the host)\n  --emit-lib          compile to a **library artifact** .qklib (contains lib<name>.so + export manifest; no sources)\n  --obfuscate         obfuscate: rename internal symbols, strip debug/ident info (with --emit-lib or -c)\n  -L <lib.qklib>      link a library: inject its library declarations + install lib<name>.so next to the output (repeatable)\n  --lib-name <name>   library name (defaults to the output file name)\n  --lib-version <ver> library version (default 0.1.0)\n  --lib-targets <list> platform variants to emit, comma-separated (e.g. linux-x86_64,windows-x86_64,darwin-arm64)\n  --lang <zh|en>      output language (Chinese by default; QK_LANG works too)\n  --version, -V       print the version and engine generation\n  -h, --help          this help\n\nenvironment: QUARK_CACHE=cache dir  QUARK_CFLAGS=clang flags (default \"-O3 -flto=thin\")REPL: internal error (recovered): %vdefined %s\ndefined type struct%s %s;\ndefined type interface%s %s;\ndefined impl%s %s; (%d methods)\ndefined library %s; (%d symbols)\ndefined type %s %s;\n%s %s shadows an outer variable of the same name (declared on line %d)%s %s shadows a global function (calls with that name resolve to this local)%s %s is assigned but never read%s %s is declared but never usedfunction %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)unreachable code (statements after line %d never execute)self-assignment: %s is assigned to itself (no effect)the assignment to %s is overwritten on line %d before any readwhile (true) with no break/return in the body: possible infinite loopdivision by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)self-comparison: %s == %s is always trueself-comparison: %s != %s is always false%s::%s returns void but its result is used as a value (nil at runtime)function %s returns void but its result is used as a value (nil at runtime)%s (true): the condition is always true, so the branch always runs%s (false): the condition is always false, so the branch never runsimported %q but no symbol from it is used (the import can be removed)function %s is never called (dead code; functions in library files are exempt)loop variablecatch variabletype %s looks like it implements interface %s but is missing method %s (implemented: %s)parametervariable:load requires a file argumentunknown command %s (see :help)-L requires a directory argumentusage: qklsp [-L dir]...  (serves LSP over stdio)unknown argument %sdocument not opened: %sqklsp: invalid Content-Length %qqklsp: missing Content-Length headerqkcheck: -L requires a directory argumentqkcheck: unknown argument %s\nqkcheck: no .qk files to checkqkcheck: %d issue(s) (%d error(s) / %d warning(s))\nqkdoc: -o requires a file argumentqkdoc: -title requires an argumentqkdoc: unknown argument %s\nqkdoc: wrote %s (%d bytes)\nqkrepl: -e requires a code snippetqkrepl: unknown argument %s\nqkrepl %s — QuarkLang interactive evaluation (:help for help, :quit to exit)\n  QuarkLang API doc generator: /* */ and // comments + pub exports -> Markdown / HTML  QuarkLang interactive evaluation: multi-line blocks, persistent environment, :help/:load/:quit  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparisonusage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]commands:\n  :help            show this help\n  :quit / :exit    exit\n  :load <file.qk>  load a file: register its functions/types/impls (main is not run; call main(io) afterwards)\nnotes:\n  - an expression echoes its value; a statement ends with ; (added automatically when omitted)\n  - an unclosed block continues on the next line; variables/functions/types stay visible in later inputs\n  - log records and io.println output are shown as they happenqklsp: JSON parse failed: %wqklsp: method not implemented: %s  QuarkLang static analysis (QK101-QK115): unused vars/params/imports/functions, unreachable code,\n                           shadowing, missing return, interface near-miss, void misuse, self-assign,\n                           constant condition, division by zero, dead store, self-comparisonRunError: #error (\"cannot run a library\"): a program library is compiled as a library and cannot be runParseError: %q is not a valid integerParseError: %q is not a valid floatCompileError: no matching overload for %q (argument types do not match)ExportLibrary: only 'program library;' can export a library (current Kind=%q)ImportError: cannot find %q (looked for %s.qk or %s.qlib under %s)TypeError: list index must be an intTypeError: indexed assignment is not supported on %sTypeError: get(i) requires an int indexStringIndexOutOfBoundsError: substring(%d, %d) out of range [0,%d]StringIndexOutOfBoundsError: charAt(%d) out of range [0,%d)TypeError: contains requires a String argumentTypeError: startsWith requires a String argumentTypeError: endsWith requires a String argumentTypeError: indexOf requires a String argumentTypeError: substring(start, end?) requires int argumentsTypeError: substring end must be an intTypeError: split requires a String separatorTypeError: replace(old, new) requires String argumentsTypeError: charAt requires an int indexIOError: cannot execute command: %vIOError: cannot start program: %vIOError: command failed: %vIOError: qkpopen output exceeds the 8 MB limitIOError: request failed: %vIOError: failed to read response: %vIOError: response exceeds the 8 MiB limitHTTPError: status code %dTypeError: qkexecv argument must be a List<String>TypeError: qkpopen(cmd String) requires a string commandTypeError: qkjson_dumps(v) requires one argumentLibraryError: library %s does not declare function %qLibraryError: %s has too few argumentsTypeError: %s argument %s requires a pointer or nullTypeError: %s argument %s requires an int/boolTypeError: %s argument %s requires a floatTypeError: %s argument %s currently supports only String/int/floatFFIError: this build has cgo disabled (FFI / system libraries unavailable)FFIError: the Windows ABI shim supports at most 4 argumentsTypeError: call's first argument must be a prefix recordTypeError: call's second argument must be a .{in,out} recordTypeError: memorize prefix is missing the wrapped function fnTypeError: prefix.fn is not a functionTypeError: rec.in must be a ListTypeError: thread.talk requires a channel instanceTypeError: @styleConfigure(file) requires file or StringTypeError: sum's first argument must be the function reference 'generate'TypeError: sum's begin must be an intTypeError: sum's stop must be an intTypeError: sum's step must be a non-zero intTypeError: generate must return an intTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: undeclared identifier %qIndexOutOfRangeError: reference move past the end of the container (index %d, size %d)TypeError: %s declares __literal__ but no __element__TypeError: ++ moves a reference variable, not this expressionTypeError: ++ needs a reference, but %q is %sTypeError: ++ only moves element references (&a[i]); %q refers to something elseTypeError: cannot take the address of a field on %s (not a struct)TypeError: cannot take the address of an element of %s (not a list)TypeError: cannot take the address of this expression (needs a variable, field or list element)TypeError: cannot take the address of undeclared identifier %qTypeError: io.println needs an IOStream, got %sTypeError: list index must be int, got %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: assignment to undeclared identifier %qTypeError: for-in requires a List or a container with size() int and get(int), got %sTypeError: cannot assign member of %sTypeError: no member %q on %sTypeError: unsupported assignment targetTypeError: '*' requires a List or a container handle with get(), got %sTypeError: unary '-' requires a number, got %sinternal: unknown unary operator %sinternal: unknown expression nodeTypeError: a signature can only wrap a direct function callCompileError: %s expects %d args, got %dTypeError: this expression is not callableCompileError: undeclared function %qTypeError: no method %q on pointerTypeError: appendAll requires a List, got %sTypeError: taskm.done requires a pid (int), got %sTypeError: no method %q on %sCompileError: %s() expects %d args, got %dTypeError: memorize has no static method %qTypeError: HashTable has no static method %qTypeError: List has no static method %qTypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn's first arg must be an IOStream, got %sTypeError: IO::setOut's first arg must be an IOStream, got %sTypeError: IO has no static method %qCompileError: unknown scope %qinternal: unknown operator %sTypeError: cannot order-compare %s and %sParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 (\"消息\")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> 形态：`program \u3000·\u3000导入：## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| 成员 | 签名 | 说明 |\n|---|---|---|\n_（没有可导出的符号）_\n函数结构体接口类型别名实现空间系统库宏函数类型实现空间宏系统库usage: qkc [options] <file.qk>\n\n  （默认）            输出 LLVM IR 到 stdout\n  --emit-ir           同上（显式）\n  -run                编译为原生二进制并执行\n  -c                  只编译为原生二进制（不执行）\n  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件\n  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）\n  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）\n  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）\n  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）\n  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）\n  --lib-name <name>   库名（默认取输出文件名）\n  --lib-version <ver> 库版本（默认 0.1.0）\n  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）\n  --version, -V       打印版本与引擎代次\n  -h, --help          本帮助\n\n环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 \"-O3 -flto=thin\"）REPL: 内部错误（已恢复）: %v已定义 %s\n已定义 type struct%s %s;\n已定义 type interface%s %s;\n已定义 impl%s %s;（%d 个方法）\n已定义 library %s;（%d 个符号）\n已定义 type %s %s;\n%s %s 遮蔽外层同名变量（外层声明于第 %d 行）%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）%s %s 只被赋值、从未读取%s %s 声明后从未使用函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）不可达代码（第 %d 行之后的语句不会执行）自赋值：%s 赋值给自身（无效果）对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）while (true) 且循环体内无 break/return：可能的死循环常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）自身比较：%s == %s 恒为真自身比较：%s != %s 恒为假%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）%s (true)：条件恒为真，分支永远执行%s (false)：条件恒为假，分支永不执行导入了 %q 但未使用其任何符号（可删除该 import）函数 %s 从未被调用（死代码；库文件中的函数不报）循环变量catch 变量类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）形参变量:load 需要一个文件参数未知命令 %s（:help 查看帮助）-L 需要一个目录参数usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）未知参数 %s未打开的文档 %sqklsp: 非法 Content-Length %qqklsp: 缺少 Content-Length 头qkcheck: -L 需要一个目录参数qkcheck: 未知参数 %s\nqkcheck: 没有可检查的 .qk 文件qkcheck: %d 个问题（%d 错误 / %d 警告）\nqkdoc: -o 需要一个文件参数qkdoc: -title 需要一个参数qkdoc: 未知参数 %s\nqkdoc: 已写入 %s（%d 字节）\nqkrepl: -e 需要一段代码qkrepl: 未知参数 %s\nqkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]命令：\n  :help            显示本帮助\n  :quit / :exit    退出\n  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）\n说明：\n  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）\n  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见\n  - log 的记录、io.println 的输出会即时显示qklsp: JSON 解析失败: %wqklsp: 未实现的方法 %s  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·\n                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较RunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行ParseError: %q 不是合法整数ParseError: %q 不是合法浮点数CompileError: 未找到匹配重载 %q（参数类型不匹配）ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）TypeError: 列表索引必须是 intTypeError: 不支持对 %s 索引赋值TypeError: get(i) 需要 int 下标StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)TypeError: contains 需要 String 参数TypeError: startsWith 需要 String 参数TypeError: endsWith 需要 String 参数TypeError: indexOf 需要 String 参数TypeError: substring(start, end?) 需要 int 参数TypeError: substring 的 end 必须是 intTypeError: split 需要 String 分隔符TypeError: replace(old, new) 需要 String 参数TypeError: charAt 需要 int 索引IOError: 无法执行命令：%vIOError: 无法启动程序：%vIOError: 命令执行失败：%vIOError: qkpopen 输出超过 8MB 上限IOError: 请求失败：%vIOError: 读取响应失败：%vIOError: 响应超过 8MiB 上限HTTPError: 状态码 %dTypeError: qkexecv 参数必须是 List<String>TypeError: qkpopen(cmd String) 需要一个字符串命令TypeError: qkjson_dumps(v) 需要一个参数LibraryError: 库 %s 没有声明函数 %qLibraryError: %s 参数不足TypeError: %s 参数 %s 需要 pointer 或 nullTypeError: %s 参数 %s 需要 int/boolTypeError: %s 参数 %s 需要 floatTypeError: %s 参数 %s 目前仅支持 String/int/floatFFIError: 本构建未启用 cgo（FFI/系统库不可用）FFIError: windows 自研 ABI 支持 <=4 参数TypeError: call 第一参数必须是 prefix 记录TypeError: call 第二参数必须是 .{in,out} 记录TypeError: memorize prefix 缺少被包装函数 fnTypeError: prefix.fn 不是函数TypeError: rec.in 必须是 ListTypeError: thread.talk 需要 channel 类实例TypeError: @styleConfigure(file) 需要 file 或 StringTypeError: sum 第一个参数必须是函数引用 generateTypeError: sum 的 begin 必须是 intTypeError: sum 的 stop 必须是 intTypeError: sum 的 step 必须是非零 intTypeError: generate 必须返回 intTypeError: 位运算与移位运算需要 int 操作数TypeError: 取反运算符 '~' 需要 int 操作数CompileError: 未声明的标识符 %qIndexOutOfRangeError: 引用移动越过了容器末尾（下标 %d，大小 %d）TypeError: %s 声明了 __literal__，却没有 __element__TypeError: ++ 移动的是引用变量，不是这个表达式TypeError: ++ 需要引用，但 %q 是 %sTypeError: ++ 只能移动元素引用（&a[i]）；%q 指向的是别的对象TypeError: 无法取 %s 上字段的地址（不是结构体）TypeError: 无法取 %s 元素的地址（不是列表）TypeError: 无法取这个表达式的地址（需要变量、字段或列表元素）TypeError: 无法取未声明的标识符 %q 的地址TypeError: io.println 需要 IOStream，得到 %sTypeError: 列表索引必须是 int，得到 %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: 对未声明的标识符 %q 赋值TypeError: for-in 需要 List，或具备 size() int 与 get(int) 的容器，得到 %sTypeError: 不能给 %s 的成员赋值TypeError: 成员 %q 在 %s 上不存在TypeError: 不支持的赋值目标TypeError: '*' 需要 List 或带 get() 的容器句柄，得到 %sTypeError: 一元 '-' 需要数字，得到 %sinternal: 未知的一元运算符 %sinternal: 未知的表达式节点TypeError: 签名只能包装直接的函数调用CompileError: %s 需要 %d 个参数，得到 %dTypeError: 这个表达式不可调用CompileError: 未声明的函数 %qTypeError: 方法 %q 在指针上不存在TypeError: appendAll 需要 List，得到 %sTypeError: taskm.done 需要 pid（int），得到 %sTypeError: 方法 %q 在 %s 上不存在CompileError: %s() 需要 %d 个参数，得到 %dTypeError: memorize 没有静态方法 %qTypeError: HashTable 没有静态方法 %qTypeError: List 没有静态方法 %qTypeError: taskm 是全局变量 —— 请使用 taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn 的第一个参数必须是 IOStream，得到 %sTypeError: IO::setOut 的第一个参数必须是 IOStream，得到 %sTypeError: IO 没有静态方法 %qCompileError: 未知的作用域 %qinternal: 未知的运算符 %sTypeError: 无法对 %s 和 %s 做大小比较"
+const msgBlob = "ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires (\"message\")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> Form: `program  · imports: ## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n| Field | Type | Description |\n|---|---|---|\n| Member | Signature | Description |\n|---|---|---|\n_(no exported symbols)_\nfunctionstructinterfacetype aliasimplspacesystem librarymacroFunctionsTypesImplsSpacesMacrosSystem librariesusage: qkc [options] <file.qk>\n\n  (default)           emit LLVM IR to stdout\n  --emit-ir           same as above (explicit)\n  -run                compile to a native binary and run it\n  -c                  compile to a native binary only (do not run)\n  -o <path>           output path: binary with -c/-run; .qklib with --emit-lib; IR file otherwise\n  --target-os <os>    preprocessor target OS (linux/darwin/windows; defaults to the host)\n  --target-arch <a>   preprocessor target arch (x86_64/arm64; defaults to the host)\n  --emit-lib          compile to a **library artifact** .qklib (contains lib<name>.so + export manifest; no sources)\n  --obfuscate         obfuscate: rename internal symbols, strip debug/ident info (with --emit-lib or -c)\n  -L <lib.qklib>      link a library: inject its library declarations + install lib<name>.so next to the output (repeatable)\n  --lib-name <name>   library name (defaults to the output file name)\n  --lib-version <ver> library version (default 0.1.0)\n  --lib-targets <list> platform variants to emit, comma-separated (e.g. linux-x86_64,windows-x86_64,darwin-arm64)\n  --lang <zh|en>      output language (Chinese by default; QK_LANG works too)\n  --version, -V       print the version and engine generation\n  -h, --help          this help\n\nenvironment: QUARK_CACHE=cache dir  QUARK_CFLAGS=clang flags (default \"-O3 -flto=thin\")REPL: internal error (recovered): %vdefined %s\ndefined type struct%s %s;\ndefined type interface%s %s;\ndefined impl%s %s; (%d methods)\ndefined library %s; (%d symbols)\ndefined type %s %s;\n%s %s shadows an outer variable of the same name (declared on line %d)%s %s shadows a global function (calls with that name resolve to this local)%s %s is assigned but never read%s %s is declared but never usedfunction %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)unreachable code (statements after line %d never execute)self-assignment: %s is assigned to itself (no effect)the assignment to %s is overwritten on line %d before any readwhile (true) with no break/return in the body: possible infinite loopdivision by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)self-comparison: %s == %s is always trueself-comparison: %s != %s is always false%s::%s returns void but its result is used as a value (nil at runtime)function %s returns void but its result is used as a value (nil at runtime)%s (true): the condition is always true, so the branch always runs%s (false): the condition is always false, so the branch never runsimported %q but no symbol from it is used (the import can be removed)function %s is never called (dead code; functions in library files are exempt)loop variablecatch variabletype %s looks like it implements interface %s but is missing method %s (implemented: %s)parametervariable:load requires a file argumentunknown command %s (see :help)-L requires a directory argumentusage: qklsp [-L dir]...  (serves LSP over stdio)unknown argument %sdocument not opened: %sqklsp: invalid Content-Length %qqklsp: missing Content-Length headerqkcheck: -L requires a directory argumentqkcheck: unknown argument %s\nqkcheck: no .qk files to checkqkcheck: %d issue(s) (%d error(s) / %d warning(s))\nqkdoc: -o requires a file argumentqkdoc: -title requires an argumentqkdoc: unknown argument %s\nqkdoc: wrote %s (%d bytes)\nqkrepl: -e requires a code snippetqkrepl: unknown argument %s\nqkrepl %s — QuarkLang interactive evaluation (:help for help, :quit to exit)\n  QuarkLang API doc generator: /* */ and // comments + pub exports -> Markdown / HTML  QuarkLang interactive evaluation: multi-line blocks, persistent environment, :help/:load/:quit  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparisonusage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]commands:\n  :help            show this help\n  :quit / :exit    exit\n  :load <file.qk>  load a file: register its functions/types/impls (main is not run; call main(io) afterwards)\nnotes:\n  - an expression echoes its value; a statement ends with ; (added automatically when omitted)\n  - an unclosed block continues on the next line; variables/functions/types stay visible in later inputs\n  - log records and io.println output are shown as they happenqklsp: JSON parse failed: %wqklsp: method not implemented: %s  QuarkLang static analysis (QK101-QK115): unused vars/params/imports/functions, unreachable code,\n                           shadowing, missing return, interface near-miss, void misuse, self-assign,\n                           constant condition, division by zero, dead store, self-comparisonRunError: #error (\"cannot run a library\"): a program library is compiled as a library and cannot be runParseError: %q is not a valid integerParseError: %q is not a valid floatCompileError: no matching overload for %q (argument types do not match)ExportLibrary: only 'program library;' can export a library (current Kind=%q)ImportError: cannot find %q (looked for %s.qk or %s.qlib under %s)TypeError: list index must be an intTypeError: indexed assignment is not supported on %sTypeError: get(i) requires an int indexStringIndexOutOfBoundsError: substring(%d, %d) out of range [0,%d]StringIndexOutOfBoundsError: charAt(%d) out of range [0,%d)TypeError: contains requires a String argumentTypeError: startsWith requires a String argumentTypeError: endsWith requires a String argumentTypeError: indexOf requires a String argumentTypeError: substring(start, end?) requires int argumentsTypeError: substring end must be an intTypeError: split requires a String separatorTypeError: replace(old, new) requires String argumentsTypeError: charAt requires an int indexIOError: cannot execute command: %vIOError: cannot start program: %vIOError: command failed: %vIOError: qkpopen output exceeds the 8 MB limitIOError: request failed: %vIOError: failed to read response: %vIOError: response exceeds the 8 MiB limitHTTPError: status code %dTypeError: qkexecv argument must be a List<String>TypeError: qkpopen(cmd String) requires a string commandTypeError: qkjson_dumps(v) requires one argumentLibraryError: library %s does not declare function %qLibraryError: %s has too few argumentsTypeError: %s argument %s requires a pointer or nullTypeError: %s argument %s requires an int/boolTypeError: %s argument %s requires a floatTypeError: %s argument %s currently supports only String/int/floatFFIError: this build has cgo disabled (FFI / system libraries unavailable)FFIError: the Windows ABI shim supports at most 4 argumentsTypeError: call's first argument must be a prefix recordTypeError: call's second argument must be a .{in,out} recordTypeError: memorize prefix is missing the wrapped function fnTypeError: prefix.fn is not a functionTypeError: rec.in must be a ListTypeError: thread.talk requires a channel instanceTypeError: @styleConfigure(file) requires file or StringTypeError: sum's first argument must be the function reference 'generate'TypeError: sum's begin must be an intTypeError: sum's stop must be an intTypeError: sum's step must be a non-zero intTypeError: generate must return an intTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: undeclared identifier %qIndexOutOfRangeError: reference move past the end of the container (index %d, size %d)TypeError: %s declares __literal__ but no __element__TypeError: ++ moves a reference variable, not this expressionTypeError: ++ needs a reference, but %q is %sTypeError: ++ only moves element references (&a[i]); %q refers to something elseTypeError: cannot take the address of a field on %s (not a struct)TypeError: cannot take the address of an element of %s (not a list)TypeError: cannot take the address of this expression (needs a variable, field or list element)TypeError: cannot take the address of undeclared identifier %qTypeError: io.println needs an IOStream, got %sTypeError: list index must be int, got %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: assignment to undeclared identifier %qTypeError: for-in requires a List or a container with size() int and get(int), got %sTypeError: cannot assign member of %sTypeError: no member %q on %sTypeError: unsupported assignment targetTypeError: '*' requires a List or a container handle with get(), got %sTypeError: unary '-' requires a number, got %sinternal: unknown unary operator %sinternal: unknown expression nodeTypeError: a signature can only wrap a direct function callCompileError: %s expects %d args, got %dTypeError: this expression is not callableCompileError: undeclared function %qTypeError: no method %q on pointerTypeError: appendAll requires a List, got %sTypeError: taskm.done requires a pid (int), got %sTypeError: no method %q on %sCompileError: %s() expects %d args, got %dTypeError: memorize has no static method %qTypeError: HashTable has no static method %qTypeError: List has no static method %qTypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn's first arg must be an IOStream, got %sTypeError: IO::setOut's first arg must be an IOStream, got %sTypeError: IO has no static method %qCompileError: unknown scope %qinternal: unknown operator %sTypeError: cannot order-compare %s and %sbadAlloc: new %s has an invalid allocation sizeRuntimeError: execCtx for %s already executedNullPointerError: assignment through null pointerTypeError: b[i] needs a writable raw-bits targetTypeError: a bit index requires raw bits and an int indexTypeError: indexing requires a List, got %sTypeError: index must be intNullPointerError: dereference of null pointerTypeError: @styleConfigure(file String)IOError: %sJSONError: %sTypeError: taskm.merge first arg must be a pid (int)RuntimeError: unknown task pid %dTypeError: taskm.channel(n) requires 0 < n <= 1048576TypeError: write(s String)TypeError: setBlock(n) requires a positive int block sizeTypeError: %s.%s is a static method; call it via %s::%s(...)TypeError: file::new(name String)TypeError: ifstream requires a path string, got %sIOError: cannot open %q: %vTypeError: ofstream requires a path string, got %sIOError: cannot create %q: %vPanicError: %sTypeError: iofstream requires a path string, got %sTypeError: qkexec(cmd String[, retries int])TypeError: qkexecv(prog String, args List<String>[, retries])TypeError: qkhttp_get(url String[, retries int])TypeError: qkhttp_post(url, body, contentType[, retries])JSONError: %vTypeError: qkjson_loads(s String)TypeError: qkfile_read(path String)IOError: %vTypeError: qkfile_write(path String, content String)TypeError: qksignal_emit(node, name String [, args...])RuntimeError: thread busy — merge only when idle (taskm.done)TypeError: taskm requires a Task or pid, got %sIndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)TypeError: raw bits admit only the bitwise family and equalityDivisionByZeroError: float division by zeroTypeError: '%' requires int operandsinternal: unknown arithmetic operator %sCompileError: duplicate declaration of %qCompileError: duplicate type alias %qCompileError: duplicate struct %qCompileError: duplicate interface %qCompileError: duplicate library %qCompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)CompileError: struct %s has no type parameters, but impl declares %dCompileError: duplicate method %q on %sCompileError: unknown interface %qCompileError: impl %s for %s: missing method %qCompileError: impl %s for %s: method %q takes %d params, interface requires %dCompileError: main must take 1-3 params in order (io, env, args), got %dTypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)CompileError: empty type annotationCompileError: %sCompileError: %s takes %d type argument(s), got %dCompileError: interface %s is not generic, but %d type argument(s) were givenCompileError: unknown type %qCompileError: parameter %q of %s is missing a type annotationIndexOutOfBoundsError: index %d out of range [0,%d)RuntimeError: unresolved call targetDivisionByZeroError: integer division by zeroDivisionByZeroError: modulo by zeroTypeError: unsupported integer operationParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 (\"消息\")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> 形态：`program \u3000·\u3000导入：## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| 成员 | 签名 | 说明 |\n|---|---|---|\n_（没有可导出的符号）_\n函数结构体接口类型别名实现空间系统库宏函数类型实现空间宏系统库usage: qkc [options] <file.qk>\n\n  （默认）            输出 LLVM IR 到 stdout\n  --emit-ir           同上（显式）\n  -run                编译为原生二进制并执行\n  -c                  只编译为原生二进制（不执行）\n  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件\n  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）\n  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）\n  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）\n  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）\n  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）\n  --lib-name <name>   库名（默认取输出文件名）\n  --lib-version <ver> 库版本（默认 0.1.0）\n  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）\n  --version, -V       打印版本与引擎代次\n  -h, --help          本帮助\n\n环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 \"-O3 -flto=thin\"）REPL: 内部错误（已恢复）: %v已定义 %s\n已定义 type struct%s %s;\n已定义 type interface%s %s;\n已定义 impl%s %s;（%d 个方法）\n已定义 library %s;（%d 个符号）\n已定义 type %s %s;\n%s %s 遮蔽外层同名变量（外层声明于第 %d 行）%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）%s %s 只被赋值、从未读取%s %s 声明后从未使用函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）不可达代码（第 %d 行之后的语句不会执行）自赋值：%s 赋值给自身（无效果）对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）while (true) 且循环体内无 break/return：可能的死循环常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）自身比较：%s == %s 恒为真自身比较：%s != %s 恒为假%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）%s (true)：条件恒为真，分支永远执行%s (false)：条件恒为假，分支永不执行导入了 %q 但未使用其任何符号（可删除该 import）函数 %s 从未被调用（死代码；库文件中的函数不报）循环变量catch 变量类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）形参变量:load 需要一个文件参数未知命令 %s（:help 查看帮助）-L 需要一个目录参数usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）未知参数 %s未打开的文档 %sqklsp: 非法 Content-Length %qqklsp: 缺少 Content-Length 头qkcheck: -L 需要一个目录参数qkcheck: 未知参数 %s\nqkcheck: 没有可检查的 .qk 文件qkcheck: %d 个问题（%d 错误 / %d 警告）\nqkdoc: -o 需要一个文件参数qkdoc: -title 需要一个参数qkdoc: 未知参数 %s\nqkdoc: 已写入 %s（%d 字节）\nqkrepl: -e 需要一段代码qkrepl: 未知参数 %s\nqkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]命令：\n  :help            显示本帮助\n  :quit / :exit    退出\n  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）\n说明：\n  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）\n  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见\n  - log 的记录、io.println 的输出会即时显示qklsp: JSON 解析失败: %wqklsp: 未实现的方法 %s  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·\n                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较RunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行ParseError: %q 不是合法整数ParseError: %q 不是合法浮点数CompileError: 未找到匹配重载 %q（参数类型不匹配）ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）TypeError: 列表索引必须是 intTypeError: 不支持对 %s 索引赋值TypeError: get(i) 需要 int 下标StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)TypeError: contains 需要 String 参数TypeError: startsWith 需要 String 参数TypeError: endsWith 需要 String 参数TypeError: indexOf 需要 String 参数TypeError: substring(start, end?) 需要 int 参数TypeError: substring 的 end 必须是 intTypeError: split 需要 String 分隔符TypeError: replace(old, new) 需要 String 参数TypeError: charAt 需要 int 索引IOError: 无法执行命令：%vIOError: 无法启动程序：%vIOError: 命令执行失败：%vIOError: qkpopen 输出超过 8MB 上限IOError: 请求失败：%vIOError: 读取响应失败：%vIOError: 响应超过 8MiB 上限HTTPError: 状态码 %dTypeError: qkexecv 参数必须是 List<String>TypeError: qkpopen(cmd String) 需要一个字符串命令TypeError: qkjson_dumps(v) 需要一个参数LibraryError: 库 %s 没有声明函数 %qLibraryError: %s 参数不足TypeError: %s 参数 %s 需要 pointer 或 nullTypeError: %s 参数 %s 需要 int/boolTypeError: %s 参数 %s 需要 floatTypeError: %s 参数 %s 目前仅支持 String/int/floatFFIError: 本构建未启用 cgo（FFI/系统库不可用）FFIError: windows 自研 ABI 支持 <=4 参数TypeError: call 第一参数必须是 prefix 记录TypeError: call 第二参数必须是 .{in,out} 记录TypeError: memorize prefix 缺少被包装函数 fnTypeError: prefix.fn 不是函数TypeError: rec.in 必须是 ListTypeError: thread.talk 需要 channel 类实例TypeError: @styleConfigure(file) 需要 file 或 StringTypeError: sum 第一个参数必须是函数引用 generateTypeError: sum 的 begin 必须是 intTypeError: sum 的 stop 必须是 intTypeError: sum 的 step 必须是非零 intTypeError: generate 必须返回 intTypeError: 位运算与移位运算需要 int 操作数TypeError: 取反运算符 '~' 需要 int 操作数CompileError: 未声明的标识符 %qIndexOutOfRangeError: 引用移动越过了容器末尾（下标 %d，大小 %d）TypeError: %s 声明了 __literal__，却没有 __element__TypeError: ++ 移动的是引用变量，不是这个表达式TypeError: ++ 需要引用，但 %q 是 %sTypeError: ++ 只能移动元素引用（&a[i]）；%q 指向的是别的对象TypeError: 无法取 %s 上字段的地址（不是结构体）TypeError: 无法取 %s 元素的地址（不是列表）TypeError: 无法取这个表达式的地址（需要变量、字段或列表元素）TypeError: 无法取未声明的标识符 %q 的地址TypeError: io.println 需要 IOStream，得到 %sTypeError: 列表索引必须是 int，得到 %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: 对未声明的标识符 %q 赋值TypeError: for-in 需要 List，或具备 size() int 与 get(int) 的容器，得到 %sTypeError: 不能给 %s 的成员赋值TypeError: 成员 %q 在 %s 上不存在TypeError: 不支持的赋值目标TypeError: '*' 需要 List 或带 get() 的容器句柄，得到 %sTypeError: 一元 '-' 需要数字，得到 %sinternal: 未知的一元运算符 %sinternal: 未知的表达式节点TypeError: 签名只能包装直接的函数调用CompileError: %s 需要 %d 个参数，得到 %dTypeError: 这个表达式不可调用CompileError: 未声明的函数 %qTypeError: 方法 %q 在指针上不存在TypeError: appendAll 需要 List，得到 %sTypeError: taskm.done 需要 pid（int），得到 %sTypeError: 方法 %q 在 %s 上不存在CompileError: %s() 需要 %d 个参数，得到 %dTypeError: memorize 没有静态方法 %qTypeError: HashTable 没有静态方法 %qTypeError: List 没有静态方法 %qTypeError: taskm 是全局变量 —— 请使用 taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn 的第一个参数必须是 IOStream，得到 %sTypeError: IO::setOut 的第一个参数必须是 IOStream，得到 %sTypeError: IO 没有静态方法 %qCompileError: 未知的作用域 %qinternal: 未知的运算符 %sTypeError: 无法对 %s 和 %s 做大小比较badAlloc: new %s 申请大小非法RuntimeError: execCtx for %s already executedNullPointerError: assignment through null pointerTypeError: b[i] needs a writable raw-bits targetTypeError: a bit index requires raw bits and an int indexTypeError: indexing requires a List, got %sTypeError: index must be intNullPointerError: dereference of null pointerTypeError: @styleConfigure(file String)IOError: %sJSONError: %sTypeError: taskm.merge first arg must be a pid (int)RuntimeError: unknown task pid %dTypeError: taskm.channel(n) requires 0 < n <= 1048576TypeError: write(s String)TypeError: setBlock(n) requires a positive int block sizeTypeError: %s.%s is a static method; call it via %s::%s(...)TypeError: file::new(name String)TypeError: ifstream requires a path string, got %sIOError: cannot open %q: %vTypeError: ofstream requires a path string, got %sIOError: cannot create %q: %vPanicError: %sTypeError: iofstream requires a path string, got %sTypeError: qkexec(cmd String[, retries int])TypeError: qkexecv(prog String, args List<String>[, retries])TypeError: qkhttp_get(url String[, retries int])TypeError: qkhttp_post(url, body, contentType[, retries])JSONError: %vTypeError: qkjson_loads(s String)TypeError: qkfile_read(path String)IOError: %vTypeError: qkfile_write(path String, content String)TypeError: qksignal_emit(node, name String [, args...])RuntimeError: thread busy — merge only when idle (taskm.done)TypeError: taskm requires a Task or pid, got %sIndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)TypeError: raw bits admit only the bitwise family and equalityDivisionByZeroError: float division by zeroTypeError: '%' requires int operandsinternal: unknown arithmetic operator %sCompileError: duplicate declaration of %qCompileError: duplicate type alias %qCompileError: duplicate struct %qCompileError: duplicate interface %qCompileError: duplicate library %qCompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)CompileError: struct %s has no type parameters, but impl declares %dCompileError: duplicate method %q on %sCompileError: unknown interface %qCompileError: impl %s for %s: missing method %qCompileError: impl %s for %s: method %q takes %d params, interface requires %dCompileError: main must take 1-3 params in order (io, env, args), got %dTypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)CompileError: empty type annotationCompileError: %sCompileError: %s takes %d type argument(s), got %dCompileError: interface %s is not generic, but %d type argument(s) were givenCompileError: unknown type %qCompileError: parameter %q of %s is missing a type annotationIndexOutOfBoundsError: index %d out of range [0,%d)RuntimeError: unresolved call targetDivisionByZeroError: integer division by zeroDivisionByZeroError: modulo by zeroTypeError: unsupported integer operation"
 
 // msgText returns the value of a message in one language block, read out of the blob. One index
 // computation and one slice: no map, no hash of the message text, no fallback branch.
 func msgText(id Msg, block int) string {
-	if block < 0 || block >= 2 || int(id) >= 240 {
+	if block < 0 || block >= 2 || int(id) >= 305 {
 		return ""
 	}
-	k := block*240 + int(id)
+	k := block*305 + int(id)
 	return msgBlob[msgOffsets[k]:msgOffsets[k+1]]
 }
 
@@ -1010,6 +1205,71 @@ func MsgKeys() []string {
 		"field.compileerror_unknown_scope_q",
 		"field.internal_unknown_operator_s",
 		"field.typeerror_cannot_order_compare_s_s",
+		"field.badalloc_new_s_invalid_allocation_size",
+		"field.runtimeerror_execctx_for_s_already_executed",
+		"field.nullpointererror_assignment_through_null_pointer",
+		"field.typeerror_b_i_needs_writable_raw",
+		"field.typeerror_bit_index_requires_raw_bits",
+		"field.typeerror_indexing_requires_list_got_s",
+		"field.typeerror_index_must_int",
+		"field.nullpointererror_dereference_null_pointer",
+		"field.typeerror_styleconfigure_file_string",
+		"field.ioerror_s",
+		"field.jsonerror_s",
+		"field.typeerror_taskm_merge_first_arg_must",
+		"field.runtimeerror_unknown_task_pid_d",
+		"field.typeerror_taskm_channel_n_requires_0",
+		"field.typeerror_write_s_string",
+		"field.typeerror_setblock_n_requires_positive_int",
+		"field.typeerror_s_s_static_method_call",
+		"field.typeerror_file_new_name_string",
+		"field.typeerror_ifstream_requires_path_string_got",
+		"field.ioerror_cannot_open_q_v",
+		"field.typeerror_ofstream_requires_path_string_got",
+		"field.ioerror_cannot_create_q_v",
+		"field.panicerror_s",
+		"field.typeerror_iofstream_requires_path_string_got",
+		"field.typeerror_qkexec_cmd_string_retries_int",
+		"field.typeerror_qkexecv_prog_string_args_list",
+		"field.typeerror_qkhttp_get_url_string_retries",
+		"field.typeerror_qkhttp_post_url_body_contenttype",
+		"field.jsonerror_v",
+		"field.typeerror_qkjson_loads_s_string",
+		"field.typeerror_qkfile_read_path_string",
+		"field.ioerror_v",
+		"field.typeerror_qkfile_write_path_string_content",
+		"field.typeerror_qksignal_emit_node_name_string",
+		"field.runtimeerror_thread_busy_merge_only_when",
+		"field.typeerror_taskm_requires_task_or_pid",
+		"field.indexoutofrangeerror_bit_index_d_out_range",
+		"field.typeerror_raw_bits_admit_only_bitwise",
+		"field.divisionbyzeroerror_float_division_by_zero",
+		"field.typeerror_percent_requires_int_operands",
+		"field.internal_unknown_arithmetic_operator_s",
+		"field.compileerror_duplicate_declaration_q",
+		"field.compileerror_duplicate_type_alias_q",
+		"field.compileerror_duplicate_struct_q",
+		"field.compileerror_duplicate_interface_q",
+		"field.compileerror_duplicate_library_q",
+		"field.compileerror_struct_s_d_type_parameter",
+		"field.compileerror_struct_s_no_type_parameters",
+		"field.compileerror_duplicate_method_q_on_s",
+		"field.compileerror_unknown_interface_q",
+		"field.compileerror_impl_s_for_s_missing",
+		"field.compileerror_impl_s_for_s_method",
+		"field.compileerror_main_must_take_1_3",
+		"field.typeerror_copyd_modifier_not_type_write",
+		"field.compileerror_empty_type_annotation",
+		"field.compileerror_s",
+		"field.compileerror_s_takes_d_type_argument",
+		"field.compileerror_interface_s_not_generic_but",
+		"field.compileerror_unknown_type_q",
+		"field.compileerror_parameter_q_s_missing_type",
+		"field.indexoutofboundserror_index_d_out_range_0",
+		"field.runtimeerror_unresolved_call_target",
+		"field.divisionbyzeroerror_integer_division_by_zero",
+		"field.divisionbyzeroerror_modulo_by_zero",
+		"field.typeerror_unsupported_integer_operation",
 	}
 }
 

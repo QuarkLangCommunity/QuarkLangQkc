@@ -506,7 +506,7 @@ func newCScope(outer *cScope) *cScope {
 
 func (s *cScope) declare(name string, v *cVar, pos Pos) error {
 	if _, dup := s.vars[name]; dup {
-		return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate declaration of %q", name), Pos: pos}
+		return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateDeclarationQ, name), Pos: pos}
 	}
 	s.vars[name] = v
 	return nil
@@ -687,7 +687,7 @@ func Typecheck(prog *Program) error {
 	registerBuiltinIfaces(c.interfaces)
 	for _, a := range prog.TypeAliases {
 		if _, dup := c.aliases[a.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate type alias %q", a.Name), Pos: a.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateTypeAliasQ, a.Name), Pos: a.Pos}
 		}
 		c.aliases[a.Name] = a.Type
 	}
@@ -707,7 +707,7 @@ func Typecheck(prog *Program) error {
 	}
 	for _, s := range prog.Structs {
 		if _, dup := c.structs[s.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate struct %q", s.Name), Pos: s.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateStructQ, s.Name), Pos: s.Pos}
 		}
 		def := &StructDef{Name: s.Name, TypeParams: s.TypeParams, Types: map[string]string{}}
 		for _, m := range s.Members {
@@ -720,7 +720,7 @@ func Typecheck(prog *Program) error {
 	}
 	for _, i := range prog.Interfaces {
 		if _, dup := c.interfaces[i.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate interface %q", i.Name), Pos: i.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateInterfaceQ, i.Name), Pos: i.Pos}
 		}
 		c.interfaces[i.Name] = &InterfaceDef{Name: i.Name, TypeParams: i.TypeParams, Methods: i.Methods, Expands: i.Expands}
 	}
@@ -729,7 +729,7 @@ func Typecheck(prog *Program) error {
 			c.libs = map[string]*LibraryDecl{}
 		}
 		if _, dup := c.libs[lb.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate library %q", lb.Name), Pos: lb.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateLibraryQ, lb.Name), Pos: lb.Pos}
 		}
 		c.libs[lb.Name] = lb
 	}
@@ -737,10 +737,10 @@ func Typecheck(prog *Program) error {
 		// Generic rule: when a struct has generic parameters its impl must introduce the same ones; when it has none the impl must not
 		if sd, ok := c.structs[im.Type]; ok {
 			if len(sd.TypeParams) > 0 && len(im.TypeParams) != len(sd.TypeParams) {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)", im.Type, len(sd.TypeParams), im.Type), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorStructSDTypeParameter, im.Type, len(sd.TypeParams), im.Type), Pos: im.Pos}
 			}
 			if len(sd.TypeParams) == 0 && len(im.TypeParams) > 0 {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: struct %s has no type parameters, but impl declares %d", im.Type, len(im.TypeParams)), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorStructSNoTypeParameters, im.Type, len(im.TypeParams)), Pos: im.Pos}
 			}
 		}
 		// A type may have several impl blocks: methods are aggregated (xmind §classes: impl<T> {...} name;); a duplicate method name is still an error
@@ -758,12 +758,12 @@ func Typecheck(prog *Program) error {
 			fn := &Func{Name: m.Name, TypeParams: m.TypeParams, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
 			if recv {
 				if _, dup := def.SelfMethods[fn.Name]; dup {
-					return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate method %q on %s", fn.Name, im.Type), Pos: m.Pos}
+					return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateMethodQOnS, fn.Name, im.Type), Pos: m.Pos}
 				}
 				def.SelfMethods[fn.Name] = fn
 			} else {
 				if _, dup := def.Methods[fn.Name]; dup {
-					return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate method %q on %s", fn.Name, im.Type), Pos: m.Pos}
+					return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateMethodQOnS, fn.Name, im.Type), Pos: m.Pos}
 				}
 				def.Methods[fn.Name] = fn
 			}
@@ -776,7 +776,7 @@ func Typecheck(prog *Program) error {
 		}
 		iface, ok := c.interfaces[im.Iface]
 		if !ok {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: unknown interface %q", im.Iface), Pos: im.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorUnknownInterfaceQ, im.Iface), Pos: im.Pos}
 		}
 		if iface.Partial {
 			// Optional interfaces: implementing some methods is enough (emit at runtime only fires the implemented ones)
@@ -804,18 +804,18 @@ func Typecheck(prog *Program) error {
 				fn = c.staticMeth(im.Type, sig.Name)
 			}
 			if fn == nil {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: impl %s for %s: missing method %q", im.Type, im.Iface, sig.Name), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorImplSForSMissing, im.Type, im.Iface, sig.Name), Pos: im.Pos}
 			}
 			want := len(sig.Params) // the interface signature includes self
 			got := len(fn.Params)
 			if got != want {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: impl %s for %s: method %q takes %d params, interface requires %d", im.Type, im.Iface, sig.Name, got, want), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorImplSForSMethod, im.Type, im.Iface, sig.Name, got, want), Pos: im.Pos}
 			}
 		}
 	}
 	for _, f := range prog.Funcs {
 		if f.Name == "main" && (len(f.Params) < 1 || len(f.Params) > 3) {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: main must take 1-3 params in order (io, env, args), got %d", len(f.Params)), Pos: f.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorMainMustTake13, len(f.Params)), Pos: f.Pos}
 		}
 		if err := c.checkFunc(c.fns[f.Name]); err != nil {
 			return err
@@ -857,7 +857,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	// copyd is a modifier, not a type: the Copyd<...> type form was removed. Rejecting it at the common
 	// entry point keeps every path honest (declarations, parameters, fields, returns, generics).
 	if strings.HasPrefix(strings.TrimSpace(s), "Copyd<") || strings.HasPrefix(strings.TrimSpace(s), "Copyd[") {
-		return nil, &CheckError{Msg: "TypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)", Pos: pos}
+		return nil, &CheckError{Msg: msgID(i18n.MsgFieldTypeerrorCopydModifierNotTypeWrite), Pos: pos}
 	}
 	if s == "null" {
 		return &Type{Kind: tNull}, nil
@@ -874,7 +874,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		return &Type{Kind: tTypeVar, FName: "Self"}, nil // interface case: Self = the referenced type (xmind §interfaces)
 	}
 	if s == "" {
-		return nil, &CheckError{Msg: "CompileError: empty type annotation", Pos: pos}
+		return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorEmptyTypeAnnotation), Pos: pos}
 	}
 	// Pointer suffix: T&
 	if strings.HasSuffix(s, "&") {
@@ -987,7 +987,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	case "HashTable":
 		k, v, err := splitTopComma(inner)
 		if err != nil {
-			return nil, &CheckError{Msg: "CompileError: " + err.Error(), Pos: pos}
+			return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorS, err.Error()), Pos: pos}
 		}
 		kt, err := c.substType(k, subst, pos)
 		if err != nil {
@@ -1015,7 +1015,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 				args = append(args, at)
 			}
 			if len(def.TypeParams) > 0 && len(args) != len(def.TypeParams) {
-				return nil, &CheckError{Msg: fmt.Sprintf("CompileError: %s takes %d type argument(s), got %d", base, len(def.TypeParams), len(args)), Pos: pos}
+				return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorSTakesDTypeArgument, base, len(def.TypeParams), len(args)), Pos: pos}
 			}
 		}
 		return &Type{Kind: tStruct, FName: base, Args: args}, nil
@@ -1034,10 +1034,10 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 			}
 		}
 		if len(def.TypeParams) > 0 && len(args) != len(def.TypeParams) {
-			return nil, &CheckError{Msg: fmt.Sprintf("CompileError: %s takes %d type argument(s), got %d", base, len(def.TypeParams), len(args)), Pos: pos}
+			return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorSTakesDTypeArgument, base, len(def.TypeParams), len(args)), Pos: pos}
 		}
 		if len(def.TypeParams) == 0 && len(args) > 0 {
-			return nil, &CheckError{Msg: fmt.Sprintf("CompileError: interface %s is not generic, but %d type argument(s) were given", base, len(args)), Pos: pos}
+			return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorInterfaceSNotGenericBut, base, len(args)), Pos: pos}
 		}
 		return &Type{Kind: tInterface, FName: base, Args: args}, nil
 	}
@@ -1053,7 +1053,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	if c.typeVars[base] {
 		return &Type{Kind: tTypeVar, FName: base}, nil
 	}
-	return nil, &CheckError{Msg: fmt.Sprintf("CompileError: unknown type %q", s), Pos: pos}
+	return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorUnknownTypeQ, s), Pos: pos}
 }
 
 // isBuiltinFuncName reports whether a name is a builtin function (usable as a function reference).
@@ -1141,7 +1141,7 @@ func (c *checker) checkFunc(f *Func) error {
 	sc := newCScope(nil)
 	for _, p := range f.Params {
 		if p.Type == "" {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: parameter %q of %s is missing a type annotation", p.Name, f.Name), Pos: p.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorParameterQSMissingType, p.Name, f.Name), Pos: p.Pos}
 		}
 		t, err := c.paramType(p, f.Pos)
 		if err != nil {

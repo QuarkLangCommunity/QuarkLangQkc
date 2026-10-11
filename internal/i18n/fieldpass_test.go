@@ -126,15 +126,14 @@ func fieldLiteral(e ast.Expr) (string, bool) {
 }
 
 // TestProofNoMessageLiteralIsWrittenIntoAField is the pass's structural gate: the shape that hid 94
-// literals from every other gate is a count this test freezes, so the wiring can only shrink it.
+// literals from every other gate is empty.
 //
-// It lands at the value this commit's run measured: 65 of the 94 are still written into a field. The
-// commit that freezes them gives every one an ID and lowers this to 0, which is the only way a ratchet
-// may move here. The failure it prevents is concrete: a message written into a field renders its own
-// text in both languages, so a reader who asked for Chinese gets English, and nothing in this
-// repository notices.
+// It landed with the value this file's first run measured and was lowered to 0 by the commit that
+// closed the pass, which is the only way a ratchet may move here. The failure it prevents is concrete:
+// a message written into a field renders its own text in both languages, so a reader who asked for
+// Chinese gets English, and nothing in this repository notices.
 func TestProofNoMessageLiteralIsWrittenIntoAField(t *testing.T) {
-	const allowed = 65 // measured by this file's first run: 64 English-only + 1 written in Chinese
+	const allowed = 0 // lowered from 65: the struct-field pass wired every one of the 94 literals
 	literals := fieldLiterals(t)
 	if len(literals) > allowed {
 		t.Errorf("%d message literals are written straight into a struct field (limit %d): give the message an ID in source/fields.tsv and render it with msgID/errfID/a localizer", len(literals), allowed)
@@ -277,4 +276,45 @@ func msgConstName(id string) string {
 		}
 	}
 	return b.String()
+}
+
+// TestProofUntranslatedFieldMessagesAreCounted freezes the backlog this pass could not translate.
+//
+// The rows it counts are not a defect of the migration: they are messages that shipped English-only
+// with no ID and no catalog entry, so they rendered English under QK_LANG=zh and nothing counted them.
+// Giving them an ID could not invent a translation without changing what a reader sees, which the
+// design forbids, so the zh column repeats the English source and the backlog is a number somebody can
+// work off. It may only go down: 64 rows are the English-only literals this pass froze, and the Chinese
+// for every one of them has to come from a speaker.
+func TestProofUntranslatedFieldMessagesAreCounted(t *testing.T) {
+	const allowed = 64 // the English-only field literals: measured by this test's first run, and the backlog
+	src, err := i18ngen.Load(i18ngen.Options{
+		SourceDir:    "source",
+		OutFile:      "msg_gen.go",
+		ModuleSource: i18ngen.DefaultModuleSource,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	en, zh := src.Table.Languages[0].Code, src.Table.Languages[1].Code
+	var untranslated []string
+	for _, m := range src.Table.Messages {
+		if !strings.HasPrefix(m.ID, "field.") {
+			continue
+		}
+		if src.Value(m.ID, en) == src.Value(m.ID, zh) {
+			untranslated = append(untranslated, m.ID)
+		}
+	}
+	if len(untranslated) > allowed {
+		t.Errorf("%d field messages have no Chinese translation (limit %d): the zh column repeats the source, and the Chinese has to come from a speaker", len(untranslated), allowed)
+		for i, id := range untranslated {
+			if i == 10 {
+				t.Errorf("  … and %d more", len(untranslated)-i)
+				break
+			}
+			t.Errorf("  %s", id)
+		}
+	}
+	t.Logf("field messages whose zh repeats the source: %d (limit %d)", len(untranslated), allowed)
 }
