@@ -14,6 +14,7 @@ package cgen
 import (
 	"strings"
 
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
@@ -152,7 +153,7 @@ func (fc *funcCtx) ifaceCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		}
 	}
 	if m == nil {
-		return nil, l.errf(me.Pos, "接口 %s 没有方法 %q", rt, me.Name)
+		return nil, l.errfID(me.Pos, i18n.MsgTypecheckInterfaceSNoMethodQ, rt, me.Name)
 	}
 	if len(c.Args) != len(m.params) {
 		return nil, l.errf(me.Pos, "接口方法 %s.%s 需要 %d 个参数，got %d", rt, me.Name, len(m.params), len(c.Args))

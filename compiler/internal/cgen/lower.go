@@ -47,6 +47,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
@@ -294,9 +295,20 @@ func lowerProgram(prog *lang.Program, file, src string) (*lowered, error) {
 	return l.out, nil
 }
 
-// errf builds a diagnostic with location.
+// errf builds a diagnostic from a template, and errfID from a generated ID. The two exist side by side
+// while the compiler domain is migrating and both go at step 5; the rendering is the only difference, so
+// they share diag rather than one going through a "%s" template — a pass-through like that is a wired
+// template with no catalog entry, which is the gate TestTemplatesRegistered exists to catch.
 func (l *lowerer) errf(pos lang.Pos, format string, args ...interface{}) error {
-	d := &diagError{msg: msg(format, args...), file: l.file, line: pos.Line, col: pos.Col}
+	return l.diag(pos, msg(format, args...))
+}
+
+func (l *lowerer) errfID(pos lang.Pos, id i18n.Msg, args ...interface{}) error {
+	return l.diag(pos, msgID(id, args...))
+}
+
+func (l *lowerer) diag(pos lang.Pos, rendered string) error {
+	d := &diagError{msg: rendered, file: l.file, line: pos.Line, col: pos.Col}
 	if d.line <= 0 {
 		d.line, d.col = 1, 1
 	}
@@ -2305,7 +2317,7 @@ func (fc *funcCtx) callArgs(c *lang.CallExpr, params []lang.Param) ([]*expr, err
 func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 	l := fc.l
 	if len(c.Args) != 3 && len(c.Args) != 4 {
-		return nil, l.errf(pos, "sum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %d", len(c.Args))
+		return nil, l.errfID(pos, i18n.MsgTypecheckSumGenerateBeginStopStepRequires, len(c.Args))
 	}
 	gid, ok := c.Args[0].(*lang.Ident)
 	if !ok {
