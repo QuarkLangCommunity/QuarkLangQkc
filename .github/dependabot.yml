@@ -1,4 +1,4 @@
-# 依赖更新：GitHub Actions 固定到 SHA 后，由 dependabot 每周提 PR 升级（含 SHA 更新）
+# Dependency updates: with GitHub Actions pinned to SHAs, dependabot opens a weekly PR to upgrade them (SHA bumps included)
 version: 2
 updates:
   - package-ecosystem: github-actions

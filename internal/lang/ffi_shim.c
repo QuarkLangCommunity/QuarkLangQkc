@@ -1,5 +1,5 @@
 #ifdef _WIN32
-/* Windows FFI：自研 wrapper 见 ffi_win_gen.c（免 libffi） */
+/* Windows FFI: the in-house wrapper lives in ffi_win_gen.c (no libffi) */
 #else
 #include <stdint.h>
 #include <stddef.h>
@@ -14,12 +14,12 @@
 #endif
 
 #if defined(__APPLE__)
-#include <ffi/ffi.h>   /* macOS：头文件在 SDK 的 usr/include/ffi/ 下 */
+#include <ffi/ffi.h>   /* macOS: the header lives under the SDK's usr/include/ffi/ */
 #else
-#include <ffi.h>       /* Linux：libffi-dev 装在 /usr/include/ffi.h */
+#include <ffi.h>       /* Linux: libffi-dev installs /usr/include/ffi.h */
 #endif
 
-/* 跨系统库加载：POSIX=dlopen/dlsym（Linux/macOS），Windows=LoadLibrary/GetProcAddress */
+/* Cross-platform library loading: POSIX = dlopen/dlsym (Linux/macOS), Windows = LoadLibrary/GetProcAddress */
 QK_EXPORT void* qk_dlopen(const char* n) {
 #ifdef _WIN32
     return (void*)LoadLibraryA(n);
@@ -46,7 +46,7 @@ QK_EXPORT const char* qk_dlerror(void) {
 
 typedef union { int32_t i; float f; double d; void* p; } qk_arg;
 
-/* 类型码：0=void 1=int32 2=f32 3=f64 4=ptr 5=bool 6=int64 */
+/* Type codes: 0=void 1=int32 2=f32 3=f64 4=ptr 5=bool 6=int64 */
 QK_EXPORT int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs,
                      int n, int rettype,
                      int64_t* ret_i, double* ret_f, void* ret_p_slot) {
@@ -61,7 +61,7 @@ QK_EXPORT int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs
         case 1: case 5: at[k] = &ffi_type_sint32; av[k].i = (int32_t)nums[k]; break;
         case 2: at[k] = &ffi_type_float;  av[k].f = (float)nums[k]; break;
         case 3: at[k] = &ffi_type_double; av[k].d = nums[k]; break;
-        case 6: at[k] = &ffi_type_sint64; av[k].i = (int32_t)nums[k]; /* 高位截断由 Go 侧规避 */ break;
+        case 6: at[k] = &ffi_type_sint64; av[k].i = (int32_t)nums[k]; /* the Go side avoids the high-word truncation */ break;
         default: at[k] = &ffi_type_pointer; av[k].p = ptrs[k]; break;
         }
     }

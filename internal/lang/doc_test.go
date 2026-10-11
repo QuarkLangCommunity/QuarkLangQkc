@@ -6,33 +6,33 @@ import (
 	"testing"
 )
 
-const docFixture = `/* QuarkLang 数学小库
-   提供整数运算。 */
+const docFixture = `/* QuarkLang math micro-library
+   Provides integer arithmetic. */
 program library;
 
 import "helper";
 
-// 双精度翻倍。
-// 第二行说明。
+// Doubles a double.
+// A second line of description.
 pub fn double(int n) int {
     return n * 2;
 }
 
-// 内部工具，不导出。
+// Internal helper, not exported.
 fn hidden(int n) int {
     return n;
 }
 
-/* 平面点。
-   字段均为 int。 */
+/* A planar point.
+   Both fields are int. */
 pub type struct {
-    int x; // 横坐标
-    int y; // 纵坐标
+    int x; // x coordinate
+    int y; // y coordinate
 } Point;
 
-// 可求值对象。
+// Something that can be summed.
 pub type interface {
-    fn sum(Self self) int; // 求和
+    fn sum(Self self) int; // sums the two coordinates
 } Summable;
 
 type int Number;
@@ -42,7 +42,7 @@ impl {
 } Point;
 
 space {
-    fn max(int a, int b) int { return a; } // 取大
+    fn max(int a, int b) int { return a; } // the larger of the two
 } math;
 
 library gl {
@@ -71,7 +71,7 @@ func TestDocModelExtraction(t *testing.T) {
 	if len(d.Imports) != 1 || d.Imports[0] != "helper" {
 		t.Errorf("Imports 不对: %v", d.Imports)
 	}
-	if !strings.Contains(d.FileDoc, "QuarkLang 数学小库") || !strings.Contains(d.FileDoc, "提供整数运算") {
+	if !strings.Contains(d.FileDoc, "QuarkLang math micro-library") || !strings.Contains(d.FileDoc, "Provides integer arithmetic") {
 		t.Errorf("文件头注释不对: %q", d.FileDoc)
 	}
 
@@ -89,7 +89,7 @@ func TestDocModelExtraction(t *testing.T) {
 	if fn.Signature != "fn double(int n) int" {
 		t.Errorf("签名不对: %q", fn.Signature)
 	}
-	if !strings.Contains(fn.Doc, "双精度翻倍") || !strings.Contains(fn.Doc, "第二行说明") {
+	if !strings.Contains(fn.Doc, "Doubles a double") || !strings.Contains(fn.Doc, "A second line of description") {
 		t.Errorf("函数文档不对: %q", fn.Doc)
 	}
 	if !fn.Pub {
@@ -103,13 +103,13 @@ func TestDocModelExtraction(t *testing.T) {
 	if pt == nil || pt.Kind != DocStruct {
 		t.Fatalf("Point 应为 struct，got %+v", pt)
 	}
-	if !strings.Contains(pt.Doc, "平面点") || !strings.Contains(pt.Doc, "字段均为 int") {
+	if !strings.Contains(pt.Doc, "A planar point") || !strings.Contains(pt.Doc, "Both fields are int") {
 		t.Errorf("结构体文档不对: %q", pt.Doc)
 	}
 	if len(pt.Fields) != 2 || pt.Fields[0].Name != "x" || pt.Fields[0].Type != "int" {
 		t.Fatalf("字段提取不对: %+v", pt.Fields)
 	}
-	if !strings.Contains(pt.Fields[0].Doc, "横坐标") {
+	if !strings.Contains(pt.Fields[0].Doc, "x coordinate") {
 		t.Errorf("字段注释应紧邻字段上方/行尾: %q", pt.Fields[0].Doc)
 	}
 	if pt.Signature != "type struct Point;" {
@@ -123,7 +123,7 @@ func TestDocModelExtraction(t *testing.T) {
 	if !strings.Contains(iface.Fields[0].Signature, "fn sum(Self self) int;") {
 		t.Errorf("接口方法签名不对: %q", iface.Fields[0].Signature)
 	}
-	if !strings.Contains(iface.Fields[0].Doc, "求和") {
+	if !strings.Contains(iface.Fields[0].Doc, "sums the two coordinates") {
 		t.Errorf("接口方法行尾注释应为文档: %q", iface.Fields[0].Doc)
 	}
 
@@ -177,10 +177,10 @@ func TestDocMarkdownPubFilter(t *testing.T) {
 	if !strings.Contains(md, "| 类别 | 名称 | 签名 | 摘要 |") {
 		t.Error("缺少概览表")
 	}
-	if !strings.Contains(md, "双精度翻倍") {
+	if !strings.Contains(md, "Doubles a double") {
 		t.Error("缺少文档正文")
 	}
-	if !strings.Contains(md, "| `x` | `int` | 横坐标 |") {
+	if !strings.Contains(md, "| `x` | `int` | x coordinate |") {
 		t.Errorf("字段表不对:\n%s", md)
 	}
 	if !strings.Contains(md, "space math;") || !strings.Contains(md, "library gl;") {
@@ -223,20 +223,20 @@ func TestDocHTML(t *testing.T) {
 }
 
 func TestDocCommentCleaning(t *testing.T) {
-	c := Comment{Text: "// 第一行\n//   第二行\n//\n// 第三行", Block: false}
+	c := Comment{Text: "// first line\n//   second line\n//\n// third line", Block: false}
 	got := cleanComment(c)
-	want := "第一行\n  第二行\n\n第三行\n"
+	want := "first line\n  second line\n\nthird line\n"
 	if got != want {
 		t.Errorf("行注释清洗不对:\n got %q\nwant %q", got, want)
 	}
-	b := Comment{Text: "/* 甲\n * 乙\n */", Block: true}
-	if got := cleanComment(b); !strings.Contains(got, "甲") || !strings.Contains(got, "乙") {
+	b := Comment{Text: "/* alpha\n * beta\n */", Block: true}
+	if got := cleanComment(b); !strings.Contains(got, "alpha") || !strings.Contains(got, "beta") {
 		t.Errorf("块注释清洗不对: %q", got)
 	}
 }
 
 func TestDocSummary(t *testing.T) {
-	if got := Summary("\n\n第一行\n第二行\n"); got != "第一行" {
+	if got := Summary("\n\nfirst line\nsecond line\n"); got != "first line" {
 		t.Errorf("Summary 不对: %q", got)
 	}
 	if got := Summary(""); got != "" {
@@ -246,7 +246,7 @@ func TestDocSummary(t *testing.T) {
 
 // Regression: a trailing comment on the previous line must not leak into the doc comment of the next declaration.
 func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
-	src := "type struct {\n    int kind; // 0=无 1=linear\n    int angle;\n} Grad;\n"
+	src := "type struct {\n    int kind; // 0=none 1=linear\n    int angle;\n} Grad;\n"
 	prog, comments, err := ParseSourceWithComments(src)
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 	if st == nil || len(st.Fields) != 2 {
 		t.Fatalf("结构体提取不对: %+v", st)
 	}
-	if st.Fields[0].Doc != "0=无 1=linear" {
+	if st.Fields[0].Doc != "0=none 1=linear" {
 		t.Errorf("kind 应取同行行尾注释，got %q", st.Fields[0].Doc)
 	}
 	if st.Fields[1].Doc != "" {
@@ -271,15 +271,15 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 
 // Macro definitions are cut out of the AST before parsing, so the doc model must collect them explicitly (BuildDocWithMacros).
 func TestDocMacros(t *testing.T) {
-	src := `/* 工具宏库。 */
+	src := `/* Utility macro library. */
 program library;
 
-// 翻倍宏。
+// Doubling macro.
 #macro twice (a) {
     #return a + a
 }
 
-// 正常函数。
+// An ordinary function.
 pub fn dbl(int n) int {
     return n * 2;
 }
@@ -299,7 +299,7 @@ pub fn dbl(int n) int {
 	if m.Signature != "#macro twice (a)" {
 		t.Errorf("宏签名不对: %q", m.Signature)
 	}
-	if !strings.Contains(m.Doc, "翻倍宏") {
+	if !strings.Contains(m.Doc, "Doubling macro") {
 		t.Errorf("宏文档注释不对: %q", m.Doc)
 	}
 	md := d.Markdown(DocOptions{})

@@ -6826,8 +6826,8 @@ static void* qk_w_ptr_4444(void* f, double a1, double a2, double a3, double a4, 
 }
 
 
-/* ---- i64（long/64 位整数）返回族：补全 dispatch 表（此前缺失，导致任何返回 long 的
-   C 函数在 Windows 上必然报 “ffi call failed”） ---- */
+/* ---- i64 (long / 64-bit integer) return family: completes the dispatch table. It used to be
+   missing, so any C function returning long failed on Windows with "ffi call failed". ---- */
 static int64_t qk_w_i64_0(void* f, double a1, double a2, double a3, double a4, void* p1, void* p2, void* p3, void* p4) {
     return ((int64_t(*)())f)();
 }
@@ -7860,7 +7860,7 @@ int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs, int n,
     if (n >= 2) { a2 = nums[1]; p2 = ptrs[1]; }
     if (n >= 3) { a3 = nums[2]; p3 = ptrs[2]; }
     if (n >= 4) { a4 = nums[3]; p4 = ptrs[3]; }
-    int64_t code = (int64_t)rettype * 100000; /* 64 位：4 参数时 code 可达 4e9，int 会溢出 */
+    int64_t code = (int64_t)rettype * 100000; /* 64-bit: with 4 parameters code reaches 4e9, which overflows an int */
     int i;
     for (i = 0; i < n; i++) code = code*10 + types[i];
     switch (code) {

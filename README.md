@@ -588,7 +588,8 @@ Written down on purpose — a young language is better judged by what it admits 
   import resolution are still in progress.
 - **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
 - **Test coverage is 65.0%** (root module, 75.3% for the compiler module — `scripts/coverage.sh`); the linter's statistical gates cover its generated corpus, not all code.
-- **Source comments** are mid-translation to English (README, docs, `SYNTAX.md` and tool output are already English).
+- **Repository text is English-only**: comments, documentation and configuration carry no Chinese. The *runtime* is a
+  separate matter and deliberately still speaks Chinese under the default locale — see the next bullet.
 - **Compiled-path runtime text is Chinese-only for now.** `QK_LANG=en` switches the interpreter's diagnostics, but the
   C runtime embedded into compiled binaries still prints the Chinese error text (e.g. `越界`), so the dual-path
   byte-equality gate is currently asserted in the default Chinese mode.

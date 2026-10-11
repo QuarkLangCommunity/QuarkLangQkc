@@ -17,23 +17,23 @@ func runCapture(t *testing.T, args ...string) (string, string, int) {
 	return out.String(), errb.String(), code
 }
 
-const libSrc = `/* 数学小库。 */
+const libSrc = `/* Math micro-library. */
 program library;
 
-// 翻倍。
+// Doubles a number.
 pub fn double(int n) int {
     return n * 2;
 }
 
-// 内部函数。
+// Internal function.
 fn hidden(int n) int {
     return n;
 }
 
-/* 点。 */
+/* A point. */
 pub type struct {
-    int x; // 横坐标
-    int y; // 纵坐标
+    int x; // x coordinate
+    int y; // y coordinate
 } Point;
 `
 
@@ -56,11 +56,11 @@ func TestQkdocMarkdownStdout(t *testing.T) {
 	}
 	for _, want := range []string{
 		"# " + p,
-		"数学小库。",
+		"Math micro-library.",
 		"fn double(int n) int",
-		"翻倍。",
+		"Doubles a number.",
 		"type struct Point;",
-		"| `x` | `int` | 横坐标 |",
+		"| `x` | `int` | x coordinate |",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Markdown 缺少 %q\n---\n%s", want, out)
@@ -128,7 +128,7 @@ func TestQkdocMultipleFiles(t *testing.T) {
 	dir := t.TempDir()
 	p1 := writeLib(t, dir)
 	p2 := filepath.Join(dir, "other.qk")
-	if err := os.WriteFile(p2, []byte("// 另一函数。\npub fn other(int a) int {\n    return a;\n}\n"), 0o644); err != nil {
+	if err := os.WriteFile(p2, []byte("// Another function.\npub fn other(int a) int {\n    return a;\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, _, code := runCapture(t, p1, p2)
@@ -147,8 +147,8 @@ func TestQkdocTitle(t *testing.T) {
 	defer lang_i18n.SetLocale(lang_i18n.Locale())
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	p := writeLib(t, t.TempDir())
-	out, _, _ := runCapture(t, "-title", "数学库 API", p)
-	if !strings.Contains(out, "# 数学库 API") {
+	out, _, _ := runCapture(t, "-title", "Math API", p)
+	if !strings.Contains(out, "# Math API") {
 		t.Errorf("自定义标题未生效:\n%s", out)
 	}
 }
