@@ -9,6 +9,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -200,7 +201,7 @@ func TestCLITwoFixesOnTheSameLineLeaveOneCorrection(t *testing.T) {
 
 // TestCLIFixKeepsFileMode: a rewrite must not change what the file's permissions were.
 func TestCLIFixKeepsFileMode(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	if runtime.GOOS == "windows" {
 		t.Skip("file modes are not meaningful on Windows")
 	}
 	p := writeFile(t, t.TempDir(), "mode.qk", fixableSrc)
