@@ -48,3 +48,5 @@ go.work.sum
 !docs/ARCHITECTURE.md
 # the i18n re-architecture design (deliverable of the i18n work; see docs/i18n-design.md)
 !docs/i18n-design.md
+# the qkcheck fix mode design and its fixability inventory (deliverable of the linter fix work)
+!cmd/qkcheck/README.md
