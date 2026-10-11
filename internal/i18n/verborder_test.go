@@ -17,7 +17,7 @@ import (
 // and the legacy Chinese key — has to be handled as a pair, which is why the repair is done in small
 // batches rather than one sweep.
 func TestVerbSequenceMatches(t *testing.T) {
-	const allowed = 10 // lowered from 11: the typecheck domain moved its last reordered entry to an ID
+	const allowed = 0 // lowered from 10: the compiler domain was the last table, so nothing is left to reorder
 	re := regexp.MustCompile("%[a-zA-Z]")
 	bad, shown := 0, 0
 	for _, domain := range stdCatalog.Domains() {

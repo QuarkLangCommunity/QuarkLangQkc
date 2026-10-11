@@ -20,3 +20,4 @@ cli.tsv
 runtime.tsv
 fields.tsv
 typecheck.tsv
+compiler.tsv

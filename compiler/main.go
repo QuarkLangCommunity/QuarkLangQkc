@@ -135,7 +135,7 @@ func linkDiag(libs []linkLib) string {
 		for _, g := range l.groups {
 			gs = append(gs, strings.Join(g, " "))
 		}
-		parts = append(parts, fmt.Sprintf(msg("%s（尝试过：%s）"), l.name, strings.Join(gs, " / ")))
+		parts = append(parts, fmt.Sprintf(msgID(i18n.MsgCompilerSTriedS), l.name, strings.Join(gs, " / ")))
 	}
 	return "library FFI 链接失败：" + strings.Join(parts, "；")
 }
@@ -253,12 +253,12 @@ func main() {
 			// A positional argument is the source file. Flags that follow it are still parsed:
 			// `qkc -c f.qk -o out` used to drop `-o` silently and build nothing.
 			if strings.HasPrefix(a, "-") {
-				fmt.Fprintf(os.Stderr, msg("qkc: 未知参数 %s\n"), a)
+				fmt.Fprintf(os.Stderr, msgID(i18n.MsgCompilerQkcUnknownArgumentS), a)
 				qkcUsage()
 				os.Exit(2)
 			}
 			if srcFile != "" {
-				fmt.Fprintf(os.Stderr, msg("qkc: 只能指定一个源文件（已给出 %s）\n"), srcFile)
+				fmt.Fprintf(os.Stderr, msgID(i18n.MsgCompilerQkcOnlyOneSourceFileMay), srcFile)
 				os.Exit(2)
 			}
 			srcFile = a
@@ -285,7 +285,7 @@ func main() {
 	}
 	ppTag := pp.OS + "-" + pp.Arch
 	if os.Getenv("QKC_DEBUG_PP") != "" {
-		fmt.Fprintln(os.Stderr, msg("qkc[debug]: 预处理目标 ="), ppTag)
+		fmt.Fprintln(os.Stderr, msgID(i18n.MsgCompilerQkcDebugPreprocessTarget), ppTag)
 	}
 
 	hash, err := srcHash(srcFile)
@@ -382,7 +382,7 @@ func main() {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		fmt.Fprintf(os.Stderr, msg("qkc: 已生成库制品 %s%s ｜ 平台变体：%s ｜ 导出 %d 个\n"), out, note, strings.Join(keys, ","), len(exports))
+		fmt.Fprintf(os.Stderr, msgID(i18n.MsgCompilerQkcWroteLibraryArtifactSS), out, note, strings.Join(keys, ","), len(exports))
 		return
 	}
 
@@ -399,13 +399,13 @@ func main() {
 		}
 		name, lir, exact := pickVariant(variants, ppTag)
 		if !exact {
-			fmt.Fprintf(os.Stderr, msg("qkc: 提示：库 %s 无 %s 变体，退回 %s（跨系统请用 --lib-targets 生成对应变体）\n"), man.Name, ppTag, name)
+			fmt.Fprintf(os.Stderr, msgID(i18n.MsgCompilerQkcNoteLibrarySNoS), man.Name, ppTag, name)
 		}
 		note := ""
 		if man.Obfuscated {
 			note = "，已混淆"
 		}
-		fmt.Fprintf(os.Stderr, msg("qkc: 引用库 %s v%s（变体 %s，导出 %d 个符号%s）\n"), man.Name, man.Version, name, len(man.Exports), note)
+		fmt.Fprintf(os.Stderr, msgID(i18n.MsgCompilerQkcLinkingLibrarySVS), man.Name, man.Version, name, len(man.Exports), note)
 		libIRs = append(libIRs, lir)
 		sum := sha256.Sum256([]byte(lir))
 		libFP += "|" + man.Name + ":" + man.Version + ":" + name + ":" + hex.EncodeToString(sum[:6])

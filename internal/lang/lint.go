@@ -804,7 +804,7 @@ func writeExprText(b *strings.Builder, e Expr) {
 	case *BoolLit:
 		b.WriteString(strconv.FormatBool(t.V))
 	default:
-		b.WriteString(msg("表达式"))
+		b.WriteString(msgID(i18n.MsgCompilerExpression))
 	}
 }
 

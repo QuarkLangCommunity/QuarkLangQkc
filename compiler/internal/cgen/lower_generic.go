@@ -9,6 +9,7 @@ package cgen
 import (
 	"strings"
 
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
@@ -50,12 +51,12 @@ func (fc *funcCtx) callGeneric(name string, c *lang.CallExpr, pos lang.Pos) (*ex
 	l := fc.l
 	fn := l.generics[name]
 	if len(c.Args) != len(fn.Params) {
-		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", name, len(fn.Params), len(c.Args))
+		return nil, l.errfID(pos, i18n.MsgCompilerFunctionSRequiresDArgumentsGot, name, len(fn.Params), len(c.Args))
 	}
 	sub := inferGenSubst(fn, c.Args, fc)
 	for _, tp := range fn.TypeParams {
 		if sub[tp] == "" {
-			return nil, l.errf(pos, "暂未支持无法从实参推断类型参数的泛型调用 %s（解释器可用）", name)
+			return nil, l.errfID(pos, i18n.MsgCompilerAGenericCallWhoseTypeArguments, name)
 		}
 	}
 	ir, err := l.instantiateFunc(name, fn, sub)
@@ -63,7 +64,7 @@ func (fc *funcCtx) callGeneric(name string, c *lang.CallExpr, pos lang.Pos) (*ex
 		return nil, err
 	}
 	if l.nilFns[ir] && fc.discarded != c {
-		return nil, l.errf(pos, "暂未支持在表达式中使用含 log 的函数 %s 的返回值（解释器返回 nil）", name)
+		return nil, l.errfID(pos, i18n.MsgCompilerUsingReturnValueLogContainingFunction, name)
 	}
 	params := make([]lang.Param, len(fn.Params))
 	for i, p := range fn.Params {
@@ -136,7 +137,7 @@ func (l *lowerer) instantiateFor(mi *methodInfo, recvType string, args []lang.Ex
 	}
 	for _, tp := range mi.impl.TypeParams {
 		if sub[tp] == "" {
-			return nil, l.errf(pos, "暂未支持无法推断类型参数的泛型方法 %s.%s（解释器可用）", mi.impl.Type, mi.fn.Name)
+			return nil, l.errfID(pos, i18n.MsgCompilerGenericMethodSSWhoseType, mi.impl.Type, mi.fn.Name)
 		}
 	}
 	key := "mi:" + mi.impl.Type + "_" + mi.fn.Name + "$" + typeArgsKey(mi.impl.TypeParams, sub)

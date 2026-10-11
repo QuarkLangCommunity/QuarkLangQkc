@@ -23,6 +23,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 const qklibMagic = "QKLB"
@@ -362,7 +364,7 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 		return man, nil, err
 	}
 	if len(b) < 4 || string(b[:4]) != qklibMagic {
-		return man, nil, errors.New(msg("不是 .qklib 制品（magic 不匹配）：%s", path))
+		return man, nil, errors.New(msgID(i18n.MsgCompilerNotQklibArtifactMagicMismatchS, path))
 	}
 	var body struct {
 		Manifest QKLibManifest     `json:"manifest"`
@@ -375,7 +377,7 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 		if want, ok := body.Manifest.SHA256[t]; ok {
 			sum := sha256.Sum256([]byte(ir))
 			if hex.EncodeToString(sum[:]) != want {
-				return body.Manifest, nil, errors.New(msg("变体 %s 校验失败（内容被改动）", t))
+				return body.Manifest, nil, errors.New(msgID(i18n.MsgCompilerVariantSFailedVerificationContentModified, t))
 			}
 		}
 	}

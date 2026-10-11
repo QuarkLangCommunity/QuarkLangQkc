@@ -73,7 +73,7 @@ func (l *lowerer) vtableFor(typ, iface string, fc *funcCtx, pos lang.Pos) (*vtab
 	for _, m := range l.ifaceMethodList(iface) {
 		mi := l.lookupSelf(typ, m.name)
 		if mi == nil {
-			return nil, l.errf(pos, "接口 %s 的方法 %s 在 %s 上未实现（类型检查本应拦截）", iface, m.name, typ)
+			return nil, l.errfID(pos, i18n.MsgCompilerMethodSInterfaceSNotImplemented, iface, m.name, typ)
 		}
 		imi, err := l.instantiateFor(mi, typ, nil, fc, pos)
 		if err != nil {
@@ -92,7 +92,7 @@ func (l *lowerer) vtableFor(typ, iface string, fc *funcCtx, pos lang.Pos) (*vtab
 			th.params = append(th.params, substType(p.Type, imi.subst))
 		}
 		if len(th.params) != len(m.params) {
-			return nil, l.errf(pos, "接口 %s 的方法 %s 与 %s 的实现参数个数不一致（类型检查本应拦截）", iface, m.name, typ)
+			return nil, l.errfID(pos, i18n.MsgCompilerMethodSInterfaceSDifferentParameter, iface, m.name, typ)
 		}
 		// Interface parameters declared as Self: the thunk takes an i8* (interface data) and restores the concrete type before the call
 		for i, pt := range m.params {
@@ -119,7 +119,7 @@ func (fc *funcCtx) boxTo(e *expr, want string, pos lang.Pos) (*expr, error) {
 		case "int", "float", "bool", "String", "interface{}", "null":
 		default:
 			if !fc.l.isStructType(e.typ) && e.typ != "List<int>" {
-				return nil, fc.l.errf(pos, "暂未支持把 %s 值装箱成 interface{}（编译器支持 int/float/bool/String/List<int>/struct）", e.typ)
+				return nil, fc.l.errfID(pos, i18n.MsgCompilerBoxingSValueIntoInterfaceNot, e.typ)
 			}
 		}
 		e.anyBox = e.typ
@@ -130,7 +130,7 @@ func (fc *funcCtx) boxTo(e *expr, want string, pos lang.Pos) (*expr, error) {
 		return e, nil
 	}
 	if !fc.l.isStructType(e.typ) {
-		return nil, fc.l.errf(pos, "暂未支持把 %s 值装入接口 %s（编译器需要 struct 实现）", e.typ, want)
+		return nil, fc.l.errfID(pos, i18n.MsgCompilerPuttingSValueIntoInterfaceS, e.typ, want)
 	}
 	vt, err := fc.l.vtableFor(e.typ, want, fc, pos)
 	if err != nil {
@@ -156,7 +156,7 @@ func (fc *funcCtx) ifaceCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		return nil, l.errfID(me.Pos, i18n.MsgTypecheckInterfaceSNoMethodQ, rt, me.Name)
 	}
 	if len(c.Args) != len(m.params) {
-		return nil, l.errf(me.Pos, "接口方法 %s.%s 需要 %d 个参数，got %d", rt, me.Name, len(m.params), len(c.Args))
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerInterfaceMethodSSRequiresD, rt, me.Name, len(m.params), len(c.Args))
 	}
 	recv, err := fc.expr(me.X)
 	if err != nil {
@@ -184,7 +184,7 @@ func (fc *funcCtx) ifaceCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 			continue
 		}
 		if !fc.assignable(at, want) {
-			return nil, l.errf(exprPos(a, me.Pos), "暂未支持向接口方法 %s.%s 传递 %s 参数（需要 %s）", rt, me.Name, at, want)
+			return nil, l.errfID(exprPos(a, me.Pos), i18n.MsgCompilerPassingSArgumentInterfaceMethodS, rt, me.Name, at, want)
 		}
 		x, err := fc.exprAs(a, want)
 		if err != nil {
