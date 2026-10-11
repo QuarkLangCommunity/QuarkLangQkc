@@ -7,5 +7,5 @@ package i18n
 // translations were unreachable. The call sites live in the pinned qkparser module, whose errf path
 // did fmt.Sprintf on its own literal and consulted no catalog, so the Chinese template rendered under
 // QK_LANG=en and these English values were never selected. The IDs are parser.named_struct_requires_type
-// and its siblings; TestProofMigratedMessagesAreNoLongerMapEntries fails if one comes back.
+// and its siblings; TestProofNoTextKeyedEntriesRemain fails if one comes back.
 var lexerTable = map[string]string{}

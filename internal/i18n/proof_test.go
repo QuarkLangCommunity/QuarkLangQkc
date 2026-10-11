@@ -414,25 +414,28 @@ func TestProofRuntimeReadsTheBlob(t *testing.T) {
 	}
 }
 
-// TestProofMigratedMessagesAreNoLongerMapEntries pins the other half of P4: the migrated messages have
-// no entry in any table_*.go, so there is no map for the runtime to consult even by accident.
-func TestProofMigratedMessagesAreNoLongerMapEntries(t *testing.T) {
+// TestProofNoTextKeyedEntriesRemain is what TestProofMigratedMessagesAreNoLongerMapEntries becomes once
+// the last domain migrates, and it is the stronger of the two.
+//
+// The old proof walked every generated message and asserted its text was not a key in any table_*.go.
+// That is now true for a simpler reason — there are no keys at all — and the proof's own guard said so
+// and failed: "the text-keyed catalog is empty, so this proof is vacuous". A proof that cannot fail is
+// not a gate, so it is replaced by the fact it was protecting: the catalog is empty, and a row coming
+// back is a regression, not a step backwards in a count.
+//
+// Step 5 deletes this test with the machinery it measures (Load, Catalog, the table_*.go files).
+func TestProofNoTextKeyedEntriesRemain(t *testing.T) {
 	entries := 0
 	for _, domain := range stdCatalog.Domains() {
-		entries += len(stdCatalog.Domain(domain))
-	}
-	if entries == 0 {
-		t.Fatal("the text-keyed catalog is empty, so this proof is vacuous")
-	}
-	for id, key := range MsgKeys() {
-		for block, lang := range MsgLangs() {
-			text := msgText(Msg(id), block)
-			if stdCatalog.Has(text) {
-				t.Fatalf("%s (%s) is still a text-keyed catalog entry: %q", key, lang, text)
-			}
+		for template := range stdCatalog.Domain(domain) {
+			entries++
+			t.Errorf("%s: the text-keyed catalog has an entry again: %q", domain, truncate(template))
 		}
 	}
-	t.Logf("the %d generated messages are absent from the %d text-keyed entries", len(MsgKeys()), entries)
+	if entries != 0 {
+		t.Fatalf("the text-keyed catalog holds %d entries: the migration moved every message to an ID, and a text key means a call site can still render text the catalog owns", entries)
+	}
+	t.Logf("text-keyed catalog entries: %d (all eight domains are IDs now)", entries)
 }
 
 // TestModuleIDsAndCatalogIDsAgree pins the mapping the type conversion in internal/lang relies on: the

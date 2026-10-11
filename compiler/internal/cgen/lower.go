@@ -325,6 +325,11 @@ func (l *lowerer) diag(pos lang.Pos, rendered string) error {
 }
 
 // errAt builds a diagnostic at a fixed hint position (when no AST position is available, e.g. a missing main).
+// errAtID is errAt's ID-rendering counterpart.
+func (l *lowerer) errAtID(id i18n.Msg, args ...interface{}) error {
+	return l.errfID(lang.Pos{Line: 1, Col: 1}, id, args...)
+}
+
 func (l *lowerer) errAt(format string, args ...interface{}) error {
 	return l.errf(lang.Pos{Line: 1, Col: 1}, format, args...)
 }
@@ -333,7 +338,7 @@ func (l *lowerer) errAt(format string, args ...interface{}) error {
 
 func (l *lowerer) collect() error {
 	if l.prog.Kind == "library" {
-		return l.errAt("compiling a program library is not supported (library form is handled by the interpreter/export flow)")
+		return l.errAtID(i18n.MsgCompilerCompilingProgramLibraryNotSupportedLibrary)
 	}
 	for _, sd := range l.prog.Structs {
 		if sd.Name == "" {
@@ -362,11 +367,11 @@ func (l *lowerer) collect() error {
 	var mainFn *lang.FuncDecl
 	for _, f := range l.prog.Funcs {
 		if f.Name == "sum" || f.Name == "clock" {
-			return l.errf(f.Pos, "redefining builtin function %q is not supported (the compiler treats %s as builtin)", f.Name, f.Name)
+			return l.errfID(f.Pos, i18n.MsgCompilerRedefiningBuiltinFunctionQNotSupported, f.Name, f.Name)
 		}
 		if len(f.TypeParams) > 0 {
 			if _, dup := l.generics[f.Name]; dup {
-				return l.errf(f.Pos, "overloading a generic function %q is not supported (the compiler requires unique generic function names)", f.Name)
+				return l.errfID(f.Pos, i18n.MsgCompilerOverloadingGenericFunctionQNotSupported, f.Name)
 			}
 			l.generics[f.Name] = f
 			continue
@@ -383,7 +388,7 @@ func (l *lowerer) collect() error {
 	for _, name := range order {
 		defs := groups[name]
 		if _, isGen := l.generics[name]; isGen {
-			return l.errf(defs[0].Pos, "a generic and a plain function sharing the name %q is not supported (the compiler requires one or the other)", name)
+			return l.errfID(defs[0].Pos, i18n.MsgCompilerAGenericPlainFunctionSharingName, name)
 		}
 		if len(defs) == 1 {
 			f := defs[0]
@@ -397,7 +402,7 @@ func (l *lowerer) collect() error {
 		for _, f := range defs {
 			ir := mangleOverload(name, f.Params)
 			if sigs[ir] {
-				return l.errf(f.Pos, "duplicate function definition %s (same parameter type signature)", ir)
+				return l.errfID(f.Pos, i18n.MsgCompilerDuplicateFunctionDefinitionSSameParameter, ir)
 			}
 			sigs[ir] = true
 			l.ovl[name] = append(l.ovl[name], f)
@@ -407,7 +412,7 @@ func (l *lowerer) collect() error {
 		}
 	}
 	if mainFn == nil && !libMode {
-		return l.errAt("未找到 main 函数（正典入口：fn main(IOStream io) { ... }）")
+		return l.errAtID(i18n.MsgCompilerNoMainFunctionFoundCanonicalEntry)
 	}
 
 	// Lower ordinary functions first (the signature/statement/expression support checks all happen here)
@@ -463,7 +468,7 @@ func (l *lowerer) registerImpl(im *lang.ImplDecl) error {
 	}
 	for _, m := range im.Methods {
 		if _, dup := l.methods[typ][m.Name]; dup {
-			return l.errf(m.Pos, "overloading/redefining method %s.%s is not supported (the compiler emits name-mangled functions and cannot distinguish overloads)", typ, m.Name)
+			return l.errfID(m.Pos, i18n.MsgCompilerOverloadingRedefiningMethodSSNot, typ, m.Name)
 		}
 		mi := &methodInfo{fn: m, impl: im, irName: typ + "_" + m.Name, subst: map[string]string{}}
 		for i, tp := range im.TypeParams {
@@ -649,7 +654,7 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	case "int", "bool", "float", "String", "List<int>", "uchar":
 		return nil
 	case "void":
-		return l.errf(pos, "暂未支持 void 类型 %s", what)
+		return l.errfID(pos, i18n.MsgCompilerVoidTypeSNotSupportedYet, what)
 	}
 	if isBitsT(t) {
 		return nil // raw bits: bit / bits<N> for N <= 32 (a wider N is refused by the shared frontend)
@@ -658,7 +663,7 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		if elem == "String" {
 			return nil // List<String>: read-only subset (keys() results / size/get/toString/for-in/indexing)
 		}
-		return l.errf(pos, "%s type %q is not supported (the compiler handles List<int> and List<String>; element %s)", what, t, elem)
+		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedCompiler, what, t, elem)
 	}
 	if l.isStructType(t) {
 		return nil
@@ -672,24 +677,24 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 	case "pointer":
 		return nil // FFI opaque handle (i8*, nullable)
 	case "char":
-		return l.errf(pos, "%s type %q is not supported (not lowered by the compiler yet)", what, t)
+		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedNot, what, t)
 	case "thread", "Task", "Channel", "channel":
 		return nil // taskm: thread = pid(i32), Channel = i8* handle
 	case "memorize":
 		return nil // built-in memorize signature instance (i8* handle; @mb() memoization)
 	case "IOStream":
-		return l.errf(pos, "IOStream %s is not supported (the compiler binds io only at the main entry)", what)
+		return l.errfID(pos, i18n.MsgCompilerIostreamSNotSupportedCompilerBinds, what)
 	case "interface{}":
 		return nil // boxes any value + runtime type descriptor (RTTI); printing/equality/scalar unboxing already lowered
 	}
 	if strings.HasPrefix(t, "List") {
-		return l.errf(pos, "%s type %q is not supported (the compiler handles List<int> only)", what, t)
+		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedCompilerHandlesList, what, t)
 	}
 	if isTableT(t) {
 		return nil // HashTable<K,V>: i8* handle + runtime structured keys (the interpreter's key rule)
 	}
 	if strings.HasPrefix(t, "HashTable") {
-		return l.errf(pos, "暂未支持 %s 类型 %q（HashTable 写法：HashTable<K, V>）", what, t)
+		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedYet, what, t)
 	}
 	if _, base, ok := ptrRefBase(t); ok {
 		// T& / pointer T: nullable reference (zero value null); only a single-element scalar/String/struct
@@ -703,12 +708,12 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		if l.isStructType(base) {
 			return nil
 		}
-		return l.errf(pos, "%s type %q is not supported (the compiler lowers T& for scalars/String/struct only)", what, t)
+		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedCompilerLowersT, what, t)
 	}
 	if strings.Contains(t, "[Copyd]") || strings.HasPrefix(t, "Copyd<") || strings.HasSuffix(t, "[]") {
-		return l.errf(pos, "pointer/copy-on-pass type %q is not supported (copyd as a parameter modifier is supported; there is no Copyd<T> type)", t)
+		return l.errfID(pos, i18n.MsgCompilerPointerCopyOnPassTypeQ, t)
 	}
-	return l.errf(pos, "未知类型 %q（%s 声明）", t, what)
+	return l.errfID(pos, i18n.MsgCompilerUnknownTypeQSDeclaration, t, what)
 }
 
 // retOK reports whether a return type can be lowered.
@@ -805,7 +810,7 @@ func (fc *funcCtx) lookup(name string) (string, bool) {
 // so shadowing would be a silent miscompile and must be rejected here).
 func (fc *funcCtx) declare(name, typ string, pos lang.Pos) error {
 	if _, ok := fc.lookup(name); ok {
-		return fc.l.errf(pos, "duplicate/shadowed variable %q is not supported (the compiler's variable table has no same-name variables; rename it)", name)
+		return fc.l.errfID(pos, i18n.MsgCompilerDuplicateShadowedVariableQNotSupported, name)
 	}
 	fc.top.vars[name] = typ
 	return nil
@@ -824,7 +829,7 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		ret = canon // pointer T → T&
 	}
 	if !l.retOK(ret) {
-		return nil, l.errf(f.Pos, "return type %q is not supported (the compiler handles int/bool/float/String/void/struct)", f.Ret)
+		return nil, l.errfID(f.Pos, i18n.MsgCompilerReturnTypeQNotSupportedCompiler, f.Ret)
 	}
 	fc := l.newCtx(irName, ret)
 	fc.subst = subst
@@ -832,7 +837,7 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 	start := 0
 	if selfTyp != "" {
 		if len(f.Params) == 0 {
-			return nil, l.errf(f.Pos, "impl 实例方法 %s 缺少 self 首参", f.Name)
+			return nil, l.errfID(f.Pos, i18n.MsgCompilerImplInstanceMethodSMissingLeading, f.Name)
 		}
 		if err := fc.declare(selfParam, selfTyp, f.Params[0].Pos); err != nil {
 			return nil, err
@@ -886,13 +891,13 @@ func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
 		return nil
 	}
 	if l.isIfaceType(t) {
-		return l.errf(pos, "暂未支持 copyd 接口形参 %s（运行期类型未知，无法深拷贝）", t)
+		return l.errfID(pos, i18n.MsgCompilerCopydInterfaceParameterSNotSupported, t)
 	}
 	if isTableT(t) {
-		return l.errf(pos, "暂未支持 copyd HashTable 形参 %s（表值深拷贝未 lower）", t)
+		return l.errfID(pos, i18n.MsgCompilerCopydHashtableParameterSNotSupported, t)
 	}
 	if t == "List<String>" {
-		return l.errf(pos, "暂未支持 copyd List<String> 形参（字符串列表深拷贝未 lower）")
+		return l.errfID(pos, i18n.MsgCompilerCopydListStringParametersNotSupported)
 	}
 	sd, sub := l.structSubst(t)
 	if sd == nil {
@@ -901,7 +906,7 @@ func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
 	for _, m := range sd.Members {
 		ft := substType(m.Type, sub)
 		if l.isIfaceType(ft) {
-			return l.errf(pos, "暂未支持 copyd struct %s 的接口字段 %s（运行期类型未知，无法深拷贝）", t, m.Name)
+			return l.errfID(pos, i18n.MsgCompilerCopydInterfaceFieldSInStruct, t, m.Name)
 		}
 		if nsd, _ := l.structSubst(ft); nsd != nil {
 			if err := l.checkCopydType(ft, pos, depth+1); err != nil {
@@ -915,16 +920,16 @@ func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
 // lowerMain lowers the program entry fn main(IOStream io).
 func (l *lowerer) lowerMain(f *lang.FuncDecl) ([]stmt, error) {
 	if len(f.TypeParams) > 0 {
-		return nil, l.errf(f.Pos, "暂未支持泛型 main 函数")
+		return nil, l.errfID(f.Pos, i18n.MsgCompilerAGenericMainFunctionNotSupported)
 	}
 	if f.Ret != "" && f.Ret != "void" {
-		return nil, l.errf(f.Pos, "main cannot return a value (got %q)", f.Ret)
+		return nil, l.errfID(f.Pos, i18n.MsgCompilerMainCannotReturnValueGotQ, f.Ret)
 	}
 	if len(f.Params) == 0 || f.Params[0].Type != "IOStream" {
-		return nil, l.errf(f.Pos, "main's first parameter must be IOStream (canonical: fn main(IOStream io) { ... })")
+		return nil, l.errfID(f.Pos, i18n.MsgCompilerMainSFirstParameterMustIostream)
 	}
 	if len(f.Params) > 1 {
-		return nil, l.errf(f.Params[1].Pos, "main's %q parameter is not supported (the compiler binds IOStream io only)", f.Params[1].Name)
+		return nil, l.errfID(f.Params[1].Pos, i18n.MsgCompilerMainSQParameterNotSupported, f.Params[1].Name)
 	}
 	fc := l.newCtx("main", "void")
 	fc.ioName = f.Params[0].Name
@@ -957,7 +962,7 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 	switch st := s.(type) {
 	case *lang.DeclStmt:
 		if st.Decor == "copyd" {
-			return nil, l.errf(st.Pos, "the copyd modifier is not supported (copy-on-pass is interpreter-only)")
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerTheCopydModifierNotSupportedCopy)
 		}
 		return fc.declStmt(st)
 
@@ -983,7 +988,7 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 						}
 						return &printStmt{args: args}, nil
 					default:
-						return nil, l.errf(call.Pos, "IOStream method %q is not supported (the compiler handles io.println/io.print only)", me.Name)
+						return nil, l.errfID(call.Pos, i18n.MsgCompilerIostreamMethodQNotSupportedCompiler, me.Name)
 					}
 				}
 			}
@@ -1010,11 +1015,11 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 			return &returnStmt{x: nil}, nil
 		}
 		if fc.ret == "void" {
-			return nil, l.errf(st.Pos, "a void function cannot return a value (the interpreter ignores the value; the compiler refuses to ignore it silently)")
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerAVoidFunctionCannotReturnValue)
 		}
 		t := fc.typeOfAs(st.X, fc.ret)
 		if !fc.assignable(t, fc.ret) {
-			return nil, l.errf(exprPos(st.X, st.Pos), "暂未支持从 %s 函数返回 %s 值", fc.ret, t)
+			return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerReturningSValueFromSFunction, fc.ret, t)
 		}
 		x, err := fc.exprAs(st.X, fc.ret)
 		if err != nil {
@@ -1095,10 +1100,10 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 
 	case *lang.TryStmt:
 		if st.CatchVarType != "" && st.CatchVarType != "void" {
-			return nil, l.errf(st.Pos, "catch (%s %s) is not supported (the compiler handles catch (void e) only)", st.CatchVarType, st.CatchVar)
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerCatchSSNotSupportedCompiler, st.CatchVarType, st.CatchVar)
 		}
 		if st.CatchVar != "" && blockUsesIdent(st.Catch, st.CatchVar) {
-			return nil, l.errf(st.Pos, "using %q inside a catch body is not supported (error value passing is interpreter-only)", st.CatchVar)
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerUsingQInsideCatchBodyNot, st.CatchVar)
 		}
 		thenB, err := fc.block(st.Try)
 		if err != nil {
@@ -1113,14 +1118,14 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 	case *lang.DeleteStmt:
 		id, ok := st.X.(*lang.Ident)
 		if !ok {
-			return nil, l.errf(st.Pos, "delete on a non-variable expression is not supported (the compiler handles delete <List variable> only)")
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnNonVariableExpressionNot)
 		}
 		if t, _ := fc.lookup(id.Name); t != "List<int>" {
-			return nil, l.errf(st.Pos, "delete %q is not supported (the compiler handles delete on a List variable only)", id.Name)
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteQNotSupportedCompilerHandles, id.Name)
 		}
 		return &deleteStmt{name: id.Name}, nil
 	}
-	return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "compiler 内部错误：未知语句类型 %T", s)
+	return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerCompilerInternalErrorUnknownStatementType, s)
 }
 
 // forIn lowers the iteration for: for (<T> x : list).
@@ -1129,19 +1134,19 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 	lt := fc.typeOf(st.Iter)
 	base, args := splitGeneric(lt)
 	if base != "List" || len(args) != 1 {
-		return nil, l.errf(st.Pos, "for-iteration over %s is not supported (the compiler handles List<int>)", lt)
+		return nil, l.errfID(st.Pos, i18n.MsgCompilerForIterationOverSNotSupported, lt)
 	}
 	elem := args[0]
 	if elem != "int" && elem != "String" {
-		return nil, l.errf(st.Pos, "iterating List<%s> is not supported (the compiler handles List<int> and List<String>)", elem)
+		return nil, l.errfID(st.Pos, i18n.MsgCompilerIteratingListSNotSupportedCompiler, elem)
 	}
 	id, ok := st.Iter.(*lang.Ident)
 	if !ok {
-		return nil, l.errf(st.Pos, "for-iteration over a non-variable list is not supported (the compiler requires a List variable)")
+		return nil, l.errfID(st.Pos, i18n.MsgCompilerForIterationOverNonVariableList)
 	}
 	vt, _ := fc.lookup(id.Name)
 	if vt != "List<int>" && vt != "List<String>" {
-		return nil, l.errf(st.Pos, "for-iteration over %s is not supported (the compiler handles List<int> and List<String>)", vt)
+		return nil, l.errfID(st.Pos, i18n.MsgCompilerForIterationOverSNotSupportedCompilerHandles, vt)
 	}
 	fc.push()
 	defer fc.pop()
@@ -1160,7 +1165,7 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	if st.Perm != "" {
 		// Permission-carrying references (&rw u int p) are interpreter-only for now.
-		return nil, fc.l.errf(st.Pos, "compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)", st.Perm, st.Scope)
+		return nil, fc.l.errfID(st.Pos, i18n.MsgCompilerCompilingPermissionReferenceSSNot, st.Perm, st.Scope)
 	}
 	l := fc.l
 	t := fc.resolveT(st.Type)
@@ -1177,7 +1182,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOf(st.Init)
 		if !fc.assignable(it, t) && !(isBitsT(t) && isIntConstLit(st.Init)) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
+			return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerUsingSInitializeSVariableQ, it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1199,7 +1204,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOf(st.Init)
 		if !fc.assignable(it, t) && !(isBitsT(t) && isIntConstLit(st.Init)) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported (raw bits take raw bits of the same width, or a constant)", it, t, st.Name)
+			return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerUsingSInitializeSVariableQNotSupported, it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1217,7 +1222,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 			return nil, err
 		}
 		if st.Init == nil {
-			return nil, l.errf(st.Pos, "List<String> %q without an initializer is not supported (the compiler only lowers existing lists such as keys())", st.Name)
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerListStringQWithoutInitializerNot, st.Name)
 		}
 		if _, isLit := st.Init.(*lang.ListLit); isLit {
 			// ["a", "b", ...]: the dedicated List<String> literal path (elements are i8* pointers)
@@ -1229,7 +1234,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if it != "List<String>" {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "initializing List<String> with %s is not supported (the compiler lowers literals, HashTable.keys() results and List<String> variables)", it)
+			return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerInitializingListStringWithSNot, it)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1239,13 +1244,13 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 
 	case "List<int>":
 		if st.Init == nil {
-			return nil, l.errf(st.Pos, "List<int> %q without an initializer is not supported (the interpreter's zero value is an empty list; the compiler backend does not lower it)", st.Name)
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerListIntQWithoutInitializerNot, st.Name)
 		}
 		lit, ok := st.Init.(*lang.ListLit)
 		if !ok {
 			it := fc.typeOf(st.Init)
 			if it != "List<int>" {
-				return nil, l.errf(exprPos(st.Init, st.Pos), "暂未支持 List<int> 的这种初始化（编译器仅支持 [a, b, ...] 字面量）")
+				return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerThisListIntInitializerNotSupported)
 			}
 			x, err := fc.expr(st.Init)
 			if err != nil {
@@ -1260,7 +1265,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		for _, it := range lit.Items {
 			et := fc.typeOf(it)
 			if !fc.assignable(et, "int") {
-				return nil, l.errf(exprPos(it, st.Pos), "initializing List<int> with %s elements is not supported", et)
+				return nil, l.errfID(exprPos(it, st.Pos), i18n.MsgCompilerInitializingListIntWithSElements, et)
 			}
 			x, err := fc.expr(it)
 			if err != nil {
@@ -1285,7 +1290,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
+			return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerUsingSInitializeSVariableQ, it, t, st.Name)
 		}
 		x, err := fc.expr(st.Init)
 		if err != nil {
@@ -1305,7 +1310,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
+			return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerUsingSInitializeSVariableQ, it, t, st.Name)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1324,7 +1329,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 		}
 		it := fc.typeOfAs(st.Init, t)
 		if !fc.assignable(it, t) {
-			return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize interface %s variable %q is not supported", it, t, st.Name)
+			return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerUsingSInitializeInterfaceSVariable, it, t, st.Name)
 		}
 		x, err := fc.exprAs(st.Init, t)
 		if err != nil {
@@ -1345,7 +1350,7 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 	}
 	it := fc.typeOfAs(st.Init, t)
 	if it != t {
-		return nil, l.errf(exprPos(st.Init, st.Pos), "using %s to initialize %s variable %q is not supported", it, t, st.Name)
+		return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerUsingSInitializeSVariableQ, it, t, st.Name)
 	}
 	x, err := fc.exprAs(st.Init, t)
 	if err != nil {
@@ -1370,7 +1375,7 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 		case "int&", "float&", "bool&", "String&", "long&": // T&: print the dereferenced value (same as the interpreter)
 		default:
 			if !isBitsT(t) {
-				return nil, fc.l.errf(exprPos(a, call.Pos), "printing a value of type %s is not supported (the compiler handles int/float/bool/String/interface{})", t)
+				return nil, fc.l.errfID(exprPos(a, call.Pos), i18n.MsgCompilerPrintingValueTypeSNotSupported, t)
 			}
 		}
 		args = append(args, x)
@@ -1383,7 +1388,7 @@ func (fc *funcCtx) cond(x lang.Expr) (*expr, error) {
 	switch t := fc.typeOf(x); t {
 	case "bool", "?":
 	default:
-		return nil, fc.l.errf(exprPos(x, lang.Pos{Line: 1, Col: 1}), "暂未支持 %s 类型的条件（需要 bool）", t)
+		return nil, fc.l.errfID(exprPos(x, lang.Pos{Line: 1, Col: 1}), i18n.MsgCompilerASConditionNotSupportedYet, t)
 	}
 	return fc.expr(x)
 }
@@ -1396,13 +1401,13 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 	case *lang.Ident:
 		vt, ok := fc.lookup(tgt.Name)
 		if !ok {
-			return nil, l.errf(tgt.Pos, "赋值目标 %q 未声明", tgt.Name)
+			return nil, l.errfID(tgt.Pos, i18n.MsgCompilerAssignmentTargetQNotDeclared, tgt.Name)
 		}
 		xt := fc.typeOfAs(st.X, vt)
 		if _, base, isRef := ptrRefBase(vt); isRef {
 			// p = v (v is a T) → write through; p = q (q is a T&) → rebind the pointer
 			if !fc.assignable(xt, vt) && !fc.assignable(xt, base) {
-				return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s variable %q is not supported", xt, vt, tgt.Name)
+				return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSSVariableQNot, xt, vt, tgt.Name)
 			}
 			x, err := fc.expr(st.X)
 			if err != nil {
@@ -1412,7 +1417,7 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			return &assignStmt{name: tgt.Name, x: x, thru: true}, nil
 		}
 		if !fc.assignable(xt, vt) && !(isBitsT(vt) && isIntConstLit(st.X)) {
-			return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s variable %q is not supported", xt, vt, tgt.Name)
+			return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSSVariableQNot, xt, vt, tgt.Name)
 		}
 		x, err := fc.exprAs(st.X, vt)
 		if err != nil {
@@ -1426,13 +1431,13 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			return fc.bitAssign(st, tgt)
 		}
 		if _, ok := listElem(rt); !ok {
-			return nil, l.errf(st.Pos, "this subscript assignment is not supported (the compiler handles List<int> only)")
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerThisSubscriptAssignmentNotSupportedCompiler)
 		}
 		if t := fc.typeOf(tgt.Idx); t != "int" && t != "?" {
-			return nil, l.errf(exprPos(tgt.Idx, st.Pos), "暂未支持下标为 %s（需要 int）", t)
+			return nil, l.errfID(exprPos(tgt.Idx, st.Pos), i18n.MsgCompilerIndexTypeSNotSupportedYet, t)
 		}
 		if t := fc.typeOf(st.X); !fc.assignable(t, "int") {
-			return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to a List<int> element is not supported", t)
+			return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSListIntElementNot, t)
 		}
 		recv, err := fc.expr(tgt.X)
 		if err != nil {
@@ -1453,10 +1458,10 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if l.isStructType(rt) {
 			ft, ok := l.fieldType(rt, tgt.Name)
 			if !ok {
-				return nil, l.errf(tgt.Pos, "struct %s 没有字段 %q", rt, tgt.Name)
+				return nil, l.errfID(tgt.Pos, i18n.MsgCompilerStructSNoFieldQ, rt, tgt.Name)
 			}
 			if !fc.assignable(fc.typeOf(st.X), ft) && !(isBitsT(ft) && isIntConstLit(st.X)) {
-				return nil, l.errf(exprPos(st.X, st.Pos), "assigning %s to %s.%s (%s) is not supported", fc.typeOf(st.X), rt, tgt.Name, ft)
+				return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSSSSNot, fc.typeOf(st.X), rt, tgt.Name, ft)
 			}
 			recv, err := fc.expr(tgt.X)
 			if err != nil {
@@ -1468,9 +1473,9 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 			}
 			return &fieldAssignStmt{recv: recv, field: tgt.Name, x: x}, nil
 		}
-		return nil, l.errf(tgt.Pos, "member assignment is not supported by the compiler (interface dispatch is interpreter-only)")
+		return nil, l.errfID(tgt.Pos, i18n.MsgCompilerMemberAssignmentNotSupportedByCompiler)
 	}
-	return nil, l.errf(st.Pos, "this assignment target is not supported (the compiler handles variables, List subscripts and struct fields only)")
+	return nil, l.errfID(st.Pos, i18n.MsgCompilerThisAssignmentTargetNotSupportedCompiler)
 }
 
 // ---------- Expressions ----------
@@ -1493,18 +1498,18 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		t, ok := fc.lookup(e.Name)
 		if !ok {
 			if _, isLib := l.libs[e.Name]; isLib {
-				return nil, l.errf(e.Pos, "暂未支持 library 库对象 %q 作为值（FFI 仅解释器可用）", e.Name)
+				return nil, l.errfID(e.Pos, i18n.MsgCompilerUsingLibraryObjectQAsValue, e.Name)
 			}
-			return nil, l.errf(e.Pos, "undeclared identifier %q (the compiler does not support function references or global names)", e.Name)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerUndeclaredIdentifierQCompilerNotSupport, e.Name)
 		}
 		if t == "IOStream" {
-			return nil, l.errf(e.Pos, "暂未支持 IOStream 值 %q（编译器仅在 main 入口绑定 io）", e.Name)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerIostreamValueQNotSupportedYet, e.Name)
 		}
 		return &expr{kind: kIdent, typ: t, s: e.Name}, nil
 
 	case *lang.IncExpr:
 		// Moving a reference (p++) belongs to the reference machinery the compiler does not lower yet.
-		return nil, l.errf(e.Pos, "compiling ++ (reference move) is not supported yet (implemented in the interpreter only)")
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerCompilingReferenceMoveNotSupportedYet)
 	case *lang.BinOp:
 		return fc.binOp(e)
 	case *lang.UnOp:
@@ -1518,10 +1523,10 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		}
 		elem, ok := listElem(rt)
 		if !ok {
-			return nil, l.errf(e.Pos, "this subscript read is not supported (the compiler handles List<int> only)")
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerThisSubscriptReadNotSupportedCompiler)
 		}
 		if t := fc.typeOf(e.Idx); t != "int" && t != "?" {
-			return nil, l.errf(exprPos(e.Idx, e.Pos), "暂未支持下标为 %s（需要 int）", t)
+			return nil, l.errfID(exprPos(e.Idx, e.Pos), i18n.MsgCompilerIndexTypeSNotSupportedYet, t)
 		}
 		recv, err := fc.expr(e.X)
 		if err != nil {
@@ -1538,14 +1543,14 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 
 	case *lang.NewExpr:
 		if e.Size != nil {
-			return nil, l.errf(e.Pos, "暂未支持 new %s[n]（解释器产出 List<T>&，无法赋给 List<T>；请用 [..] 字面量）", e.Typ)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerNewSNNotSupportedYet, e.Typ)
 		}
 		pt := strings.TrimSpace(e.Typ)
 		if err := l.checkType(pt, e.Pos, "new"); err != nil {
 			return nil, err
 		}
 		if _, _, ok := ptrRefBase(pt); ok {
-			return nil, l.errf(e.Pos, "暂未支持 new %s（new 的元素类型不能是指针）", e.Typ)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerNewSNotSupportedYetElement, e.Typ)
 		}
 		return &expr{kind: kNewRef, typ: pt + "&", s: pt}, nil
 	case *lang.ListLit:
@@ -1556,13 +1561,13 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		}
 		elem, ok := listElem(t)
 		if !ok || (elem != "int" && elem != "String") {
-			return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "list literal %s is not supported (the compiler lowers List<int> and List<String>)", t)
+			return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerListLiteralSNotSupportedCompiler, t)
 		}
 		items := make([]*expr, 0, len(e.Items))
 		for _, it := range e.Items {
 			et := fc.typeOf(it)
 			if !fc.assignable(et, elem) {
-				return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "initializing %s with %s elements is not supported", et, t)
+				return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerInitializingSWithSElementsNot, et, t)
 			}
 			x, err := fc.expr(it)
 			if err != nil {
@@ -1580,7 +1585,7 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 	case *lang.MemberExpr:
 		return fc.member(e)
 	}
-	return nil, l.errf(lang.Pos{Line: 1, Col: 1}, "compiler 内部错误：未知表达式类型 %T", x)
+	return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerCompilerInternalErrorUnknownExpressionType, x)
 }
 
 // binOp lowers a binary operation (arithmetic/comparison/logic/String concatenation/operator overload).
@@ -1610,7 +1615,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 	case "+":
 		if lt == "String" || rt == "String" {
 			if lt != "String" || rt != "String" {
-				return nil, l.errf(pos, "暂未支持 %s 与 %s 相加（String 拼接要求两侧都是 String）", lt, rt)
+				return nil, l.errfID(pos, i18n.MsgCompilerAddingSSNotSupportedYet, lt, rt)
 			}
 			x, err := fc.binary(e, "+")
 			if err != nil {
@@ -1621,7 +1626,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "using %q on %s / %s is not supported (Operation overloading works for same-type structs only)", lt, rt, e.Op)
+			return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNot, lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, "+")
 		if err != nil {
@@ -1631,7 +1636,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		return x, nil
 	case "-", "*", "/":
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "using %q on %s / %s is not supported (Operation overloading works for same-type structs only)", lt, rt, e.Op)
+			return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNot, lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1652,7 +1657,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "using %q on %s / %s is not supported (Operation overloading works for same-type structs only)", lt, rt, e.Op)
+			return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNot, lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1667,7 +1672,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return fc.rawBitsBin(e, lt, rt)
 		}
 		if !isIntViewT(lt) || !isIntViewT(rt) {
-			return nil, l.errf(pos, "using %q on %s / %s is not supported (bitwise operators need int views or raw bits)", e.Op, lt, rt)
+			return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedBitwise, e.Op, lt, rt)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1681,7 +1686,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return fc.rawBitsBin(e, lt, rt)
 		}
 		if !isIntViewT(lt) || !isIntViewT(rt) {
-			return nil, l.errf(pos, "using %q on %s / %s is not supported (shifts need int operands)", lt, rt, e.Op)
+			return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedShifts, lt, rt, e.Op)
 		}
 		x, err := fc.binary(e, e.Op)
 		if err != nil {
@@ -1693,13 +1698,13 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// Storage identity is implemented in the interpreter. The compiler would need address
 		// computation for both operands, which arrives with the pointer work (R2); until then it is a
 		// hard error instead of a silently different answer (project policy for unsupported constructs).
-		return nil, l.errf(e.Pos, "compiling %s is not supported yet (=== storage identity is implemented in the interpreter only)", e.Op)
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerCompilingSNotSupportedYetStorage, e.Op)
 	case "==", "!=", "<", "<=", ">", ">=":
 		// T& / pointer T comparison: against null it compares pointer identity (the interpreter's equalValues(ref, nil));
 		// against a value it compares the dereferenced value (the interpreter's p == 0 → compares the pointed-to cell).
 		if (isPtrRefT(lt) && rt == "null") || (lt == "null" && isPtrRefT(rt)) || (isPtrRefT(lt) && isPtrRefT(rt)) {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "using %q on %s / %s is not supported (pointers allow == / != only)", lt, rt, e.Op)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedPointers, lt, rt, e.Op)
 			}
 			x, err := fc.expr(e.L)
 			if err != nil {
@@ -1722,14 +1727,14 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// for != use (ptr == null) || (deref != value)). The pointer side must be a variable (to avoid double evaluation).
 		if isPtrRefT(lt) != isPtrRefT(rt) && lt != "null" && rt != "null" {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "using %q on %s / %s is not supported (nullable references allow == / != only)", lt, rt, e.Op)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedNullable, lt, rt, e.Op)
 			}
 			refSide, valSide := e.L, e.R
 			if isPtrRefT(rt) {
 				refSide, valSide = e.R, e.L
 			}
 			if _, ok := refSide.(*lang.Ident); !ok {
-				return nil, l.errf(exprPos(refSide, pos), "comparing a non-variable nullable reference is not supported (the compiler requires a T& variable)")
+				return nil, l.errfID(exprPos(refSide, pos), i18n.MsgCompilerComparingNonVariableNullableReferenceNot)
 			}
 			rv, err := fc.expr(refSide)
 			if err != nil {
@@ -1763,7 +1768,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// consistent with the interpreter's equalValues: int/float compared numerically across types, String by content, struct/List by reference)
 		if isAnyT(lt) || isAnyT(rt) {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "using %q on interface{} is not supported (only == / !=)", e.Op)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnInterfaceNotSupported, e.Op)
 			}
 			x, err := fc.expr(e.L)
 			if err != nil {
@@ -1807,7 +1812,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// pointer / null: reference comparison (interpreter Value semantics: the same pointer is equal; null is the zero value)
 		if isPtrType(lt) || isPtrType(rt) {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "using %q on %s / %s is not supported (pointers allow == / != only)", lt, rt, e.Op)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedPointers, lt, rt, e.Op)
 			}
 			x, err := fc.binary(e, e.Op)
 			if err != nil {
@@ -1819,7 +1824,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		}
 		if lt == "bool" && rt == "bool" {
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "using %q on bool is not supported (the interpreter allows == / != only)", e.Op)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnBoolNotSupported, e.Op)
 			}
 			x, err := fc.binary(e, e.Op)
 			if err != nil {
@@ -1832,10 +1837,10 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		// raw bits: equality compares bit by bit, ordering is not admitted (spec §3.3)
 		if isBitsT(lt) || isBitsT(rt) {
 			if lt != rt && !rawVsConst(e, lt, rt) {
-				return nil, l.errf(pos, "using %q on %s / %s is not supported: the widths differ", e.Op, lt, rt)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedWidths, e.Op, lt, rt)
 			}
 			if e.Op != "==" && e.Op != "!=" {
-				return nil, l.errf(pos, "using %q on %s is not supported (raw bits admit == and != only)", e.Op, lt)
+				return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSNotSupported, e.Op, lt)
 			}
 			x, err := fc.binary(e, e.Op)
 			if err != nil {
@@ -1846,7 +1851,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 			return x, nil
 		}
 		if !numLike(lt) || !numLike(rt) {
-			return nil, l.errf(pos, "using %q on %s / %s is not supported (String/Operation comparison needs the same type)", lt, rt, e.Op)
+			return nil, l.errfID(pos, i18n.MsgCompilerUsingQOnSSNotSupportedString, lt, rt, e.Op)
 		}
 		// ordered comparison: both int and float are compared as float64 (the interpreter's ordCmp)
 		x, err := fc.binary(e, e.Op)
@@ -1859,7 +1864,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 	case "&&", "||":
 		for _, t := range []string{lt, rt} {
 			if t != "bool" && t != "?" {
-				return nil, l.errf(pos, "%s with %q is not supported (bool required)", t, e.Op)
+				return nil, l.errfID(pos, i18n.MsgCompilerSWithQNotSupportedBool, t, e.Op)
 			}
 		}
 		x, err := fc.binary(e, e.Op)
@@ -1870,7 +1875,7 @@ func (fc *funcCtx) binOp(e *lang.BinOp) (*expr, error) {
 		x.typ = "bool"
 		return x, nil
 	}
-	return nil, l.errf(pos, "operator %q is not supported by the compiler (available in the interpreter)", e.Op)
+	return nil, l.errfID(pos, i18n.MsgCompilerOperatorQNotSupportedByCompiler, e.Op)
 }
 
 // opMethodFor maps an operator to an Operation protocol method name (consistent with internal/lang/typecheck).
@@ -1913,12 +1918,12 @@ func rawVsConst(e *lang.BinOp, lt, rt string) bool {
 func (fc *funcCtx) rawBitsBin(e *lang.BinOp, lt, rt string) (*expr, error) {
 	l := fc.l
 	if e.Bits == 0 {
-		return nil, l.errf(e.Pos, "using %q on %s / %s is not supported (raw bits need one width)", e.Op, lt, rt)
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerUsingQOnSSNotSupportedRaw, e.Op, lt, rt)
 	}
 	typ := rawNameOf(e.Bits)
 	for _, side := range []string{lt, rt} {
 		if isBitsT(side) && side != typ {
-			return nil, l.errf(e.Pos, "using %q on %s / %s is not supported: the widths differ", e.Op, lt, rt)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerUsingQOnSSNotSupportedWidths, e.Op, lt, rt)
 		}
 	}
 	x, err := fc.binary(e, e.Op)
@@ -1955,7 +1960,7 @@ func (fc *funcCtx) binary(e *lang.BinOp, op string) (*expr, error) {
 func (fc *funcCtx) complement(e *lang.UnOp) (*expr, error) {
 	t := fc.typeOf(e.X)
 	if !isBitsT(t) && !isIntViewT(t) {
-		return nil, fc.l.errf(e.Pos, "the bitwise complement '~' requires an int operand, got %s", t)
+		return nil, fc.l.errfID(e.Pos, i18n.MsgCompilerTheBitwiseComplementTildeRequiresInt, t)
 	}
 	inner, err := fc.expr(e.X)
 	if err != nil {
@@ -1972,10 +1977,10 @@ func (fc *funcCtx) complement(e *lang.UnOp) (*expr, error) {
 // bitIndex lowers b[i] on raw bits: the i-th bit comes out as a bit (spec §3.3).
 func (fc *funcCtx) bitIndex(e *lang.IndexExpr, rt string) (*expr, error) {
 	if !isBitsT(rt) {
-		return nil, fc.l.errf(e.Pos, "subscripting a bit requires raw bits, got %s", rt)
+		return nil, fc.l.errfID(e.Pos, i18n.MsgCompilerSubscriptingBitRequiresRawBitsGot, rt)
 	}
 	if t := fc.typeOf(e.Idx); !isIntViewT(t) && t != "?" {
-		return nil, fc.l.errf(exprPos(e.Idx, e.Pos), "a bit index must be int, got %s", t)
+		return nil, fc.l.errfID(exprPos(e.Idx, e.Pos), i18n.MsgCompilerABitIndexMustIntGot, t)
 	}
 	recv, err := fc.expr(e.X)
 	if err != nil {
@@ -2001,10 +2006,10 @@ func (fc *funcCtx) conversion(c *lang.CallExpr, arg lang.Expr) (*expr, error) {
 func (fc *funcCtx) bitAssign(st *lang.AssignStmt, tgt *lang.IndexExpr) (stmt, error) {
 	rt := fc.typeOf(tgt.X)
 	if !isBitsT(rt) {
-		return nil, fc.l.errf(st.Pos, "b[i] = v requires raw bits, got %s", rt)
+		return nil, fc.l.errfID(st.Pos, i18n.MsgCompilerBIVRequiresRawBits, rt)
 	}
 	if t := fc.typeOf(st.X); !fc.assignable(t, "bit") && !isIntConstLit(st.X) {
-		return nil, fc.l.errf(exprPos(st.X, st.Pos), "assigning %s to a bit is not supported", t)
+		return nil, fc.l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSBitNotSupported, t)
 	}
 	recv, err := fc.expr(tgt.X)
 	if err != nil {
@@ -2027,7 +2032,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 	if e.Op == "&" {
 		// Address-of feeds the reference machinery, which the compiler does not lower yet. Hard error
 		// rather than a silently different answer (project policy for unsupported constructs).
-		return nil, l.errf(e.Pos, "compiling & (address-of) is not supported yet (references are implemented in the interpreter only)")
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerCompilingAddressNotSupportedYetReferences)
 	}
 	if e.Op == "~" {
 		return fc.complement(e)
@@ -2050,7 +2055,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 			}
 		}
 		if !numLike(t) {
-			return nil, l.errf(e.Pos, "negating %s is not supported (Operation overloading works for same-type structs only)", t)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerNegatingSNotSupportedOperationOverloading, t)
 		}
 		inner, err := fc.expr(e.X)
 		if err != nil {
@@ -2063,7 +2068,7 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 		return &expr{kind: kBin, op: "-", typ: "int", l: &expr{kind: kInt, typ: "int"}, r: inner}, nil
 	case "!":
 		if t != "bool" && t != "?" {
-			return nil, l.errf(e.Pos, "暂未支持对 %s 取反（需要 bool）", t)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerNegatingSNotSupportedYetBool, t)
 		}
 		inner, err := fc.expr(e.X)
 		if err != nil {
@@ -2078,9 +2083,9 @@ func (fc *funcCtx) unOp(e *lang.UnOp) (*expr, error) {
 			}
 			return &expr{kind: kMethod, typ: "int", line: e.Pos.Line, method: &methodExpr{recv: recv, name: "peek"}}, nil
 		}
-		return nil, l.errf(e.Pos, "dereference * is not supported (pointers are interpreter-only)")
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerDereferenceNotSupportedPointersInterpreterOnly)
 	}
-	return nil, l.errf(e.Pos, "unary operator %q is not supported", e.Op)
+	return nil, l.errfID(e.Pos, i18n.MsgCompilerUnaryOperatorQNotSupported, e.Op)
 }
 
 // ---------- Calls ----------
@@ -2102,7 +2107,7 @@ func (fc *funcCtx) call(c *lang.CallExpr) (*expr, error) {
 	case *lang.ScopeCall:
 		return fc.scopeCallCall(c, fn)
 	}
-	return nil, l.errf(c.Pos, "this call form is not supported (the compiler handles f(...), obj.m(...) and T::m(...) only)")
+	return nil, l.errfID(c.Pos, i18n.MsgCompilerThisCallFormNotSupportedCompiler)
 }
 
 // signCall lowers a signature call f(args) @sign(prefix) (canonical §6: sign.call(prefix) receives
@@ -2112,28 +2117,28 @@ func (fc *funcCtx) signCall(c *lang.CallExpr) (*expr, error) {
 	l := fc.l
 	id, ok := c.Fn.(*lang.Ident)
 	if !ok {
-		return nil, l.errf(c.Pos, "this signature call is not supported (the compiler requires a direct function name: f(args) @sign(...))")
+		return nil, l.errfID(c.Pos, i18n.MsgCompilerThisSignatureCallNotSupportedCompiler)
 	}
 	st, ok := fc.lookup(c.Sign.Name)
 	if !ok {
-		return nil, l.errf(c.Pos, "未声明的签名实例 %q（@%s）", c.Sign.Name, c.Sign.Name)
+		return nil, l.errfID(c.Pos, i18n.MsgCompilerUndeclaredSignatureInstanceQS, c.Sign.Name, c.Sign.Name)
 	}
 	if st != "memorize" {
-		return nil, l.errf(c.Pos, "暂未支持 %s 类型的签名实例 %q（编译器只 lower 内置 memorize）", st, c.Sign.Name)
+		return nil, l.errfID(c.Pos, i18n.MsgCompilerSignatureInstanceQTypeSNot, st, c.Sign.Name)
 	}
 	irName, fd, err := fc.resolveFunc(id.Name, c.Args, id.Pos)
 	if err != nil {
 		return nil, err
 	}
 	if len(c.Args) != len(fd.Params) {
-		return nil, l.errf(id.Pos, "函数 %s 需要 %d 个参数，got %d", id.Name, len(fd.Params), len(c.Args))
+		return nil, l.errfID(id.Pos, i18n.MsgCompilerFunctionSRequiresDArgumentsGot, id.Name, len(fd.Params), len(c.Args))
 	}
 	if l.fnRet[irName] != "int" {
-		return nil, l.errf(id.Pos, "暂未支持 memorize 包装返回 %s 的函数 %s（运行时缓存只承载 int）", l.fnRet[irName], id.Name)
+		return nil, l.errfID(id.Pos, i18n.MsgCompilerWrappingFunctionSReturnsSWith, l.fnRet[irName], id.Name)
 	}
 	for _, p := range fd.Params {
 		if pt := strings.TrimSpace(p.Type); pt != "int" {
-			return nil, l.errf(p.Pos, "暂未支持 memorize 包装 %s 形参（运行时缓存键只承载 int）", pt)
+			return nil, l.errfID(p.Pos, i18n.MsgCompilerMemorizeWrappingSParameterNotSupported, pt)
 		}
 	}
 	// arguments of the wrapped call: the interpreter records the in list by value after derefArgs (non-lvalue semantics)
@@ -2141,7 +2146,7 @@ func (fc *funcCtx) signCall(c *lang.CallExpr) (*expr, error) {
 	for _, a := range c.Args {
 		t := fc.typeOf(a)
 		if !fc.assignable(t, "int") {
-			return nil, l.errf(exprPos(a, id.Pos), "暂未支持 memorize 的 %s 实参（运行时缓存键只承载 int）", t)
+			return nil, l.errfID(exprPos(a, id.Pos), i18n.MsgCompilerASArgumentMemorizeNotSupported, t)
 		}
 		x, err := fc.expr(a)
 		if err != nil {
@@ -2171,7 +2176,7 @@ func (fc *funcCtx) callNamed(name string, pos lang.Pos, c *lang.CallExpr) (*expr
 		return fc.callSum(c, pos)
 	case "clock":
 		if len(c.Args) != 0 {
-			return nil, l.errf(pos, "clock() 不接受参数，got %d", len(c.Args))
+			return nil, l.errfID(pos, i18n.MsgCompilerClockTakesNoArgumentsGotD, len(c.Args))
 		}
 		return &expr{kind: kCall, typ: "int", call: &callExpr{name: "clock"}}, nil
 	}
@@ -2183,10 +2188,10 @@ func (fc *funcCtx) callNamed(name string, pos lang.Pos, c *lang.CallExpr) (*expr
 		return nil, err
 	}
 	if len(c.Args) != len(fd.Params) {
-		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", name, len(fd.Params), len(c.Args))
+		return nil, l.errfID(pos, i18n.MsgCompilerFunctionSRequiresDArgumentsGot, name, len(fd.Params), len(c.Args))
 	}
 	if l.nilFns[irName] && fc.discarded != c {
-		return nil, l.errf(pos, "using the return value of the log-containing function %s in an expression is not supported (the interpreter returns nil)", name)
+		return nil, l.errfID(pos, i18n.MsgCompilerUsingReturnValueLogContainingFunction, name)
 	}
 	args, err := fc.callArgs(c, fd.Params)
 	if err != nil {
@@ -2202,19 +2207,19 @@ func (l *lowerer) resolveGenerator(name string, pos lang.Pos) (*lang.FuncDecl, s
 		for _, f := range cands {
 			if len(f.Params) == 1 && f.Params[0].Type == "int" && retOf(f) == "int" {
 				if hit != nil {
-					return nil, "", l.errf(pos, "sum 生成器 %q 有多个 int(%s) 重载，无法确定", name, name)
+					return nil, "", l.errfID(pos, i18n.MsgCompilerSumGeneratorQMultipleIntS, name, name)
 				}
 				hit = f
 			}
 		}
 		if hit == nil {
-			return nil, "", l.errf(pos, "sum 生成器 %q 没有 int(%s) 重载", name, name)
+			return nil, "", l.errfID(pos, i18n.MsgCompilerSumGeneratorQNoIntS, name, name)
 		}
 		return hit, l.fnIR[hit], nil
 	}
 	gfn, ok := l.fns[name]
 	if !ok {
-		return nil, "", l.errf(pos, "unknown generator function %q (the compiler only supports non-generic functions defined in the same program)", name)
+		return nil, "", l.errfID(pos, i18n.MsgCompilerUnknownGeneratorFunctionQCompilerOnly, name)
 	}
 	return gfn, name, nil
 }
@@ -2225,7 +2230,7 @@ func (l *lowerer) resolveRunnerTarget(name string, nargs int, pos lang.Pos) (*la
 	if !ok {
 		fn, ok := l.fns[name]
 		if !ok {
-			return nil, "", l.errf(pos, "unknown function %q (the compiler only supports functions defined in the same program)", name)
+			return nil, "", l.errfID(pos, i18n.MsgCompilerUnknownFunctionQCompilerOnlySupports, name)
 		}
 		return fn, name, nil
 	}
@@ -2233,13 +2238,13 @@ func (l *lowerer) resolveRunnerTarget(name string, nargs int, pos lang.Pos) (*la
 	for _, f := range cands {
 		if len(f.Params) == nargs {
 			if hit != nil {
-				return nil, "", l.errf(pos, "merge 目标 %q 有多个同参数个数的重载，无法确定", name)
+				return nil, "", l.errfID(pos, i18n.MsgCompilerMergeTargetQSeveralOverloadsWith, name)
 			}
 			hit = f
 		}
 	}
 	if hit == nil {
-		return nil, "", l.errf(pos, "merge 目标 %q 没有 %d 个参数的重载", name, nargs)
+		return nil, "", l.errfID(pos, i18n.MsgCompilerMergeTargetQNoOverloadWith, name, nargs)
 	}
 	return hit, l.fnIR[hit], nil
 }
@@ -2253,7 +2258,7 @@ func (fc *funcCtx) resolveFunc(name string, args []lang.Expr, pos lang.Pos) (str
 	if !isOvl {
 		fd, ok := l.fns[name]
 		if !ok {
-			return "", nil, l.errf(pos, "unknown function %q (the compiler only supports functions defined in the same program)", name)
+			return "", nil, l.errfID(pos, i18n.MsgCompilerUnknownFunctionQCompilerOnlySupports, name)
 		}
 		return name, fd, nil
 	}
@@ -2287,7 +2292,7 @@ func (fc *funcCtx) resolveFunc(name string, args []lang.Expr, pos lang.Pos) (str
 		}
 	}
 	if best == nil {
-		return "", nil, l.errf(pos, "未找到匹配重载 %q（参数个数/类型不匹配）", name)
+		return "", nil, l.errfID(pos, i18n.MsgCompilerNoMatchingOverloadForQArity, name)
 	}
 	return l.fnIR[best], best, nil
 }
@@ -2302,7 +2307,7 @@ func (fc *funcCtx) callArgs(c *lang.CallExpr, params []lang.Param) ([]*expr, err
 		}
 		at := fc.typeOfAs(a, want)
 		if want != "?" && !fc.assignable(at, want) {
-			return nil, fc.l.errf(exprPos(a, c.Pos), "暂未支持向 %s 传递 %s 参数（需要 %s）", identifierName(c.Fn), at, want)
+			return nil, fc.l.errfID(exprPos(a, c.Pos), i18n.MsgCompilerPassingSArgumentSNotSupported, identifierName(c.Fn), at, want)
 		}
 		x, err := fc.exprAs(a, want)
 		if err != nil {
@@ -2321,14 +2326,14 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 	}
 	gid, ok := c.Args[0].(*lang.Ident)
 	if !ok {
-		return nil, l.errf(exprPos(c.Args[0], pos), "this sum generator is not supported (the compiler requires a named function)")
+		return nil, l.errfID(exprPos(c.Args[0], pos), i18n.MsgCompilerThisSumGeneratorNotSupportedCompiler)
 	}
 	if gfn, isGen := l.generics[gid.Name]; isGen {
 		// generic generator: sum requires int(int), monomorphized with T=int
 		if len(gfn.TypeParams) != 1 || len(gfn.Params) != 1 ||
 			strings.TrimSpace(gfn.Params[0].Type) != gfn.TypeParams[0] ||
 			strings.TrimSpace(gfn.Ret) != gfn.TypeParams[0] {
-			return nil, l.errf(gid.Pos, "this generic generator %s is not supported (the compiler requires fn<T> %s(T) T)", gid.Name, gid.Name)
+			return nil, l.errfID(gid.Pos, i18n.MsgCompilerThisGenericGeneratorSNotSupported, gid.Name, gid.Name)
 		}
 		irName, err := l.instantiateFunc(gid.Name, gfn, map[string]string{gfn.TypeParams[0]: "int"})
 		if err != nil {
@@ -2337,7 +2342,7 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 		args := []*expr{{kind: kIdent, typ: "function", s: irName}}
 		for _, a := range c.Args[1:] {
 			if t := fc.typeOf(a); t != "int" && t != "?" {
-				return nil, l.errf(exprPos(a, pos), "暂未支持 sum 的 %s 参数（需要 int）", t)
+				return nil, l.errfID(exprPos(a, pos), i18n.MsgCompilerSumSSArgumentNotSupported, t)
 			}
 			x, err := fc.expr(a)
 			if err != nil {
@@ -2352,12 +2357,12 @@ func (fc *funcCtx) callSum(c *lang.CallExpr, pos lang.Pos) (*expr, error) {
 		return nil, err
 	}
 	if len(gfn.Params) != 1 || gfn.Params[0].Type != "int" || l.fnRet[gIR] != "int" {
-		return nil, l.errf(gid.Pos, "generator %q is not supported (the compiler requires int %s(int))", gid.Name, gid.Name)
+		return nil, l.errfID(gid.Pos, i18n.MsgCompilerGeneratorQNotSupportedCompilerRequires, gid.Name, gid.Name)
 	}
 	args := []*expr{{kind: kIdent, typ: "function", s: gIR}}
 	for _, a := range c.Args[1:] {
 		if t := fc.typeOf(a); t != "int" && t != "?" {
-			return nil, l.errf(exprPos(a, pos), "暂未支持 sum 的 %s 参数（需要 int）", t)
+			return nil, l.errfID(exprPos(a, pos), i18n.MsgCompilerSumSSArgumentNotSupported, t)
 		}
 		x, err := fc.expr(a)
 		if err != nil {
@@ -2381,7 +2386,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		switch rt {
 		case "int", "bool", "float", "String":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "toString() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerTostringTakesNoArguments)
 			}
 			recv, err := fc.expr(me.X)
 			if err != nil {
@@ -2390,7 +2395,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			return &expr{kind: kToString, typ: "String", l: recv}, nil
 		case "List<int>":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "toString() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerTostringTakesNoArguments)
 			}
 			recv, err := fc.expr(me.X)
 			if err != nil {
@@ -2416,32 +2421,32 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		switch me.Name {
 		case "size":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "List.size() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListSizeTakesNoArguments)
 			}
 			return &expr{kind: kMethod, typ: "int", method: &methodExpr{recv: rx, name: "size"}}, nil
 		case "get":
 			if len(c.Args) != 1 {
-				return nil, l.errf(me.Pos, "List.get(i) 需要 1 个参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListGetIRequires1Argument)
 			}
 			if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
-				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List.get 的 %s 下标（需要 int）", t)
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListGetWithSIndexNot, t)
 			}
 			return &expr{kind: kMethod, typ: "String", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "get", args: args}}, nil
 		case "toString":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "toString() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerTostringTakesNoArguments)
 			}
 			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: rx, name: "toString"}}, nil
 		case "append":
 			if len(c.Args) != 1 {
-				return nil, l.errf(me.Pos, "List.append(v) 需要 1 个参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListAppendVRequires1Argument)
 			}
 			if t := fc.typeOf(c.Args[0]); t != "String" && t != "?" {
-				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List<String>.append 的 %s 参数（需要 String）", t)
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListStringAppendWithSArgument, t)
 			}
 			return &expr{kind: kMethod, typ: "void", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "append", args: args}}, nil
 		}
-		return nil, l.errf(me.Pos, "暂未支持 List<String>.%s（编译器 lower size/get/toString/append 与 for-in 迭代）", me.Name)
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerListStringSNotSupportedYet, me.Name)
 	}
 	// List builtin methods (the receiver may be any List<int> expression: a variable / struct field etc.)
 	if elem, ok := listElem(rt); ok && elem == "int" {
@@ -2460,50 +2465,50 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		switch me.Name {
 		case "size":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "List.size() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListSizeTakesNoArguments)
 			}
 			return &expr{kind: kMethod, typ: "int", method: &methodExpr{recv: rx, name: "size"}}, nil
 		case "get":
 			if len(c.Args) != 1 {
-				return nil, l.errf(me.Pos, "List.get(i) 需要 1 个参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListGetIRequires1Argument)
 			}
 			if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
-				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List.get 的 %s 下标（需要 int）", t)
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListGetWithSIndexNot, t)
 			}
 			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "get", args: args}}, nil
 		case "append":
 			if len(c.Args) != 1 {
-				return nil, l.errf(me.Pos, "List.append(v) 需要 1 个参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListAppendVRequires1Argument)
 			}
 			if t := fc.typeOf(c.Args[0]); !fc.assignable(t, "int") {
-				return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 List<int>.append 的 %s 参数（需要 int）", t)
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListIntAppendWithSArgument, t)
 			}
 			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: rx, name: "append", args: args}}, nil
 		case "head", "tail", "next":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "List.%s() 不接受参数", me.Name)
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListSCallTakesNoArguments, me.Name)
 			}
 			return &expr{kind: kMethod, typ: "int", line: me.Pos.Line, method: &methodExpr{recv: rx, name: me.Name}}, nil
 		case "reset":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "List.reset() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListResetTakesNoArguments)
 			}
 			return &expr{kind: kMethod, typ: "List<int>", method: &methodExpr{recv: rx, name: "reset"}}, nil
 		case "appendAll":
 			if len(c.Args) != 1 {
-				return nil, l.errf(me.Pos, "List.appendAll(l2) 需要 1 个参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListAppendallL2Requires1Argument)
 			}
 			if t := fc.typeOf(c.Args[0]); t != "List<int>" && t != "?" {
-				return nil, l.errf(exprPos(c.Args[0], me.Pos), "List.appendAll 需要 List<int>，got %s", t)
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListAppendallRequiresListIntGot, t)
 			}
 			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: rx, name: "appendAll", args: args}}, nil
 		case "__sort__":
 			if len(c.Args) != 0 {
-				return nil, l.errf(me.Pos, "List.__sort__() 不接受参数")
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListSortTakesNoArguments)
 			}
 			return &expr{kind: kMethod, typ: "void", method: &methodExpr{recv: rx, name: "__sort__"}}, nil
 		}
-		return nil, l.errf(me.Pos, "暂未支持 List 方法 %q（编译器支持 size/get/append/head/tail/next/reset/appendAll/toString/__sort__）", me.Name)
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerListMethodQNotSupportedYet, me.Name)
 	}
 	// String builtin methods (rune/byte semantics match the interpreter; the runtime lives in qthreads.c)
 	if rt == "String" {
@@ -2539,7 +2544,7 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 	if l.isStructType(rt) {
 		if mi := l.lookupSelf(rt, me.Name); mi != nil {
 			if len(mi.fn.Params)-1 != len(c.Args) {
-				return nil, l.errf(me.Pos, "方法 %s.%s 需要 %d 个参数，got %d", rt, me.Name, len(mi.fn.Params)-1, len(c.Args))
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerMethodSSRequiresDArguments, rt, me.Name, len(mi.fn.Params)-1, len(c.Args))
 			}
 			imi, err := l.instantiateFor(mi, rt, c.Args, fc, me.Pos)
 			if err != nil {
@@ -2548,23 +2553,23 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			return fc.methodCall(imi, rt, me.X, c.Args, me.Pos)
 		}
 		if l.hasMethod(rt, me.Name) {
-			return nil, l.errf(me.Pos, "calling static method %s.%s on an instance is not supported (canonical: %s::%s(...))", rt, me.Name, rt, me.Name)
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerCallingStaticMethodSSOn, rt, me.Name, rt, me.Name)
 		}
-		return nil, l.errf(me.Pos, "struct %s 没有方法 %q（解释器在类型检查期报错）", rt, me.Name)
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerStructSNoMethodQInterpreter, rt, me.Name)
 	}
 	// built-in objects: taskm / library / io
 	if id, ok := me.X.(*lang.Ident); ok {
 		if id.Name == "taskm" {
-			return nil, l.errf(me.Pos, "暂未支持 taskm 线程/通道（%s，解释器可用）", me.Name)
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmThreadsChannelsNotSupportedYet, me.Name)
 		}
 		if _, isLib := l.libs[id.Name]; isLib {
-			return nil, l.errf(me.Pos, "暂未支持 library FFI 调用 %s.%s（解释器可用）", id.Name, me.Name)
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerLibraryFfiCallSSNot, id.Name, me.Name)
 		}
 		if fc.ioName != "" && id.Name == fc.ioName {
-			return nil, l.errf(me.Pos, "io.%s 无返回值，不能用于表达式（请作为独立语句调用）", me.Name)
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerIoSReturnsNothingCannotUsed, me.Name)
 		}
 	}
-	return nil, l.errf(me.Pos, "calling method %s on %s is not supported by the compiler (available in the interpreter)", rt, me.Name)
+	return nil, l.errfID(me.Pos, i18n.MsgCompilerCallingMethodSOnSNot, rt, me.Name)
 }
 
 // methodCall lowers a single instance method call (including operator overload).
@@ -2587,7 +2592,7 @@ func (fc *funcCtx) methodCall(mi *methodInfo, recvTyp string, recv lang.Expr, ex
 			want = substType(params[i].Type, mi.subst)
 		}
 		if want != "?" && !fc.assignable(at, want) {
-			return nil, l.errf(exprPos(a, pos), "暂未支持向 %s.%s 传递 %s 参数（需要 %s）", recvTyp, mi.fn.Name, at, want)
+			return nil, l.errfID(exprPos(a, pos), i18n.MsgCompilerPassingSArgumentSSNot, recvTyp, mi.fn.Name, at, want)
 		}
 		x, err := fc.expr(a)
 		if err != nil {
@@ -2622,7 +2627,7 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 	boxed := func(a lang.Expr, what string) (*expr, error) {
 		at := fc.typeOf(a)
 		if !fc.assignable(at, "interface{}") {
-			return nil, l.errf(exprPos(a, me.Pos), "暂未支持 HashTable.%s 的 %s 参数", me.Name, at)
+			return nil, l.errfID(exprPos(a, me.Pos), i18n.MsgCompilerHashtableSWithSArgumentNot, me.Name, at)
 		}
 		_ = what
 		return fc.exprAs(a, "interface{}")
@@ -2630,27 +2635,27 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 	switch me.Name {
 	case "size":
 		if len(c.Args) != 0 {
-			return nil, l.errf(me.Pos, "HashTable.size() 不接受参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtableSizeTakesNoArguments)
 		}
 		return &expr{kind: kTable, typ: "int", tbl: &tableExpr{recv: recv, name: "size", keyT: keyT, valT: valT}}, nil
 	case "keys":
 		if len(c.Args) != 0 {
-			return nil, l.errf(me.Pos, "HashTable.keys() 不接受参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtableKeysTakesNoArguments)
 		}
 		if keyT != "String" {
 			// the interpreter's Keys() returns the original key values (int key → int value), which List<String> cannot carry
-			return nil, l.errf(me.Pos, "暂未支持 HashTable<%s, %s>.keys()（解释器返回键的原值；编译器只 lower String 键 → List<String>）", keyT, valT)
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtableSSKeysNotSupported, keyT, valT)
 		}
 		return &expr{kind: kTable, typ: "List<String>", tbl: &tableExpr{recv: recv, name: "keys", keyT: keyT, valT: valT}}, nil
 	case "put":
 		if len(c.Args) != 2 {
-			return nil, l.errf(me.Pos, "HashTable.put(k, v) 需要 2 个参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtablePutKVRequires2)
 		}
 		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
-			return nil, l.errf(exprPos(c.Args[0], me.Pos), "HashTable<%s, %s>.put 键需要 %s，got %s", keyT, valT, keyT, t)
+			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerHashtableSSPutKeyMust, keyT, valT, keyT, t)
 		}
 		if t := fc.typeOf(c.Args[1]); !fc.assignable(t, valT) {
-			return nil, l.errf(exprPos(c.Args[1], me.Pos), "HashTable<%s, %s>.put 值需要 %s，got %s", keyT, valT, valT, t)
+			return nil, l.errfID(exprPos(c.Args[1], me.Pos), i18n.MsgCompilerHashtableSSPutValueMust, keyT, valT, valT, t)
 		}
 		k, err := boxed(c.Args[0], "键")
 		if err != nil {
@@ -2663,10 +2668,10 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		return &expr{kind: kTable, typ: "void", tbl: &tableExpr{recv: recv, name: "put", args: []*expr{k, v}, keyT: keyT, valT: valT}}, nil
 	case "get":
 		if len(c.Args) != 1 {
-			return nil, l.errf(me.Pos, "HashTable.get(k) 需要 1 个参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtableGetKRequires1Argument)
 		}
 		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
-			return nil, l.errf(exprPos(c.Args[0], me.Pos), "HashTable<%s, %s>.get 键需要 %s，got %s", keyT, valT, keyT, t)
+			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerHashtableSSGetKeyMust, keyT, valT, keyT, t)
 		}
 		k, err := boxed(c.Args[0], "键")
 		if err != nil {
@@ -2679,10 +2684,10 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		return &expr{kind: kTable, typ: t, tbl: &tableExpr{recv: recv, name: "get", args: []*expr{k}, keyT: keyT, valT: valT}}, nil
 	case "contains", "remove":
 		if len(c.Args) != 1 {
-			return nil, l.errf(me.Pos, "HashTable.%s(k) 需要 1 个参数", me.Name)
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtableSKRequires1Argument, me.Name)
 		}
 		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
-			return nil, l.errf(exprPos(c.Args[0], me.Pos), "HashTable<%s, %s>.%s 键需要 %s，got %s", keyT, valT, me.Name, keyT, t)
+			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerHashtableSSSKeyMust, keyT, valT, me.Name, keyT, t)
 		}
 		k, err := boxed(c.Args[0], "键")
 		if err != nil {
@@ -2694,7 +2699,7 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		}
 		return &expr{kind: kTable, typ: ret, tbl: &tableExpr{recv: recv, name: me.Name, args: []*expr{k}, keyT: keyT, valT: valT}}, nil
 	}
-	return nil, l.errf(me.Pos, "HashTable method %q is not supported (the compiler handles put/get/contains/remove/size/keys)", me.Name)
+	return nil, l.errfID(me.Pos, i18n.MsgCompilerHashtableMethodQNotSupportedCompiler, me.Name)
 }
 
 // scopeCallCall lowers the T::m(...) / space::f(...) call form.
@@ -2703,7 +2708,7 @@ func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, e
 	// built-in HashTable::new(): an i8* handle (key/value types come from the expected type at the declaration)
 	if sc.Scope == "HashTable" {
 		if sc.Name != "new" || len(sc.Args) != 0 {
-			return nil, l.errf(sc.Pos, "暂未支持 HashTable::%s（编译器只 lower HashTable::new()）", sc.Name)
+			return nil, l.errfID(sc.Pos, i18n.MsgCompilerHashtableSNotSupportedYetOnly, sc.Name)
 		}
 		t := "HashTable<interface{}, interface{}>"
 		if isTableT(fc.expectT) {
@@ -2714,7 +2719,7 @@ func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, e
 	// built-in memorize::new(): a signature instance (@mb() memoization)
 	if sc.Scope == "memorize" {
 		if sc.Name != "new" || len(sc.Args) != 0 {
-			return nil, l.errf(sc.Pos, "暂未支持 memorize::%s（编译器只 lower memorize::new()）", sc.Name)
+			return nil, l.errfID(sc.Pos, i18n.MsgCompilerMemorizeSNotSupportedYetOnly, sc.Name)
 		}
 		return &expr{kind: kCall, typ: "memorize", call: &callExpr{name: "ql_memo_new"}}, nil
 	}
@@ -2727,7 +2732,7 @@ func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, e
 		ret = "void"
 	}
 	if l.nilFns[mi.irName] {
-		return nil, l.errf(sc.Pos, "using the return value of the log-containing function %s in an expression is not supported (the interpreter returns nil)", mi.irName)
+		return nil, l.errfID(sc.Pos, i18n.MsgCompilerUsingReturnValueLogContainingFunction, mi.irName)
 	}
 	args := make([]*expr, 0, len(sc.Args))
 	for i, a := range sc.Args {
@@ -2737,7 +2742,7 @@ func (fc *funcCtx) scopeCallCall(c *lang.CallExpr, sc *lang.ScopeCall) (*expr, e
 			want = substType(mi.fn.Params[i].Type, mi.subst)
 		}
 		if want != "?" && !fc.assignable(at, want) {
-			return nil, l.errf(exprPos(a, sc.Pos), "暂未支持向 %s::%s 传递 %s 参数（需要 %s）", sc.Scope, sc.Name, at, want)
+			return nil, l.errfID(exprPos(a, sc.Pos), i18n.MsgCompilerPassingSArgumentSSNotSupportedYet, sc.Scope, sc.Name, at, want)
 		}
 		x, err := fc.expr(a)
 		if err != nil {
@@ -2760,7 +2765,7 @@ func (fc *funcCtx) member(e *lang.MemberExpr) (*expr, error) {
 	if l.isStructType(rt) {
 		ft, ok := l.fieldType(rt, e.Name)
 		if !ok {
-			return nil, l.errf(e.Pos, "struct %s 没有字段 %q", rt, e.Name)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerStructSNoFieldQ, rt, e.Name)
 		}
 		recv, err := fc.expr(e.X)
 		if err != nil {
@@ -2769,14 +2774,14 @@ func (fc *funcCtx) member(e *lang.MemberExpr) (*expr, error) {
 		return &expr{kind: kField, typ: ft, field: &fieldExpr{recv: recv, name: e.Name, typ: rt}}, nil
 	}
 	if l.isIfaceType(rt) {
-		return nil, l.errf(e.Pos, "interface member access %s.%s is not supported (dynamic dispatch is interpreter-only)", rt, e.Name)
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerInterfaceMemberAccessSSNot, rt, e.Name)
 	}
 	if id, ok := e.X.(*lang.Ident); ok {
 		if _, isLib := l.libs[id.Name]; isLib {
-			return nil, l.errf(e.Pos, "暂未支持 library 成员访问 %s.%s（FFI 仅解释器可用）", id.Name, e.Name)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerLibraryMemberAccessSSNot, id.Name, e.Name)
 		}
 	}
-	return nil, l.errf(e.Pos, "member access %s.%s is not supported by the compiler (available in the interpreter)", rt, e.Name)
+	return nil, l.errfID(e.Pos, i18n.MsgCompilerMemberAccessSSNotSupported, rt, e.Name)
 }
 
 // structLit lowers a .{...} literal (when target is empty, take the Name filled in by typecheck).
@@ -2793,12 +2798,12 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 		if tb == base && len(ta) > 0 {
 			typ = target
 		} else {
-			return nil, l.errf(e.Pos, "a generic struct literal .{...} whose type arguments cannot be inferred is not supported (%s; available in the interpreter)", base)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerAGenericStructLiteralWhoseType, base)
 		}
 	}
 	sd, sub := l.structSubst(typ)
 	if sd == nil {
-		return nil, l.errf(e.Pos, "anonymous struct literal .{...} is not supported (the compiler requires a named struct)")
+		return nil, l.errfID(e.Pos, i18n.MsgCompilerAnonymousStructLiteralNotSupportedCompiler)
 	}
 	l.ensureStructTy(typ)
 	// collect field values in declaration order (both named and positional forms)
@@ -2815,16 +2820,16 @@ func (fc *funcCtx) structLit(e *lang.StructLit, target string) (*expr, error) {
 				}
 			}
 			if idx < 0 {
-				return nil, l.errf(e.Pos, "struct %s 没有字段 %q", typ, f.Name)
+				return nil, l.errfID(e.Pos, i18n.MsgCompilerStructSNoFieldQ, typ, f.Name)
 			}
 		}
 		if idx >= len(sd.Members) {
-			return nil, l.errf(e.Pos, "struct %s 字面量字段过多", typ)
+			return nil, l.errfID(e.Pos, i18n.MsgCompilerStructSLiteralTooManyFields, typ)
 		}
 		ft := substType(sd.Members[idx].Type, sub)
 		vt := fc.typeOfAs(f.X, ft)
 		if !fc.assignable(vt, ft) && !(isBitsT(ft) && isIntConstLit(f.X)) {
-			return nil, l.errf(exprPos(f.X, e.Pos), "initializing field %s.%s with %s is not supported (%s)", vt, typ, sd.Members[idx].Name, ft)
+			return nil, l.errfID(exprPos(f.X, e.Pos), i18n.MsgCompilerInitializingFieldSSWithS, vt, typ, sd.Members[idx].Name, ft)
 		}
 		x, err := fc.exprAs(f.X, ft)
 		if err != nil {
@@ -2856,14 +2861,14 @@ func (fc *funcCtx) strCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, bool, 
 	strArg := func(i int) (*expr, error) {
 		a := c.Args[i]
 		if t := fc.typeOf(a); t != "String" {
-			return nil, l.errf(exprPos(a, me.Pos), "%s 需要 String 参数，got %s", me.Name, t)
+			return nil, l.errfID(exprPos(a, me.Pos), i18n.MsgCompilerSRequiresStringArgumentGotS, me.Name, t)
 		}
 		return fc.expr(a)
 	}
 	intArg := func(i int) (*expr, error) {
 		a := c.Args[i]
 		if t := fc.typeOf(a); t != "int" && t != "?" {
-			return nil, l.errf(exprPos(a, me.Pos), "%s 需要 int 参数，got %s", me.Name, t)
+			return nil, l.errfID(exprPos(a, me.Pos), i18n.MsgCompilerSRequiresIntArgumentGotS, me.Name, t)
 		}
 		return fc.expr(a)
 	}
@@ -2879,7 +2884,7 @@ func (fc *funcCtx) strCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, bool, 
 	switch me.Name {
 	case "split":
 		if len(c.Args) != 1 {
-			return nil, true, l.errf(me.Pos, "split(sep) 需要 1 个参数")
+			return nil, true, l.errfID(me.Pos, i18n.MsgCompilerSplitSepRequires1Argument)
 		}
 		a, err := strArg(0)
 		if err != nil {
@@ -3010,15 +3015,15 @@ func (l *lowerer) staticMethodFor(scope, name string, args []lang.Expr, fc *func
 	mi := l.lookupStatic(scope, name)
 	if mi == nil {
 		if _, isStruct := l.structs[scope]; isStruct {
-			return nil, l.errf(pos, "暂未支持 struct %s 的静态方法 %s（该类型未声明 impl）", scope, name)
+			return nil, l.errfID(pos, i18n.MsgCompilerStaticMethodSStructSNot, scope, name)
 		}
 		if _, ok := l.methods[scope]; !ok {
-			return nil, l.errf(pos, "暂未支持 space 调用 %s::%s（解释器可用；编译器只支持同一程序内声明的 space/impl）", scope, name)
+			return nil, l.errfID(pos, i18n.MsgCompilerSpaceCallSSNotSupported, scope, name)
 		}
 		if l.hasMethod(scope, name) {
-			return nil, l.errf(pos, "%s::%s 是实例方法（需要 self 接收者）", scope, name)
+			return nil, l.errfID(pos, i18n.MsgCompilerSSInstanceMethodNeedsSelf, scope, name)
 		}
-		return nil, l.errf(pos, "暂未支持 %s::%s（该 space/类型未声明此方法）", scope, name)
+		return nil, l.errfID(pos, i18n.MsgCompilerSSNotSupportedYetSpace, scope, name)
 	}
 	return l.instantiateFor(mi, scope, args, fc, pos)
 }
@@ -3527,7 +3532,7 @@ func (l *lowerer) ffiLangType(t string, pos lang.Pos) (string, error) {
 	if t == "long" {
 		return "long", nil // 64-bit integer channel (i64)
 	}
-	return "", l.errf(pos, "暂未支持 library FFI 的类型 %q", t)
+	return "", l.errfID(pos, i18n.MsgCompilerLibraryFfiTypeQNotSupported, t)
 }
 
 // libRetType returns the type a library call exposes at the language level.
@@ -3573,10 +3578,10 @@ func (fc *funcCtx) libCall(c *lang.CallExpr, me *lang.MemberExpr, libName string
 		}
 	}
 	if fn == nil {
-		return nil, l.errf(me.Pos, "library %s 没有声明函数 %q", libName, me.Name)
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerLibrarySNotDeclareFunctionQ, libName, me.Name)
 	}
 	if len(c.Args) != len(fn.Params) {
-		return nil, l.errf(me.Pos, "library 函数 %s.%s 需要 %d 个参数，got %d", libName, me.Name, len(fn.Params), len(c.Args))
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerLibraryFunctionSSRequiresD, libName, me.Name, len(fn.Params), len(c.Args))
 	}
 	ret, err := l.ffiLangType(fn.Ret, fn.Pos)
 	if err != nil {
@@ -3589,16 +3594,16 @@ func (fc *funcCtx) libCall(c *lang.CallExpr, me *lang.MemberExpr, libName string
 			return nil, err
 		}
 		if pt == "void" {
-			return nil, l.errf(p.Pos, "library 函数参数不能是 void")
+			return nil, l.errfID(p.Pos, i18n.MsgCompilerALibraryFunctionParameterCannotVoid)
 		}
 		if !fc.ffiArgOK(pt) {
-			return nil, l.errf(p.Pos, "暂未支持 library FFI 参数类型 %q（编译器支持 int/bool/f32/float/double/String）", p.Type)
+			return nil, l.errfID(p.Pos, i18n.MsgCompilerLibraryFfiParameterTypeQNot, p.Type)
 		}
 		params = append(params, funcParam{name: p.Name, typ: pt})
 		// argument assignability: int → double/f32, bool → cbool, float → f32 are allowed
 		at := fc.typeOf(c.Args[i])
 		if !fc.ffiAssignable(at, pt) {
-			return nil, l.errf(exprPos(c.Args[i], me.Pos), "暂未支持向 %s.%s 传递 %s 参数（需要 %s）", libName, me.Name, at, p.Type)
+			return nil, l.errfID(exprPos(c.Args[i], me.Pos), i18n.MsgCompilerPassingSArgumentSSNot, libName, me.Name, at, p.Type)
 		}
 	}
 	args := make([]*expr, 0, len(c.Args))

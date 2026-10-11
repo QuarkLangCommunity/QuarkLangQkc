@@ -14,6 +14,7 @@ package cgen
 import (
 	"strings"
 
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
@@ -21,7 +22,7 @@ import (
 func (fc *funcCtx) taskPid(x lang.Expr) (*expr, error) {
 	t := fc.typeOf(x)
 	if t != "int" && t != "thread" && t != "?" {
-		return nil, fc.l.errf(exprPos(x, lang.Pos{Line: 1, Col: 1}), "taskm 需要 thread 或 pid，got %s", t)
+		return nil, fc.l.errfID(exprPos(x, lang.Pos{Line: 1, Col: 1}), i18n.MsgCompilerTaskmRequiresThreadOrPidGot, t)
 	}
 	return fc.expr(x)
 }
@@ -31,20 +32,20 @@ func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) 
 	l := fc.l
 	id, ok := fnExpr.(*lang.Ident)
 	if !ok {
-		return nil, l.errf(pos, "暂未支持该 merge 目标（编译器要求具名函数）")
+		return nil, l.errfID(pos, i18n.MsgCompilerThisMergeTargetNotSupportedYet)
 	}
 	if _, isGen := l.generics[id.Name]; isGen {
-		return nil, l.errf(id.Pos, "暂未支持 merge 泛型函数 %s（解释器可用）", id.Name)
+		return nil, l.errfID(id.Pos, i18n.MsgCompilerMergingGenericFunctionSNotSupported, id.Name)
 	}
 	fn, irName, err := l.resolveRunnerTarget(id.Name, len(extra), id.Pos)
 	if err != nil {
 		return nil, err
 	}
 	if len(fn.Params) != len(extra) {
-		return nil, l.errf(pos, "函数 %s 需要 %d 个参数，got %d", id.Name, len(fn.Params), len(extra))
+		return nil, l.errfID(pos, i18n.MsgCompilerFunctionSRequiresDArgumentsGot, id.Name, len(fn.Params), len(extra))
 	}
 	if len(fn.Params) > 8 {
-		return nil, l.errf(pos, "暂未支持 merge 传 %d 个参数（运行时线程携带 8 个 i64 槽）", len(extra))
+		return nil, l.errfID(pos, i18n.MsgCompilerMergingWithDArgumentsNotSupported, len(extra))
 	}
 	var ptypes []string
 	for _, p := range fn.Params {
@@ -55,13 +56,13 @@ func (fc *funcCtx) runnerFor(fnExpr lang.Expr, extra []lang.Expr, pos lang.Pos) 
 			if l.isStructType(pt) || l.isListTypeE(pt) {
 				l.ensureStructTy(pt)
 			} else {
-				return nil, l.errf(p.Pos, "暂未支持 merge 的 %s 形参（需要标量/String/struct/List）", pt)
+				return nil, l.errfID(p.Pos, i18n.MsgCompilerASMergeParameterNotSupported, pt)
 			}
 		}
 		ptypes = append(ptypes, pt)
 	}
 	if _, isNil := l.nilFns[irName]; isNil {
-		return nil, l.errf(id.Pos, "暂未支持 merge 含 log 的函数 %s（返回值可能为 nil）", id.Name)
+		return nil, l.errfID(id.Pos, i18n.MsgCompilerMergingFunctionSContainsLogNot, id.Name)
 	}
 	r := l.addRunner(irName, ptypes)
 	return &expr{kind: kRunner, typ: "runner", s: r, i: int64(len(ptypes))}, nil
@@ -102,17 +103,17 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 	switch me.Name {
 	case "spawn":
 		if len(c.Args) != 0 {
-			return nil, l.errf(me.Pos, "taskm.spawn() 不接受参数，got %d", len(c.Args))
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmSpawnTakesNoArgumentsGot, len(c.Args))
 		}
 		return &expr{kind: kCall, typ: "thread", call: &callExpr{name: "ql_spawn"}}, nil
 	case "channel":
 		if len(c.Args) > 1 {
-			return nil, l.errf(me.Pos, "taskm.channel() 需要 0 或 1 个参数，got %d", len(c.Args))
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmChannelTakes0Or1, len(c.Args))
 		}
 		arg := &expr{kind: kInt, typ: "int", i: 1024}
 		if len(c.Args) == 1 {
 			if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
-				return nil, l.errf(exprPos(c.Args[0], me.Pos), "taskm.channel(n) 需要 int 容量，got %s", t)
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerTaskmChannelNRequiresIntCapacity, t)
 			}
 			x, err := fc.expr(c.Args[0])
 			if err != nil {
@@ -123,7 +124,7 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 		return &expr{kind: kCall, typ: "Channel", call: &callExpr{name: "ql_channel_new", args: []*expr{arg}}}, nil
 	case "block":
 		if len(c.Args) != 1 {
-			return nil, l.errf(me.Pos, "taskm.block(pid) 需要 1 个参数，got %d", len(c.Args))
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmBlockPidRequires1Argument, len(c.Args))
 		}
 		pid, err := fc.taskPid(c.Args[0])
 		if err != nil {
@@ -132,7 +133,7 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 		return &expr{kind: kCall, typ: "void", call: &callExpr{name: "ql_block", args: []*expr{pid}}}, nil
 	case "done":
 		if len(c.Args) != 1 {
-			return nil, l.errf(me.Pos, "taskm.done(pid) 需要 1 个参数，got %d", len(c.Args))
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmDonePidRequires1Argument, len(c.Args))
 		}
 		pid, err := fc.taskPid(c.Args[0])
 		if err != nil {
@@ -142,7 +143,7 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 	case "merge":
 		// taskm.merge(pid, fn[, args...])
 		if len(c.Args) < 2 || len(c.Args) > 10 {
-			return nil, l.errf(me.Pos, "taskm.merge(pid, fn[, args...]) 需要 2..10 个参数（最多 8 个实参），got %d", len(c.Args))
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmMergePidFnArgsRequires, len(c.Args))
 		}
 		pid, err := fc.taskPid(c.Args[0])
 		if err != nil {
@@ -150,9 +151,9 @@ func (fc *funcCtx) taskmCall(c *lang.CallExpr, me *lang.MemberExpr) (*expr, erro
 		}
 		return fc.mergeCall(me, pid, c.Args[1], c.Args[2:])
 	case "talk":
-		return nil, l.errf(me.Pos, "暂未支持 thread.talk（解释器可用）")
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerThreadTalkNotSupportedYetAvailable)
 	}
-	return nil, l.errf(me.Pos, "暂未支持 taskm.%s（编译器支持 spawn/merge/block/done/channel）", me.Name)
+	return nil, l.errfID(me.Pos, i18n.MsgCompilerTaskmSNotSupportedYetCompiler, me.Name)
 }
 
 // threadCall lowers t.merge(fn[, arg]) / t.pid().
@@ -161,28 +162,28 @@ func (fc *funcCtx) threadCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr)
 	switch me.Name {
 	case "pid":
 		if len(c.Args) != 0 {
-			return nil, l.errf(me.Pos, "t.pid() 不接受参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTPidTakesNoArguments)
 		}
 		return recv, nil // on the compiled path a thread variable is itself the pid (i32)
 	case "merge":
 		if len(c.Args) < 1 || len(c.Args) > 9 {
-			return nil, l.errf(me.Pos, "t.merge(fn[, args...]) 需要 1..9 个参数（最多 8 个实参），got %d", len(c.Args))
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTMergeFnArgsRequires1, len(c.Args))
 		}
 		return fc.mergeCall(me, recv, c.Args[0], c.Args[1:])
 	case "talk":
 		// Interpreter semantics: verify the argument is a channel, then do nothing
 		if len(c.Args) != 1 {
-			return nil, l.errf(me.Pos, "t.talk(c) 需要 1 个参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerTTalkCRequires1Argument)
 		}
 		if t := fc.typeOf(c.Args[0]); t != "Channel" && t != "channel" && t != "?" {
-			return nil, l.errf(exprPos(c.Args[0], me.Pos), "thread.talk 需要 channel 类实例，got %s", t)
+			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerThreadTalkRequiresChannelInstanceGot, t)
 		}
 		if _, err := fc.expr(c.Args[0]); err != nil {
 			return nil, err
 		}
 		return &expr{kind: kInt, typ: "void"}, nil
 	}
-	return nil, l.errf(me.Pos, "暂未支持 thread 方法 %q（编译器支持 merge/pid/talk）", me.Name)
+	return nil, l.errfID(me.Pos, i18n.MsgCompilerThreadMethodQNotSupportedYet, me.Name)
 }
 
 // mergeCall builds taskm.merge(pid, runner, args...) (arguments are passed to the runtime through i64 slots).
@@ -195,7 +196,7 @@ func (fc *funcCtx) mergeCall(me *lang.MemberExpr, pid *expr, fnExpr lang.Expr, e
 	for _, a := range extra {
 		t := fc.typeOf(a)
 		if t != "?" && !fc.mergeArgOK(t) {
-			return nil, fc.l.errf(exprPos(a, me.Pos), "暂未支持 merge 的 %s 实参", t)
+			return nil, fc.l.errfID(exprPos(a, me.Pos), i18n.MsgCompilerASMergeArgumentNotSupported, t)
 		}
 		x, err := fc.expr(a)
 		if err != nil {
@@ -221,10 +222,10 @@ func (fc *funcCtx) channelCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr
 	switch me.Name {
 	case "send":
 		if len(c.Args) != 1 {
-			return nil, l.errf(me.Pos, "c.send(v) 需要 1 个参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerCSendVRequires1Argument)
 		}
 		if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
-			return nil, l.errf(exprPos(c.Args[0], me.Pos), "暂未支持 channel 发送 %s（运行时通道只承载 int）", t)
+			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerSendingSOverChannelNotSupported, t)
 		}
 		x, err := fc.expr(c.Args[0])
 		if err != nil {
@@ -233,9 +234,9 @@ func (fc *funcCtx) channelCall(c *lang.CallExpr, me *lang.MemberExpr, recv *expr
 		return &expr{kind: kCall, typ: "void", call: &callExpr{name: "ql_send", args: []*expr{recv, x}}}, nil
 	case "recv":
 		if len(c.Args) != 0 {
-			return nil, l.errf(me.Pos, "c.recv() 不接受参数")
+			return nil, l.errfID(me.Pos, i18n.MsgCompilerCRecvTakesNoArguments)
 		}
 		return &expr{kind: kCall, typ: "int", call: &callExpr{name: "ql_recv", args: []*expr{recv}}}, nil
 	}
-	return nil, l.errf(me.Pos, "暂未支持 channel 方法 %q（编译器支持 send/recv）", me.Name)
+	return nil, l.errfID(me.Pos, i18n.MsgCompilerChannelMethodQNotSupportedYet, me.Name)
 }

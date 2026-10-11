@@ -2943,7 +2943,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 		return tOutputStreamV, nil
 	case "panic":
 		if len(args) != 1 {
-			return nil, c.errf(id.Pos, "TypeError: panic(msg String) takes exactly 1 argument")
+			return nil, c.errfID(id.Pos, i18n.MsgCompilerTypeerrorPanicMsgStringTakesExactly)
 		}
 		return tNilV, nil
 	case "rand", "clock":
