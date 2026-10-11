@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"sync/atomic"
 )
 
@@ -723,7 +725,7 @@ func (in *interp) runVM(ctx *execCtx) error {
 			}
 			if !stream.IsIO() {
 				ctx.vmStack = st
-				return &RunError{Msg: msg("TypeError: io.println needs an IOStream, got %s", stream.TypeName()), Pos: ins.pos, Ctx: ctx}
+				return &RunError{Msg: msgID(i18n.MsgRuntimeTypeerrorIoPrintlnNeedsIostreamGotS, stream.TypeName()), Pos: ins.pos, Ctx: ctx}
 			}
 			start := len(ctx.argArena)
 			ctx.argArena = append(ctx.argArena, st[len(st)-argc:]...)

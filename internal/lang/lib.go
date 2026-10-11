@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
+
 	"github.com/QuarkLangCommunity/QuarkLangQkparser"
 )
 
@@ -18,7 +20,7 @@ import (
 // ExportLibrary exports a program library's pub symbols as a .qlib binary library.
 func ExportLibrary(prog *Program, outPath string) error {
 	if prog.Kind != "library" {
-		return errors.New(msg("ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）", prog.Kind))
+		return errors.New(msgID(i18n.MsgRuntimeExportlibraryProgramLibraryExportLibrary, prog.Kind))
 	}
 	syms := map[string]string{}
 	for _, fn := range prog.Funcs {
@@ -137,7 +139,7 @@ func LoadImportIn(dirs []string, path string) (string, string, error) {
 		}
 		return sb.String(), p, nil
 	}
-	return "", "", errors.New(msg("ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）",
+	return "", "", errors.New(msgID(i18n.MsgRuntimeImporterrorFindQLookedSQkSQlibUnder,
 		path, strings.Join(dirs, ", "), path, path))
 }
 

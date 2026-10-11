@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // ============ Static types (v0.1 structural subset, spec §11.1) ============
@@ -585,7 +587,7 @@ func overloadErrT(defs []*Func, name string, n int) string {
 			return fmt.Sprintf("CompileError: %s expects %d args, got %d", name, len(d.Params), n)
 		}
 	}
-	return fmt.Sprintf(msg("CompileError: 未找到匹配重载 %q（参数类型不匹配）"), name)
+	return fmt.Sprintf(msgID(i18n.MsgRuntimeCompileerrorMatchingOverloadQArgument), name)
 }
 
 // opMethodFor maps an operator → the Operation protocol method name (xmind §interfaces: operator methods such as __add__; dynamic interface dispatch).
@@ -1103,6 +1105,12 @@ func (c *checker) errf(pos Pos, format string, args ...interface{}) error {
 	return &CheckError{Msg: msg(format, args...), Pos: pos}
 }
 
+// errfID is the ID-rendering counterpart of errf for a message that is a generated ID rather than a
+// template. The two exist side by side while the typecheck domain is migrating; both go at step 5.
+func (c *checker) errfID(pos Pos, id i18n.Msg, args ...interface{}) error {
+	return &CheckError{Msg: msgID(id, args...), Pos: pos}
+}
+
 func (c *checker) paramType(p Param, pos Pos) (*Type, error) {
 	return c.substType(p.Type, c.curSubst, p.Pos)
 }
@@ -1453,7 +1461,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				}
 			case tList, tPtr:
 				if kidx.Kind != tInt {
-					return c.errf(target.Pos, "TypeError: 列表索引必须是 int")
+					return c.errfID(target.Pos, i18n.MsgRuntimeTypeerrorListIndexInt)
 				}
 				if recvT.Elem != nil && !assignable(t, recvT.Elem) {
 					return c.errf(target.Pos, "TypeError: 值需要 %s，给了 %s", recvT.Elem, t)
@@ -1462,7 +1470,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 					return err
 				}
 			default:
-				return c.errf(target.Pos, "TypeError: 不支持对 %s 索引赋值", recvT)
+				return c.errfID(target.Pos, i18n.MsgRuntimeTypeerrorIndexedAssignmentSupportedS, recvT)
 			}
 			return nil
 		case *MemberExpr:
@@ -1644,7 +1652,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		}
 		v := sc.lookup(id.Name)
 		if v == nil {
-			return nil, c.errf(x.Pos, msg("CompileError: undeclared identifier %q", id.Name))
+			return nil, c.errf(x.Pos, msgID(i18n.MsgRuntimeCompileerrorUndeclaredIdentifierQ, id.Name))
 		}
 		if !isRefKind(v.typ) {
 			return nil, c.errf(x.Pos, msg("TypeError: ++ needs a reference (permission m), but %q is %s", id.Name, v.typ))
@@ -1691,7 +1699,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		if isBuiltinFuncName(x.Name) {
 			return mkFunc(x.Name), nil // builtin function as a function reference (sum(rand, ...))
 		}
-		return nil, c.errf(x.Pos, "CompileError: undeclared identifier %q", x.Name)
+		return nil, c.errfID(x.Pos, i18n.MsgRuntimeCompileerrorUndeclaredIdentifierQ, x.Name)
 	case *ListLit:
 		var elem *Type
 		for _, it := range x.Items {
@@ -1717,7 +1725,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 			switch x.X.(type) {
 			case *Ident, *MemberExpr, *IndexExpr:
 			default:
-				return nil, c.errf(x.Pos, msg("TypeError: cannot take the address of this expression (needs a variable, field or list element)"))
+				return nil, c.errf(x.Pos, msgID(i18n.MsgRuntimeTypeerrorTakeAddressExpressionNeeds))
 			}
 			t, err := c.infer(x.X, sc)
 			if err != nil {
@@ -2201,7 +2209,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 					return nil, err
 				}
 				if args[0].Kind != tString {
-					return nil, c.errf(pos, "TypeError: indexOf 需要 String 参数")
+					return nil, c.errfID(pos, i18n.MsgRuntimeTypeerrorIndexofRequiresStringArgument)
 				}
 			}
 			if name == "toInt" {
@@ -2231,7 +2239,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tString {
-				return nil, c.errf(pos, "TypeError: split 需要 String 分隔符")
+				return nil, c.errfID(pos, i18n.MsgRuntimeTypeerrorSplitRequiresStringSeparator)
 			}
 			return c.resolveType("List<String>", pos)
 		case "trim", "trimLeft", "trimRight", "toLower", "toUpper", "charAt", "toFloat":
@@ -2240,7 +2248,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 					return nil, err
 				}
 				if args[0].Kind != tInt {
-					return nil, c.errf(pos, "TypeError: charAt 需要 int 索引")
+					return nil, c.errfID(pos, i18n.MsgRuntimeTypeerrorCharatRequiresIntIndex)
 				}
 			} else if err := c.checkArity(name, 0, len(args), pos); err != nil {
 				return nil, err
@@ -2252,7 +2260,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			for _, a := range args {
 				if a.Kind != tString {
-					return nil, c.errf(pos, "TypeError: replace(old, new) 需要 String 参数")
+					return nil, c.errfID(pos, i18n.MsgRuntimeTypeerrorReplaceOldNewRequiresString)
 				}
 			}
 			return tStringV, nil
