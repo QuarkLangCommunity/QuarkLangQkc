@@ -1,0 +1,15 @@
+# The message tables, in load order. A message's number is its position in this list.
+#
+# parser.tsv comes first because its rows are the pinned qkparser module's messages and the module's own
+# IDs are positions in the module's table: internal/lang answers a qkparser.ID by converting it straight
+# to a Msg, so the imported block has to be the prefix of the generated numbering. Everything after it is
+# this repository's own and appends, so a new domain can never renumber a message that already shipped.
+#
+# This file exists because the order used to be the alphabetical order of source/*.tsv, and docgen.tsv
+# sorts before parser.tsv: adding one local domain would have renumbered all 63 syntax-layer messages
+# and silently changed which message the conversion meant. Every *.tsv other than tables.tsv and
+# languages.tsv must be listed here, or generation fails.
+#
+# file
+parser.tsv
+docgen.tsv

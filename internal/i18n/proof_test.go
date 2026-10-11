@@ -132,7 +132,7 @@ func renderFromGenerated(t *testing.T, generated []byte, id Msg, block int) stri
 	t.Helper()
 	src := string(generated)
 	offsets := parseUint32Table(t, src, "msgOffsets")
-	blob := parseBackquotedString(t, src, "msgBlob")
+	blob := parseStringLiteral(t, src, "msgBlob")
 	nMsgs := len(offsets) / len(MsgLangs())
 	k := block*nMsgs + int(id)
 	if k+1 >= len(offsets) {
@@ -169,19 +169,53 @@ func parseUint32Table(t *testing.T, src, name string) []uint32 {
 	return out
 }
 
-// parseBackquotedString reads "const name = `...`" out of a generated file.
-func parseBackquotedString(t *testing.T, src, name string) string {
+// parseStringLiteral reads "const name = <value>" out of a generated file, in either form the
+// generator may emit. It prefers a raw literal, because that is what keeps the blob readable in a
+// diff, but falls back to a quoted one: a message that itself contains a backtick cannot live in a raw
+// literal, so one such message switches the whole blob to an escaped literal. The docgen domain has
+// one (`> Form: ` + "`program `"), which is how this was found — the proof, not the generator, was
+// making an assumption about the artefact's spelling.
+func parseStringLiteral(t *testing.T, src, name string) string {
 	t.Helper()
-	at := strings.Index(src, "const "+name+" = `")
+	head := "const " + name + " = "
+	at := strings.Index(src, head)
 	if at < 0 {
 		t.Fatalf("no %s literal in the generated file", name)
 	}
-	rest := src[at+len("const "+name+" = `"):]
-	end := strings.Index(rest, "`")
-	if end < 0 {
-		t.Fatalf("the %s literal is not terminated", name)
+	rest := src[at+len(head):]
+	if rest == "" {
+		t.Fatalf("the %s literal is empty", name)
 	}
-	return rest[:end]
+	switch rest[0] {
+	case '`':
+		end := strings.Index(rest[1:], "`")
+		if end < 0 {
+			t.Fatalf("the %s literal is not terminated", name)
+		}
+		return rest[1 : 1+end]
+	case '"':
+		end := 1
+		for end < len(rest) {
+			if rest[end] == '\\' {
+				end += 2
+				continue
+			}
+			if rest[end] == '"' {
+				break
+			}
+			end++
+		}
+		if end >= len(rest) {
+			t.Fatalf("the %s literal is not terminated", name)
+		}
+		value, err := strconv.Unquote(rest[:end+1])
+		if err != nil {
+			t.Fatalf("the %s literal does not unquote: %v", name, err)
+		}
+		return value
+	}
+	t.Fatalf("the %s literal starts with %q, which is neither ` nor \"", name, rest[0])
+	return ""
 }
 
 // TestProofTextKeyedCatalogLosesTheTranslationOnRephrase is the mirror of P1, measured against the

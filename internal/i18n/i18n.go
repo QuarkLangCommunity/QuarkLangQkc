@@ -149,7 +149,6 @@ func domainTables() map[string]map[string]string {
 	return map[string]map[string]string{
 		"cli":       cliTable,
 		"compiler":  compilerTable,
-		"docgen":    docgenTable,
 		"lexer":     lexerTable,
 		"lint":      lintTable,
 		"repl":      replTable,

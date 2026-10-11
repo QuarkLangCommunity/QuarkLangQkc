@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"html"
 	"strings"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // DocOptions controls rendering.
@@ -76,7 +78,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		b.WriteString(d.FileDoc)
 		b.WriteString("\n")
 	}
-	b.WriteString(msg("> 形态：`program "))
+	b.WriteString(msgID(i18n.MsgDocgenFormPrefix))
 	b.WriteString(d.Kind)
 	b.WriteString(";`")
 	if len(d.Imports) > 0 {
@@ -84,7 +86,7 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		for _, im := range d.Imports {
 			q = append(q, "`"+im+"`")
 		}
-		b.WriteString(msg("　·　导入："))
+		b.WriteString(msgID(i18n.MsgDocgenImportsSeparator))
 		b.WriteString(strings.Join(q, ", "))
 	}
 	b.WriteString("\n\n")
@@ -97,10 +99,10 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		}
 	}
 	if len(rows) == 0 {
-		b.WriteString(msg("_（没有可导出的符号）_\n"))
+		b.WriteString(msgID(i18n.MsgDocgenNoExportedSymbols))
 		return b.String()
 	}
-	b.WriteString(msg("## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n"))
+	b.WriteString(msgID(i18n.MsgDocgenOverviewHeading))
 	for _, it := range rows {
 		b.WriteString("| ")
 		b.WriteString(kindLabel(it.Kind))
@@ -171,13 +173,13 @@ func writeFieldsMD(b *strings.Builder, it *DocItem) {
 		b.WriteString(" |\n")
 	}
 	if it.Kind == DocStruct {
-		b.WriteString(msg("| 字段 | 类型 | 说明 |\n|---|---|---|\n"))
+		b.WriteString(msgID(i18n.MsgDocgenFieldsHeading))
 		for _, f := range it.Fields {
 			writeRow(f.Name, "`"+f.Type+"`", cell(Summary(f.Doc)))
 		}
 		return
 	}
-	b.WriteString(msg("| 成员 | 签名 | 说明 |\n|---|---|---|\n"))
+	b.WriteString(msgID(i18n.MsgDocgenMembersHeading))
 	for _, f := range it.Fields {
 		name, sig := f.Name, f.Signature
 		if sig == "" {
