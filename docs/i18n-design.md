@@ -688,7 +688,7 @@ all identical (interpreter: origin/main == this tree), en and zh  [18 runs]
 
 * ⚠ **Step 2's real-world ordering** has been exercised as two local checkouts plus a `go.work`, not as
   two merged PRs. The module's branch is pushed; this repository's pin is bumped to a pseudo-version of
-  that branch's commit, which is a pre-merge pin and must become a post-merge pin (§9.1).
+  that branch's commit, which is a pre-merge pin; the pre-merge bullet below says how it lands.
 * ⚠ **The `qkparser` interface break has no deprecation window.** Every consumer that calls
   `Localizer.T` stops compiling. Deliberate, but it is a compatibility promise this design changes, and
   the release plan for the module is not mine to set.
