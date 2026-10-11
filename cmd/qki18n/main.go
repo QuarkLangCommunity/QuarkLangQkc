@@ -54,6 +54,7 @@ func main() {
 	source := flag.String("source", filepath.Join("internal", "i18n", "source"), "authored message tables")
 	out := flag.String("out", filepath.Join("internal", "i18n", "msg_gen.go"), "generated catalog")
 	doc := flag.String("doc", "", "generated review document, e.g. docs/i18n-backlog.md (empty: do not generate one)")
+	cout := flag.String("c-out", "", "generated C message catalog for the embedded runtime, e.g. compiler/internal/rtcat/msg_c.h (empty: do not generate one)")
 	root := flag.String("root", "", "checkout the call sites and the alternate-Chinese scan are measured in (empty: the working directory)")
 	module := flag.String("module", "", "pinned qkparser source directory (default: resolved from go.mod)")
 	flag.Parse()
@@ -90,6 +91,7 @@ func main() {
 		SourceDir:    *source,
 		OutFile:      *out,
 		DocFile:      docFile,
+		COutFile:     *cout,
 		Root:         scanRoot,
 		ModuleDir:    moduleDir,
 		ModuleSource: i18ngen.DefaultModuleSource,
@@ -107,6 +109,9 @@ func main() {
 		verb = "checked"
 	}
 	fmt.Printf("qki18n: %s %s\n", verb, *out)
+	if *cout != "" {
+		fmt.Printf("qki18n: %s %s\n", verb, *cout)
+	}
 	if docFile != "" {
 		fmt.Printf("qki18n: %s %s\n", verb, docFile)
 	}

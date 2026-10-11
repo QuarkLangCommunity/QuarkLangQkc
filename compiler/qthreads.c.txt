@@ -196,6 +196,87 @@ char* ql_strcat(const char* a, const char* b) {
 }
 #endif
 
+/* ================= Messages =================
+ * The strings this runtime prints come from the generated C catalog (compiler/internal/rtcat/msg_c.h,
+ * from the authored tables under internal/i18n/source through cmd/qki18n): the same rows, languages and
+ * verbs as the interpreter's catalog, so a compiled program and `quark` say the same thing in the same
+ * language. qkc prepends the header, so nothing here is compiled without it.
+ *
+ * The language is the process environment, resolved when a message is first rendered. The order — and
+ * the prefix match — is the Go side's Detect(): QK_LANG, then LC_ALL / LC_MESSAGES / LANG, then the
+ * source language. Reading the environment at render time rather than at start-up is what keeps
+ * `QK_LANG=en prog` and `QK_LANG=zh prog` the same binary.
+ */
+static int qk_lang_block(void) {
+    static int cached = -1;
+    const char* names[4];
+    if (cached >= 0) return cached;
+    names[0] = getenv("QK_LANG");
+    names[1] = getenv("LC_ALL");
+    names[2] = getenv("LC_MESSAGES");
+    names[3] = getenv("LANG");
+    for (int i = 0; i < 4; i++) {
+        const char* v = names[i];
+        if (!v) continue;
+        while (*v == ' ' || *v == '\t') v++;
+        if ((v[0] == 'z' || v[0] == 'Z') && (v[1] == 'h' || v[1] == 'H')) { cached = 1; return cached; }
+        if ((v[0] == 'e' || v[0] == 'E') && (v[1] == 'n' || v[1] == 'N')) { cached = 0; return cached; }
+    }
+    cached = 0;
+    return cached;
+}
+
+/* qk_msg_text renders one message of the catalog into buf. A catalog id is generated code, so an id
+ * the header does not carry is a build mistake, not a user-facing condition; rendering the id keeps
+ * the failure visible instead of printing an empty message. */
+static const char* qk_msg_text(int lang, const char* id, char* buf, size_t n) {
+    const char* s = qk_msg(lang, id);
+    size_t len;
+    if (!s) {
+        snprintf(buf, n, "missing message: %s", id);
+        return buf;
+    }
+    len = strlen(s);
+    if (len >= n) len = n - 1;
+    memcpy(buf, s, len);
+    buf[len] = 0;
+    return buf;
+}
+
+/* qk_quote mirrors the interpreter's %q for the strings that reach a parse error (Go's strconv.Quote
+ * over printable ASCII and the UTF-8 bytes): quotes and backslashes are escaped, the C escapes Go
+ * spells with a letter are the same letters, and any other control byte is a two-digit hex escape. The
+ * two sides therefore quote the same value the same way, which is what keeps one message one message. */
+static void qk_quote(const char* s, char* out, size_t n) {
+    size_t o = 0;
+    if (n) out[o++] = '"';
+    for (const unsigned char* p = (const unsigned char*)s; *p && o + 8 < n; p++) {
+        unsigned char c = *p;
+        switch (c) {
+        case '"': out[o++] = '\\'; out[o++] = '"'; break;
+        case '\\': out[o++] = '\\'; out[o++] = '\\'; break;
+        case '\a': out[o++] = '\\'; out[o++] = 'a'; break;
+        case '\b': out[o++] = '\\'; out[o++] = 'b'; break;
+        case '\f': out[o++] = '\\'; out[o++] = 'f'; break;
+        case '\n': out[o++] = '\\'; out[o++] = 'n'; break;
+        case '\r': out[o++] = '\\'; out[o++] = 'r'; break;
+        case '\t': out[o++] = '\\'; out[o++] = 't'; break;
+        case '\v': out[o++] = '\\'; out[o++] = 'v'; break;
+        default:
+            if (c < 0x20 || c == 0x7f) {
+                static const char hex[] = "0123456789abcdef";
+                out[o++] = '\\'; out[o++] = 'x'; out[o++] = hex[c >> 4]; out[o++] = hex[c & 15];
+            } else {
+                out[o++] = (char)c;
+            }
+            break;
+        }
+    }
+    if (o < n) out[o++] = '"';
+    if (o < n) out[o] = 0;
+    else if (n) out[n - 1] = 0;
+}
+
 /* ================= String built-in methods (same semantics as the interpreter internal/lang/eval.go) =================
  * rune (UTF-8) semantics: size/charAt/substring are per rune; contains/startsWith/endsWith/indexOf
  * are per byte (same semantics as the Go strings package). Out-of-range / parse failure → the same runtime error wording as the interpreter, exiting 1. */
@@ -238,8 +319,9 @@ int ql_str_indexof(const char* s, const char* sub) {
 char* ql_str_sub(const char* s, int start, int end, int line) {
     int n = ql_str_size(s);
     if (start < 0 || end < start || end > n) {
-        char msg[160];
-        snprintf(msg, sizeof msg, "StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]", start, end, n);
+        char msg[192], text[192];
+        qk_msg_text(qk_lang_block(), "runtime.stringindexoutofboundserror_substring_d_d", text, sizeof text);
+        snprintf(msg, sizeof msg, text, start, end, n);
         ql_err_at(msg, line);
     }
     int b0 = ql_u8_off(s, start), b1 = ql_u8_off(s, end);
@@ -252,8 +334,9 @@ char* ql_str_charat(const char* s, int i, int line) {
     int n = ql_str_size(s);
     int b = ql_u8_off(s, i);
     if (i < 0 || b < 0 || s[b] == 0) {
-        char msg[160];
-        snprintf(msg, sizeof msg, "StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)", i, n);
+        char msg[192], text[192];
+        qk_msg_text(qk_lang_block(), "runtime.stringindexoutofboundserror_charat_d_out", text, sizeof text);
+        snprintf(msg, sizeof msg, text, i, n);
         ql_err_at(msg, line);
     }
     int sz = ql_u8seq((unsigned char)s[b]);
@@ -374,9 +457,27 @@ char* ql_str_replace(const char* s, const char* old, const char* nw) {
     r[o] = 0;
     return r;
 }
-static void ql_parse_err(const char* s, const char* what, int line) {
-    char msg[192];
-    snprintf(msg, sizeof msg, "ParseError: \"%s\" 不是合法%s", s, what);
+/* ql_parse_err: the value did not parse. The two callers pass the catalog id of their row; the row is
+ * a sentence with one %q in it, so this renders the quoted value into it. Go spells "the value,
+ * quoted" with %q and C's printf has no such verb, so the verb is rewritten to %s here — the quoting
+ * is the same on both sides (qk_quote mirrors strconv.Quote for the strings that reach a parse error),
+ * which is what keeps one message one message instead of two rows that could drift apart. */
+static void ql_parse_err(const char* s, const char* id, int line) {
+    char quoted[256], text[192], fmt[192], msg[256];
+    size_t k = 0;
+    qk_quote(s, quoted, sizeof quoted);
+    qk_msg_text(qk_lang_block(), id, text, sizeof text);
+    for (size_t i = 0; text[i] && k + 3 < sizeof fmt; i++) {
+        if (text[i] == '%' && text[i + 1] == 'q') {
+            fmt[k++] = '%'; fmt[k++] = 's'; i++;
+        } else if (text[i] == '%' && text[i + 1] == '%') {
+            fmt[k++] = '%'; fmt[k++] = '%'; i++;
+        } else {
+            fmt[k++] = text[i];
+        }
+    }
+    fmt[k] = 0;
+    snprintf(msg, sizeof msg, fmt, quoted);
     ql_err_at(msg, line);
 }
 int ql_str_toint(const char* s, int line) {
@@ -386,11 +487,11 @@ int ql_str_toint(const char* s, int line) {
     while (q > p && (q[-1] == ' ' || q[-1] == '\t' || q[-1] == '\n' || q[-1] == '\v' || q[-1] == '\f' || q[-1] == '\r')) q--;
     char buf[64];
     size_t n = (size_t)(q - p);
-    if (n == 0 || n >= sizeof buf) ql_parse_err(s, "整数", line);
+    if (n == 0 || n >= sizeof buf) ql_parse_err(s, "runtime.parseerror_q_valid_integer", line);
     memcpy(buf, p, n); buf[n] = 0;
     char* end = 0;
     long v = strtol(buf, &end, 10);
-    if (end == buf || *end != 0 || v < -2147483648L || v > 2147483647L) ql_parse_err(s, "整数", line);
+    if (end == buf || *end != 0 || v < -2147483648L || v > 2147483647L) ql_parse_err(s, "runtime.parseerror_q_valid_integer", line);
     return (int)v;
 }
 double ql_str_tofloat(const char* s, int line) {
@@ -400,11 +501,11 @@ double ql_str_tofloat(const char* s, int line) {
     while (q > p && (q[-1] == ' ' || q[-1] == '\t' || q[-1] == '\n' || q[-1] == '\v' || q[-1] == '\f' || q[-1] == '\r')) q--;
     char buf[128];
     size_t n = (size_t)(q - p);
-    if (n == 0 || n >= sizeof buf) ql_parse_err(s, "浮点数", line);
+    if (n == 0 || n >= sizeof buf) ql_parse_err(s, "runtime.parseerror_q_valid_float", line);
     memcpy(buf, p, n); buf[n] = 0;
     char* end = 0;
     double v = strtod(buf, &end);
-    if (end == buf || *end != 0) ql_parse_err(s, "浮点数", line);
+    if (end == buf || *end != 0) ql_parse_err(s, "runtime.parseerror_q_valid_float", line);
     return v;
 }
 

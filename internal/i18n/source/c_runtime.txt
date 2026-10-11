@@ -1,0 +1,20 @@
+# The messages the embedded C runtime renders, one dotted id per line, in the order the generated
+# macros are numbered.
+#
+# compiler/qthreads.c.txt is compiled by clang into every program qkc builds and can reach no Go code
+# at run time, so it cannot render through internal/i18n. cmd/qki18n turns this list into a C header
+# (compiler/internal/rtcat/msg_c.h) carrying the same rows, from the same tables, in the same
+# languages, and the same staleness gate covers both files: a message whose text changes here and not
+# in the tables fails generation, and an id this list names that no table carries fails it too.
+#
+# Only the strings the C side can actually reach belong here. The list is deliberately shorter than
+# the catalog: everything named here is compiled into every binary, so a row nothing can print would
+# be dead weight in every compiled program.
+#
+# The verb set is the intersection of the two formatters. Go's %q has no C equivalent, so a message
+# that carries one is rendered from its parts instead (ql_parse_err builds the quoted argument with
+# C's own quoting and passes it to the %s verb of the same row).
+runtime.stringindexoutofboundserror_substring_d_d
+runtime.stringindexoutofboundserror_charat_d_out
+runtime.parseerror_q_valid_integer
+runtime.parseerror_q_valid_float
