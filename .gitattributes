@@ -5,3 +5,8 @@ internal/lang/ffi_win.inc linguist-generated=true
 
 # Compiled artefacts: excluded from diffs
 compiler/qkc binary
+
+# The authored message tables are the input to the generated catalog in internal/i18n. Pin them to LF in
+# every checkout: a CRLF working tree would otherwise put a carriage return inside a message's text on
+# Windows and make the generator's output platform-dependent. (The syntax layer pins the same pattern.)
+internal/i18n/source/*.tsv text eol=lf

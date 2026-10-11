@@ -204,7 +204,7 @@ type Row struct {
 // whole blob on every run.
 func splitTable(raw []byte) []Row {
 	var out []Row
-	for i, line := range strings.Split(string(raw), "\n") {
+	for i, line := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -489,7 +489,7 @@ func Run(opts Options) []string {
 		if rerr != nil {
 			return []string{rerr.Error()}
 		}
-		if !bytes.Equal(got, out) {
+		if !bytes.Equal(normalizeEOL(got), normalizeEOL(out)) {
 			return []string{fmt.Sprintf("%s is out of date: regenerate it with `go generate ./internal/i18n`", opts.OutFile)}
 		}
 		return nil
@@ -611,7 +611,7 @@ func RunWith(opts Options, src *Sources) []string {
 		if rerr != nil {
 			return []string{rerr.Error()}
 		}
-		if !bytes.Equal(got, out) {
+		if !bytes.Equal(normalizeEOL(got), normalizeEOL(out)) {
 			return []string{fmt.Sprintf("%s is out of date: regenerate it with `go generate ./internal/i18n`", opts.OutFile)}
 		}
 		return nil
@@ -621,3 +621,7 @@ func RunWith(opts Options, src *Sources) []string {
 	}
 	return nil
 }
+
+// normalizeEOL folds CRLF to LF, so a content check is not decided by how a platform checked a file
+// out: the generated content is the contract, the checkout's line endings are not.
+func normalizeEOL(b []byte) []byte { return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")) }
