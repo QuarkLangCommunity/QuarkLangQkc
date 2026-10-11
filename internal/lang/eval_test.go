@@ -408,7 +408,7 @@ func TestTypeCheckErrors(t *testing.T) {
 }
 fn main(IOStream io) {
     f(1, 2, 3);
-}`, "expects 1 args"},
+}`, "需要 1 个参数，得到 3"},
 		{"arg_type", `fn f(String s) String {
     return s;
 }

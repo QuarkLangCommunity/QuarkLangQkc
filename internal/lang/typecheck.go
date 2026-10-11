@@ -506,7 +506,7 @@ func newCScope(outer *cScope) *cScope {
 
 func (s *cScope) declare(name string, v *cVar, pos Pos) error {
 	if _, dup := s.vars[name]; dup {
-		return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate declaration of %q", name), Pos: pos}
+		return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateDeclarationQ, name), Pos: pos}
 	}
 	s.vars[name] = v
 	return nil
@@ -584,7 +584,7 @@ func (c *checker) implDefsFor(typ string) []*ImplDef {
 func overloadErrT(defs []*Func, name string, n int) string {
 	for _, d := range defs {
 		if len(d.Params) != n {
-			return fmt.Sprintf("CompileError: %s expects %d args, got %d", name, len(d.Params), n)
+			return msgID(i18n.MsgFieldCompileerrorSExpectsDArgsGot, name, len(d.Params), n)
 		}
 	}
 	return fmt.Sprintf(msgID(i18n.MsgRuntimeCompileerrorMatchingOverloadQArgument), name)
@@ -687,7 +687,7 @@ func Typecheck(prog *Program) error {
 	registerBuiltinIfaces(c.interfaces)
 	for _, a := range prog.TypeAliases {
 		if _, dup := c.aliases[a.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate type alias %q", a.Name), Pos: a.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateTypeAliasQ, a.Name), Pos: a.Pos}
 		}
 		c.aliases[a.Name] = a.Type
 	}
@@ -707,7 +707,7 @@ func Typecheck(prog *Program) error {
 	}
 	for _, s := range prog.Structs {
 		if _, dup := c.structs[s.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate struct %q", s.Name), Pos: s.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateStructQ, s.Name), Pos: s.Pos}
 		}
 		def := &StructDef{Name: s.Name, TypeParams: s.TypeParams, Types: map[string]string{}}
 		for _, m := range s.Members {
@@ -720,7 +720,7 @@ func Typecheck(prog *Program) error {
 	}
 	for _, i := range prog.Interfaces {
 		if _, dup := c.interfaces[i.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate interface %q", i.Name), Pos: i.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateInterfaceQ, i.Name), Pos: i.Pos}
 		}
 		c.interfaces[i.Name] = &InterfaceDef{Name: i.Name, TypeParams: i.TypeParams, Methods: i.Methods, Expands: i.Expands}
 	}
@@ -729,7 +729,7 @@ func Typecheck(prog *Program) error {
 			c.libs = map[string]*LibraryDecl{}
 		}
 		if _, dup := c.libs[lb.Name]; dup {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate library %q", lb.Name), Pos: lb.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateLibraryQ, lb.Name), Pos: lb.Pos}
 		}
 		c.libs[lb.Name] = lb
 	}
@@ -737,10 +737,10 @@ func Typecheck(prog *Program) error {
 		// Generic rule: when a struct has generic parameters its impl must introduce the same ones; when it has none the impl must not
 		if sd, ok := c.structs[im.Type]; ok {
 			if len(sd.TypeParams) > 0 && len(im.TypeParams) != len(sd.TypeParams) {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)", im.Type, len(sd.TypeParams), im.Type), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorStructSDTypeParameter, im.Type, len(sd.TypeParams), im.Type), Pos: im.Pos}
 			}
 			if len(sd.TypeParams) == 0 && len(im.TypeParams) > 0 {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: struct %s has no type parameters, but impl declares %d", im.Type, len(im.TypeParams)), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorStructSNoTypeParameters, im.Type, len(im.TypeParams)), Pos: im.Pos}
 			}
 		}
 		// A type may have several impl blocks: methods are aggregated (xmind §classes: impl<T> {...} name;); a duplicate method name is still an error
@@ -758,12 +758,12 @@ func Typecheck(prog *Program) error {
 			fn := &Func{Name: m.Name, TypeParams: m.TypeParams, Params: m.Params, Ret: m.Ret, Body: m.Body, Pos: m.Pos}
 			if recv {
 				if _, dup := def.SelfMethods[fn.Name]; dup {
-					return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate method %q on %s", fn.Name, im.Type), Pos: m.Pos}
+					return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateMethodQOnS, fn.Name, im.Type), Pos: m.Pos}
 				}
 				def.SelfMethods[fn.Name] = fn
 			} else {
 				if _, dup := def.Methods[fn.Name]; dup {
-					return &CheckError{Msg: fmt.Sprintf("CompileError: duplicate method %q on %s", fn.Name, im.Type), Pos: m.Pos}
+					return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorDuplicateMethodQOnS, fn.Name, im.Type), Pos: m.Pos}
 				}
 				def.Methods[fn.Name] = fn
 			}
@@ -776,7 +776,7 @@ func Typecheck(prog *Program) error {
 		}
 		iface, ok := c.interfaces[im.Iface]
 		if !ok {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: unknown interface %q", im.Iface), Pos: im.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorUnknownInterfaceQ, im.Iface), Pos: im.Pos}
 		}
 		if iface.Partial {
 			// Optional interfaces: implementing some methods is enough (emit at runtime only fires the implemented ones)
@@ -804,18 +804,18 @@ func Typecheck(prog *Program) error {
 				fn = c.staticMeth(im.Type, sig.Name)
 			}
 			if fn == nil {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: impl %s for %s: missing method %q", im.Type, im.Iface, sig.Name), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorImplSForSMissing, im.Type, im.Iface, sig.Name), Pos: im.Pos}
 			}
 			want := len(sig.Params) // the interface signature includes self
 			got := len(fn.Params)
 			if got != want {
-				return &CheckError{Msg: fmt.Sprintf("CompileError: impl %s for %s: method %q takes %d params, interface requires %d", im.Type, im.Iface, sig.Name, got, want), Pos: im.Pos}
+				return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorImplSForSMethod, im.Type, im.Iface, sig.Name, got, want), Pos: im.Pos}
 			}
 		}
 	}
 	for _, f := range prog.Funcs {
 		if f.Name == "main" && (len(f.Params) < 1 || len(f.Params) > 3) {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: main must take 1-3 params in order (io, env, args), got %d", len(f.Params)), Pos: f.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorMainMustTake13, len(f.Params)), Pos: f.Pos}
 		}
 		if err := c.checkFunc(c.fns[f.Name]); err != nil {
 			return err
@@ -857,7 +857,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	// copyd is a modifier, not a type: the Copyd<...> type form was removed. Rejecting it at the common
 	// entry point keeps every path honest (declarations, parameters, fields, returns, generics).
 	if strings.HasPrefix(strings.TrimSpace(s), "Copyd<") || strings.HasPrefix(strings.TrimSpace(s), "Copyd[") {
-		return nil, &CheckError{Msg: "TypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)", Pos: pos}
+		return nil, &CheckError{Msg: msgID(i18n.MsgFieldTypeerrorCopydModifierNotTypeWrite), Pos: pos}
 	}
 	if s == "null" {
 		return &Type{Kind: tNull}, nil
@@ -874,7 +874,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 		return &Type{Kind: tTypeVar, FName: "Self"}, nil // interface case: Self = the referenced type (xmind §interfaces)
 	}
 	if s == "" {
-		return nil, &CheckError{Msg: "CompileError: empty type annotation", Pos: pos}
+		return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorEmptyTypeAnnotation), Pos: pos}
 	}
 	// Pointer suffix: T&
 	if strings.HasSuffix(s, "&") {
@@ -987,7 +987,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	case "HashTable":
 		k, v, err := splitTopComma(inner)
 		if err != nil {
-			return nil, &CheckError{Msg: "CompileError: " + err.Error(), Pos: pos}
+			return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorS, err.Error()), Pos: pos}
 		}
 		kt, err := c.substType(k, subst, pos)
 		if err != nil {
@@ -1015,7 +1015,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 				args = append(args, at)
 			}
 			if len(def.TypeParams) > 0 && len(args) != len(def.TypeParams) {
-				return nil, &CheckError{Msg: fmt.Sprintf("CompileError: %s takes %d type argument(s), got %d", base, len(def.TypeParams), len(args)), Pos: pos}
+				return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorSTakesDTypeArgument, base, len(def.TypeParams), len(args)), Pos: pos}
 			}
 		}
 		return &Type{Kind: tStruct, FName: base, Args: args}, nil
@@ -1034,10 +1034,10 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 			}
 		}
 		if len(def.TypeParams) > 0 && len(args) != len(def.TypeParams) {
-			return nil, &CheckError{Msg: fmt.Sprintf("CompileError: %s takes %d type argument(s), got %d", base, len(def.TypeParams), len(args)), Pos: pos}
+			return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorSTakesDTypeArgument, base, len(def.TypeParams), len(args)), Pos: pos}
 		}
 		if len(def.TypeParams) == 0 && len(args) > 0 {
-			return nil, &CheckError{Msg: fmt.Sprintf("CompileError: interface %s is not generic, but %d type argument(s) were given", base, len(args)), Pos: pos}
+			return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorInterfaceSNotGenericBut, base, len(args)), Pos: pos}
 		}
 		return &Type{Kind: tInterface, FName: base, Args: args}, nil
 	}
@@ -1053,7 +1053,7 @@ func (c *checker) substType(s string, subst map[string]*Type, pos Pos) (*Type, e
 	if c.typeVars[base] {
 		return &Type{Kind: tTypeVar, FName: base}, nil
 	}
-	return nil, &CheckError{Msg: fmt.Sprintf("CompileError: unknown type %q", s), Pos: pos}
+	return nil, &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorUnknownTypeQ, s), Pos: pos}
 }
 
 // isBuiltinFuncName reports whether a name is a builtin function (usable as a function reference).
@@ -1141,7 +1141,7 @@ func (c *checker) checkFunc(f *Func) error {
 	sc := newCScope(nil)
 	for _, p := range f.Params {
 		if p.Type == "" {
-			return &CheckError{Msg: fmt.Sprintf("CompileError: parameter %q of %s is missing a type annotation", p.Name, f.Name), Pos: p.Pos}
+			return &CheckError{Msg: msgID(i18n.MsgFieldCompileerrorParameterQSMissingType, p.Name, f.Name), Pos: p.Pos}
 		}
 		t, err := c.paramType(p, f.Pos)
 		if err != nil {
@@ -1244,7 +1244,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			sz, serr := c.methodType(it, "size", nil, s.Pos)
 			gt, gerr := c.methodType(it, "get", []*Type{tIntV}, s.Pos)
 			if serr != nil || gerr != nil || sz == nil || sz.Kind != tInt || gt == nil {
-				return c.errf(s.Pos, "TypeError: for-in requires a List or a container with size() int and get(int), got %s", it)
+				return c.errfID(s.Pos, i18n.MsgFieldTypeerrorForInRequiresListOr, it)
 			}
 			elem = gt
 		}
@@ -1395,7 +1395,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		case *Ident:
 			v := sc.lookup(target.Name)
 			if v == nil {
-				return c.errf(target.Pos, "CompileError: assignment to undeclared identifier %q", target.Name)
+				return c.errfID(target.Pos, i18n.MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ, target.Name)
 			}
 			if v.isConst {
 				return c.errf(target.Pos, "CompileError: const 变量 %q 不可重新赋值", target.Name)
@@ -1479,7 +1479,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				return err
 			}
 			if objT.Kind != tStruct {
-				return c.errf(s.Pos, "TypeError: cannot assign member of %s", objT)
+				return c.errfID(s.Pos, i18n.MsgFieldTypeerrorCannotAssignMemberS, objT)
 			}
 			def, ok := c.structs[objT.FName]
 			if !ok {
@@ -1487,7 +1487,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			}
 			fieldT, ok := def.Types[target.Name]
 			if !ok {
-				return c.errf(target.Pos, "TypeError: no member %q on %s", target.Name, objT.FName)
+				return c.errfID(target.Pos, i18n.MsgFieldTypeerrorNoMemberQOnS, target.Name, objT.FName)
 			}
 			ft, err := c.substType(fieldT, c.instanceSubst(def, objT), target.Pos)
 			if err != nil {
@@ -1502,7 +1502,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			}
 			return nil
 		}
-		return c.errf(s.Pos, "TypeError: unsupported assignment target")
+		return c.errfID(s.Pos, i18n.MsgFieldTypeerrorUnsupportedAssignmentTarget)
 	}
 	return nil
 }
@@ -1752,7 +1752,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 				}
 			}
 			if t.Kind != tList {
-				return nil, c.errf(x.Pos, "TypeError: '*' requires a List or a container handle with get(), got %s", t)
+				return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorStarRequiresListOrContainer, t)
 			}
 			return t.Elem, nil
 		case "-":
@@ -1764,7 +1764,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 				}
 			}
 			if t.Kind != tInt && t.Kind != tFloat && t.Kind != tUchar {
-				return nil, c.errf(x.Pos, "TypeError: unary '-' requires a number, got %s", t)
+				return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorUnaryMinusRequiresNumberGot, t)
 			}
 			if t.Kind == tUchar {
 				return tIntV, nil // integer promotion: the negation does not fit the 8-bit unsigned view
@@ -1776,7 +1776,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 			}
 			return tBoolV, nil
 		}
-		return nil, c.errf(x.Pos, "internal: unknown unary operator %s", x.Op)
+		return nil, c.errfID(x.Pos, i18n.MsgFieldInternalUnknownUnaryOperatorS, x.Op)
 	case *BinOp:
 		return c.inferBin(x, sc)
 	case *MemberExpr:
@@ -1821,7 +1821,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		}
 		return t.Elem, nil
 	}
-	return nil, c.errf(Pos{}, "internal: unknown expression node")
+	return nil, c.errfID(Pos{}, i18n.MsgFieldInternalUnknownExpressionNode)
 }
 
 func isNumeric(t *Type) bool {
@@ -2023,9 +2023,9 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 		if (isNumeric(l) && isNumeric(r)) || (l.Kind == tString && r.Kind == tString) {
 			return tBoolV, nil
 		}
-		return nil, c.errf(x.Pos, "TypeError: cannot order-compare %s and %s", l, r)
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorCannotOrderCompareSS, l, r)
 	}
-	return nil, c.errf(x.Pos, "internal: unknown operator %s", x.Op)
+	return nil, c.errfID(x.Pos, i18n.MsgFieldInternalUnknownOperatorS, x.Op)
 }
 
 // memberType checks member access (an undeclared member is a compile error).
@@ -2064,7 +2064,7 @@ func (c *checker) memberType(recv *Type, name string, pos Pos) (*Type, error) {
 	case tCopyd:
 		return c.memberType(recv.Elem, name, pos)
 	}
-	return nil, c.errf(pos, "TypeError: no member %q on %s", name, recv)
+	return nil, c.errfID(pos, i18n.MsgFieldTypeerrorNoMemberQOnS, name, recv)
 }
 
 // instanceSubst builds the type-parameter substitution table for an instance (curSubst inside a generic method takes precedence).
@@ -2085,7 +2085,7 @@ func (c *checker) instanceSubst(def *StructDef, recv *Type) map[string]*Type {
 
 func (c *checker) checkArity(name string, want, got int, pos Pos) error {
 	if want != got {
-		return c.errf(pos, "CompileError: %s() expects %d args, got %d", name, want, got)
+		return c.errfID(pos, i18n.MsgFieldCompileerrorSCallExpectsDArgs, name, want, got)
 	}
 	return nil
 }
@@ -2306,7 +2306,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tList {
-				return nil, c.errf(pos, "TypeError: appendAll requires a List, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgFieldTypeerrorAppendallRequiresListGotS, args[0])
 			}
 			return tNilV, nil
 		case "toString":
@@ -2449,7 +2449,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			if args[0].FName != "" {
 				if fn, ok := c.fns[args[0].FName]; ok && len(fn.Params) != len(args)-1 {
-					return nil, c.errf(pos, "CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(args)-1)
+					return nil, c.errfID(pos, i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(args)-1)
 				}
 			}
 			return tNilV, nil
@@ -2515,7 +2515,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			if args[1].FName != "" {
 				if fn, ok := c.fns[args[1].FName]; ok {
 					if len(fn.Params) != len(args)-2 {
-						return nil, c.errf(pos, "CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(args)-2)
+						return nil, c.errfID(pos, i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(args)-2)
 					}
 					for i, p := range fn.Params {
 						pt, err := c.paramType(p, pos)
@@ -2543,7 +2543,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tInt {
-				return nil, c.errf(pos, "TypeError: taskm.done requires a pid (int), got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgFieldTypeerrorTaskmDoneRequiresPidInt, args[0])
 			}
 			return tBoolV, nil
 		case "channel":
@@ -2568,7 +2568,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		}
 		if fn := c.selfMeth(recv.FName, name); fn != nil {
 			if len(fn.Params)-1 != len(args) {
-				return nil, c.errf(pos, "CompileError: %s() expects %d args, got %d", name, len(fn.Params)-1, len(args))
+				return nil, c.errfID(pos, i18n.MsgFieldCompileerrorSCallExpectsDArgs, name, len(fn.Params)-1, len(args))
 			}
 			for i, p := range fn.Params[1:] {
 				pt, err := c.paramType(p, pos)
@@ -2595,7 +2595,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				}
 				return tStringV, nil
 			}
-			return nil, c.errf(pos, "TypeError: no method %q on pointer", name)
+			return nil, c.errfID(pos, i18n.MsgFieldTypeerrorNoMethodQOnPointer, name)
 		}
 		// A raw block allocated by new T[n] knows its own length: that is a property of the
 		// allocation, not of a library type, so size() is answered here.
@@ -2616,7 +2616,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		}
 		return c.methodType(recv.Elem, name, args, pos)
 	}
-	return nil, c.errf(pos, "TypeError: no method %q on %s", name, recv)
+	return nil, c.errfID(pos, i18n.MsgFieldTypeerrorNoMethodQOnS, name, recv)
 }
 
 // isConvTypeName reports whether a name can head a conversion call T(x) (spec §3.4).
@@ -2725,7 +2725,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			}
 			fn, ok := c.fns[id.Name]
 			if !ok {
-				return nil, c.errf(id.Pos, "CompileError: undeclared function %q", id.Name)
+				return nil, c.errfID(id.Pos, i18n.MsgFieldCompileerrorUndeclaredFunctionQ, id.Name)
 			}
 			if err := c.checkCallArgs(fn, x.Args, sc, x.Pos); err != nil {
 				return nil, err
@@ -2737,11 +2737,11 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 		}
 		id, ok := x.Fn.(*Ident)
 		if !ok {
-			return nil, c.errf(x.Pos, "TypeError: a signature can only wrap a direct function call")
+			return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorSignatureCanOnlyWrapDirect)
 		}
 		fn, ok := c.fns[id.Name]
 		if !ok {
-			return nil, c.errf(id.Pos, "CompileError: undeclared function %q", id.Name)
+			return nil, c.errfID(id.Pos, i18n.MsgFieldCompileerrorUndeclaredFunctionQ, id.Name)
 		}
 		// v2 signature: @instance(prefix) — instance is a variable (a Sign instance, any name); the result type is the wrapped function's return type
 		if err := c.checkCallArgs(fn, x.Args, sc, x.Pos); err != nil {
@@ -2771,7 +2771,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 	}
 	id, ok := x.Fn.(*Ident)
 	if !ok {
-		return nil, c.errf(x.Pos, "TypeError: this expression is not callable")
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorExpressionNotCallable)
 	}
 	args, err := c.inferArgs(x.Args, sc)
 	if err != nil {
@@ -2956,7 +2956,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 		}
 		return tIntV, nil
 	}
-	return nil, c.errf(id.Pos, "CompileError: undeclared function %q", id.Name)
+	return nil, c.errfID(id.Pos, i18n.MsgFieldCompileerrorUndeclaredFunctionQ, id.Name)
 }
 
 func (c *checker) inferArgs(args []Expr, sc *cScope) ([]*Type, error) {
@@ -3011,7 +3011,7 @@ func (c *checker) checkCallArgs(fn *Func, args []Expr, sc *cScope, pos Pos) erro
 		return err
 	}
 	if len(argTys) != len(fn.Params) {
-		return c.errf(pos, "CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(argTys))
+		return c.errfID(pos, i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(argTys))
 	}
 	genSubst := map[string]*Type{}
 	if len(fn.TypeParams) > 0 {
@@ -3272,17 +3272,17 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 		if x.Name == "new" && len(args) == 0 {
 			return tMemorizeV, nil
 		}
-		return nil, c.errf(x.Pos, "TypeError: memorize has no static method %q", x.Name)
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorMemorizeNoStaticMethodQ, x.Name)
 	case "HashTable":
 		if x.Name == "new" && len(args) == 0 {
 			return mkTable(tAnyV, tAnyV), nil
 		}
-		return nil, c.errf(x.Pos, "TypeError: HashTable has no static method %q", x.Name)
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorHashtableNoStaticMethodQ, x.Name)
 	case "List":
 		if x.Name == "new" && len(args) == 0 {
 			return mkList(tAnyV), nil
 		}
-		return nil, c.errf(x.Pos, "TypeError: List has no static method %q", x.Name)
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorListNoStaticMethodQ, x.Name)
 	case "IO":
 		switch x.Name {
 		case "setIn":
@@ -3290,7 +3290,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 				return nil, err
 			}
 			if args[0].Kind != tIOStream {
-				return nil, c.errf(x.Pos, "TypeError: IO::setIn's first arg must be an IOStream, got %s", args[0])
+				return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorIoSetinSFirstArg, args[0])
 			}
 			if args[1].Kind != tString && args[1].Kind != tInputStream {
 				return nil, c.errf(x.Pos, "TypeError: IO::setIn requires a path String or an InputStream, got %s", args[1])
@@ -3301,17 +3301,17 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 				return nil, err
 			}
 			if args[0].Kind != tIOStream {
-				return nil, c.errf(x.Pos, "TypeError: IO::setOut's first arg must be an IOStream, got %s", args[0])
+				return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorIoSetoutSFirstArg, args[0])
 			}
 			if args[1].Kind != tString && args[1].Kind != tOutputStream {
 				return nil, c.errf(x.Pos, "TypeError: IO::setOut requires a path String or an OutputStream, got %s", args[1])
 			}
 			return tNilV, nil
 		}
-		return nil, c.errf(x.Pos, "TypeError: IO has no static method %q", x.Name)
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorIoNoStaticMethodQ, x.Name)
 	case "taskm":
 		// taskm is a global variable: the correct syntax is taskm.spawn(...) etc.
-		return nil, c.errf(x.Pos, "TypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])")
+		return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorTaskmGlobalVariableUseTaskm)
 	}
 	if x.Scope == "file" && x.Name == "new" {
 		if err := c.checkArity("file::new", 1, len(x.Args), x.Pos); err != nil {
@@ -3352,5 +3352,5 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 		}
 		return nil, c.errf(x.Pos, "TypeError: %s has no static method %q", x.Scope, x.Name)
 	}
-	return nil, c.errf(x.Pos, "CompileError: unknown scope %q", x.Scope)
+	return nil, c.errfID(x.Pos, i18n.MsgFieldCompileerrorUnknownScopeQ, x.Scope)
 }

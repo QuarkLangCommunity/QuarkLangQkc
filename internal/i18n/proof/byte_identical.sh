@@ -83,6 +83,14 @@ w('errf_unterminated_comment.qk', 'fn main(IOStream io) void {\n    /* open\n}\n
 w('errf_unexpected_char.qk', 'fn main(IOStream io) void {\n    int x = 1 $ 2;\n}\n')
 w('errf_int_range.qk', 'fn main(IOStream io) void {\n    int x = 99999999999;\n}\n')
 w('errf_top_level.qk', 'int x = 1\n')
+
+# --- the struct-field pass, and the one case in it that changes ENGLISH: a message written in Chinese
+#     inside a struct field. `new T[size]` with a bad size rendered `badAlloc: new int 申请大小非法` in
+#     BOTH languages before the pass, because the site concatenated its own literal and never consulted
+#     a localizer. The pass gives it an ID whose English source is authored here — nothing in either
+#     repository has an English text for it — and whose Chinese value is the shipped text, so the
+#     Chinese reader sees exactly what they saw and the English reader stops seeing Chinese.
+w('badalloc.qk', 'fn main(IOStream io) void {\n    pointer int p = new int[-1];\n    io.println(1);\n}\n')
 PY
 
 # The EN fixes: case name, the Chinese template that leaked, and the English text that was already in
@@ -97,6 +105,7 @@ errf_pub_prefix.qk	pub 只能前缀于 fn 或 type struct/interface（实名类�
 errf_func_keyword.qk	函数声明关键字是 fn：func main(...) 应写为 fn main(...)	the function keyword is 'fn': write fn main(...) rather than func main(...)
 errf_return_type.qk	函数必须声明返回类型：fn %s(...) 返回类型 { ... }	a function must declare its return type: fn %s(...) <return type> { ... }
 errf_library_body.qk	library 体内只能有 fn 符号签名	a library body may only contain fn symbol signatures
+badalloc.qk	badAlloc: new %s 申请大小非法	badAlloc: new %s has an invalid allocation size
 TSV
 
 build() { # build <revision-or-worktree> <output>
@@ -148,6 +157,119 @@ for lang in en zh; do
     diff <(printf '%s\n' "$b_out") <(printf '%s\n' "$p_out") | head -10
   done
 done
+
+# ---- the struct-field pass: the messages no callee-based gate could see ------------------------------
+#
+# This is the one section where QK_LANG=zh is NOT asserted byte-identical, and the exception is the
+# point of the pass. A message written into a struct field (`&RunError{Msg: fmt.Sprintf("...", x)}`) is
+# not an argument to any callee, so it never reached a localizer: the site rendered its own English
+# literal in both languages while the catalog already carried the Chinese. Wiring the site is what
+# changes the Chinese rendering, so equality cannot be the claim. The claim is the leak and the fix,
+# checked by name, in the mirror of step 3's EN fixes:
+#
+#   * the baseline's QK_LANG=zh run must equal its QK_LANG=en run -- there was no language in the site;
+#   * this tree's QK_LANG=zh run must be the baseline's with that English template replaced by the
+#     Chinese the catalog already shipped, everything else byte for byte;
+#   * this tree's QK_LANG=en run must equal the baseline's, because the pass moves where a message
+#     lives and never which English text is chosen.
+#
+# The REPL is the driver rather than a .qk file on purpose: `quark file.qk` runs the static checker
+# first, and the checker has its own copy of many of these messages, so the interpreter's site is never
+# reached. A dynamically typed program (`Any a = 5; log a.x`) is what gets past the checker and into the
+# evaluator, which is where these sites are.
+field_fixes="$work/zh_fixes.tsv"
+cat > "$field_fixes" <<'TSV'
+field_forin	TypeError: for-in requires a List or a container with size() int and get(int), got %s	TypeError: for-in 需要 List，或具备 size() int 与 get(int) 的容器，得到 %s
+field_assign_member	TypeError: cannot assign member of %s	TypeError: 不能给 %s 的成员赋值
+field_no_member	TypeError: no member %q on %s	TypeError: 成员 %q 在 %s 上不存在
+field_unary_minus	TypeError: unary '-' requires a number, got %s	TypeError: 一元 '-' 需要数字，得到 %s
+field_order_compare	TypeError: cannot order-compare %s and %s	TypeError: 无法对 %s 和 %s 做大小比较
+field_no_method	TypeError: no method %q on %s	TypeError: 方法 %q 在 %s 上不存在
+field_not_callable	TypeError: this expression is not callable	TypeError: 这个表达式不可调用
+field_appendall	TypeError: appendAll requires a List, got %s	TypeError: appendAll 需要 List，得到 %s
+field_taskm_done	TypeError: taskm.done requires a pid (int), got %s	TypeError: taskm.done 需要 pid（int），得到 %s
+field_io_static	TypeError: IO has no static method %q	TypeError: IO 没有静态方法 %q
+field_list_static	TypeError: List has no static method %q	TypeError: List 没有静态方法 %q
+field_hash_static	TypeError: HashTable has no static method %q	TypeError: HashTable 没有静态方法 %q
+field_memorize_static	TypeError: memorize has no static method %q	TypeError: memorize 没有静态方法 %q
+field_arity_call	CompileError: %s() expects %d args, got %d	CompileError: %s() 需要 %d 个参数，得到 %d
+field_arity_call2	CompileError: %s() expects %d args, got %d	CompileError: %s() 需要 %d 个参数，得到 %d
+field_undeclared_fn	CompileError: undeclared function %q	CompileError: 未声明的函数 %q
+field_star_deref	TypeError: '*' requires a List or a container handle with get(), got %s	TypeError: '*' 需要 List 或带 get() 的容器句柄，得到 %s
+field_assign_target	TypeError: unsupported assignment target	TypeError: 不支持的赋值目标
+field_sig_wrap	TypeError: a signature can only wrap a direct function call	TypeError: 签名只能包装直接的函数调用
+field_assign_undecl	CompileError: assignment to undeclared identifier %q	CompileError: 对未声明的标识符 %q 赋值
+field_undecl_read	CompileError: undeclared identifier %q	CompileError: 未声明的标识符 %q
+field_unknown_scope	CompileError: unknown scope %q	CompileError: 未知的作用域 %q
+TSV
+
+build_field() { ( cd "$1" && go build -o "$2" ./cmd/qkrepl ) || { echo "qkrepl build failed: $1" >&2; exit 1; }; }
+build_field "$base_tree" "$work/bin/baseline-field-repl"
+build_field "$root" "$work/bin/prototype-field-repl"
+
+# run_snippet <binary> <lang> <snippet> -> the rendering with the exit code appended
+run_snippet() {
+  LANG=C.UTF-8 QK_LANG="$2" "$1" -q -e "$3" 2>&1; echo "rc=$?"
+}
+
+field_fail=0
+field_case() { # field_case <name> <snippet>
+  local name="$1" snippet="$2"
+  local b_zh p_zh b_en p_en
+  b_zh="$(run_snippet "$work/bin/baseline-field-repl" zh "$snippet")"
+  p_zh="$(run_snippet "$work/bin/prototype-field-repl" zh "$snippet")"
+  b_en="$(run_snippet "$work/bin/baseline-field-repl" en "$snippet")"
+  p_en="$(run_snippet "$work/bin/prototype-field-repl" en "$snippet")"
+  total=$((total + 2))
+
+  printf '%s' "$b_zh" > "$work/baseline.zh"
+  printf '%s' "$b_en" > "$work/baseline.en"
+  printf '%s' "$p_zh" > "$work/prototype.zh"
+  printf '%s' "$p_en" > "$work/prototype.en"
+
+  if [ "$b_en" != "$p_en" ]; then
+    field_fail=$((field_fail + 1))
+    printf '%-3s %-30s DIFFERS (the English text moved)\n' "en" "field/$name"
+    diff <(printf '%s\n' "$b_en") <(printf '%s\n' "$p_en") | head -10
+  else
+    printf '%-3s %-30s identical (%d bytes)\n' "en" "field/$name" "$(printf '%s' "$b_en" | wc -c)"
+  fi
+
+  if [ "$b_zh" = "$p_zh" ]; then
+    printf '%-3s %-30s identical (%d bytes)\n' "zh" "field/$name" "$(printf '%s' "$b_zh" | wc -c)"
+  elif python3 "$here/check_zh_fix.py" "$name" "$field_fixes" "$work/baseline.zh" "$work/baseline.en" "$work/prototype.zh"; then
+    fixed=$((fixed + 1))
+    printf '%-3s %-30s fixed (English leaked to a Chinese reader, then the shipped translation)\n' "zh" "field/$name"
+  else
+    field_fail=$((field_fail + 1))
+    printf '%-3s %-30s DIFFERS\n' "zh" "field/$name"
+    diff <(printf '%s\n' "$b_zh") <(printf '%s\n' "$p_zh") | head -10
+  fi
+}
+
+field_case "field_forin" 'Any a = 5; for (int x : a) { }'
+field_case "field_assign_member" 'Any a = 5; a.x = 1'
+field_case "field_no_member" 'Any a = 5; log a.x'
+field_case "field_unary_minus" 'Any a = "s"; -a'
+field_case "field_order_compare" 'Any a = 1; Any b = "s"; log a < b'
+field_case "field_no_method" 'Any a = 5; log a.nope()'
+field_case "field_not_callable" 'Any l = [1]; log l.get(0)()'
+field_case "field_appendall" 'Any a = 5; List<int> l = [1]; l.appendAll(a)'
+field_case "field_taskm_done" 'Any a = "x"; taskm.done(a)'
+field_case "field_io_static" 'IO::nope()'
+field_case "field_list_static" 'List::nope()'
+field_case "field_hash_static" 'HashTable::nope()'
+field_case "field_memorize_static" 'memorize::nope()'
+field_case "field_arity_call" 'IO::setIn(5)'
+field_case "field_arity_call2" 'IO::setOut(5)'
+field_case "field_undeclared_fn" 'log nope()'
+field_case "field_star_deref" 'Any a = 5; log *a'
+field_case "field_assign_target" 'Any a = 5; *a = 1'
+field_case "field_sig_wrap" 'Any l = [1]; l.get(0) @nope(x)'
+field_case "field_assign_undecl" 'nope = 1'
+field_case "field_undecl_read" 'log nope'
+field_case "field_unknown_scope" 'log Nope::f()'
+fail=$((fail + field_fail))
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
@@ -594,4 +716,4 @@ if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
 fi
-echo "all identical (interpreter, qkdoc, qkc, repl, qkcheck: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"
+echo "all identical (interpreter, qkdoc, qkc, repl, qkcheck: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared fix (EN: step 3; ZH: the struct-field pass)]"

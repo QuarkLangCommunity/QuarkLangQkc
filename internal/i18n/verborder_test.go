@@ -17,7 +17,7 @@ import (
 // and the legacy Chinese key — has to be handled as a pair, which is why the repair is done in small
 // batches rather than one sweep.
 func TestVerbSequenceMatches(t *testing.T) {
-	const allowed = 12 // measured when the test was added; fix in batches, never grow
+	const allowed = 11 // lowered from 12: the struct-field pass deleted the one text-keyed entry that reordered
 	re := regexp.MustCompile("%[a-zA-Z]")
 	bad, shown := 0, 0
 	for _, domain := range stdCatalog.Domains() {

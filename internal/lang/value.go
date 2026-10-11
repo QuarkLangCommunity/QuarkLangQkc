@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // Value is any QuarkLang runtime value: a 24-byte tagged union.
@@ -467,7 +469,7 @@ func (l *List) AppendAll(o *List) {
 func (l *List) setIndex(i int, v Value) error {
 	idx := l.head + i
 	if i < 0 || idx >= l.tail {
-		return &RunError{Msg: fmt.Sprintf("IndexOutOfBoundsError: index %d out of range [0,%d)", i, l.Size())}
+		return &RunError{Msg: msgID(i18n.MsgFieldIndexoutofboundserrorIndexDOutRange0, i, l.Size())}
 	}
 	l.items[idx] = v
 	if l.mem != nil {

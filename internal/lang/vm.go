@@ -708,7 +708,7 @@ func (in *interp) runVM(ctx *execCtx) error {
 			}
 			if callee == nil {
 				ctx.vmStack = st
-				return &RunError{Msg: "RuntimeError: unresolved call target", Pos: ins.pos, Ctx: ctx}
+				return &RunError{Msg: msgID(i18n.MsgFieldRuntimeerrorUnresolvedCallTarget), Pos: ins.pos, Ctx: ctx}
 			}
 			v, err := in.callFunc(callee, args, ins.pos, ctx.depth)
 			ctx.argArena = ctx.argArena[:start] // the arena slice must not escape into the callee's result
@@ -778,12 +778,12 @@ func intBinOpVM(op vmOp, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 		return wrapI32(int64(li) * int64(ri)), nil
 	case opDivI:
 		if ri == 0 {
-			return NilV(), &RunError{Msg: "DivisionByZeroError: integer division by zero", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldDivisionbyzeroerrorIntegerDivisionByZero), Pos: pos, Ctx: ctx}
 		}
 		return wrapI32(int64(li) / int64(ri)), nil
 	case opModI:
 		if ri == 0 {
-			return NilV(), &RunError{Msg: "DivisionByZeroError: modulo by zero", Pos: pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldDivisionbyzeroerrorModuloByZero), Pos: pos, Ctx: ctx}
 		}
 		return wrapI32(int64(li) % int64(ri)), nil
 	case opLtI:
@@ -799,7 +799,7 @@ func intBinOpVM(op vmOp, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 	case opNeI:
 		return BoolV(li != ri), nil
 	}
-	return NilV(), &RunError{Msg: "TypeError: unsupported integer operation", Pos: pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorUnsupportedIntegerOperation), Pos: pos, Ctx: ctx}
 }
 
 func vmOpName(op vmOp) string {
