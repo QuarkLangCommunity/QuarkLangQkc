@@ -1,0 +1,13 @@
+# The repl domain.
+#
+# Columns, tab-separated: id, owner, ctx, note, src, then one value column per language
+# (see languages.tsv for the order). Both text columns are copied out of the old
+# text-keyed table by script, never retyped: transcription is the migration's real risk.
+#
+repl.internal_error_recovered	local	REPL session	the REPL caught a panic and reports it instead of dying	"REPL: internal error (recovered): %v"	"REPL: internal error (recovered): %v"	"REPL: 内部错误（已恢复）: %v"
+repl.defined_function	local	REPL echo	echo of a function registered at top level	"defined %s\n"	"defined %s\n"	"已定义 %s\n"
+repl.defined_struct	local	REPL echo	echo of a struct registered at top level	"defined type struct%s %s;\n"	"defined type struct%s %s;\n"	"已定义 type struct%s %s;\n"
+repl.defined_interface	local	REPL echo	echo of an interface registered at top level	"defined type interface%s %s;\n"	"defined type interface%s %s;\n"	"已定义 type interface%s %s;\n"
+repl.defined_impl	local	REPL echo	echo of an impl block registered at top level	"defined impl%s %s; (%d methods)\n"	"defined impl%s %s; (%d methods)\n"	"已定义 impl%s %s;（%d 个方法）\n"
+repl.defined_library	local	REPL echo	echo of a library registered at top level	"defined library %s; (%d symbols)\n"	"defined library %s; (%d symbols)\n"	"已定义 library %s;（%d 个符号）\n"
+repl.defined_type_alias	local	REPL echo	echo of a type alias registered at top level	"defined type %s %s;\n"	"defined type %s %s;\n"	"已定义 type %s %s;\n"
