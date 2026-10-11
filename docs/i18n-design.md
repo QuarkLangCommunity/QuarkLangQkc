@@ -942,6 +942,88 @@ verb inside a Chinese sentence rewrites the sentence, which is authoring a trans
 migration does not invent Chinese. The same rule that leaves 64 field rows with an English `zh` column
 applies, the limit is the measured 11, and the fix has to come from a speaker.
 
+### 7.8 The embedded C runtime: the hole §7.7 left
+
+Step 5 deleted every text-keyed entry point in Go, and `TestDecouplingRatchet` holds that line. It could
+not hold a line in C. `compiler/qthreads.c.txt` is a translation unit: `qkc` embeds it with `//go:embed`,
+writes it beside the generated IR and hands both to clang (§2 of the compiler's architecture). No Go code
+is reachable from the resulting binary, so the runtime's error sites could not call a localizer, and their
+text was hardcoded. Two of them carried the same sentences the catalog already held in both languages:
+
+| Message | Emitted at | Reachable from a compiled program |
+|---|---|---|
+| `StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]` | `ql_str_sub` | yes — `s.substring(1, 9)` |
+| `StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)` | `ql_str_charat` | yes — `s.charAt(9)` |
+| `ParseError: "%s" 不是合法%s` (整数) | `ql_parse_err` ← `ql_str_toint` | yes — `s.toInt()` on a non-integer |
+| `ParseError: "%s" 不是合法%s` (浮点数) | `ql_parse_err` ← `ql_str_tofloat` | yes — `s.toFloat()` on a non-float |
+
+Three more strings live in the same file and are already English in both languages: `ql_err_at`'s
+`error: %s at line %d` wrapper, `ql_any_bad`'s `TypeError: cannot use interface{} value of type %s as %s`,
+and `HashTable.get`'s missing-key error. `ql_any_bad` is the one of the three a user reaches (unboxing an
+`interface{}` as the wrong type); the interpreter raises its own type error at check time on that path, so
+it has no Chinese rendering to preserve, and this work does not invent one. Separately, eight runtime
+error sentences are emitted *by cgen* into the generated IR (division by zero, `List.next` exhaustion,
+the two panic helpers, …); they are English in both languages and reachable, and they are the same class
+of gap in the other direction. Both are reported as findings, not silently fixed: changing either would
+change what a reader sees today, and P3's contract forbids that.
+
+Nothing in the runtime consulted the environment either, so the two engines could also *disagree*: the
+interpreter's default is the source language when no locale variable is set, and the runtime's was
+Chinese. Measured on the revision before this work, with every locale variable unset — the configuration
+a CI runner actually has — `substring.qk` printed `out of range [0,3]` under `quark` and `越界 [0,3]`
+under `qkc -run` for the same program. The dual-path gate did not catch it because no case in its corpus
+fails that way, which is the same lesson as §7.8's opening: a string that never reaches a catalog is a
+string no gate can see, and a string no case reaches is a string no gate runs.
+
+**Where the boundary is now.** The runtime renders through the catalog, generated into C:
+
+```
+internal/i18n/source/runtime.tsv           the four rows, authored in en with a zh column
+internal/i18n/source/c_runtime.txt         which rows the C side can reach (four ids, in macro order)
+        │
+        ├── cmd/qki18n ──► internal/i18n/msg_gen.go                 (Go: one blob, one offset table)
+        └── cmd/qki18n -c-out ──► compiler/internal/rtcat/msg_c.h   (C: same rows, same languages)
+                                          │
+                        //go:embed (compiler/embed.go) + prepend (compiler/main.go)
+                                          ▼
+                    qthreads-*.c  ──clang──►  the compiled program
+```
+
+The choice was between returning a code to Go, rendering English text by hand, or generating the table.
+Codes do not fit: the runtime computes its arguments at run time (a bounds error carries the size it
+found), and the binary has no Go in it to render a code. Hand-maintained English would be a second store
+with nothing checking it — the exact shape of D-3. So the third option, the one the blob design was
+already shaped for: one generator, one set of authored rows, two readers. `-c-out` is part of the same
+`go generate` run and compared by the same `-check`, so a template edited in one place and not the other
+fails generation rather than drifting.
+
+Three details make the C side work without a second mechanism:
+
+* **The language is the environment, read at render time.** `qk_lang_block()` applies the same order and
+  the same prefix match as Go's `Detect()` — `QK_LANG`, then `LC_ALL` / `LC_MESSAGES` / `LANG`, then the
+  source language — so a compiled program and the interpreter agree without being told twice. It is read
+  when a message is first rendered, not at start-up, which is what lets one binary answer `QK_LANG=en`
+  and `QK_LANG=zh` differently.
+* **Only the reachable rows are emitted.** A table of all 662 rows would work, but it is compiled into
+  every binary qkc builds; `c_runtime.txt` names the four, and an id no table carries fails generation.
+* **`%q` is rewritten, not duplicated.** Go's `%q` has no C equivalent and C's `printf` has no such verb.
+  Rather than author a second Chinese row for the C side (two rows that could drift), the runtime
+  rewrites the verb to `%s` and applies the quoting itself, mirroring `strconv.Quote` for the strings
+  that reach a parse error. One row, one sentence, two engines.
+
+The proof is `internal/i18n/proof/compiled_runtime.sh`, and it is a separate harness because
+`byte_identical.sh` drives interpreters and cannot see this surface at all — that is precisely why the
+gap outlived the migration. It builds the baseline revision and this tree, runs one program per
+reachable message under both languages, and asserts three things: the baseline's English run leaked Han
+runes (so the fix is measured, not asserted), this tree's English run carries none and equals the
+interpreter's rendering, and the Chinese run is byte-identical to the baseline. All four messages pass
+that last check, and it is worth writing down why they do, because the two sides spell the quoted value
+differently: the baseline's `ql_parse_err` built `ParseError: "%s" …` around the value itself, while the
+catalog row the interpreter renders writes `%q` and hands it the value. Both produce
+`ParseError: "nope" …` here, so the equivalence holds on the corpus. It is checked, not proved for every
+byte a String can hold — `qk_quote` and `strconv.Quote` disagree on invalid UTF-8, which is out of scope
+the same way §5 leaves plural forms out.
+
 ---
 
 ## 8. Evidence index

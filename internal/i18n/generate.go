@@ -13,4 +13,9 @@ package i18n
 // generator, one set of tables, two artefacts, one staleness check. -root is the checkout the document
 // measures call sites in, and it is given explicitly because `go generate` runs in this directory.
 //
-//go:generate go run ../../cmd/qki18n -source source -out msg_gen.go -doc ../../docs/i18n-backlog.md -root ../..
+// -c-out writes the third artefact, the C message catalog the embedded runtime is compiled with
+// (compiler/internal/rtcat/msg_c.h), for the rows source/c_runtime.txt lists. It comes from the same
+// tables and is checked by the same run, so the text a compiled program prints and the text the
+// interpreter prints cannot drift apart: a template edited here and not in the tables fails both files.
+//
+//go:generate go run ../../cmd/qki18n -source source -out msg_gen.go -c-out ../../compiler/internal/rtcat/msg_c.h -doc ../../docs/i18n-backlog.md -root ../..

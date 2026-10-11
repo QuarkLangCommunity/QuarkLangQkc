@@ -31,7 +31,7 @@ func runtimeSrc() string {
 		fmt.Fprintln(os.Stderr, "runtimeSrc: create temp:", err)
 		return ""
 	}
-	if _, err := f.WriteString(qthreadsC); err != nil {
+	if _, err := f.WriteString(runtimeSource()); err != nil {
 		fmt.Fprintln(os.Stderr, "runtimeSrc: write:", err)
 	}
 	f.Close()
@@ -57,7 +57,7 @@ var version = "dev" // 13: T&/pointer T nullable references (new T + auto-derefe
 
 // engineFingerprint is the cache-key prefix: engine generation + thread-runtime fingerprint (any runtime change invalidates it automatically).
 func engineFingerprint() string {
-	h := sha256.Sum256([]byte(qthreadsC))
+	h := sha256.Sum256([]byte(runtimeSource()))
 	return engineVersion + "-" + hex.EncodeToString(h[:8])
 }
 

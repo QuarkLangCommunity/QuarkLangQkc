@@ -48,10 +48,24 @@ type Options struct {
 	// DocFile is the review document to write (or to compare against, with Check). When it is empty
 	// no document is generated, so a caller that only wants the catalog is unaffected.
 	DocFile string
+	// COutFile is the C message catalog to write (or to compare against, with Check): the same rows,
+	// as a C header, for the text the embedded runtime renders. It is generated from the same tables
+	// and checked by the same gate as the Go catalog, so a message the runtime can print cannot drift
+	// from the one the interpreter prints. Empty means no C catalog is generated.
+	COutFile string
 }
 
 // DefaultModuleSource is where the pinned module keeps its authored table.
 const DefaultModuleSource = "i18n/source/messages.tsv"
+
+// CRuntimeList is the authored list of messages the embedded C runtime renders (source/c_runtime.txt):
+// one id per line, in the order the generated C macros are numbered. It is the C side's declaration of
+// what it can print, and generation refuses an id the tables do not carry, so the list cannot name a
+// message that does not exist.
+const CRuntimeList = "c_runtime.txt"
+
+// CRuntimeHeader is the include guard and the shape marker of the generated C catalog.
+const CRuntimeHeader = "QK_MSG_C_H"
 
 // Language is one shipped language, in file order.
 type Language struct {
@@ -85,6 +99,9 @@ type Table struct {
 type Sources struct {
 	Table     Table
 	ModuleRaw []byte // the pinned module's authored table, or nil when it is unavailable
+	// CRuntimeIDs is the authored list of messages the embedded C runtime renders, in macro-number
+	// order (source/c_runtime.txt). It is empty in a checkout with no embedded C runtime.
+	CRuntimeIDs []string
 }
 
 // ParseLanguages reads languages.tsv: one <lang, dir> row per shipped language, in index order.
@@ -257,7 +274,45 @@ func Load(opts Options) (*Sources, error) {
 		}
 		src.ModuleRaw = raw
 	}
+	// The C runtime's list is optional: a checkout that has no embedded C runtime generates no C
+	// catalog. It is read here so the completeness check below sees it, and so a caller that asked for
+	// one and has no list is told rather than silently getting a header with no messages in it.
+	listPath := filepath.Join(opts.SourceDir, CRuntimeList)
+	if raw, rerr := os.ReadFile(listPath); rerr == nil {
+		ids, lerr := ParseCRuntimeList(CRuntimeList, raw)
+		if lerr != nil {
+			return nil, lerr
+		}
+		src.CRuntimeIDs = ids
+	}
 	return src, nil
+}
+
+// ParseCRuntimeList reads source/c_runtime.txt: the messages the embedded C runtime renders, one dotted
+// id per line, in the order the generated macros are numbered. It is authored rather than derived
+// because "which strings can the C runtime reach" is a fact about the C source, not about the tables.
+func ParseCRuntimeList(name string, raw []byte) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	err := parseRows(name, raw, 1, func(line int, fields []string) error {
+		id := fields[0]
+		if !idRe.MatchString(id) {
+			return fmt.Errorf("%s:%d: id %q is not <domain>.<snake_case>", name, line, id)
+		}
+		if seen[id] {
+			return fmt.Errorf("%s:%d: %s is listed twice", name, line, id)
+		}
+		seen[id] = true
+		out = append(out, id)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s: no messages listed", name)
+	}
+	return out, nil
 }
 
 // readTableOrder reads tables.tsv: the message tables in load order, one file name per line.
@@ -515,6 +570,158 @@ func blob(s *Sources) string {
 	return b.String()
 }
 
+// CRuntime messages. The C runtime is compiled by clang, in the same tree as the program it is linked
+// into, and it can reach no Go code at run time, so it cannot ask internal/i18n to render. The
+// generator emits the rows it can print as a C header instead: one contiguous blob per language, one
+// start-offset vector per language, and one lookup. It is the same data, from the same tables, checked
+// by the same gate as msg_gen.go; the only thing that differs is which language's text a call site picks
+// out of it.
+//
+// Only the messages source/c_runtime.txt lists are emitted, not the whole catalog: the table is
+// compiled into every program the compiler builds, so an unlisted row would be a string nothing can
+// print, carried by every binary.
+
+// CMsgMacro is the macro a C call site uses to name a message: QK_MSG_ plus the dotted id, upper-cased.
+func CMsgMacro(id string) string {
+	return "QK_MSG_" + strings.ToUpper(strings.ReplaceAll(id, ".", "_"))
+}
+
+// CString renders a C string literal. Kept to printable ASCII escapes plus the exact UTF-8 bytes —
+// like the Go blob, the bytes are the message, so the two catalogues render byte-identically under
+// every locale and on every platform, newline convention included.
+func CString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '\\' || c == '"':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		case c == '\n':
+			b.WriteString(`\n`)
+		case c == '\r':
+			b.WriteString(`\r`)
+		case c == '\t':
+			b.WriteString(`\t`)
+		case c < 0x20 || c == 0x7f:
+			fmt.Fprintf(&b, `\%03o`, c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// CRuntimeRows resolves the listed ids against the table, in list order.
+func (s *Sources) CRuntimeRows() ([]Message, error) {
+	if len(s.CRuntimeIDs) == 0 {
+		return nil, fmt.Errorf("no C runtime messages listed")
+	}
+	out := make([]Message, 0, len(s.CRuntimeIDs))
+	for _, id := range s.CRuntimeIDs {
+		mi := s.index(id)
+		if mi < 0 {
+			return nil, fmt.Errorf("source/%s lists %s, which no table carries", CRuntimeList, id)
+		}
+		m := s.Table.Messages[mi]
+		if len(m.Values) != len(s.Table.Languages) {
+			return nil, fmt.Errorf("%s has %d value(s), want one per shipped language", id, len(m.Values))
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// GenerateC renders the C message catalog for the messages listed in source/c_runtime.txt. A row whose
+// id the tables do not carry is an error, not a skip: the list is how the C runtime declares what it can
+// print, so it has to name messages that exist, each with a value in every shipped language.
+//
+// Each message is followed by a NUL in the blob, so a call site gets an ordinary C string and needs no
+// length; the offset vector is what makes the message an addressable unit rather than a run of bytes.
+func GenerateC(s *Sources) ([]byte, error) {
+	rows, err := s.CRuntimeRows()
+	if err != nil {
+		return nil, err
+	}
+	if len(s.Table.Languages) == 0 {
+		return nil, fmt.Errorf("no languages")
+	}
+	var b bytes.Buffer
+	fmt.Fprintf(&b, "/* Code generated by %s from the authored tables under %s. DO NOT EDIT.\n", "cmd/qki18n", "internal/i18n/source")
+	fmt.Fprintf(&b, " *\n")
+	fmt.Fprintf(&b, " * The messages the embedded C runtime renders (%s), in the languages\n", "qthreads.c.txt")
+	fmt.Fprintf(&b, " * this repository ships, from the same authored tables as internal/i18n/msg_gen.go. A call site\n")
+	fmt.Fprintf(&b, " * names a message with QK_MSG_<id> and renders it with qk_msg(...). The list is authored: it names\n")
+	fmt.Fprintf(&b, " * the strings the C side can reach, and generation refuses an id the tables do not carry, so a\n")
+	fmt.Fprintf(&b, " * runtime string cannot be written in one language only without this file failing to generate. */\n")
+	fmt.Fprintf(&b, "#ifndef %s\n#define %s\n\n", CRuntimeHeader, CRuntimeHeader)
+	fmt.Fprintf(&b, "#include <string.h>\n\n")
+
+	for li, l := range s.Table.Languages {
+		fmt.Fprintf(&b, "/* %s. One NUL-terminated message after another, in the order of %s. */\n", l.Code, CRuntimeList)
+		fmt.Fprintf(&b, "static const char qk_msgs_%s[] =\n", l.Code)
+		for _, m := range rows {
+			fmt.Fprintf(&b, "    %s \"\\0\" /* %s */\n", CString(m.Values[li]), m.ID)
+		}
+		fmt.Fprintf(&b, "    ;\n")
+		fmt.Fprintf(&b, "/* Start offset of each message in qk_msgs_%s, in %s order. */\n", l.Code, CRuntimeList)
+		fmt.Fprintf(&b, "static const unsigned int qk_msg_off_%s[] = {\n", l.Code)
+		start := 0
+		for _, m := range rows {
+			fmt.Fprintf(&b, "    %d, /* %s */\n", start, m.ID)
+			start += len(m.Values[li]) + 1
+		}
+		fmt.Fprintf(&b, "};\n\n")
+	}
+
+	fmt.Fprintf(&b, "/* One macro per listed message: its index into the offset vectors and the blob. */\n")
+	fmt.Fprintf(&b, "enum {\n")
+	for i, m := range rows {
+		fmt.Fprintf(&b, "    %s = %d,\n", CMsgMacro(m.ID), i)
+	}
+	fmt.Fprintf(&b, "    QK_MSG_COUNT = %d\n};\n\n", len(rows))
+
+	fmt.Fprintf(&b, "/* The message ids the lookup accepts, in the same order; a call site passes one as a string. */\n")
+	fmt.Fprintf(&b, "static const char* const qk_msg_ids[] = {\n")
+	for _, m := range rows {
+		fmt.Fprintf(&b, "    %s, /* %s */\n", CString(m.ID), m.ID)
+	}
+	fmt.Fprintf(&b, "   0\n};\n\n")
+
+	fmt.Fprintf(&b, "/* The blob and the offset vector of each shipped language, in blob order. */\n")
+	fmt.Fprintf(&b, "static const char* const qk_msg_blob[] = {")
+	for li, l := range s.Table.Languages {
+		if li > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "qk_msgs_%s", l.Code)
+	}
+	fmt.Fprintf(&b, "};\nstatic const unsigned int* const qk_msg_offsets[] = {")
+	for li, l := range s.Table.Languages {
+		if li > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "qk_msg_off_%s", l.Code)
+	}
+	fmt.Fprintf(&b, "};\nenum { QK_MSG_LANGS = %d };\n\n", len(s.Table.Languages))
+
+	fmt.Fprintf(&b, "/* qk_msg returns the text of one message of the list in one language: a strcmp over a handful of\n")
+	fmt.Fprintf(&b, " * ids, a pointer into the blob, no map and no fallback to another language. An id the list does\n")
+	fmt.Fprintf(&b, " * not carry returns NULL, which is a mistake on this side of the interface, not a user-facing\n")
+	fmt.Fprintf(&b, " * condition; an out-of-range language renders the source language. */\n")
+	fmt.Fprintf(&b, "static const char* qk_msg(int lang, const char* id) {\n")
+	fmt.Fprintf(&b, "    int k;\n")
+	fmt.Fprintf(&b, "    if (lang < 0 || lang >= QK_MSG_LANGS) lang = 0;\n")
+	fmt.Fprintf(&b, "    for (k = 0; k < QK_MSG_COUNT; k++) {\n")
+	fmt.Fprintf(&b, "        if (strcmp(qk_msg_ids[k], id) == 0) return qk_msg_blob[lang] + qk_msg_offsets[lang][k];\n")
+	fmt.Fprintf(&b, "    }\n")
+	fmt.Fprintf(&b, "    return 0;\n}\n\n")
+	fmt.Fprintf(&b, "#endif /* %s */\n", CRuntimeHeader)
+	return normalizeEOL(b.Bytes()), nil
+}
+
 // Run generates (or checks) the file, returning every problem it found. A non-empty result is a build
 // failure: the caller must not accept a catalog with a message that has no value in a shipped
 // language, or an imported id the pinned module does not ship. When OutFile and DocFile are the same
@@ -535,6 +742,9 @@ func Run(opts Options) []string {
 		return []string{err.Error()}
 	}
 	if problems := writeOrCheck(opts, opts.OutFile, out, "go generate ./internal/i18n"); len(problems) > 0 {
+		return problems
+	}
+	if problems := runC(opts, src); len(problems) > 0 {
 		return problems
 	}
 	return runDoc(opts, src)
@@ -581,6 +791,7 @@ func writeOrCheck(opts Options, path string, want []byte, fix string) []string {
 func (s *Sources) Clone() *Sources {
 	out := &Sources{ModuleRaw: append([]byte(nil), s.ModuleRaw...)}
 	out.Table.Languages = append([]Language(nil), s.Table.Languages...)
+	out.CRuntimeIDs = append([]string(nil), s.CRuntimeIDs...)
 	for _, m := range s.Table.Messages {
 		c := m
 		c.Values = append([]string(nil), m.Values...)
@@ -672,7 +883,24 @@ func RunWith(opts Options, src *Sources) []string {
 	if problems := writeOrCheck(opts, opts.OutFile, out, "go generate ./internal/i18n"); len(problems) > 0 {
 		return problems
 	}
+	if problems := runC(opts, src); len(problems) > 0 {
+		return problems
+	}
 	return runDoc(opts, src)
+}
+
+// runC writes (or checks) the C message catalog, when one is asked for. It is a second reader of the
+// same tables, never a second source of truth: every row comes from the tables that also produced the
+// Go catalog, and the staleness check is the same one.
+func runC(opts Options, src *Sources) []string {
+	if opts.COutFile == "" {
+		return nil
+	}
+	out, err := GenerateC(src)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: %v", opts.COutFile, err)}
+	}
+	return writeOrCheck(opts, opts.COutFile, out, "go generate ./internal/i18n")
 }
 
 // normalizeEOL folds CRLF to LF, so a content check is not decided by how a platform checked a file
