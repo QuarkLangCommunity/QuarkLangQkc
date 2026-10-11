@@ -27,8 +27,7 @@ var cliTable = map[string]string{
 	"qkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n":             "qkrepl %s — QuarkLang interactive evaluation (:help for help, :quit to exit)\n",
 	"  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML": "  QuarkLang API doc generator: /* */ and // comments + pub exports -> Markdown / HTML",
 	"  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit":               "  QuarkLang interactive evaluation: multi-line blocks, persistent environment, :help/:load/:quit",
-	"  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·":           "  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,",
-	"                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较": "                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparison",
-	"变量": "variable",
+	"  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·":                                                                              "  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,",
+	"                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较":                                                                    "                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparison",
 	"  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·\n                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较": "  QuarkLang static analysis (QK101-QK115): unused vars/params/imports/functions, unreachable code,\n                           shadowing, missing return, interface near-miss, void misuse, self-assign,\n                           constant condition, division by zero, dead store, self-comparison",
 }

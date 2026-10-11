@@ -360,3 +360,34 @@ func TestLintCodesUnique(t *testing.T) {
 		}
 	}
 }
+
+// TestLintKindLabelsAreMessages pins the linter's binding-kind labels in both languages.
+//
+// The labels used to be `msg("形参")` / `msg("循环变量")` / `msg("catch 变量")` / `msg("变量")` returned
+// from lintKindName, and two of the four had no catalog entry at all: they reached an i18n boundary and
+// still rendered Chinese, which is the one shape the coverage ratchets cannot see (they read literals
+// passed to a boundary, and the literal here is a return value). Only the `param` and fallback kinds are
+// reachable from a corpus — the duplicate-declaration error fires before shadowing for `forvar` and
+// `catch` — so the four labels are pinned here, by rendering each kind directly.
+func TestLintKindLabelsAreMessages(t *testing.T) {
+	kinds := []struct {
+		kind string
+		en   string
+		zh   string
+	}{
+		{"param", "parameter", "形参"},
+		{"forvar", "loop variable", "循环变量"},
+		{"catch", "catch variable", "catch 变量"},
+		{"", "variable", "变量"},
+	}
+	for _, tt := range kinds {
+		withLocalizer(t, i18n.New(nil, i18n.EN))
+		if got := msgID(lintKindName(tt.kind)); got != tt.en {
+			t.Errorf("kind %q in English: got %q, want %q", tt.kind, got, tt.en)
+		}
+		withLocalizer(t, i18n.New(nil, i18n.ZH))
+		if got := msgID(lintKindName(tt.kind)); got != tt.zh {
+			t.Errorf("kind %q in Chinese: got %q, want %q", tt.kind, got, tt.zh)
+		}
+	}
+}
