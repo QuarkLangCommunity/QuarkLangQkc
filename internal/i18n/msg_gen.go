@@ -11,128 +11,158 @@ type Msg uint16
 
 // Message constants, in table order.
 const (
-	MsgParserMacroUnbalancedDelimiters    Msg = 0
-	MsgParserMacroArgCountMismatch        Msg = 1
-	MsgParserMacroExpandFailed            Msg = 2
-	MsgParserPpSharpNeedsCommand          Msg = 3
-	MsgParserPpUnknownDirective           Msg = 4
-	MsgParserPpRequiresParens             Msg = 5
-	MsgParserPpErrorNeedsMessage          Msg = 6
-	MsgParserPpErrorDirective             Msg = 7
-	MsgParserPpInsertNotMacroParam        Msg = 8
-	MsgParserPpExecuteNeedsName           Msg = 9
-	MsgParserPpUnknownCommand             Msg = 10
-	MsgParserPpInsertNeedsAst             Msg = 11
-	MsgParserMacroNeedsName               Msg = 12
-	MsgParserMacroMissingParamList        Msg = 13
-	MsgParserMacroParamListDelimiters     Msg = 14
-	MsgParserMacroParamsMustBeNames       Msg = 15
-	MsgParserMacroMissingBody             Msg = 16
-	MsgParserMacroBodyDelimiters          Msg = 17
-	MsgParserPpIncludeTooDeep             Msg = 18
-	MsgParserPpElifWithoutIf              Msg = 19
-	MsgParserPpBranchWithoutIf            Msg = 20
-	MsgParserPpIncludeFailed              Msg = 21
-	MsgParserPpUnclosedIf                 Msg = 22
-	MsgParserPpUnrecognizedCondition      Msg = 23
-	MsgParserNestingTooDeep               Msg = 24
-	MsgParserNamedStructRequiresType      Msg = 25
-	MsgParserNamedInterfaceRequiresType   Msg = 26
-	MsgParserLibraryBodySignaturesOnly    Msg = 27
-	MsgParserProgramOnlyMainOrLibrary     Msg = 28
-	MsgParserDuplicateProgramMacro        Msg = 29
-	MsgParserAnonStructHasNoName          Msg = 30
-	MsgParserAnonInterfaceHasNoName       Msg = 31
-	MsgParserPubTypeOnlyStructOrInterface Msg = 32
-	MsgParserPubPrefixRestricted          Msg = 33
-	MsgParserFunctionKeywordIsFn          Msg = 34
-	MsgParserFunctionNeedsReturnType      Msg = 35
-	MsgParserAnonStructNoGenerics         Msg = 36
-	MsgParserAnonInterfaceNoGenerics      Msg = 37
-	MsgParserExpectedGot                  Msg = 38
-	MsgParserUnterminatedTypeArguments    Msg = 39
-	MsgParserUnterminatedStructBody       Msg = 40
-	MsgParserUnterminatedSpaceBody        Msg = 41
-	MsgParserUnterminatedLibraryBody      Msg = 42
-	MsgParserUnterminatedInterfaceBody    Msg = 43
-	MsgParserUnterminatedImplBody         Msg = 44
-	MsgParserUnterminatedFunctionType     Msg = 45
-	MsgParserUnterminatedBlock            Msg = 46
-	MsgParserUnexpectedTokenInExpression  Msg = 47
-	MsgParserSignatureMustFollowCall      Msg = 48
-	MsgParserScopeRequiresIdentifier      Msg = 49
-	MsgParserIntLiteralOutOfRange         Msg = 50
-	MsgParserExpectedFn                   Msg = 51
-	MsgParserExpectedTopLevelDeclaration  Msg = 52
-	MsgParserDuplicateSignature           Msg = 53
-	MsgParserUnterminatedBlockComment     Msg = 54
-	MsgParserUnexpectedCharacter          Msg = 55
-	MsgParserInvalidHexLiteralNoDigits    Msg = 56
-	MsgParserInvalidHexLiteral            Msg = 57
-	MsgParserInvalidFloatLiteral          Msg = 58
-	MsgParserInvalidIntLiteral            Msg = 59
-	MsgParserUnterminatedRawString        Msg = 60
-	MsgParserUnterminatedStringLiteral    Msg = 61
-	MsgParserUnterminatedEscapeSequence   Msg = 62
-	MsgDocgenFormPrefix                   Msg = 63
-	MsgDocgenImportsSeparator             Msg = 64
-	MsgDocgenOverviewHeading              Msg = 65
-	MsgDocgenFieldsHeading                Msg = 66
-	MsgDocgenMembersHeading               Msg = 67
-	MsgDocgenNoExportedSymbols            Msg = 68
-	MsgDocgenKindFunction                 Msg = 69
-	MsgDocgenKindStruct                   Msg = 70
-	MsgDocgenKindInterface                Msg = 71
-	MsgDocgenKindAlias                    Msg = 72
-	MsgDocgenKindImpl                     Msg = 73
-	MsgDocgenKindSpace                    Msg = 74
-	MsgDocgenKindLibrary                  Msg = 75
-	MsgDocgenKindMacro                    Msg = 76
-	MsgDocgenSectionFunctions             Msg = 77
-	MsgDocgenSectionTypes                 Msg = 78
-	MsgDocgenSectionImpls                 Msg = 79
-	MsgDocgenSectionSpaces                Msg = 80
-	MsgDocgenSectionMacros                Msg = 81
-	MsgDocgenSectionLibraries             Msg = 82
-	MsgSharedUsageQkcHelp                 Msg = 83
-	MsgReplInternalErrorRecovered         Msg = 84
-	MsgReplDefinedFunction                Msg = 85
-	MsgReplDefinedStruct                  Msg = 86
-	MsgReplDefinedInterface               Msg = 87
-	MsgReplDefinedImpl                    Msg = 88
-	MsgReplDefinedLibrary                 Msg = 89
-	MsgReplDefinedTypeAlias               Msg = 90
-	MsgLintShadowOuterVariable            Msg = 91
-	MsgLintShadowGlobalFunction           Msg = 92
-	MsgLintAssignedNeverRead              Msg = 93
-	MsgLintDeclaredNeverUsed              Msg = 94
-	MsgLintMissingReturnPath              Msg = 95
-	MsgLintMissingReturnLogPath           Msg = 96
-	MsgLintUnreachableCode                Msg = 97
-	MsgLintSelfAssignment                 Msg = 98
-	MsgLintDeadStoreOverwritten           Msg = 99
-	MsgLintWhileTrueNoBreak               Msg = 100
-	MsgLintConstantDivisionByZero         Msg = 101
-	MsgLintSelfComparisonTrue             Msg = 102
-	MsgLintSelfComparisonFalse            Msg = 103
-	MsgLintVoidResultUsedMethod           Msg = 104
-	MsgLintVoidResultUsedFunction         Msg = 105
-	MsgLintConstantConditionTrue          Msg = 106
-	MsgLintConstantConditionFalse         Msg = 107
-	MsgLintUnusedImport                   Msg = 108
-	MsgLintFunctionNeverCalled            Msg = 109
-	MsgLintKindLoopVariable               Msg = 110
-	MsgLintKindCatchVariable              Msg = 111
-	MsgLintInterfaceNearMiss              Msg = 112
-	MsgLintKindParameter                  Msg = 113
-	MsgLintKindVariable                   Msg = 114
+	MsgParserMacroUnbalancedDelimiters            Msg = 0
+	MsgParserMacroArgCountMismatch                Msg = 1
+	MsgParserMacroExpandFailed                    Msg = 2
+	MsgParserPpSharpNeedsCommand                  Msg = 3
+	MsgParserPpUnknownDirective                   Msg = 4
+	MsgParserPpRequiresParens                     Msg = 5
+	MsgParserPpErrorNeedsMessage                  Msg = 6
+	MsgParserPpErrorDirective                     Msg = 7
+	MsgParserPpInsertNotMacroParam                Msg = 8
+	MsgParserPpExecuteNeedsName                   Msg = 9
+	MsgParserPpUnknownCommand                     Msg = 10
+	MsgParserPpInsertNeedsAst                     Msg = 11
+	MsgParserMacroNeedsName                       Msg = 12
+	MsgParserMacroMissingParamList                Msg = 13
+	MsgParserMacroParamListDelimiters             Msg = 14
+	MsgParserMacroParamsMustBeNames               Msg = 15
+	MsgParserMacroMissingBody                     Msg = 16
+	MsgParserMacroBodyDelimiters                  Msg = 17
+	MsgParserPpIncludeTooDeep                     Msg = 18
+	MsgParserPpElifWithoutIf                      Msg = 19
+	MsgParserPpBranchWithoutIf                    Msg = 20
+	MsgParserPpIncludeFailed                      Msg = 21
+	MsgParserPpUnclosedIf                         Msg = 22
+	MsgParserPpUnrecognizedCondition              Msg = 23
+	MsgParserNestingTooDeep                       Msg = 24
+	MsgParserNamedStructRequiresType              Msg = 25
+	MsgParserNamedInterfaceRequiresType           Msg = 26
+	MsgParserLibraryBodySignaturesOnly            Msg = 27
+	MsgParserProgramOnlyMainOrLibrary             Msg = 28
+	MsgParserDuplicateProgramMacro                Msg = 29
+	MsgParserAnonStructHasNoName                  Msg = 30
+	MsgParserAnonInterfaceHasNoName               Msg = 31
+	MsgParserPubTypeOnlyStructOrInterface         Msg = 32
+	MsgParserPubPrefixRestricted                  Msg = 33
+	MsgParserFunctionKeywordIsFn                  Msg = 34
+	MsgParserFunctionNeedsReturnType              Msg = 35
+	MsgParserAnonStructNoGenerics                 Msg = 36
+	MsgParserAnonInterfaceNoGenerics              Msg = 37
+	MsgParserExpectedGot                          Msg = 38
+	MsgParserUnterminatedTypeArguments            Msg = 39
+	MsgParserUnterminatedStructBody               Msg = 40
+	MsgParserUnterminatedSpaceBody                Msg = 41
+	MsgParserUnterminatedLibraryBody              Msg = 42
+	MsgParserUnterminatedInterfaceBody            Msg = 43
+	MsgParserUnterminatedImplBody                 Msg = 44
+	MsgParserUnterminatedFunctionType             Msg = 45
+	MsgParserUnterminatedBlock                    Msg = 46
+	MsgParserUnexpectedTokenInExpression          Msg = 47
+	MsgParserSignatureMustFollowCall              Msg = 48
+	MsgParserScopeRequiresIdentifier              Msg = 49
+	MsgParserIntLiteralOutOfRange                 Msg = 50
+	MsgParserExpectedFn                           Msg = 51
+	MsgParserExpectedTopLevelDeclaration          Msg = 52
+	MsgParserDuplicateSignature                   Msg = 53
+	MsgParserUnterminatedBlockComment             Msg = 54
+	MsgParserUnexpectedCharacter                  Msg = 55
+	MsgParserInvalidHexLiteralNoDigits            Msg = 56
+	MsgParserInvalidHexLiteral                    Msg = 57
+	MsgParserInvalidFloatLiteral                  Msg = 58
+	MsgParserInvalidIntLiteral                    Msg = 59
+	MsgParserUnterminatedRawString                Msg = 60
+	MsgParserUnterminatedStringLiteral            Msg = 61
+	MsgParserUnterminatedEscapeSequence           Msg = 62
+	MsgDocgenFormPrefix                           Msg = 63
+	MsgDocgenImportsSeparator                     Msg = 64
+	MsgDocgenOverviewHeading                      Msg = 65
+	MsgDocgenFieldsHeading                        Msg = 66
+	MsgDocgenMembersHeading                       Msg = 67
+	MsgDocgenNoExportedSymbols                    Msg = 68
+	MsgDocgenKindFunction                         Msg = 69
+	MsgDocgenKindStruct                           Msg = 70
+	MsgDocgenKindInterface                        Msg = 71
+	MsgDocgenKindAlias                            Msg = 72
+	MsgDocgenKindImpl                             Msg = 73
+	MsgDocgenKindSpace                            Msg = 74
+	MsgDocgenKindLibrary                          Msg = 75
+	MsgDocgenKindMacro                            Msg = 76
+	MsgDocgenSectionFunctions                     Msg = 77
+	MsgDocgenSectionTypes                         Msg = 78
+	MsgDocgenSectionImpls                         Msg = 79
+	MsgDocgenSectionSpaces                        Msg = 80
+	MsgDocgenSectionMacros                        Msg = 81
+	MsgDocgenSectionLibraries                     Msg = 82
+	MsgSharedUsageQkcHelp                         Msg = 83
+	MsgReplInternalErrorRecovered                 Msg = 84
+	MsgReplDefinedFunction                        Msg = 85
+	MsgReplDefinedStruct                          Msg = 86
+	MsgReplDefinedInterface                       Msg = 87
+	MsgReplDefinedImpl                            Msg = 88
+	MsgReplDefinedLibrary                         Msg = 89
+	MsgReplDefinedTypeAlias                       Msg = 90
+	MsgLintShadowOuterVariable                    Msg = 91
+	MsgLintShadowGlobalFunction                   Msg = 92
+	MsgLintAssignedNeverRead                      Msg = 93
+	MsgLintDeclaredNeverUsed                      Msg = 94
+	MsgLintMissingReturnPath                      Msg = 95
+	MsgLintMissingReturnLogPath                   Msg = 96
+	MsgLintUnreachableCode                        Msg = 97
+	MsgLintSelfAssignment                         Msg = 98
+	MsgLintDeadStoreOverwritten                   Msg = 99
+	MsgLintWhileTrueNoBreak                       Msg = 100
+	MsgLintConstantDivisionByZero                 Msg = 101
+	MsgLintSelfComparisonTrue                     Msg = 102
+	MsgLintSelfComparisonFalse                    Msg = 103
+	MsgLintVoidResultUsedMethod                   Msg = 104
+	MsgLintVoidResultUsedFunction                 Msg = 105
+	MsgLintConstantConditionTrue                  Msg = 106
+	MsgLintConstantConditionFalse                 Msg = 107
+	MsgLintUnusedImport                           Msg = 108
+	MsgLintFunctionNeverCalled                    Msg = 109
+	MsgLintKindLoopVariable                       Msg = 110
+	MsgLintKindCatchVariable                      Msg = 111
+	MsgLintInterfaceNearMiss                      Msg = 112
+	MsgLintKindParameter                          Msg = 113
+	MsgLintKindVariable                           Msg = 114
+	MsgCliReplLoadNeedsFile                       Msg = 115
+	MsgCliReplUnknownCommand                      Msg = 116
+	MsgCliLspLNeedsDirectory                      Msg = 117
+	MsgCliLspUsage                                Msg = 118
+	MsgCliLspUnknownArgument                      Msg = 119
+	MsgCliLspDocumentNotOpened                    Msg = 120
+	MsgCliLspInvalidContentLength                 Msg = 121
+	MsgCliLspMissingContentLength                 Msg = 122
+	MsgCliCheckLNeedsDirectory                    Msg = 123
+	MsgCliCheckUnknownArgument                    Msg = 124
+	MsgCliCheckNoFiles                            Msg = 125
+	MsgCliCheckSummary                            Msg = 126
+	MsgCliDocONeedsFile                           Msg = 127
+	MsgCliDocTitleNeedsArgument                   Msg = 128
+	MsgCliDocUnknownArgument                      Msg = 129
+	MsgCliDocWroteFile                            Msg = 130
+	MsgCliReplENeedsCode                          Msg = 131
+	MsgCliReplUnknownArgument                     Msg = 132
+	MsgCliReplBanner                              Msg = 133
+	MsgCliDocHelpLine                             Msg = 134
+	MsgCliReplHelpLine                            Msg = 135
+	MsgCliQuarklangStaticAnalysisQk101Qk115Unused Msg = 136
+	MsgCliInterfaceNearMissVoidMisuseSelf         Msg = 137
+	MsgCliCheckUsage                              Msg = 138
+	MsgCliDocUsage                                Msg = 139
+	MsgCliReplUsage                               Msg = 140
+	MsgCliReplHelpText                            Msg = 141
+	MsgCliLspJsonParseFailedReply                 Msg = 142
+	MsgCliLspMethodNotImplemented                 Msg = 143
+	MsgCliCheckHelpLines                          Msg = 144
 )
 
 // msgLangs are the shipped languages, in blob-block order. The first is the source language.
 var msgLangs = [...]string{"en", "zh"}
 
 // msgOffsets has one entry per (language, message) pair plus a final sentinel: the pair at flat
-// index lang*115+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
+// index lang*145+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
 var msgOffsets = [...]uint32{
 	0,
 	42,
@@ -250,133 +280,193 @@ var msgOffsets = [...]uint32{
 	6141,
 	6150,
 	6158,
-	6201,
-	6277,
-	6301,
-	6361,
-	6410,
-	6441,
-	6478,
-	6517,
-	6571,
-	6608,
-	6646,
+	6188,
+	6218,
+	6250,
+	6299,
+	6318,
+	6341,
+	6373,
+	6409,
+	6450,
+	6479,
+	6509,
+	6560,
+	6594,
+	6628,
+	6655,
 	6682,
-	6726,
-	6779,
-	6848,
-	6937,
-	6984,
-	7047,
-	7092,
-	7124,
-	7154,
-	7181,
-	7225,
-	7260,
-	7342,
-	7397,
-	7452,
-	7491,
-	7538,
-	7565,
-	7640,
-	7715,
-	7752,
-	7832,
-	7899,
-	7963,
-	8045,
-	8133,
-	8152,
-	8185,
-	8223,
-	8246,
-	8271,
-	8312,
-	8348,
-	8374,
-	8406,
-	8439,
-	8478,
-	8517,
-	8575,
-	8588,
-	8674,
-	8705,
+	6716,
+	6744,
+	6823,
+	6908,
+	7004,
+	7134,
+	7284,
+	7371,
+	7440,
+	7480,
+	7928,
+	7956,
+	7989,
+	8281,
+	8324,
+	8400,
+	8424,
+	8484,
+	8533,
+	8564,
+	8601,
+	8640,
+	8694,
 	8731,
-	8754,
-	8797,
-	8819,
-	8843,
-	8865,
-	8888,
-	8915,
-	8943,
-	8963,
-	8980,
-	9047,
-	9090,
-	9133,
-	9166,
-	9172,
-	9181,
-	9187,
-	9199,
-	9205,
-	9211,
-	9220,
-	9223,
-	9229,
-	9235,
-	9241,
+	8769,
+	8805,
+	8849,
+	8902,
+	8971,
+	9060,
+	9107,
+	9170,
+	9215,
 	9247,
-	9250,
-	9259,
-	10496,
-	10533,
-	10546,
-	10574,
-	10605,
-	10644,
-	10684,
-	10706,
-	10767,
-	10839,
-	10872,
-	10899,
-	10997,
-	11106,
-	11164,
-	11209,
-	11274,
-	11339,
-	11423,
-	11456,
-	11489,
-	11565,
-	11644,
-	11692,
-	11741,
-	11806,
-	11876,
-	11888,
-	11900,
-	11970,
-	11976,
-	11982,
+	9277,
+	9304,
+	9348,
+	9383,
+	9465,
+	9520,
+	9575,
+	9614,
+	9661,
+	9688,
+	9763,
+	9838,
+	9875,
+	9955,
+	10022,
+	10086,
+	10168,
+	10256,
+	10275,
+	10308,
+	10346,
+	10369,
+	10394,
+	10435,
+	10471,
+	10497,
+	10529,
+	10562,
+	10601,
+	10640,
+	10698,
+	10711,
+	10797,
+	10828,
+	10854,
+	10877,
+	10920,
+	10942,
+	10966,
+	10988,
+	11011,
+	11038,
+	11066,
+	11086,
+	11103,
+	11170,
+	11213,
+	11256,
+	11289,
+	11295,
+	11304,
+	11310,
+	11322,
+	11328,
+	11334,
+	11343,
+	11346,
+	11352,
+	11358,
+	11364,
+	11370,
+	11373,
+	11382,
+	12619,
+	12656,
+	12669,
+	12697,
+	12728,
+	12767,
+	12807,
+	12829,
+	12890,
+	12962,
+	12995,
+	13022,
+	13120,
+	13229,
+	13287,
+	13332,
+	13397,
+	13462,
+	13546,
+	13579,
+	13612,
+	13688,
+	13767,
+	13815,
+	13864,
+	13929,
+	13999,
+	14011,
+	14023,
+	14093,
+	14099,
+	14105,
+	14135,
+	14174,
+	14201,
+	14259,
+	14274,
+	14295,
+	14326,
+	14358,
+	14394,
+	14419,
+	14457,
+	14506,
+	14540,
+	14572,
+	14595,
+	14630,
+	14659,
+	14683,
+	14759,
+	14842,
+	14925,
+	15052,
+	15183,
+	15270,
+	15339,
+	15379,
+	15800,
+	15828,
+	15856,
+	16115,
 }
 
 // msgBlob is every message in every language, back to back, in language-then-table order.
-const msgBlob = "ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires (\"message\")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> Form: `program  · imports: ## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n| Field | Type | Description |\n|---|---|---|\n| Member | Signature | Description |\n|---|---|---|\n_(no exported symbols)_\nfunctionstructinterfacetype aliasimplspacesystem librarymacroFunctionsTypesImplsSpacesMacrosSystem librariesusage: qkc [options] <file.qk>\n\n  (default)           emit LLVM IR to stdout\n  --emit-ir           same as above (explicit)\n  -run                compile to a native binary and run it\n  -c                  compile to a native binary only (do not run)\n  -o <path>           output path: binary with -c/-run; .qklib with --emit-lib; IR file otherwise\n  --target-os <os>    preprocessor target OS (linux/darwin/windows; defaults to the host)\n  --target-arch <a>   preprocessor target arch (x86_64/arm64; defaults to the host)\n  --emit-lib          compile to a **library artifact** .qklib (contains lib<name>.so + export manifest; no sources)\n  --obfuscate         obfuscate: rename internal symbols, strip debug/ident info (with --emit-lib or -c)\n  -L <lib.qklib>      link a library: inject its library declarations + install lib<name>.so next to the output (repeatable)\n  --lib-name <name>   library name (defaults to the output file name)\n  --lib-version <ver> library version (default 0.1.0)\n  --lib-targets <list> platform variants to emit, comma-separated (e.g. linux-x86_64,windows-x86_64,darwin-arm64)\n  --lang <zh|en>      output language (Chinese by default; QK_LANG works too)\n  --version, -V       print the version and engine generation\n  -h, --help          this help\n\nenvironment: QUARK_CACHE=cache dir  QUARK_CFLAGS=clang flags (default \"-O3 -flto=thin\")REPL: internal error (recovered): %vdefined %s\ndefined type struct%s %s;\ndefined type interface%s %s;\ndefined impl%s %s; (%d methods)\ndefined library %s; (%d symbols)\ndefined type %s %s;\n%s %s shadows an outer variable of the same name (declared on line %d)%s %s shadows a global function (calls with that name resolve to this local)%s %s is assigned but never read%s %s is declared but never usedfunction %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)unreachable code (statements after line %d never execute)self-assignment: %s is assigned to itself (no effect)the assignment to %s is overwritten on line %d before any readwhile (true) with no break/return in the body: possible infinite loopdivision by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)self-comparison: %s == %s is always trueself-comparison: %s != %s is always false%s::%s returns void but its result is used as a value (nil at runtime)function %s returns void but its result is used as a value (nil at runtime)%s (true): the condition is always true, so the branch always runs%s (false): the condition is always false, so the branch never runsimported %q but no symbol from it is used (the import can be removed)function %s is never called (dead code; functions in library files are exempt)loop variablecatch variabletype %s looks like it implements interface %s but is missing method %s (implemented: %s)parametervariableParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 (\"消息\")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> 形态：`program \u3000·\u3000导入：## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| 成员 | 签名 | 说明 |\n|---|---|---|\n_（没有可导出的符号）_\n函数结构体接口类型别名实现空间系统库宏函数类型实现空间宏系统库usage: qkc [options] <file.qk>\n\n  （默认）            输出 LLVM IR 到 stdout\n  --emit-ir           同上（显式）\n  -run                编译为原生二进制并执行\n  -c                  只编译为原生二进制（不执行）\n  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件\n  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）\n  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）\n  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）\n  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）\n  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）\n  --lib-name <name>   库名（默认取输出文件名）\n  --lib-version <ver> 库版本（默认 0.1.0）\n  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）\n  --version, -V       打印版本与引擎代次\n  -h, --help          本帮助\n\n环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 \"-O3 -flto=thin\"）REPL: 内部错误（已恢复）: %v已定义 %s\n已定义 type struct%s %s;\n已定义 type interface%s %s;\n已定义 impl%s %s;（%d 个方法）\n已定义 library %s;（%d 个符号）\n已定义 type %s %s;\n%s %s 遮蔽外层同名变量（外层声明于第 %d 行）%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）%s %s 只被赋值、从未读取%s %s 声明后从未使用函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）不可达代码（第 %d 行之后的语句不会执行）自赋值：%s 赋值给自身（无效果）对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）while (true) 且循环体内无 break/return：可能的死循环常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）自身比较：%s == %s 恒为真自身比较：%s != %s 恒为假%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）%s (true)：条件恒为真，分支永远执行%s (false)：条件恒为假，分支永不执行导入了 %q 但未使用其任何符号（可删除该 import）函数 %s 从未被调用（死代码；库文件中的函数不报）循环变量catch 变量类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）形参变量"
+const msgBlob = "ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires (\"message\")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> Form: `program  · imports: ## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n| Field | Type | Description |\n|---|---|---|\n| Member | Signature | Description |\n|---|---|---|\n_(no exported symbols)_\nfunctionstructinterfacetype aliasimplspacesystem librarymacroFunctionsTypesImplsSpacesMacrosSystem librariesusage: qkc [options] <file.qk>\n\n  (default)           emit LLVM IR to stdout\n  --emit-ir           same as above (explicit)\n  -run                compile to a native binary and run it\n  -c                  compile to a native binary only (do not run)\n  -o <path>           output path: binary with -c/-run; .qklib with --emit-lib; IR file otherwise\n  --target-os <os>    preprocessor target OS (linux/darwin/windows; defaults to the host)\n  --target-arch <a>   preprocessor target arch (x86_64/arm64; defaults to the host)\n  --emit-lib          compile to a **library artifact** .qklib (contains lib<name>.so + export manifest; no sources)\n  --obfuscate         obfuscate: rename internal symbols, strip debug/ident info (with --emit-lib or -c)\n  -L <lib.qklib>      link a library: inject its library declarations + install lib<name>.so next to the output (repeatable)\n  --lib-name <name>   library name (defaults to the output file name)\n  --lib-version <ver> library version (default 0.1.0)\n  --lib-targets <list> platform variants to emit, comma-separated (e.g. linux-x86_64,windows-x86_64,darwin-arm64)\n  --lang <zh|en>      output language (Chinese by default; QK_LANG works too)\n  --version, -V       print the version and engine generation\n  -h, --help          this help\n\nenvironment: QUARK_CACHE=cache dir  QUARK_CFLAGS=clang flags (default \"-O3 -flto=thin\")REPL: internal error (recovered): %vdefined %s\ndefined type struct%s %s;\ndefined type interface%s %s;\ndefined impl%s %s; (%d methods)\ndefined library %s; (%d symbols)\ndefined type %s %s;\n%s %s shadows an outer variable of the same name (declared on line %d)%s %s shadows a global function (calls with that name resolve to this local)%s %s is assigned but never read%s %s is declared but never usedfunction %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)unreachable code (statements after line %d never execute)self-assignment: %s is assigned to itself (no effect)the assignment to %s is overwritten on line %d before any readwhile (true) with no break/return in the body: possible infinite loopdivision by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)self-comparison: %s == %s is always trueself-comparison: %s != %s is always false%s::%s returns void but its result is used as a value (nil at runtime)function %s returns void but its result is used as a value (nil at runtime)%s (true): the condition is always true, so the branch always runs%s (false): the condition is always false, so the branch never runsimported %q but no symbol from it is used (the import can be removed)function %s is never called (dead code; functions in library files are exempt)loop variablecatch variabletype %s looks like it implements interface %s but is missing method %s (implemented: %s)parametervariable:load requires a file argumentunknown command %s (see :help)-L requires a directory argumentusage: qklsp [-L dir]...  (serves LSP over stdio)unknown argument %sdocument not opened: %sqklsp: invalid Content-Length %qqklsp: missing Content-Length headerqkcheck: -L requires a directory argumentqkcheck: unknown argument %s\nqkcheck: no .qk files to checkqkcheck: %d issue(s) (%d error(s) / %d warning(s))\nqkdoc: -o requires a file argumentqkdoc: -title requires an argumentqkdoc: unknown argument %s\nqkdoc: wrote %s (%d bytes)\nqkrepl: -e requires a code snippetqkrepl: unknown argument %s\nqkrepl %s — QuarkLang interactive evaluation (:help for help, :quit to exit)\n  QuarkLang API doc generator: /* */ and // comments + pub exports -> Markdown / HTML  QuarkLang interactive evaluation: multi-line blocks, persistent environment, :help/:load/:quit  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparisonusage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]commands:\n  :help            show this help\n  :quit / :exit    exit\n  :load <file.qk>  load a file: register its functions/types/impls (main is not run; call main(io) afterwards)\nnotes:\n  - an expression echoes its value; a statement ends with ; (added automatically when omitted)\n  - an unclosed block continues on the next line; variables/functions/types stay visible in later inputs\n  - log records and io.println output are shown as they happenqklsp: JSON parse failed: %wqklsp: method not implemented: %s  QuarkLang static analysis (QK101-QK115): unused vars/params/imports/functions, unreachable code,\n                           shadowing, missing return, interface near-miss, void misuse, self-assign,\n                           constant condition, division by zero, dead store, self-comparisonParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 (\"消息\")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> 形态：`program \u3000·\u3000导入：## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| 成员 | 签名 | 说明 |\n|---|---|---|\n_（没有可导出的符号）_\n函数结构体接口类型别名实现空间系统库宏函数类型实现空间宏系统库usage: qkc [options] <file.qk>\n\n  （默认）            输出 LLVM IR 到 stdout\n  --emit-ir           同上（显式）\n  -run                编译为原生二进制并执行\n  -c                  只编译为原生二进制（不执行）\n  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件\n  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）\n  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）\n  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）\n  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）\n  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）\n  --lib-name <name>   库名（默认取输出文件名）\n  --lib-version <ver> 库版本（默认 0.1.0）\n  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）\n  --version, -V       打印版本与引擎代次\n  -h, --help          本帮助\n\n环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 \"-O3 -flto=thin\"）REPL: 内部错误（已恢复）: %v已定义 %s\n已定义 type struct%s %s;\n已定义 type interface%s %s;\n已定义 impl%s %s;（%d 个方法）\n已定义 library %s;（%d 个符号）\n已定义 type %s %s;\n%s %s 遮蔽外层同名变量（外层声明于第 %d 行）%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）%s %s 只被赋值、从未读取%s %s 声明后从未使用函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）不可达代码（第 %d 行之后的语句不会执行）自赋值：%s 赋值给自身（无效果）对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）while (true) 且循环体内无 break/return：可能的死循环常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）自身比较：%s == %s 恒为真自身比较：%s != %s 恒为假%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）%s (true)：条件恒为真，分支永远执行%s (false)：条件恒为假，分支永不执行导入了 %q 但未使用其任何符号（可删除该 import）函数 %s 从未被调用（死代码；库文件中的函数不报）循环变量catch 变量类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）形参变量:load 需要一个文件参数未知命令 %s（:help 查看帮助）-L 需要一个目录参数usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）未知参数 %s未打开的文档 %sqklsp: 非法 Content-Length %qqklsp: 缺少 Content-Length 头qkcheck: -L 需要一个目录参数qkcheck: 未知参数 %s\nqkcheck: 没有可检查的 .qk 文件qkcheck: %d 个问题（%d 错误 / %d 警告）\nqkdoc: -o 需要一个文件参数qkdoc: -title 需要一个参数qkdoc: 未知参数 %s\nqkdoc: 已写入 %s（%d 字节）\nqkrepl: -e 需要一段代码qkrepl: 未知参数 %s\nqkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]命令：\n  :help            显示本帮助\n  :quit / :exit    退出\n  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）\n说明：\n  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）\n  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见\n  - log 的记录、io.println 的输出会即时显示qklsp: JSON 解析失败: %wqklsp: 未实现的方法 %s  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·\n                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较"
 
 // msgText returns the value of a message in one language block, read out of the blob. One index
 // computation and one slice: no map, no hash of the message text, no fallback branch.
 func msgText(id Msg, block int) string {
-	if block < 0 || block >= 2 || int(id) >= 115 {
+	if block < 0 || block >= 2 || int(id) >= 145 {
 		return ""
 	}
-	k := block*115 + int(id)
+	k := block*145 + int(id)
 	return msgBlob[msgOffsets[k]:msgOffsets[k+1]]
 }
 
@@ -510,6 +600,36 @@ func MsgKeys() []string {
 		"lint.interface_near_miss",
 		"lint.kind_parameter",
 		"lint.kind_variable",
+		"cli.repl_load_needs_file",
+		"cli.repl_unknown_command",
+		"cli.lsp_l_needs_directory",
+		"cli.lsp_usage",
+		"cli.lsp_unknown_argument",
+		"cli.lsp_document_not_opened",
+		"cli.lsp_invalid_content_length",
+		"cli.lsp_missing_content_length",
+		"cli.check_l_needs_directory",
+		"cli.check_unknown_argument",
+		"cli.check_no_files",
+		"cli.check_summary",
+		"cli.doc_o_needs_file",
+		"cli.doc_title_needs_argument",
+		"cli.doc_unknown_argument",
+		"cli.doc_wrote_file",
+		"cli.repl_e_needs_code",
+		"cli.repl_unknown_argument",
+		"cli.repl_banner",
+		"cli.doc_help_line",
+		"cli.repl_help_line",
+		"cli.quarklang_static_analysis_qk101_qk115_unused",
+		"cli.interface_near_miss_void_misuse_self",
+		"cli.check_usage",
+		"cli.doc_usage",
+		"cli.repl_usage",
+		"cli.repl_help_text",
+		"cli.lsp_json_parse_failed_reply",
+		"cli.lsp_method_not_implemented",
+		"cli.check_help_lines",
 	}
 }
 
