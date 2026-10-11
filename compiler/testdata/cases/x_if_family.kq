@@ -1,0 +1,13 @@
+// The #if family at top level, in both engines: the guards around the entry point select, and the
+// program they leave is the same one, so the output is byte-identical interpreted and compiled.
+#define FALLBACK
+#ifdef FALLBACK
+fn main(IOStream io) {
+    io.println(1);
+}
+#endif
+#ifndef FALLBACK
+fn main(IOStream io) {
+    io.println(2);
+}
+#endif

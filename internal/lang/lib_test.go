@@ -69,7 +69,7 @@ func TestCompileTokensWithImportsMatchesTextPath(t *testing.T) {
 	}
 	expanded := rest
 	if len(macros) > 0 {
-		if expanded, err = ExpandMacros(rest, macros, "compile"); err != nil {
+		if expanded, err = ExpandMacros(rest, macros); err != nil {
 			t.Fatalf("ExpandMacros: %v", err)
 		}
 	}

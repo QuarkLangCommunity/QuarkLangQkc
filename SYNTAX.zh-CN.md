@@ -81,7 +81,7 @@
 | 编号 | 语法 | 说明 |
 |---|---|---|
 | M1 | `#macro name (a, b) { 主体 }` | 命名参数宏；`()`/`[]`/`{}` 分隔符可互换；单趟展开，不递归 |
-| M2 | `#when (run) { ... }` / `#when (compile) { ... }` | 态选择：解释器传 `explain`（同时命中 `run`），编译器传 `compile` |
+| M2 | `#ifdef COMPILE` · `#ifdef EXPLAIN` · `#ifndef` · `#if` · `#endif` | 引擎选择：编译器定义 `COMPILE`、解释器定义 `EXPLAIN`，行级预处理器由两个引擎共享（标准 §7.2）。同族还有 `#define`/`#undef`/`#elif`/`#else`/`#include`/`#error` |
 | M3 | `#error("msg")` `#return <expr>` `#insert(...)` `#execute(名字)` | 预处理命令 |
 | M4 | `#` 开头的自定义命令 | 见内部宏表 |
 | M5 | `library name { fn sym(int a, String b) int; }` | FFI 库绑定（参数同函数，类型在前）；方法名即符号名 |

@@ -485,7 +485,7 @@ go test ./internal/lang/ -run XXX -bench . -benchmem    # 库级基准（解释�
 - **指针 / 堆申请**：`pointer T` 修饰、`new <type>[size]` 堆上申请（非法大小 `badAlloc`）、空指针解引用 `NullPointerError`；
 - **签名**：`f(args) @instance(prefix)` ≡ `instance.call(prefix)(.{in, out})`（instance 为任意 Sign 实例变量名）——记忆化/包装；
 - **taskm 并发**：`t thread = taskm.spawn(); t.merge(fn, args); taskm.block(t.pid()); taskm.done(pid); c channel = taskm.channel(); c.send(v); c.recv();`——用户态任务 + 线程池（编译路径 pthread 载体，跨系统）；
-- **宏系统**：`#macro name (参数) { 主体 }` 命名参数宏——参数不限、`()/[]/{}` 分隔符任意，调用 `name(args)`/`name[args]`/`name{args}`，参数按名替换；主体支持 `#when(compile/run)` 与 `#error`——**解释器与编译器共享同一 token 级宏展开**；
+- **宏系统**：`#macro name (参数) { 主体 }` 命名参数宏——参数不限、`()/[]/{}` 分隔符任意，调用 `name(args)`/`name[args]`/`name{args}`，参数按名替换；主体支持 `#error`，用 `#ifdef COMPILE` / `#ifdef EXPLAIN` 按引擎选体——**解释器与编译器共享同一 token 级宏展开，也共享同一行级预处理器**；
 - **delete/clear 语义**：`delete` 入空闲队列（数据保留，可复用），`clear` 真正清空空闲数据（使用中保留，数据安全）；
 - **List<int>**：字面量/下标/`size()`/`get(i)`/`append(v)`（几何增长 O(n)）；
 - **program/library**：`program main;`/`library;`、`import`、`pub`——可发布为 `.qlib` 库；

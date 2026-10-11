@@ -562,9 +562,7 @@ func TestIORedirect(t *testing.T) {
 // Named macros: #macro name (parameters) { body }, called as name(args), parameters are substituted by name
 func TestMacroNamedParams(t *testing.T) {
 	out, err := runSrc(t, `#macro emit (expr) {
-    #when (run) {
-        #return expr
-    }
+    #return expr
 }
 
 fn main(IOStream io) {
@@ -578,13 +576,16 @@ fn main(IOStream io) {
 	}
 }
 
-// #when(compile) blocks are dropped at run time
-func TestMacroWhenCompileDropped(t *testing.T) {
+// The compiler's branches are dropped at run time: `#ifdef COMPILE` is the compiler's symbol (spec §7.2),
+// so the interpreter — which defines EXPLAIN — does not see that body at all.
+func TestMacroCompilerBranchDropped(t *testing.T) {
 	out, err := runSrc(t, `#macro only (x) {
-    #when (compile) { #return io.println("COMPILE-ONLY"); }
-    #when (run) {
-        #return x
-    }
+#ifdef COMPILE
+    #return io.println("COMPILE-ONLY");
+#endif
+#ifdef EXPLAIN
+    #return x
+#endif
 }
 
 fn main(IOStream io) {
@@ -601,9 +602,7 @@ fn main(IOStream io) {
 // #error raises an error directly in the selected preprocessor branch
 func TestMacroErrorDirective(t *testing.T) {
 	_, err := runSrc(t, `#macro bad (x) {
-    #when (run) {
-        #error("cannot do this at run time")
-    }
+    #error("cannot do this at run time")
 }
 
 fn main(IOStream io) {
@@ -671,9 +670,7 @@ pub type struct {
 func TestMacroDelimitersAndArity(t *testing.T) {
 	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	out, err := runSrc(t, `#macro add [a, b] {
-    #when (run) {
-        #return a + b
-    }
+    #return a + b
 }
 
 fn main(IOStream io) {
