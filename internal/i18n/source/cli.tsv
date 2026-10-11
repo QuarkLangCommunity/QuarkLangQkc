@@ -44,3 +44,4 @@ cli.check_fix_replace	local	cli		"  fix: %s (%s)\n"	"  fix: %s (%s)\n"	"  修复
 cli.check_fix_unchanged	local	cli		"  fix: unchanged\n"	"  fix: unchanged\n"	"  修复：不变\n"
 cli.check_fix_skipped	local	cli		"  no fix: %s\n"	"  no fix: %s\n"	"  无法修复：%s\n"
 cli.check_fix_flagged	local	cli		"  fix: -check does not write this; run qkcheck -fix to apply it\n"	"  fix: -check does not write this; run qkcheck -fix to apply it\n"	"  修复：-check 不会写入；运行 qkcheck -fix 应用\n"
+cli.check_fix_capped	local	cli		"qkcheck: stopped after %d passes with corrections still pending; run -fix again\n"	"qkcheck: stopped after %d passes with corrections still pending; run -fix again\n"	"qkcheck: 已达 %d 轮上限，仍有待修复项；请再次运行 -fix\n"

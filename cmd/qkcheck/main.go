@@ -314,7 +314,7 @@ func fixFile(path string, opts checkOptions, stdout, stderr io.Writer) ([]findin
 		fmt.Fprintln(stderr, "qkcheck:", err)
 		return nil, 2
 	}
-	src, lines := string(data), 0
+	src, lines, capped := string(data), 0, false
 	for pass := 0; pass < maxPasses; pass++ {
 		fixed, n := fixOnce(path, src, opts)
 		if n == 0 {
@@ -324,8 +324,16 @@ func fixFile(path string, opts checkOptions, stdout, stderr io.Writer) ([]findin
 			break // a pass that changes nothing must not become a loop
 		}
 		src, lines = fixed, lines+n
+		if pass == maxPasses-1 {
+			capped = true // the bound was reached; the report says so rather than looping on
+		}
 	}
 	final := checkSource(path, src, opts)
+	if capped {
+		// A correction can expose another, so the loop runs until nothing applies; if it hits the bound
+		// with corrections still pending, the user has to know the file may not be settled yet.
+		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixCapped), maxPasses)
+	}
 	if lines > 0 {
 		// Write only when something changed, and keep the file's own permissions: -fix rewrites the
 		// bytes the checks rewrote, nothing else.
