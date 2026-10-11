@@ -259,4 +259,9 @@ var compilerTable = map[string]string{
 	"using %q on %s / %s is not supported (raw bits need one width)":                                                   "暂未支持对 %s / %s 使用 %q（原始位需要统一的宽度）",
 	"using %q on %s / %s is not supported: the widths differ":                                                          "暂未支持对 %s / %s 使用 %q：两侧宽度不同",
 	"using %s to initialize %s variable %q is not supported (raw bits take raw bits of the same width, or a constant)": "暂未支持用 %s 初始化 %s 变量 %q（原始位只接受同宽度的原始位或常量）",
+
+	"compiling %s is not supported yet (=== storage identity is implemented in the interpreter only)":    "暂未支持编译 %s（=== 的存储同一性仅在解释器中实现）",
+	"compiling & (address-of) is not supported yet (references are implemented in the interpreter only)": "暂未支持编译 &（取地址）（引用仅在解释器中实现）",
+	"compiling ++ (reference move) is not supported yet (implemented in the interpreter only)":           "暂未支持编译 ++（引用移动）（仅在解释器中实现）",
+	"compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)": "暂未支持编译权限引用 &%s %s（仅在解释器中实现）",
 }

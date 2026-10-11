@@ -128,8 +128,10 @@ func TestTemplatesRegistered(t *testing.T) {
 	missing := missingEntries(sortedKeys(wired))
 	// Ratchet, not a cliff: every message needs a Chinese catalog value (English is the source
 	// language, so QK_LANG=zh renders the translation). The scanner used to skip English templates —
-	// that is how this backlog was found — so the count may only go down from here.
-	const allowedMissing = 124
+	// that is how this backlog was found — and the 108 it then reported are translated, so the ratchet
+	// is at zero: a new wired message without a catalog value fails here instead of rendering English
+	// to a reader who asked for Chinese.
+	const allowedMissing = 0
 	if len(missing) > allowedMissing {
 		t.Errorf("%d wired templates have no translation (limit %d): an English message needs a Chinese catalog value for QK_LANG=zh", len(missing), allowedMissing)
 		for i, m := range missing {

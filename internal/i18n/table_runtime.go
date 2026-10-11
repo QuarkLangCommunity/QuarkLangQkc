@@ -57,4 +57,17 @@ var runtimeTable = map[string]string{
 	"TypeError: generate 必须返回 int":                                  "TypeError: generate must return an int",
 	"TypeError: bitwise and shift operators require int operands":   "TypeError: 位运算与移位运算需要 int 操作数",
 	"TypeError: the bitwise complement '~' requires an int operand": "TypeError: 取反运算符 '~' 需要 int 操作数",
+
+	"CompileError: undeclared identifier %q":                                                          "CompileError: 未声明的标识符 %q",
+	"IndexOutOfRangeError: reference move past the end of the container (index %d, size %d)":          "IndexOutOfRangeError: 引用移动越过了容器末尾（下标 %d，大小 %d）",
+	"TypeError: %s declares __literal__ but no __element__":                                           "TypeError: %s 声明了 __literal__，却没有 __element__",
+	"TypeError: ++ moves a reference variable, not this expression":                                   "TypeError: ++ 移动的是引用变量，不是这个表达式",
+	"TypeError: ++ needs a reference, but %q is %s":                                                   "TypeError: ++ 需要引用，但 %q 是 %s",
+	"TypeError: ++ only moves element references (&a[i]); %q refers to something else":                "TypeError: ++ 只能移动元素引用（&a[i]）；%q 指向的是别的对象",
+	"TypeError: cannot take the address of a field on %s (not a struct)":                              "TypeError: 无法取 %s 上字段的地址（不是结构体）",
+	"TypeError: cannot take the address of an element of %s (not a list)":                             "TypeError: 无法取 %s 元素的地址（不是列表）",
+	"TypeError: cannot take the address of this expression (needs a variable, field or list element)": "TypeError: 无法取这个表达式的地址（需要变量、字段或列表元素）",
+	"TypeError: cannot take the address of undeclared identifier %q":                                  "TypeError: 无法取未声明的标识符 %q 的地址",
+	"TypeError: io.println needs an IOStream, got %s":                                                 "TypeError: io.println 需要 IOStream，得到 %s",
+	"TypeError: list index must be int, got %s":                                                       "TypeError: 列表索引必须是 int，得到 %s",
 }
