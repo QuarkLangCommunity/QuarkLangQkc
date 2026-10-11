@@ -967,6 +967,14 @@ the two panic helpers, …); they are English in both languages and reachable, a
 of gap in the other direction. Both are reported as findings, not silently fixed: changing either would
 change what a reader sees today, and P3's contract forbids that.
 
+Nothing in the runtime consulted the environment either, so the two engines could also *disagree*: the
+interpreter's default is the source language when no locale variable is set, and the runtime's was
+Chinese. Measured on the revision before this work, with every locale variable unset — the configuration
+a CI runner actually has — `substring.qk` printed `out of range [0,3]` under `quark` and `越界 [0,3]`
+under `qkc -run` for the same program. The dual-path gate did not catch it because no case in its corpus
+fails that way, which is the same lesson as §7.8's opening: a string that never reaches a catalog is a
+string no gate can see, and a string no case reaches is a string no gate runs.
+
 **Where the boundary is now.** The runtime renders through the catalog, generated into C:
 
 ```
