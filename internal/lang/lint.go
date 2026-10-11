@@ -119,6 +119,7 @@ func newLinter(opts LintOptions) *linter {
 		usesNames: map[string]bool{},
 		refVars:   map[string]bool{},
 		reads:     map[string]int{},
+		eqTypes:   map[string]bool{},
 	}
 }
 
@@ -126,6 +127,15 @@ func newLinter(opts LintOptions) *linter {
 func (l *linter) check(prog *Program) {
 	for _, f := range prog.Funcs {
 		l.funcs[f.Name] = append(l.funcs[f.Name], f)
+	}
+	// An `impl { fn __eq__(T self, T o) bool {...} } T` makes `==` user code for T, which is what
+	// decides whether a self-comparison of a T can be replaced by its constant (QK114).
+	for _, im := range prog.Impls {
+		for _, m := range im.Methods {
+			if m.Name == "__eq__" {
+				l.eqTypes[im.Type] = true
+			}
+		}
 	}
 	for _, f := range prog.Funcs {
 		l.globals[f.Name] = "fn"
@@ -235,6 +245,7 @@ type linter struct {
 	reads     map[string]int           // reads per variable name (the liveness gate of a QK114 rewrite)
 	cands     []fixCandidate           // corrections found during the walk, decided once the file is known
 	plan      *FixPlan                 // the corrections attached by the run that is in progress
+	eqTypes   map[string]bool          // types that define __eq__, whose equality is user code (QK114's gate)
 }
 
 // warnID records a diagnostic whose message is a generated ID, rendered in the requested language. It is
@@ -626,7 +637,7 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 		// QK114: self comparison x == x / x != x (only for addressable forms: identifier/member/index)
 		if (t.Op == "==" || t.Op == "!=") && isRefLike(t.L) && sameExpr(t.L, t.R) {
 			name := exprText(t.L)
-			l.cands = append(l.cands, selfCompareFix(Diag{Pos: t.Pos, Code: CodeSelfCompare}, t.Op, t.L))
+			l.cands = append(l.cands, selfCompareFix(Diag{Pos: t.Pos, Code: CodeSelfCompare}, t.Op, t.L, l.eqTypes, l.operandType))
 			if t.Op == "==" {
 				l.warnID(t.Pos, CodeSelfCompare, i18n.MsgLintSelfComparisonTrue, name, name)
 			} else {

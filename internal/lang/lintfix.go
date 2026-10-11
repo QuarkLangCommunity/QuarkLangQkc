@@ -12,9 +12,10 @@ package lang
 // only removed together with the line it terminates.
 
 import (
-	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // Fix is one mechanical correction of a diagnostic: replace Text at [From,To) of Line.
@@ -44,17 +45,6 @@ func (f *Fix) Replacement() string {
 // HasFix reports whether the diagnostic carries a mechanical correction.
 func (d Diag) HasFix() bool { return d.Fix != nil }
 
-// Brief renders the correction in one line, for the default report.
-func (f *Fix) Brief() string {
-	if f == nil {
-		return ""
-	}
-	if f.Delete {
-		return fmt.Sprintf("delete line %d (%s)", f.Line, f.Why)
-	}
-	return fmt.Sprintf("line %d: %s (%s)", f.Line, f.Text, f.Why)
-}
-
 // FixPlan is what applying corrections to one file's diagnostics would do.
 type FixPlan struct {
 	Fixes []AppliedFix // one per diagnostic that carries a correction, in line order
@@ -71,9 +61,10 @@ type AppliedFix struct {
 
 // LineChange is one line of the file after the plan is applied.
 type LineChange struct {
-	Line int
-	Old  string // the line without its terminator, as it is now
-	New  string // the line without its terminator, as it becomes
+	Line   int
+	Old    string // the line without its terminator, as it is now
+	New    string // the line without its terminator, as it becomes
+	Delete bool   // the line goes away with its terminator, rather than becoming New
 }
 
 // SkipReason records a diagnostic whose correction was withheld, and why.
@@ -86,7 +77,9 @@ type SkipReason struct {
 // Pending reports how many lines the plan would rewrite.
 func (p *FixPlan) Pending() int { return len(p.Lines) }
 
-// Apply writes the plan's rewrites into src, preserving every line separator of the original.
+// Apply writes the plan's rewrites into src, preserving every line separator of the original. A change
+// marked Delete removes its line together with the terminator that line was written with, which is what
+// makes deleting a statement remove the line rather than leave an empty one behind.
 func (p *FixPlan) Apply(src string) string {
 	if p == nil || len(p.Lines) == 0 {
 		return src
@@ -94,6 +87,10 @@ func (p *FixPlan) Apply(src string) string {
 	sf := splitSource(src)
 	for _, c := range p.Lines {
 		if c.Line < 1 || c.Line > len(sf.lines) {
+			continue
+		}
+		if c.Delete {
+			sf.lines[c.Line-1] = srcLine{gone: true}
 			continue
 		}
 		sf.lines[c.Line-1].text = c.New
@@ -104,10 +101,12 @@ func (p *FixPlan) Apply(src string) string {
 // ---------- the source, split so that each line keeps its own terminator ----------
 
 // srcLine is one line with the terminator it was written with, so a rewrite can never normalise a
-// CRLF file to LF or the other way round.
+// CRLF file to LF or the other way round. A line marked gone is removed from the file entirely: it
+// contributes neither text nor terminator, so the lines around it close up.
 type srcLine struct {
 	text string // without the terminator
 	sep  string // "\n", "\r\n" or "" for a last line that does not end in one
+	gone bool   // the line (and its terminator) is deleted by the plan
 }
 
 type srcLines struct{ lines []srcLine }
@@ -133,6 +132,9 @@ func splitSource(src string) srcLines {
 func (s srcLines) join() string {
 	var b strings.Builder
 	for _, l := range s.lines {
+		if l.gone {
+			continue
+		}
 		b.WriteString(l.text)
 		b.WriteString(l.sep)
 	}
@@ -380,7 +382,8 @@ type fixCandidate struct {
 	why    string // what makes the correction right, shown in the report
 	need   string // variable whose liveness gates this candidate ("" = no liveness gate)
 	needN  int    // how many reads the rewrite would drop
-	reason string // why the correction is withheld when the shape gate fails
+	reason string // why the correction is decisively inapplicable (a property of the code itself)
+	shape  string // why the correction is withheld when the statement is not alone on its line
 	build  func(sf srcLines) (Fix, bool)
 }
 
@@ -411,8 +414,8 @@ func attachFixes(diags []Diag, cands []fixCandidate, sf srcLines, reads map[stri
 		idx := list[0]
 		byKey[k] = list[1:] // one candidate per diagnostic, in registration order
 		if c.need != "" && reads[c.need] <= c.needN {
-			plan.Skip = append(plan.Skip, SkipReason{Code: c.code, Line: c.line, Reason: fmt.Sprintf(
-				"rewriting it would drop the last read of %s and leave a new QK101 finding behind", c.need)})
+			plan.Skip = append(plan.Skip, SkipReason{Code: c.code, Line: c.line,
+				Reason: msgID(i18n.MsgLintFixNoLastRead, c.need)})
 			continue
 		}
 		if c.build == nil {
@@ -421,7 +424,11 @@ func attachFixes(diags []Diag, cands []fixCandidate, sf srcLines, reads map[stri
 		}
 		f, ok := c.build(sf)
 		if !ok {
-			plan.Skip = append(plan.Skip, SkipReason{Code: c.code, Line: c.line, Reason: c.reason})
+			why := c.reason
+			if c.shape != "" {
+				why = c.shape
+			}
+			plan.Skip = append(plan.Skip, SkipReason{Code: c.code, Line: c.line, Reason: why})
 			continue
 		}
 		f.Why = c.why
@@ -465,13 +472,13 @@ func (p *FixPlan) merge() {
 		if n := len(p.Lines); n > 0 {
 			if prev := p.Lines[n-1]; prev.Line == af.Fix.Line {
 				if prev.Old != af.Fix.Original || prev.New != af.Fix.Replacement() {
-					p.Skip = append(p.Skip, SkipReason{Code: af.Code, Line: af.Fix.Line, Reason: fmt.Sprintf(
-						"another fix rewrites the same line instead (%q becomes %q)", prev.Old, prev.New)})
+					p.Skip = append(p.Skip, SkipReason{Code: af.Code, Line: af.Fix.Line,
+						Reason: msgID(i18n.MsgLintFixConflict, prev.Old, prev.New)})
 				}
 				continue // two diagnostics, one correction
 			}
 		}
-		p.Lines = append(p.Lines, LineChange{Line: af.Fix.Line, Old: af.Fix.Original, New: af.Fix.Replacement()})
+		p.Lines = append(p.Lines, LineChange{Line: af.Fix.Line, Old: af.Fix.Original, New: af.Fix.Replacement(), Delete: af.Fix.Delete})
 	}
 }
 
@@ -496,13 +503,12 @@ func fixPriority(code string) int {
 // statement that carried the pending write, and both delete the same line, so the two agree.
 func selfAssignFix(at, start Pos) fixCandidate {
 	return fixCandidate{
-		at:   at,    // the diagnostic reports the assignment operator
-		pos:  start, // the rewrite starts where the statement starts
-		code: CodeSelfAssign,
-		line: start.Line,
-		why:  "a self-assignment has no effect",
-		reason: "the statement shares its line with other code, so deleting the line would remove " +
-			"something else (the linter only rewrites a whole line)",
+		at:     at,    // the diagnostic reports the assignment operator
+		pos:    start, // the rewrite starts where the statement starts
+		code:   CodeSelfAssign,
+		line:   start.Line,
+		why:    msgID(i18n.MsgLintFixSelfAssignWhy),
+		reason: msgID(i18n.MsgLintFixNoSharedLine),
 		build: func(sf srcLines) (Fix, bool) {
 			return deleteLineIf(sf, start.Line, start.Col, stmtOnOwnLine)
 		},
@@ -518,17 +524,17 @@ func deadStoreFix(d Diag, prev *pendingWrite) fixCandidate {
 		pos:  prev.Start,
 		code: CodeDeadStore,
 		line: prev.Start.Line,
-		why:  "the value it computes is overwritten before any read",
+		why:  msgID(i18n.MsgLintFixDeadStoreWhy),
 	}
 	if prev.Decl {
-		c.reason = "the overwritten write is the declaration initializer, and deleting it would delete the declaration itself"
+		c.reason = msgID(i18n.MsgLintFixNoDeclaration)
 		return c
 	}
 	if !pureExpr(prev.RHS) {
-		c.reason = "the overwritten right-hand side calls or writes something, so deleting the assignment would drop that effect"
+		c.reason = msgID(i18n.MsgLintFixNoImpureRhs)
 		return c
 	}
-	c.reason = "the assignment shares its line with other code, so deleting the line would remove something else"
+	c.reason = msgID(i18n.MsgLintFixNoSharedLine)
 	c.build = func(sf srcLines) (Fix, bool) {
 		return deleteLineIf(sf, prev.Start.Line, prev.Start.Col, stmtOnOwnLine)
 	}
@@ -539,13 +545,12 @@ func deadStoreFix(d Diag, prev *pendingWrite) fixCandidate {
 // imported file is used. Withheld when the line holds more than that one import.
 func unusedImportFix(pos Pos, path string) fixCandidate {
 	return fixCandidate{
-		at:   pos,
-		pos:  pos,
-		code: CodeUnusedImport,
-		line: pos.Line,
-		why:  "no symbol of the imported file is used",
-		reason: "the line holds more than this one import (or something else follows it), and the " +
-			"linter only rewrites a whole line",
+		at:     pos,
+		pos:    pos,
+		code:   CodeUnusedImport,
+		line:   pos.Line,
+		why:    msgID(i18n.MsgLintFixUnusedImportWhy),
+		reason: msgID(i18n.MsgLintFixNoImportSharedLine),
 		build: func(sf srcLines) (Fix, bool) {
 			l := lineTextAt(sf, pos.Line)
 			if !importAloneOnLine(l, path) {
@@ -556,39 +561,62 @@ func unusedImportFix(pos Pos, path string) fixCandidate {
 	}
 }
 
+// builtinNoEq are the types whose `==` is the language's own comparison and cannot be replaced by a
+// user method. `==` is overloadable through the operation method `__eq__` (spec/STANDARD.md 5), and a
+// rewrite of `x == x` to `true` is only sound when no such method can be selected: for a struct type
+// that defines one, the comparison runs user code, and skipping it would change what the program does.
+var builtinNoEq = map[string]bool{
+	"int": true, "float": true, "bool": true, "str": true, "string": true, "char": true,
+	"byte": true, "bit": true, "uint": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint8": true, "uint16": true, "uint32": true, "uint64": true, "float32": true, "float64": true,
+}
+
 // selfCompareFix corrects QK114 by replacing the standalone comparison with the constant it always
-// yields: `x == x` is true and `x != x` is false for every value x can hold, including NaN, because
-// both sides read the same storage. It is withheld unless the comparison is a whole statement (so
-// nothing but the comparison is lost) and the operand is a pure read that the file reads elsewhere
-// (so the rewrite cannot turn the program into a new QK101 finding).
-func selfCompareFix(d Diag, op string, operand Expr) fixCandidate {
+// yields: `x == x` is true and `x != x` is false for every value x can hold. It is withheld unless the
+// comparison is a whole statement of its own (so nothing but the comparison is lost), the operand is a
+// plain read the file reads elsewhere (so the rewrite cannot turn the program into a new QK101
+// finding), and the operand's declared type is one whose equality is the language's own rather than a
+// user `__eq__`.
+//
+// reason is what a caller reports when the candidate is decisively inapplicable; shape is what it
+// reports when the obstacle is where the statement sits in its line. Two reasons rather than one
+// because a reader of the report needs to know which of the two it was.
+func selfCompareFix(d Diag, op string, operand Expr, eqTypes map[string]bool, typeOf func(Expr) string) fixCandidate {
 	var reads int
 	root := rootIdent(operand, &reads)
 	c := fixCandidate{
-		at:   d.Pos,              // the diagnostic reports the operator ...
-		pos:  exprStart(operand), // ... while the rewrite starts at the operand
-		code: CodeSelfCompare,
-		line: exprStart(operand).Line,
-		why:  "a value compared with itself is a constant",
+		at:    d.Pos,              // the diagnostic reports the operator ...
+		pos:   exprStart(operand), // ... while the rewrite starts at the operand
+		code:  CodeSelfCompare,
+		line:  exprStart(operand).Line,
+		why:   msgID(i18n.MsgLintFixSelfCompareWhy),
+		shape: msgID(i18n.MsgLintFixNoCompareEmbedded),
 	}
 	if !pureExpr(operand) {
-		c.reason = "the operand calls or writes something, so evaluating it could have an effect the constant would drop"
+		c.reason = msgID(i18n.MsgLintFixNoOperandEffect)
+		return c
+	}
+	if root == "" {
+		c.reason = msgID(i18n.MsgLintFixNoOperandRead)
+		return c
+	}
+	if name := typeOf(operand); !builtinNoEq[name] || eqTypes[name] {
+		c.reason = msgID(i18n.MsgLintFixNoOperandType, name)
 		return c
 	}
 	c.need, c.needN = root, reads
-	if root == "" {
-		c.reason = "the operand is not a plain read, so its value cannot be shown to be constant here"
-		return c
-	}
-	c.reason = "the comparison shares its line with other code, so replacing the line would remove something else"
 	start := exprStart(operand)
 	c.build = func(sf srcLines) (Fix, bool) {
 		line := lineTextAt(sf, start.Line)
+		// The statement has to be exactly this comparison, alone on its line: nothing before it but
+		// indentation, nothing after it but a terminator and an optional comment. The front end
+		// carries no end position, so the comparison's own text is what has to account for the line.
+		if strings.TrimSpace(line[:start.Col-1]) != "" {
+			return Fix{}, false
+		}
 		if !stmtOnOwnLine(line, start.Col) {
 			return Fix{}, false
 		}
-		// Replace the comparison only, and keep the terminator and any trailing comment: the fix
-		// changes what the expression evaluates to, not the shape of the statement around it.
 		from, to := start.Col-1, stmtEnd(line, start.Col-1)
 		if to < from {
 			return Fix{}, false
@@ -631,4 +659,17 @@ func deleteLineIf(sf srcLines, line, col int, ok func(string, int) bool) (Fix, b
 		return Fix{}, false
 	}
 	return Fix{Line: line, From: 0, To: len(l), Text: "", Delete: true}, true
+}
+
+// operandType names the declared type of an operand, or "" when this file does not say. Only the
+// binding itself is read: the linter does not run the type checker, so a type it cannot name is one
+// whose equality cannot be shown to be the language's own, and the caller withholds the correction.
+func (l *linter) operandType(e Expr) string {
+	switch t := e.(type) {
+	case *Ident:
+		return declTypeOf(l, t.Name)
+	case *MemberExpr, *IndexExpr:
+		return "" // the element's type is the container's field or element type, which this walk does not track
+	}
+	return ""
 }
