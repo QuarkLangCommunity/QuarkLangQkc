@@ -434,7 +434,7 @@ space {
         return angle;
     }
 
-    // ---------- v2：transform ----------
+    // ---------- v2: transform ----------
     fn parenArg(String s, int startIdx) String {
         int i = startIdx;
         String out = "";
