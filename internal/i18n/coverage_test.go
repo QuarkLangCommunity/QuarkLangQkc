@@ -267,7 +267,7 @@ func TestDecouplingRatchet(t *testing.T) {
 // set was written the other way round, which also made Chinese the *default* rendering; the count may
 // only go down as those messages are migrated.
 func TestEnglishSourceRatchet(t *testing.T) {
-	const allowed = 271 // lowered from 318: the docgen domain migrated in step 4 (6 messages moved to IDs)
+	const allowed = 270 // lowered from 271: the shared domain migrated in step 4 (1 message moved to an ID)
 	wired := wiredTemplates(t)
 	n := 0
 	var sample []string

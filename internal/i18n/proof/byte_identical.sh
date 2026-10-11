@@ -115,8 +115,8 @@ git -C "$base_tree" checkout -q --detach "$baseline_rev" || exit 1
 build "$base_tree" "$work/bin/baseline-quark"
 build "$root" "$work/bin/prototype-quark"
 
-# run <binary> <lang> <file> -> the rendering, with the exit code appended
-run() { LANG=C.UTF-8 QK_LANG="$2" "$1" "$3" 2>&1; echo "rc=$?"; }
+# run <binary> <lang> [file] -> the rendering, with the exit code appended
+run() { LANG=C.UTF-8 QK_LANG="$2" "$1" ${3:+"$3"} 2>&1; echo "rc=$?"; }
 
 fail=0
 total=0
@@ -228,8 +228,41 @@ for f in "$doc_corpus"/*.qk; do
 done
 fail=$((fail + doc_fail))
 
+# ---- the shared domain: the compiler's own usage text ---------------------------------------------
+#
+# `qkc` with no arguments is the only way to reach this message, and it is the repository's own (domain
+# `shared`, one row). It is a Chinese-source row, and the one place the migration is interesting is that
+# the old design did NOT leak it: the English value was selected, so `QK_LANG=en qkc` already printed
+# English. Both languages are therefore asserted byte-identical, and there is no declared EN fix here.
+#
+#   $ QK_LANG=zh qkc    usage: qkc [options] <file.qk> … （默认） …     (before and after)
+#
+# The Chinese help is deliberately NOT extended with the `--lang` row the English text carries (the
+# English text is 20 lines, the Chinese 19, and that predates this commit). Migrating a domain moves
+# where the text lives, never which text is chosen, so the Chinese rendering stays exactly what it was;
+# inventing a translation to make the two columns look parallel is the retyping the migration forbids.
+# The asymmetry is reported in the commit message and §7.4, not papered over.
+build_qkc() { ( cd "$1/compiler" && go build -o "$2" . ) || { echo "qkc build failed: $1" >&2; exit 1; }; }
+build_qkc "$base_tree" "$work/bin/baseline-qkc"
+build_qkc "$root" "$work/bin/prototype-qkc"
+
+shared_fail=0
+for lang in en zh; do
+  b="$(run "$work/bin/baseline-qkc" "$lang")"
+  p="$(run "$work/bin/prototype-qkc" "$lang")"
+  total=$((total + 1))
+  if [ "$b" != "$p" ]; then
+    shared_fail=$((shared_fail + 1))
+    printf '%-3s %-30s DIFFERS\n' "$lang" "shared/usage"
+    diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | head -10
+  else
+    printf '%-3s %-30s identical (%d bytes)\n' "$lang" "shared/usage" "$(printf '%s' "$b" | wc -c)"
+  fi
+done
+fail=$((fail + shared_fail))
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
 fi
-echo "all identical (interpreter and qkdoc: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"
+echo "all identical (interpreter, qkdoc and qkc: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"
