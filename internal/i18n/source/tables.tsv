@@ -19,3 +19,4 @@ lint.tsv
 cli.tsv
 runtime.tsv
 fields.tsv
+typecheck.tsv

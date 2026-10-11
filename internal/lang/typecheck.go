@@ -177,7 +177,7 @@ func (c *checker) checkConstBitIndex(idx Expr, raw *Type) error {
 	if !ok || (n >= 0 && n < int64(raw.Bits)) {
 		return nil
 	}
-	return c.errf(posOf(idx), "CompileError: bit index %d is out of range for %s (0..%d)", n, raw, raw.Bits-1)
+	return c.errfID(posOf(idx), i18n.MsgTypecheckCompileerrorBitIndexDOutRange, n, raw, raw.Bits-1)
 }
 
 var kindName = map[tKind]string{
@@ -697,7 +697,7 @@ func Typecheck(prog *Program) error {
 			// Function overloads: same name appends (different signatures are fine; an identical one is an error)
 			for _, od := range c.overloads[f.Name] {
 				if sameSig(od, nfn) {
-					return &CheckError{Msg: fmt.Sprintf(msg("CompileError: duplicate overload %q (与已有签名相同)"), f.Name), Pos: f.Pos}
+					return &CheckError{Msg: fmt.Sprintf(msgID(i18n.MsgTypecheckCompileerrorDuplicateOverloadQIdenticalSignature), f.Name), Pos: f.Pos}
 				}
 			}
 			c.overloads[f.Name] = append(c.overloads[f.Name], nfn)
@@ -1111,6 +1111,15 @@ func (c *checker) errfID(pos Pos, id i18n.Msg, args ...interface{}) error {
 	return &CheckError{Msg: msgID(id, args...), Pos: pos}
 }
 
+// errfRendered builds an error from a message that is already rendered. It exists because a few call
+// sites pass a message *value* rather than a template -- overloadErr builds the wording in one place and
+// the site that knows the position uses it -- and the old table served them with a `"%s"` row so that
+// T("%s") would pass the text through. That row is scaffolding, not a message: it said nothing to a
+// translator and could not be translated, so it is deleted and the pass-through is named here instead.
+func (c *checker) errfRendered(pos Pos, rendered string) error {
+	return &CheckError{Msg: rendered, Pos: pos}
+}
+
 func (c *checker) paramType(p Param, pos Pos) (*Type, error) {
 	return c.substType(p.Type, c.curSubst, p.Pos)
 }
@@ -1199,7 +1208,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				return err
 			}
 			if c.curRet != nil && !passable(t, c.curRet) {
-				return c.errf(s.Pos, "TypeError: return type is %s, got %s", c.curRet, t)
+				return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorReturnTypeSGotS, c.curRet, t)
 			}
 			if c.curRet != nil {
 				if err := c.checkIfaceStrict(t, c.curRet, s.Pos, "return"); err != nil {
@@ -1210,7 +1219,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 		return nil
 	case *BreakStmt:
 		if c.loopDepth == 0 {
-			return c.errf(s.Pos, "CompileError: break 只能在 while/for 循环体内")
+			return c.errfID(s.Pos, i18n.MsgTypecheckCompileerrorBreakOnlyAllowedInsideWhile)
 		}
 		return nil
 	case *IfStmt:
@@ -1258,7 +1267,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				return err
 			}
 			if !assignable(elem, dt) {
-				return c.errf(s.Pos, "TypeError: for 迭代变量类型 %s 与元素类型 %s 不匹配", dt, it.Elem)
+				return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorForLoopVariableTypeS, dt, it.Elem)
 			}
 			if err := c.checkIfaceStrict(it.Elem, dt, s.Pos, "for 迭代变量"); err != nil {
 				return err
@@ -1308,10 +1317,10 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if sl, ok := s.Init.(*StructLit); ok && typ.Kind == tStruct && typ.FName != "." {
 				def, has := c.structs[typ.FName]
 				if !has {
-					return c.errf(s.Pos, "CompileError: unknown struct %q", typ.FName)
+					return c.errfID(s.Pos, i18n.MsgTypecheckCompileerrorUnknownStructQ, typ.FName)
 				}
 				if len(sl.Fields) != len(def.Types) {
-					return c.errf(s.Pos, "TypeError: %s 需要 %d 个字段，字面量给了 %d", typ.FName, len(def.Types), len(sl.Fields))
+					return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorSRequiresDFieldsBut, typ.FName, len(def.Types), len(sl.Fields))
 				}
 				for i, f := range sl.Fields {
 					fname := f.Name
@@ -1320,7 +1329,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 					}
 					ft, has := def.Types[fname]
 					if !has {
-						return c.errf(s.Pos, "TypeError: %s 没有字段 %q", typ.FName, fname)
+						return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorSNoFieldQ, typ.FName, fname)
 					}
 					fv, err := c.infer(f.X, sc)
 					if err != nil {
@@ -1335,7 +1344,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 						return err
 					}
 					if !assignable(fv, want) && !(isRawBits(want) && isIntConst(f.X)) {
-						return c.errf(s.Pos, "TypeError: 字段 %q: cannot assign %s to %s", f.Name, fv, want)
+						return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorFieldQCannotAssignS, f.Name, fv, want)
 					}
 					// a raw-bits or uchar field stores exactly its width (f is a copy: write the slice element)
 					sl.Fields[i].Bits = storeWidth(want)
@@ -1357,7 +1366,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				// An integer constant is materialized directly at a raw width (bits<8> a = 0xF0),
 				// because a constant is not a view value (spec §3.4).
 				if !assignable(it, typ) && !(isRawBits(typ) && isIntConst(s.Init)) {
-					return c.errf(s.Pos, "TypeError: cannot assign %s to %s", it, typ)
+					return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotAssignSS, it, typ)
 				}
 				// R2 reference rules apply to declarations too, not only to later assignments: a
 				// reference may not be parked in a wider-scoped variable, and a more restrictive
@@ -1366,10 +1375,10 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 					if src, ok := s.Init.(*Ident); ok {
 						if sv := sc.lookup(src.Name); sv != nil && isRefKind(sv.typ) {
 							if !refPermCovers(sv.refPerm, perm) {
-								return c.errf(s.Pos, msg("TypeError: cannot assign a %q reference to a %q reference (the source is more restrictive)", sv.refPerm, perm))
+								return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotAssignQReferenceQ, sv.refPerm, perm)
 							}
 							if refScopeRank(sv.refScope) < refScopeRank(scope) {
-								return c.errf(s.Pos, msg("TypeError: cannot store a %s-scoped reference in a %s-scoped variable (the variable would outlive the reference)", refScopeName(sv.refScope), refScopeName(scope)))
+								return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotStoreSScopedReference, refScopeName(sv.refScope), refScopeName(scope))
 							}
 						}
 					}
@@ -1398,16 +1407,16 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				return c.errfID(target.Pos, i18n.MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ, target.Name)
 			}
 			if v.isConst {
-				return c.errf(target.Pos, "CompileError: const 变量 %q 不可重新赋值", target.Name)
+				return c.errfID(target.Pos, i18n.MsgTypecheckCompileerrorConstVariableQCannotReassigned, target.Name)
 			}
 			// R2 permission enforcement (write side): writing through a reference requires the w
 			// permission. This is the same rule the compiler front end applies, and it is what makes
 			// "&r int p" read-only rather than merely documented as read-only.
 			if isRefKind(v.typ) && !refAllows(v.refPerm, "w") {
-				return c.errf(target.Pos, msg("TypeError: reference %q has permission %q and cannot be written through (w is missing)", target.Name, v.refPerm))
+				return c.errfID(target.Pos, i18n.MsgTypecheckTypeerrorReferenceQPermissionQCannotWrittenThrough, target.Name, v.refPerm)
 			}
 			if !assignable(t, v.typ) && !(isRawBits(v.typ) && isIntConst(s.X)) {
-				return c.errf(s.Pos, "TypeError: cannot assign %s to %s", t, v.typ)
+				return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotAssignSS, t, v.typ)
 			}
 			s.Bits = storeWidth(v.typ) // raw bits and uchar store exactly their width (spec §3.1)
 			// R2 permission enforcement (reference assignment): the source must grant everything the
@@ -1416,10 +1425,10 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				if src, isSrcIdent := s.X.(*Ident); isSrcIdent {
 					if sv := sc.lookup(src.Name); sv != nil && isRefKind(sv.typ) {
 						if !refPermCovers(sv.refPerm, v.refPerm) {
-							return c.errf(s.Pos, msg("TypeError: cannot assign a %q reference to a %q reference (the source is more restrictive)", sv.refPerm, v.refPerm))
+							return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotAssignQReferenceQ, sv.refPerm, v.refPerm)
 						}
 						if refScopeRank(sv.refScope) < refScopeRank(v.refScope) {
-							return c.errf(s.Pos, msg("TypeError: cannot store a %s-scoped reference in a %s-scoped variable (the variable would outlive the reference)", refScopeName(sv.refScope), refScopeName(v.refScope)))
+							return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotStoreSScopedReference, refScopeName(sv.refScope), refScopeName(v.refScope))
 						}
 					}
 				}
@@ -1442,7 +1451,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			case tBits:
 				// b[i] = v writes one bit (spec §3.3): the value is a bit, or an integer constant.
 				if !assignable(t, rawBitsOf(1)) && !isIntConst(s.X) {
-					return c.errf(target.Pos, "TypeError: cannot assign %s to %s[i] (%s)", t, recvT, rawBitsOf(1))
+					return c.errfID(target.Pos, i18n.MsgTypecheckTypeerrorCannotAssignSSI, t, recvT, rawBitsOf(1))
 				}
 				if err := c.checkConstBitIndex(target.Idx, recvT); err != nil {
 					return err
@@ -1451,10 +1460,10 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				s.Bits = 1
 			case tHashTable:
 				if recvT.Key != nil && !assignable(kidx, recvT.Key) {
-					return c.errf(target.Pos, "TypeError: 索引键需要 %s，给了 %s", recvT.Key, kidx)
+					return c.errfID(target.Pos, i18n.MsgTypecheckTypeerrorIndexKeyMustSGot, recvT.Key, kidx)
 				}
 				if recvT.Elem != nil && !assignable(t, recvT.Elem) {
-					return c.errf(target.Pos, "TypeError: 值需要 %s，给了 %s", recvT.Elem, t)
+					return c.errfID(target.Pos, i18n.MsgTypecheckTypeerrorValueMustSGotS, recvT.Elem, t)
 				}
 				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "table value"); err != nil {
 					return err
@@ -1464,7 +1473,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 					return c.errfID(target.Pos, i18n.MsgRuntimeTypeerrorListIndexInt)
 				}
 				if recvT.Elem != nil && !assignable(t, recvT.Elem) {
-					return c.errf(target.Pos, "TypeError: 值需要 %s，给了 %s", recvT.Elem, t)
+					return c.errfID(target.Pos, i18n.MsgTypecheckTypeerrorValueMustSGotS, recvT.Elem, t)
 				}
 				if err := c.checkIfaceStrict(t, recvT.Elem, target.Pos, "element"); err != nil {
 					return err
@@ -1483,7 +1492,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			}
 			def, ok := c.structs[objT.FName]
 			if !ok {
-				return c.errf(s.Pos, "TypeError: unknown struct %s", objT.FName)
+				return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorUnknownStructS, objT.FName)
 			}
 			fieldT, ok := def.Types[target.Name]
 			if !ok {
@@ -1494,7 +1503,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 				return err
 			}
 			if !assignable(t, ft) && !(isRawBits(ft) && isIntConst(s.X)) {
-				return c.errf(s.Pos, "TypeError: cannot assign %s to %s.%s (%s)", t, objT.FName, target.Name, ft)
+				return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorCannotAssignSSS, t, objT.FName, target.Name, ft)
 			}
 			s.Bits = storeWidth(ft)
 			if err := c.checkIfaceStrict(t, ft, s.Pos, objT.FName+"."+target.Name); err != nil {
@@ -1513,7 +1522,7 @@ func (c *checker) requireBool(e Expr, sc *cScope) error {
 		return err
 	}
 	if t.Kind != tBool {
-		return c.errf(posOf(e), "TypeError: condition must be bool, got %s", t)
+		return c.errfID(posOf(e), i18n.MsgTypecheckTypeerrorConditionMustBoolGotS, t)
 	}
 	return nil
 }
@@ -1598,7 +1607,7 @@ func (c *checker) infer(e Expr, sc *cScope) (*Type, error) {
 	c.depth++
 	if c.depth > MaxExprDepth {
 		c.depth--
-		return nil, c.errf(posOf(e), msg("CompileError: expression nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements", MaxExprDepth))
+		return nil, c.errfID(posOf(e), i18n.MsgTypecheckCompileerrorExpressionNestingDeeperThanD, MaxExprDepth)
 	}
 	t, err := c.inferNode(e, sc)
 	c.depth--
@@ -1648,17 +1657,17 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		// R2 move permission: advancing a reference is what m exists for.
 		id, ok := x.X.(*Ident)
 		if !ok {
-			return nil, c.errf(x.Pos, msg("TypeError: ++ moves a reference variable, got %s", exprKindName(x.X)))
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorMovesReferenceVariableGotS, exprKindName(x.X))
 		}
 		v := sc.lookup(id.Name)
 		if v == nil {
 			return nil, c.errf(x.Pos, msgID(i18n.MsgRuntimeCompileerrorUndeclaredIdentifierQ, id.Name))
 		}
 		if !isRefKind(v.typ) {
-			return nil, c.errf(x.Pos, msg("TypeError: ++ needs a reference (permission m), but %q is %s", id.Name, v.typ))
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorNeedsReferencePermissionMBut, id.Name, v.typ)
 		}
 		if !refAllows(v.refPerm, "m") {
-			return nil, c.errf(x.Pos, msg("TypeError: reference %q has permission %q and cannot move (m is missing)", id.Name, v.refPerm))
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorReferenceQPermissionQCannotMoveM, id.Name, v.refPerm)
 		}
 		return v.typ, nil
 	case *Ident:
@@ -1667,7 +1676,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		// through the scope directly), so a write-only reference stays assignable but unreadable.
 		if v := sc.lookup(x.Name); v != nil {
 			if isRefKind(v.typ) && !refAllows(v.refPerm, "r") {
-				return nil, c.errf(x.Pos, msg("TypeError: reference %q has permission %q and cannot be read (r is missing)", x.Name, v.refPerm))
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorReferenceQPermissionQCannot, x.Name, v.refPerm)
 			}
 		}
 		if c.libs != nil {
@@ -1689,7 +1698,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		}
 		if v := sc.lookup(x.Name); v != nil {
 			if !v.init {
-				return nil, c.errf(x.Pos, "CompileError: variable %q used before initialization", x.Name)
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckCompileerrorVariableQUsedBeforeInitialization, x.Name)
 			}
 			return v.typ, nil
 		}
@@ -1740,7 +1749,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 				return rawBitsOf(t.Bits), nil
 			}
 			if t.Kind != tInt && t.Kind != tUchar {
-				return nil, c.errf(x.Pos, "TypeError: the bitwise complement '~' requires an int operand, got %s", t)
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorBitwiseComplementTildeRequiresInt, t)
 			}
 			return tIntV, nil
 		case "*":
@@ -1772,7 +1781,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 			return t, nil
 		case "!":
 			if t.Kind != tBool {
-				return nil, c.errf(x.Pos, "TypeError: '!' requires bool, got %s", t)
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorBangRequiresBoolGotS, t)
 			}
 			return tBoolV, nil
 		}
@@ -1801,7 +1810,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 				return nil, err
 			}
 			if !isIntView(it) {
-				return nil, c.errf(x.Pos, "TypeError: a bit index must be int, got %s", it)
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorBitIndexMustIntGot, it)
 			}
 			if err := c.checkConstBitIndex(x.Idx, t); err != nil {
 				return nil, err
@@ -1810,14 +1819,14 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 			return rawBitsOf(1), nil
 		}
 		if t.Kind != tList && t.Kind != tPtr {
-			return nil, c.errf(x.Pos, "TypeError: indexing requires a List or a pointer block, got %s", t)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorIndexingRequiresListOrPointer, t)
 		}
 		it, err := c.infer(x.Idx, sc)
 		if err != nil {
 			return nil, err
 		}
 		if it.Kind != tInt {
-			return nil, c.errf(x.Pos, "TypeError: index must be int, got %s", it)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorIndexMustIntGotS, it)
 		}
 		return t.Elem, nil
 	}
@@ -1910,20 +1919,20 @@ func (c *checker) inferRawBin(x *BinOp, l, r *Type) (*Type, error) {
 		return rawBitsOf(w), nil
 	case "<<", ">>":
 		if lw == 0 {
-			return nil, c.errf(x.Pos, "TypeError: %s shifts raw bits, so the left operand must be raw bits, got %s", x.Op, l)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSShiftsRawBitsSo, x.Op, l)
 		}
 		// The shift count is a distance: raw bits of any width, or an integer view (spec §3.3).
 		if rw == 0 && !isIntView(r) {
-			return nil, c.errf(x.Pos, "TypeError: %s needs a shift count of int or raw bits, got %s", x.Op, r)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSNeedsShiftCountInt, x.Op, r)
 		}
 		x.Bits = lw
 		return rawBitsOf(lw), nil
 	case "+", "-", "*", "/", "%":
-		return nil, c.errf(x.Pos, "TypeError: raw bits admit no arithmetic: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)", x.Op, l, x.Op)
+		return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorRawBitsAdmitNoArithmetic, x.Op, l, x.Op)
 	case "<", "<=", ">", ">=":
-		return nil, c.errf(x.Pos, "TypeError: raw bits admit no ordering: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)", x.Op, l, x.Op)
+		return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorRawBitsAdmitNoOrdering, x.Op, l, x.Op)
 	}
-	return nil, c.errf(x.Pos, "TypeError: raw bits admit only & | ^ ~ << >> == != and b[i], not '%s' (spec §3.3)", x.Op)
+	return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorRawBitsAdmitOnlyB, x.Op)
 }
 
 // rawPairWidth returns the common width of two operands of a bitwise or equality operation on raw
@@ -1931,13 +1940,13 @@ func (c *checker) inferRawBin(x *BinOp, l, r *Type) (*Type, error) {
 func (c *checker) rawPairWidth(x *BinOp, l, r *Type, lw, rw int) (int, error) {
 	switch {
 	case lw != 0 && rw != 0 && lw != rw:
-		return 0, c.errf(x.Pos, "TypeError: %s and %s have different widths (%d and %d bits): a bitwise operation needs equal widths (spec §3.4)", l, r, lw, rw)
+		return 0, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSSDifferentWidthsD, l, r, lw, rw)
 	case lw != 0 && rw != 0:
 		return lw, nil
 	case lw != 0 && isIntConst(x.R), rw != 0 && isIntConst(x.L):
 		return lw + rw, nil // exactly one side is raw, and a constant is not a view value
 	}
-	return 0, c.errf(x.Pos, "TypeError: %s on %s and %s mixes raw bits with a view: both sides must be raw bits of one width (spec §3.3)", x.Op, l, r)
+	return 0, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSOnSSMixes, x.Op, l, r)
 }
 
 func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
@@ -1948,14 +1957,14 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 	switch x.Op {
 	case "&&", "||":
 		if l.Kind != tBool {
-			return nil, c.errf(x.Pos, "TypeError: %s requires bool operands, got %s", x.Op, l)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSRequiresBoolOperandsGot, x.Op, l)
 		}
 		r, err := c.infer(x.R, sc)
 		if err != nil {
 			return nil, err
 		}
 		if r.Kind != tBool {
-			return nil, c.errf(x.Pos, "TypeError: %s requires bool operands, got %s", x.Op, r)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSRequiresBoolOperandsGot, x.Op, r)
 		}
 		return tBoolV, nil
 	}
@@ -1983,7 +1992,7 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 			return tStringV, nil
 		}
 		if !isNumeric(l) || !isNumeric(r) {
-			return nil, c.errf(x.Pos, "TypeError: '+' requires numbers or a String, got %s and %s", l, r)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorPlusRequiresNumbersOrString, l, r)
 		}
 		if l.Kind == tFloat || r.Kind == tFloat {
 			return tFloatV, nil
@@ -1991,7 +2000,7 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 		return tIntV, nil
 	case "-", "*", "/", "%":
 		if !isNumeric(l) || !isNumeric(r) {
-			return nil, c.errf(x.Pos, "TypeError: arithmetic requires numbers, got %s and %s", l, r)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorArithmeticRequiresNumbersGotS, l, r)
 		}
 		if l.Kind == tFloat || r.Kind == tFloat {
 			return tFloatV, nil
@@ -1999,7 +2008,7 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 		return tIntV, nil
 	case "<<", ">>", "&", "|", "^":
 		if !isIntView(l) || !isIntView(r) {
-			return nil, c.errf(x.Pos, "TypeError: bitwise and shift operators require int operands, got %s and %s", l, r)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorBitwiseShiftOperatorsRequireInt, l, r)
 		}
 		return tIntV, nil // uchar promotes to the int view, like every other uchar operation
 	case "===":
@@ -2016,7 +2025,7 @@ func (c *checker) inferBin(x *BinOp, sc *cScope) (*Type, error) {
 			// same underlying block — which is what a handle-like type needs from ==.
 			(l.Kind == tInterface && r.Kind == tInterface)
 		if !ok {
-			return nil, c.errf(x.Pos, "TypeError: cannot compare %s and %s", l, r)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorCannotCompareSS, l, r)
 		}
 		return tBoolV, nil
 	case "<", "<=", ">", ">=":
@@ -2047,7 +2056,7 @@ func (c *checker) memberType(recv *Type, name string, pos Pos) (*Type, error) {
 			if ft, ok := recv.Fields[name]; ok {
 				return ft, nil
 			}
-			return nil, c.errf(pos, "TypeError: no member %q on 匿名结构体", name)
+			return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorNoMemberQOnAnonymous, name)
 		}
 		if def, ok := c.structs[recv.FName]; ok {
 			if typ, exists := def.Types[name]; exists {
@@ -2057,7 +2066,7 @@ func (c *checker) memberType(recv *Type, name string, pos Pos) (*Type, error) {
 		}
 	case tPtr:
 		if recv.Elem == nil { // opaque handle (FFI void*): no members
-			return nil, c.errf(pos, "TypeError: no member %q on pointer", name)
+			return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorNoMemberQOnPointer, name)
 		}
 		// Pointer member access dereferences automatically
 		return c.memberType(recv.Elem, name, pos)
@@ -2096,7 +2105,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 	case tInterface:
 		iface, ok := c.interfaces[recv.FName]
 		if !ok {
-			return nil, c.errf(pos, "TypeError: 未知接口 %q", recv.FName)
+			return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorUnknownInterfaceQ, recv.FName)
 		}
 		methods := append([]MethodSig{}, iface.Methods...)
 		for _, ex := range iface.Expands {
@@ -2114,7 +2123,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 					}
 				}
 				if len(args) != want {
-					return nil, c.errf(pos, "TypeError: %s.%s 需要 %d 个参数，给了 %d", recv.FName, name, want, len(args))
+					return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSSExpectsDArguments, recv.FName, name, want, len(args))
 				}
 				ret := sig.Ret
 				if ret == "" || ret == "void" {
@@ -2141,16 +2150,16 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return c.resolveType(ret, pos)
 			}
 		}
-		return nil, c.errf(pos, "TypeError: 接口 %s 没有方法 %q", recv.FName, name)
+		return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorInterfaceSNoMethodQ, recv.FName, name)
 	case tLib:
 		if c.libs == nil {
-			return nil, c.errf(pos, "TypeError: 未知系统库 %q", recv.FName)
+			return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorUnknownSystemLibraryQ, recv.FName)
 		}
 		lb := c.libs[recv.FName]
 		for _, fn := range lb.Methods {
 			if fn.Name == name {
 				if len(args) != len(fn.Params) {
-					return nil, c.errf(pos, "LibraryError: %s.%s 需要 %d 个参数，给了 %d", recv.FName, name, len(fn.Params), len(args))
+					return nil, c.errfID(pos, i18n.MsgTypecheckLibraryerrorSSExpectsDArguments, recv.FName, name, len(fn.Params), len(args))
 				}
 				for i, p := range fn.Params {
 					want := tFloatV
@@ -2162,7 +2171,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 						want = rt
 					}
 					if !assignable(args[i], want) {
-						return nil, c.errf(pos, "TypeError: %s.%s 参数 %s 需要 %s，给了 %s", recv.FName, name, p.Name, want, args[i])
+						return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSSArgumentSRequires, recv.FName, name, p.Name, want, args[i])
 					}
 				}
 				if fn.Ret == "" || fn.Ret == "void" {
@@ -2175,7 +2184,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return c.resolveType(ret, pos)
 			}
 		}
-		return nil, c.errf(pos, "LibraryError: 库 %s 没有导出函数 %q", recv.FName, name)
+		return nil, c.errfID(pos, i18n.MsgTypecheckLibraryerrorLibrarySNotExportFunction, recv.FName, name)
 	case tInt, tFloat, tBool:
 		if name == "toString" {
 			if err := c.checkArity(name, 0, len(args), pos); err != nil {
@@ -2183,7 +2192,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			return tStringV, nil
 		}
-		return nil, c.errf(pos, "TypeError: no method %q", name)
+		return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorNoMethodQ, name)
 	case tFile:
 		switch name {
 		case "read", "name":
@@ -2197,7 +2206,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			}
 			return tNilV, nil
 		}
-		return nil, c.errf(pos, "TypeError: file 没有方法 %q", name)
+		return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorFileNoMethodQ, name)
 	case tString:
 		switch name {
 		case "size", "indexOf", "toInt":
@@ -2221,16 +2230,16 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tString {
-				return nil, c.errf(pos, "TypeError: %s 需要 String 参数", name)
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSRequiresStringArgument, name)
 			}
 			return tBoolV, nil
 		case "substring":
 			if len(args) < 1 || len(args) > 2 {
-				return nil, c.errf(pos, "TypeError: substring(start, end?) 需要 1-2 个 int 参数")
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSubstringStartEndRequiresOne)
 			}
 			for _, a := range args {
 				if a.Kind != tInt {
-					return nil, c.errf(pos, "TypeError: substring 参数必须是 int")
+					return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSubstringArgumentsMustInts)
 				}
 			}
 			return tStringV, nil
@@ -2277,7 +2286,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tInt {
-				return nil, c.errf(pos, "TypeError: get(i) 需要 int 下标，得到 %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorGetIRequiresIntIndex, args[0])
 			}
 			return recv.Elem, nil
 		case "next":
@@ -2295,7 +2304,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if !assignable(args[0], recv.Elem) {
-				return nil, c.errf(pos, "TypeError: append expects %s, got %s", recv.Elem, args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorAppendExpectsSGotS, recv.Elem, args[0])
 			}
 			if err := c.checkIfaceStrict(args[0], recv.Elem, pos, "append"); err != nil {
 				return nil, err
@@ -2327,10 +2336,10 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if !assignable(args[0], recv.Key) {
-				return nil, c.errf(pos, "TypeError: put key expects %s, got %s", recv.Key, args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorPutKeyExpectsSGot, recv.Key, args[0])
 			}
 			if !assignable(args[1], recv.Val) {
-				return nil, c.errf(pos, "TypeError: put value expects %s, got %s", recv.Val, args[1])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorPutValueExpectsSGot, recv.Val, args[1])
 			}
 			if err := c.checkIfaceStrict(args[1], recv.Val, pos, "put value"); err != nil {
 				return nil, err
@@ -2407,7 +2416,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tString && args[0].Kind != tInputStream {
-				return nil, c.errf(pos, "TypeError: setIn requires a path String or an InputStream, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSetinRequiresPathStringOr, args[0])
 			}
 			return tNilV, nil
 		case "setOut":
@@ -2415,7 +2424,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tString && args[0].Kind != tOutputStream {
-				return nil, c.errf(pos, "TypeError: setOut requires a path String or an OutputStream, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSetoutRequiresPathStringOr, args[0])
 			}
 			return tNilV, nil
 		case "readln":
@@ -2442,10 +2451,10 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		switch name {
 		case "merge":
 			if len(args) < 1 {
-				return nil, c.errf(pos, "CompileError: thread.merge(fn, args...) requires at least 1 arg")
+				return nil, c.errfID(pos, i18n.MsgTypecheckCompileerrorThreadMergeFnArgsRequires)
 			}
 			if args[0].Kind != tFunc {
-				return nil, c.errf(pos, "TypeError: thread.merge second arg must be a function reference, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorThreadMergeSecondArgMust, args[0])
 			}
 			if args[0].FName != "" {
 				if fn, ok := c.fns[args[0].FName]; ok && len(fn.Params) != len(args)-1 {
@@ -2463,7 +2472,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tChannel {
-				return nil, c.errf(pos, "TypeError: thread.talk requires a channel, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorThreadTalkRequiresChannelGot, args[0])
 			}
 			return tNilV, nil
 		}
@@ -2489,7 +2498,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tInt {
-				return nil, c.errf(pos, "TypeError: setBlock(n) requires an int block size, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSetblockNRequiresIntBlock, args[0])
 			}
 			return tNilV, nil
 		}
@@ -2498,19 +2507,19 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		case "spawn":
 			// xmind: taskm.spawn() takes no arguments and returns a thread instance
 			if len(args) != 0 {
-				return nil, c.errf(pos, "CompileError: taskm.spawn() takes no args, got %d", len(args))
+				return nil, c.errfID(pos, i18n.MsgTypecheckCompileerrorTaskmSpawnTakesNoArgs, len(args))
 			}
 			return tTaskV, nil
 		case "merge":
 			// v2: taskm.merge(pid, fn, args...)
 			if len(args) < 2 {
-				return nil, c.errf(pos, "CompileError: taskm.merge(pid, fn, args...) requires at least 2 args, got %d", len(args))
+				return nil, c.errfID(pos, i18n.MsgTypecheckCompileerrorTaskmMergePidFnArgs, len(args))
 			}
 			if args[0].Kind != tInt {
-				return nil, c.errf(pos, "TypeError: taskm.merge first arg must be a pid (int), got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorTaskmMergeFirstArgMust, args[0])
 			}
 			if args[1].Kind != tFunc {
-				return nil, c.errf(pos, "TypeError: taskm.merge second arg must be a function reference, got %s", args[1])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorTaskmMergeSecondArgMust, args[1])
 			}
 			if args[1].FName != "" {
 				if fn, ok := c.fns[args[1].FName]; ok {
@@ -2523,7 +2532,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 							return nil, err
 						}
 						if !passable(args[i+2], pt) {
-							return nil, c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, args[i+2], pt)
+							return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorArgumentDSCannotAssign, i+1, fn.Name, args[i+2], pt)
 						}
 					}
 				}
@@ -2535,7 +2544,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 				return nil, err
 			}
 			if args[0].Kind != tTask && args[0].Kind != tInt {
-				return nil, c.errf(pos, "TypeError: taskm.block requires a pid, got %s", args[0])
+				return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorTaskmBlockRequiresPidGot, args[0])
 			}
 			return tNilV, nil
 		case "done":
@@ -2549,17 +2558,17 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		case "channel":
 			if len(args) == 1 {
 				if args[0].Kind != tInt {
-					return nil, c.errf(pos, "TypeError: taskm.channel(n) requires an int capacity, got %s", args[0])
+					return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorTaskmChannelNRequiresInt, args[0])
 				}
 			} else if len(args) != 0 {
-				return nil, c.errf(pos, "CompileError: taskm.channel() expects 0 or 1 args, got %d", len(args))
+				return nil, c.errfID(pos, i18n.MsgTypecheckCompileerrorTaskmChannelExpects0Or, len(args))
 			}
 			return tChannelV, nil
 		}
 	case tStruct:
 		defs := c.implDefsFor(recv.FName)
 		if len(defs) == 0 {
-			return nil, c.errf(pos, "TypeError: type %s has no impl", recv.FName)
+			return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorTypeSNoImpl, recv.FName)
 		}
 		if sd, ok := c.structs[recv.FName]; ok {
 			prev := c.curSubst
@@ -2576,7 +2585,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 					return nil, err
 				}
 				if !passable(args[i], pt) {
-					return nil, c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, name, args[i], pt)
+					return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorArgumentDSCannotAssign, i+1, name, args[i], pt)
 				}
 			}
 			if fn.Ret != "" {
@@ -2585,7 +2594,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			return tFuncBufferV, nil
 		}
 		if c.staticMeth(recv.FName, name) != nil {
-			return nil, c.errf(pos, "TypeError: %s is a static method; call it via %s::%s(...)", name, recv.FName, name)
+			return nil, c.errfID(pos, i18n.MsgTypecheckTypeerrorSStaticMethodCallVia, name, recv.FName, name)
 		}
 	case tPtr:
 		if recv.Elem == nil { // opaque handle (FFI void*): supports toString (hex rendering), no other methods
@@ -2656,12 +2665,12 @@ func typeWidth(t *Type) int {
 
 // convWidthErr is the diagnostic for a conversion whose operands do not line up in width (spec §3.4).
 func (c *checker) convWidthErr(dst, src *Type, pos Pos) error {
-	return c.errf(pos, "TypeError: %s(%s) is a width mismatch: %s is %d bits wide and %s is %d bits wide (spec §3.4)", dst, src, dst, typeWidth(dst), src, typeWidth(src))
+	return c.errfID(pos, i18n.MsgTypecheckTypeerrorSSWidthMismatchS, dst, src, dst, typeWidth(dst), src, typeWidth(src))
 }
 
 // convNotErr is the diagnostic for a conversion the spec does not define (spec §3.4).
 func (c *checker) convNotErr(dst, src *Type, pos Pos) error {
-	return c.errf(pos, "TypeError: %s(%s) is not a conversion: a reinterpretation needs a view of the same width, and a value conversion needs two integer views (spec §3.4)", dst, src)
+	return c.errfID(pos, i18n.MsgTypecheckTypeerrorSSNotConversionReinterpretation, dst, src)
 }
 
 // convResult types one conversion T(x): a reinterpretation, or a value conversion that narrows by
@@ -2721,7 +2730,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			}
 			id, ok := x.Fn.(*Ident)
 			if !ok {
-				return nil, c.errf(x.Pos, "TypeError: @styleConfigure 只能包装函数/方法调用")
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorStyleconfigureCanOnlyWrapFunction)
 			}
 			fn, ok := c.fns[id.Name]
 			if !ok {
@@ -2749,7 +2758,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 		}
 		// instance must be in scope (a Sign instance variable, any name)
 		if v := sc.lookup(x.Sign.Name); v == nil {
-			return nil, c.errf(x.Pos, "CompileError: @%s —— 签名名必须是作用域中的 Sign 实例变量（名字任意）", x.Sign.Name)
+			return nil, c.errfID(x.Pos, i18n.MsgTypecheckCompileerrorSSignatureNameMustSign, x.Sign.Name)
 		}
 		// Result type: the return type of the wrapped function fn
 		if fn.Ret != "" {
@@ -2800,7 +2809,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 					return nil, err
 				}
 			}
-			return nil, c.errf(id.Pos, "%s", overloadErrT(c.allDefs(id.Name), id.Name, len(x.Args)))
+			return nil, c.errfRendered(id.Pos, overloadErrT(c.allDefs(id.Name), id.Name, len(x.Args)))
 		}
 		if err := c.checkCallArgs(fn, x.Args, sc, x.Pos); err != nil {
 			return nil, err
@@ -2841,14 +2850,14 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			want = 2
 		}
 		if len(args) != want && len(args) != want+1 {
-			return nil, c.errf(id.Pos, "CompileError: %s expects %d args (可加 retries), got %d", id.Name, want, len(args))
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckCompileerrorSExpectsDArgsOptionally, id.Name, want, len(args))
 		}
 		if id.Name == "qkexec" && args[0].Kind != tString {
-			return nil, c.errf(id.Pos, "TypeError: qkexec requires a command String, got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorQkexecRequiresCommandStringGot, args[0])
 		}
 		if id.Name == "qkexecv" {
 			if args[0].Kind != tString || args[1].Kind != tList {
-				return nil, c.errf(id.Pos, "TypeError: qkexecv(prog String, args List<String>)")
+				return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorQkexecvProgStringArgsList)
 			}
 		}
 		return tIntV, nil
@@ -2857,15 +2866,15 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			return nil, err
 		}
 		if args[0].Kind != tString {
-			return nil, c.errf(id.Pos, "TypeError: qkpopen requires a path String, got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorQkpopenRequiresPathStringGot, args[0])
 		}
 		return tInputStreamV, nil
 	case "qkhttp_get":
 		if len(args) != 1 && len(args) != 2 {
-			return nil, c.errf(id.Pos, "CompileError: qkhttp_get expects 1-2 args (url[, retries]), got %d", len(args))
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckCompileerrorQkhttpGetExpects12, len(args))
 		}
 		if args[0].Kind != tString {
-			return nil, c.errf(id.Pos, "TypeError: qkhttp_get requires url String, got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorQkhttpGetRequiresUrlString, args[0])
 		}
 		return tStringV, nil
 	case "qkfile_read":
@@ -2880,7 +2889,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 		return tNilV, nil
 	case "qksignal_emit":
 		if len(args) < 2 {
-			return nil, c.errf(id.Pos, "CompileError: qksignal_emit(node, name String [, args...])")
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckCompileerrorQksignalEmitNodeNameString)
 		}
 		return tNilV, nil
 	case "qkjson_dumps":
@@ -2893,16 +2902,16 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			return nil, err
 		}
 		if args[0].Kind != tString {
-			return nil, c.errf(id.Pos, "TypeError: qkjson_loads requires String, got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorQkjsonLoadsRequiresStringGot, args[0])
 		}
 		return tAnyV, nil
 	case "qkhttp_post":
 		if len(args) != 3 && len(args) != 4 {
-			return nil, c.errf(id.Pos, "CompileError: qkhttp_post expects 3-4 args (url, body, ct[, retries]), got %d", len(args))
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckCompileerrorQkhttpPostExpects34, len(args))
 		}
 		for _, a := range args {
 			if a.Kind != tString {
-				return nil, c.errf(id.Pos, "TypeError: qkhttp_post(url, body, contentType) 全部为 String")
+				return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorQkhttpPostUrlBodyContenttype)
 			}
 		}
 		return tStringV, nil
@@ -2911,7 +2920,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			return nil, err
 		}
 		if args[0].Kind != tString {
-			return nil, c.errf(id.Pos, "TypeError: FileInputStream requires a path String, got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorFileinputstreamRequiresPathStringGot, args[0])
 		}
 		return tInputStreamV, nil
 	case "FileOutputStream", "ofstream":
@@ -2919,7 +2928,7 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 			return nil, err
 		}
 		if args[0].Kind != tString {
-			return nil, c.errf(id.Pos, "TypeError: FileOutputStream requires a path String, got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorFileoutputstreamRequiresPathStringGot, args[0])
 		}
 		return tOutputStreamV, nil
 	case "ConsoleInputStream":
@@ -2944,14 +2953,14 @@ func (c *checker) inferCall(x *CallExpr, sc *cScope) (*Type, error) {
 		return tIntV, nil
 	case "sum":
 		if len(args) != 3 && len(args) != 4 {
-			return nil, c.errf(id.Pos, "CompileError: sum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %d", len(args))
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckCompileerrorSumGenerateBeginStopStep, len(args))
 		}
 		if args[0].Kind != tFunc {
-			return nil, c.errf(id.Pos, "TypeError: sum 第一个参数必须是函数引用，got %s", args[0])
+			return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorSumSFirstArgumentMust, args[0])
 		}
 		for _, a := range args[1:] {
 			if a.Kind != tInt {
-				return nil, c.errf(id.Pos, "TypeError: sum 的边界参数必须是 int，got %s", a)
+				return nil, c.errfID(id.Pos, i18n.MsgTypecheckTypeerrorSumSBoundArgumentsMust, a)
 			}
 		}
 		return tIntV, nil
@@ -3029,19 +3038,19 @@ func (c *checker) checkCallArgs(fn *Func, args []Expr, sc *cScope, pos Pos) erro
 			// Strict interface-implementation check for interface parameters: a struct/interface argument must cover every interface method (dynamic dispatch guarantee)
 			if argTys[i].Kind == tStruct {
 				if err := c.checkImplements(argTys[i].FName, pt.FName); err != nil {
-					return c.errf(pos, "TypeError: argument %d of %s: %v", i+1, fn.Name, err)
+					return c.errfID(pos, i18n.MsgTypecheckTypeerrorArgumentDSV, i+1, fn.Name, err)
 				}
 			} else if argTys[i].Kind == tInterface {
 				if err := c.checkIfaceCovers(argTys[i].FName, pt.FName); err != nil {
-					return c.errf(pos, "TypeError: argument %d of %s: %v", i+1, fn.Name, err)
+					return c.errfID(pos, i18n.MsgTypecheckTypeerrorArgumentDSV, i+1, fn.Name, err)
 				}
 			} else if !passable(argTys[i], pt) {
-				return c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, argTys[i], pt)
+				return c.errfID(pos, i18n.MsgTypecheckTypeerrorArgumentDSCannotAssign, i+1, fn.Name, argTys[i], pt)
 			}
 			continue
 		}
 		if !passable(argTys[i], pt) {
-			return c.errf(pos, "TypeError: argument %d of %s: cannot assign %s to %s", i+1, fn.Name, argTys[i], pt)
+			return c.errfID(pos, i18n.MsgTypecheckTypeerrorArgumentDSCannotAssign, i+1, fn.Name, argTys[i], pt)
 		}
 		if err := c.checkIfaceStrict(argTys[i], pt, pos, fmt.Sprintf("argument %d of %s", i+1, fn.Name)); err != nil {
 			return err
@@ -3146,11 +3155,11 @@ func (c *checker) checkIfaceCovers(fromIface, toIface string) error {
 	for _, n := range c.ifaceMethodNames(toIface, map[string]bool{}) {
 		fsig, ok := c.methodSigOf(fromIface, n)
 		if !ok {
-			return errors.New(msg("接口 %s 缺少 %s 的方法 %q", fromIface, toIface, n))
+			return errors.New(msgID(i18n.MsgTypecheckInterfaceSMissingMethodQS, fromIface, toIface, n))
 		}
 		tsig, _ := c.methodSigOf(toIface, n)
 		if !sigCompatible(fsig, tsig) {
-			return errors.New(msg("接口 %s 的方法 %q 与 %s 的签名不兼容（按类型严格）", fromIface, n, toIface))
+			return errors.New(msgID(i18n.MsgTypecheckInterfaceSMethodQSignatureIncompatible, fromIface, n, toIface))
 		}
 	}
 	return nil
@@ -3193,14 +3202,14 @@ func (c *checker) typeArgsSubst(t *Type) map[string]*Type {
 func (c *checker) checkLiteral(t *Type, lit *ListLit, sc *cScope, pos Pos) error {
 	fn := c.staticMeth(t.FName, "__literal__")
 	if len(fn.Params) != 0 {
-		return c.errf(pos, "TypeError: %s.__literal__ must take no parameters", t.FName)
+		return c.errfID(pos, i18n.MsgTypecheckTypeerrorSLiteralMustTakeNo, t.FName)
 	}
 	appendFn := c.selfMeth(t.FName, "__element__")
 	if appendFn == nil {
-		return c.errf(pos, "TypeError: %s declares __literal__ but no __element__ to receive the elements", t.FName)
+		return c.errfID(pos, i18n.MsgTypecheckTypeerrorSDeclaresLiteralButNo, t.FName)
 	}
 	if len(appendFn.Params) != 2 {
-		return c.errf(pos, "TypeError: %s.__element__ must take exactly one element parameter", t.FName)
+		return c.errfID(pos, i18n.MsgTypecheckTypeerrorSElementMustTakeExactly, t.FName)
 	}
 	subst := c.typeArgsSubst(t)
 	if subst == nil {
@@ -3216,7 +3225,7 @@ func (c *checker) checkLiteral(t *Type, lit *ListLit, sc *cScope, pos Pos) error
 			return err
 		}
 		if !assignable(et, want) {
-			return c.errf(pos, "TypeError: literal element is %s, but %s.__element__ takes %s", et, t.FName, want)
+			return c.errfID(pos, i18n.MsgTypecheckTypeerrorLiteralElementSButS, et, t.FName, want)
 		}
 	}
 	return nil
@@ -3229,11 +3238,11 @@ func (c *checker) checkIfaceStrict(from, to *Type, pos Pos, what string) error {
 	switch from.Kind {
 	case tInterface:
 		if err := c.checkIfaceCovers(from.FName, to.FName); err != nil {
-			return c.errf(pos, "TypeError: %s: %v", what, err)
+			return c.errfID(pos, i18n.MsgTypecheckTypeerrorSV, what, err)
 		}
 	case tStruct:
 		if err := c.checkImplements(from.FName, to.FName); err != nil {
-			return c.errf(pos, "TypeError: %s: %v", what, err)
+			return c.errfID(pos, i18n.MsgTypecheckTypeerrorSV, what, err)
 		}
 	}
 	return nil
@@ -3243,7 +3252,7 @@ func (c *checker) checkIfaceStrict(from, to *Type, pos Pos, what string) error {
 func (c *checker) checkImplements(typ, iface string) error {
 	def, ok := c.interfaces[iface]
 	if !ok {
-		return errors.New(msg("未知接口 %s", iface))
+		return errors.New(msgID(i18n.MsgTypecheckUnknownInterfaceS, iface))
 	}
 	if def.Partial {
 		return nil // optional implementation: no full coverage required
@@ -3256,7 +3265,7 @@ func (c *checker) checkImplements(typ, iface string) error {
 	}
 	for _, sig := range methods {
 		if c.selfMeth(typ, sig.Name) == nil {
-			return errors.New(msg("类型 %s 未实现接口方法 %q", typ, sig.Name))
+			return errors.New(msgID(i18n.MsgTypecheckTypeSNotImplementInterfaceMethod, typ, sig.Name))
 		}
 	}
 	return nil
@@ -3293,7 +3302,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 				return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorIoSetinSFirstArg, args[0])
 			}
 			if args[1].Kind != tString && args[1].Kind != tInputStream {
-				return nil, c.errf(x.Pos, "TypeError: IO::setIn requires a path String or an InputStream, got %s", args[1])
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorIoSetinRequiresPathString, args[1])
 			}
 			return tNilV, nil
 		case "setOut":
@@ -3304,7 +3313,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 				return nil, c.errfID(x.Pos, i18n.MsgFieldTypeerrorIoSetoutSFirstArg, args[0])
 			}
 			if args[1].Kind != tString && args[1].Kind != tOutputStream {
-				return nil, c.errf(x.Pos, "TypeError: IO::setOut requires a path String or an OutputStream, got %s", args[1])
+				return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorIoSetoutRequiresPathString, args[1])
 			}
 			return tNilV, nil
 		}
@@ -3333,7 +3342,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 		for _, def := range defs {
 			if fn, ok := def.Methods[x.Name]; ok {
 				if len(fn.Params) != len(args) {
-					return nil, c.errf(x.Pos, "CompileError: %s::%s expects %d args, got %d", x.Scope, x.Name, len(fn.Params), len(args))
+					return nil, c.errfID(x.Pos, i18n.MsgTypecheckCompileerrorSSExpectsDArgs, x.Scope, x.Name, len(fn.Params), len(args))
 				}
 				for i, p := range fn.Params {
 					pt, err := c.paramType(p, x.Pos)
@@ -3341,7 +3350,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 						return nil, err
 					}
 					if !passable(args[i], pt) {
-						return nil, c.errf(x.Pos, "TypeError: argument %d of %s::%s: cannot assign %s to %s", i+1, x.Scope, x.Name, args[i], pt)
+						return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorArgumentDSSCannot, i+1, x.Scope, x.Name, args[i], pt)
 					}
 				}
 				if fn.Ret != "" {
@@ -3350,7 +3359,7 @@ func (c *checker) inferScope(x *ScopeCall, sc *cScope) (*Type, error) {
 				return tFuncBufferV, nil
 			}
 		}
-		return nil, c.errf(x.Pos, "TypeError: %s has no static method %q", x.Scope, x.Name)
+		return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorSNoStaticMethodQ, x.Scope, x.Name)
 	}
 	return nil, c.errfID(x.Pos, i18n.MsgFieldCompileerrorUnknownScopeQ, x.Scope)
 }

@@ -201,6 +201,8 @@ field_sig_wrap	TypeError: a signature can only wrap a direct function call	TypeE
 field_assign_undecl	CompileError: assignment to undeclared identifier %q	CompileError: 对未声明的标识符 %q 赋值
 field_undecl_read	CompileError: undeclared identifier %q	CompileError: 未声明的标识符 %q
 field_unknown_scope	CompileError: unknown scope %q	CompileError: 未知的作用域 %q
+typecheck_condition	TypeError: condition must be bool, got %s	TypeError: 条件必须是 bool，得到 %s
+typecheck_condition_while	TypeError: condition must be bool, got %s	TypeError: 条件必须是 bool，得到 %s
 TSV
 
 build_field() { ( cd "$1" && go build -o "$2" ./cmd/qkrepl ) || { echo "qkrepl build failed: $1" >&2; exit 1; }; }
@@ -269,6 +271,14 @@ field_case "field_sig_wrap" 'Any l = [1]; l.get(0) @nope(x)'
 field_case "field_assign_undecl" 'nope = 1'
 field_case "field_undecl_read" 'log nope'
 field_case "field_unknown_scope" 'log Nope::f()'
+
+# --- the typecheck domain's one declared ZH fix. It is the same shape as the struct-field pass: the
+#     literal never reached a localizer, so the catalog's Chinese for it was unreachable and a Chinese
+#     reader got English. The checker has the message too, but a dynamically typed condition reaches the
+#     evaluator's copy first, which is why this snippet is the one that shows it.
+field_case "typecheck_condition" 'Any a = 1; if (a) { log 1; }'
+field_case "typecheck_condition_while" 'Any a = "s"; while (a) { }'
+
 fail=$((fail + field_fail))
 
 if [ "$fail" -ne 0 ]; then
@@ -716,4 +726,7 @@ if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
 fi
-echo "all identical (interpreter, qkdoc, qkc, repl, qkcheck: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared fix (EN: step 3; ZH: the struct-field pass)]"
+# The count is of cases that took a fix branch, and which domains those are depends on what the baseline
+# already carries: the fixes of a domain that has merged are in origin/main, so its cases are identical
+# here and only the newly migrated ones are counted. That is why the number moves down as PRs land.
+echo "all identical (interpreter, qkdoc, qkc, repl, qkcheck: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared fix]"

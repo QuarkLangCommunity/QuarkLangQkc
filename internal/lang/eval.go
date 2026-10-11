@@ -3761,7 +3761,7 @@ func truthy(v Value) (bool, error) {
 	if v.IsBool() {
 		return v.Bool(), nil
 	}
-	return false, fmt.Errorf("TypeError: condition must be bool, got %s", v.TypeName())
+	return false, errors.New(msgID(i18n.MsgTypecheckTypeerrorConditionMustBoolGotS, v.TypeName()))
 }
 
 func isCopydType(t string) bool { return strings.Contains(t, "Copyd") }
