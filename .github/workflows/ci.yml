@@ -125,6 +125,12 @@ jobs:
           /tmp/qkcheck --version && /tmp/qkdoc --version && /tmp/qkrepl --version && /tmp/qklsp --version
       - name: Linter self-check (qkcheck over this repo corpus; -exit0 = report mode, the gate lives in the Go snapshot test)
         run: /tmp/qkcheck -exit0 examples compiler/testdata
+      - name: Corrections preserve behaviour (a -fix run must not change what a program does)
+        run: |
+          go build -o /tmp/qkc-fix-check ./cmd/qkcheck
+          (cd compiler && go build -o /tmp/qkc-fix-compiler .)
+          bash scripts/fix-preserves-behaviour.sh /tmp/qkc-fix-check /tmp/quark /tmp/qkc-fix-compiler \
+            examples compiler/testdata internal/lang/testdata
       - name: "Editors: tree-sitter grammar (optional; runs when the CLI is installed)"
         run: |
           if command -v tree-sitter >/dev/null 2>&1; then

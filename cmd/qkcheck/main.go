@@ -7,10 +7,16 @@
 //	-no-typecheck  Syntax + static checks only, no type checking
 //	-L dir         Append an import search directory (repeatable; same directory takes priority)
 //	-exit0         Exit 0 even with diagnostics (report only, never blocks)
-//	--lang           Output language zh|en (QK_LANG, then LC_ALL/LC_MESSAGES/LANG; English if none is set)
+//	-fix           Apply every mechanical correction in place, then re-check and report what remains
+//	-check         Write nothing and exit non-zero when a correction is pending (the CI form; -dry-run is an alias)
+//	--lang         Output language zh|en (QK_LANG, then LC_ALL/LC_MESSAGES/LANG; English if none is set)
 //	--version      Print version
 //
-// Exit codes: 0 = no diagnostics; 1 = errors or warnings; 2 = usage error.
+// A diagnostic that has a mechanical correction prints it: the corrected line, not only what is
+// wrong. The corrections and the reasons a diagnostic has none are inventoried in README.md.
+//
+// Exit codes: 0 = no diagnostics; 1 = errors or warnings; 2 = usage error; 3 = -check found a pending
+// correction and wrote nothing.
 package main
 
 import (
@@ -31,6 +37,9 @@ import (
 // version is the release version, injected at build time with -ldflags "-X main.version=vX.Y.Z" (see scripts/build-release.sh)
 var version = "dev"
 
+// exitFixPending is the -check exit code: corrections are pending and nothing was written.
+const exitFixPending = 3
+
 type finding struct {
 	File string `json:"file"`
 	Line int    `json:"line"`
@@ -38,6 +47,13 @@ type finding struct {
 	Sev  string `json:"severity"` // error | warning
 	Code string `json:"code,omitempty"`
 	Msg  string `json:"message"`
+	// Fix is the mechanical correction, when this diagnostic has one: the corrected line, how it is
+	// applied, and why it is right. A diagnostic without a fix is one whose correction needs a human
+	// decision (see README.md).
+	Fix *lang.Fix `json:"fix,omitempty"`
+	// NoFix says why no correction could be applied to a diagnostic that is mechanically fixable in
+	// principle (for example a declaration whose initializer is a dead store).
+	NoFix string `json:"no_fix,omitempty"`
 }
 
 func (f finding) String() string {
@@ -59,7 +75,7 @@ func usage(w io.Writer) {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	jsonOut, params, typecheck, exit0 := false, false, true, false
+	jsonOut, params, typecheck, exit0, fixMode, checkMode := false, false, true, false, false, false
 	var files, libDirs []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -72,6 +88,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 			typecheck = false
 		case "-exit0":
 			exit0 = true
+		case "-fix", "--fix":
+			fixMode = true
+		case "-check", "--check", "-dry-run", "--dry-run":
+			checkMode = true
 		case "-L":
 			if i+1 >= len(args) {
 				fmt.Fprintln(stderr, msgID(i18n.MsgCliCheckLNeedsDirectory))
@@ -84,7 +104,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 				i++
 				if l, ok := i18n.ParseLang(args[i]); ok {
 					i18n.SetLocale(l)
-					lang.SetLocalizer(i18n.New(l)) // interpreter diagnostics follow the same language
 				} // zh | en; unknown values keep the current locale
 			}
 		case "--version", "-V":
@@ -102,12 +121,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 			files = append(files, a)
 		}
 	}
+	// -fix applies, -check only reports what -fix would do: asking for both is a usage error rather
+	// than a silent choice between them.
+	if fixMode && checkMode {
+		fmt.Fprint(stderr, msgID(i18n.MsgCliCheckFixFlagConflict))
+		return 2
+	}
 	if len(files) == 0 {
 		usage(stderr)
 		return 2
 	}
 
-	var all []finding
 	files, err := expandArgs(files)
 	if err != nil {
 		fmt.Fprintln(stderr, "qkcheck:", err)
@@ -117,13 +141,53 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, msgID(i18n.MsgCliCheckNoFiles))
 		return 2
 	}
+
+	opts := checkOptions{params: params, typecheck: typecheck, libDirs: libDirs}
+	var all []finding
+	pending, wrote := 0, false
 	for _, f := range files {
-		fs, code := checkFile(f, checkOptions{params: params, typecheck: typecheck, libDirs: libDirs}, stderr)
-		if code != 0 {
-			return code
+		var fs []finding
+		var code int
+		if fixMode {
+			fs, code = fixFile(f, opts, stdout, stderr)
+			if code != 0 {
+				return code
+			}
+		} else {
+			fs, code = checkFile(f, opts, stderr)
+			if code != 0 {
+				return code
+			}
+		}
+		for _, x := range fs {
+			if x.Fix != nil {
+				pending++
+			}
 		}
 		all = append(all, fs...)
 	}
+	sortFindings(all)
+
+	report(all, jsonOut, checkMode, stdout)
+
+	if len(all) == 0 {
+		return 0
+	}
+	if checkMode && pending > 0 {
+		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixPending), pending)
+		return exitFixPending
+	}
+	if exit0 {
+		return 0
+	}
+	if !jsonOut {
+		printSummary(stdout, all, wrote)
+	}
+	return 1
+}
+
+// sortFindings puts the findings of every file in report order (file, then position, then message).
+func sortFindings(all []finding) {
 	sort.SliceStable(all, func(i, j int) bool {
 		if all[i].File != all[j].File {
 			return all[i].File < all[j].File
@@ -136,7 +200,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return all[i].Msg < all[j].Msg
 	})
+}
 
+// report prints the findings: as JSON, or line by line with the proposed correction under each one
+// that has a correction, and the reason under each that has none but is mechanically fixable.
+// checkMode only adds the note that nothing was written.
+func report(all []finding, jsonOut, checkMode bool, stdout io.Writer) {
 	if jsonOut {
 		if all == nil {
 			all = []finding{}
@@ -144,29 +213,44 @@ func run(args []string, stdout, stderr io.Writer) int {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(all); err != nil {
-			fmt.Fprintln(stderr, "qkcheck:", err)
-			return 2
+			fmt.Fprintln(stdout, "qkcheck:", err)
 		}
-	} else {
-		for _, f := range all {
-			fmt.Fprintln(stdout, f.String())
+		return
+	}
+	for _, f := range all {
+		fmt.Fprintln(stdout, f.String())
+		switch {
+		case f.Fix != nil && f.Fix.Delete:
+			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixDelete), f.Fix.Why)
+		case f.Fix != nil:
+			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixReplace), f.Fix.Replacement(), f.Fix.Why)
+		case f.NoFix != "":
+			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixSkipped), f.NoFix)
 		}
-		if n := len(all); n > 0 {
-			errs, warns := 0, 0
-			for _, f := range all {
-				if f.Sev == "error" {
-					errs++
-				} else {
-					warns++
-				}
-			}
-			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckSummary), n, errs, warns)
+		if checkMode && f.Fix != nil {
+			fmt.Fprint(stdout, msgID(i18n.MsgCliCheckFixFlagged))
 		}
 	}
-	if exit0 || len(all) == 0 {
-		return 0
+}
+
+// printSummary prints the counts line, and - after a run that rewrote something - how many findings no
+// fix applies to. Nothing is ever dropped silently: those findings were printed above.
+func printSummary(stdout io.Writer, all []finding, wrote bool) {
+	errs, warns, unfixed := 0, 0, 0
+	for _, f := range all {
+		if f.Sev == "error" {
+			errs++
+		} else {
+			warns++
+		}
+		if f.Fix == nil {
+			unfixed++
+		}
 	}
-	return 1
+	fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckSummary), len(all), errs, warns)
+	if wrote && unfixed > 0 {
+		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixRemaining), unfixed)
+	}
 }
 
 type checkOptions struct {
@@ -175,6 +259,9 @@ type checkOptions struct {
 	libDirs   []string
 }
 
+// checkFile checks one file and returns its findings. A correction is attached to every finding that
+// has one; a finding that is mechanically fixable in principle but cannot be corrected in this
+// position carries the reason instead (NoFix), so a -fix run can never silently drop it.
 func checkFile(path string, opts checkOptions, stderr io.Writer) ([]finding, int) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -182,14 +269,22 @@ func checkFile(path string, opts checkOptions, stderr io.Writer) ([]finding, int
 		return nil, 2
 	}
 	src := string(data)
+	return checkSource(path, src, opts), 0
+}
+
+// checkSource is the check itself, over source the caller already holds.
+func checkSource(path, src string, opts checkOptions) []finding {
 	var out []finding
 
-	// 1) Single-file front end: positions are file line numbers, static checks run in that coordinate space
+	// 1) Single-file front end: positions are file line numbers, static checks run in that coordinate space.
+	// The correction is computed against src, the text the author wrote and a -fix run rewrites.
 	prog, perr := lang.ParseSource(src)
 	if perr != nil {
-		return append(out, compileFinding(path, perr)), 0
+		return append(out, compileFinding(path, perr))
 	}
-	out = append(out, lintFindings(path, lang.Lint(prog, lang.LintOptions{Params: opts.params}))...)
+	lintOpts := lang.LintOptions{Params: opts.params, File: path, LibDirs: opts.libDirs, OrigSrc: src}
+	res := lang.LintReport(prog, lintOpts)
+	out = append(out, lintFindings(path, res.Diags, res.Plan)...)
 
 	// 2) Type checking
 	//
@@ -205,16 +300,101 @@ func checkFile(path string, opts checkOptions, stderr io.Writer) ([]finding, int
 			out = append(out, mappedCompileFinding(path, sm, cerr))
 		}
 	}
-	return out, 0
+	return out
 }
 
-func lintFindings(file string, diags []lang.Diag) []finding {
+// fixFile applies every correction the checks propose to path, then checks the result again and
+// returns what remains. It repeats while a correction still applies, because one correction can expose
+// another (deleting `x = x;` between two writes can make the write it carried dead as well); the loop
+// is bounded, and reaching the bound is reported rather than looped on.
+func fixFile(path string, opts checkOptions, stdout, stderr io.Writer) ([]finding, int) {
+	const maxPasses = 8
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(stderr, "qkcheck:", err)
+		return nil, 2
+	}
+	src, lines, capped := string(data), 0, false
+	for pass := 0; pass < maxPasses; pass++ {
+		fixed, n := fixOnce(path, src, opts)
+		if n == 0 {
+			break
+		}
+		if fixed == src {
+			break // a pass that changes nothing must not become a loop
+		}
+		src, lines = fixed, lines+n
+		if pass == maxPasses-1 {
+			capped = true // the bound was reached; the report says so rather than looping on
+		}
+	}
+	final := checkSource(path, src, opts)
+	if capped {
+		// A correction can expose another, so the loop runs until nothing applies; if it hits the bound
+		// with corrections still pending, the user has to know the file may not be settled yet.
+		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixCapped), maxPasses)
+	}
+	if lines > 0 {
+		// Write only when something changed, and keep the file's own permissions: -fix rewrites the
+		// bytes the checks rewrote, nothing else.
+		if err := writePreservingMode(path, src); err != nil {
+			fmt.Fprintln(stderr, "qkcheck:", err)
+			return nil, 2
+		}
+		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixWrote), path, lines)
+	}
+	return final, 0
+}
+
+// fixOnce computes the corrections of one pass over src: the corrected source and how many lines it
+// rewrote. The findings of that pass are not reported - the caller re-checks the result and reports
+// that, which is the report the user's file now deserves.
+func fixOnce(path, src string, opts checkOptions) (string, int) {
+	prog, perr := lang.ParseSource(src)
+	if perr != nil {
+		return src, 0 // a file that does not parse has no mechanical correction
+	}
+	res := lang.LintReport(prog, lang.LintOptions{
+		Params: opts.params, File: path, LibDirs: opts.libDirs, OrigSrc: src,
+	})
+	if res.Plan == nil || res.Plan.Pending() == 0 {
+		return src, 0
+	}
+	return res.Fixed, res.Plan.Pending()
+}
+
+// writePreservingMode rewrites a file's bytes without changing its permissions.
+func writePreservingMode(path, src string) error {
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	return os.WriteFile(path, []byte(src), mode)
+}
+
+// lintFindings turns the checker's diagnostics into findings, carrying each correction and the reason
+// a diagnostic that could have had one does not (plan.Skip). A diagnostic is never dropped by the
+// conversion: a missing correction adds NoFix to it, it does not remove it.
+func lintFindings(file string, diags []lang.Diag, plan *lang.FixPlan) []finding {
 	out := make([]finding, 0, len(diags))
 	for _, d := range diags {
 		out = append(out, finding{
 			File: file, Line: d.Pos.Line, Col: d.Pos.Col,
-			Sev: d.Sev, Code: d.Code, Msg: d.Msg,
+			Sev: d.Sev, Code: d.Code, Msg: d.Msg, Fix: d.Fix,
 		})
+	}
+	if plan == nil {
+		return out
+	}
+	// Match a skip to its diagnostic by code and line: SkipReason carries no column, and two
+	// diagnostics of one code on one line is not a shape the linter produces.
+	for _, sk := range plan.Skip {
+		for i := range out {
+			if out[i].Code == sk.Code && out[i].Line == sk.Line && out[i].Fix == nil && out[i].NoFix == "" {
+				out[i].NoFix = sk.Reason
+				break
+			}
+		}
 	}
 	return out
 }

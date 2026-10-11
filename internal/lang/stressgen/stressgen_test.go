@@ -46,7 +46,7 @@ func TestCorpusShape(t *testing.T) {
 			t.Errorf("%s: no description", c.Name)
 		}
 		switch c.Category {
-		case CategoryScale, CategoryPathological, CategoryMalformed, CategoryResource:
+		case CategoryScale, CategoryPathological, CategoryMalformed, CategoryResource, CategoryFixable:
 		default:
 			t.Errorf("%s: unknown category %q", c.Name, c.Category)
 		}

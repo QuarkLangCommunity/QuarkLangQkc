@@ -126,533 +126,560 @@ const (
 	MsgLintInterfaceNearMiss                                       Msg = 112
 	MsgLintKindParameter                                           Msg = 113
 	MsgLintKindVariable                                            Msg = 114
-	MsgCliReplLoadNeedsFile                                        Msg = 115
-	MsgCliReplUnknownCommand                                       Msg = 116
-	MsgCliLspLNeedsDirectory                                       Msg = 117
-	MsgCliLspUsage                                                 Msg = 118
-	MsgCliLspUnknownArgument                                       Msg = 119
-	MsgCliLspDocumentNotOpened                                     Msg = 120
-	MsgCliLspInvalidContentLength                                  Msg = 121
-	MsgCliLspMissingContentLength                                  Msg = 122
-	MsgCliCheckLNeedsDirectory                                     Msg = 123
-	MsgCliCheckUnknownArgument                                     Msg = 124
-	MsgCliCheckNoFiles                                             Msg = 125
-	MsgCliCheckSummary                                             Msg = 126
-	MsgCliDocONeedsFile                                            Msg = 127
-	MsgCliDocTitleNeedsArgument                                    Msg = 128
-	MsgCliDocUnknownArgument                                       Msg = 129
-	MsgCliDocWroteFile                                             Msg = 130
-	MsgCliReplENeedsCode                                           Msg = 131
-	MsgCliReplUnknownArgument                                      Msg = 132
-	MsgCliReplBanner                                               Msg = 133
-	MsgCliDocHelpLine                                              Msg = 134
-	MsgCliReplHelpLine                                             Msg = 135
-	MsgCliQuarklangStaticAnalysisQk101Qk115Unused                  Msg = 136
-	MsgCliInterfaceNearMissVoidMisuseSelf                          Msg = 137
-	MsgCliCheckUsage                                               Msg = 138
-	MsgCliDocUsage                                                 Msg = 139
-	MsgCliReplUsage                                                Msg = 140
-	MsgCliReplHelpText                                             Msg = 141
-	MsgCliLspJsonParseFailedReply                                  Msg = 142
-	MsgCliLspMethodNotImplemented                                  Msg = 143
-	MsgCliCheckHelpLines                                           Msg = 144
-	MsgRuntimeRunerrorErrorRunLibraryProgramLibrary                Msg = 145
-	MsgRuntimeParseerrorQValidInteger                              Msg = 146
-	MsgRuntimeParseerrorQValidFloat                                Msg = 147
-	MsgRuntimeCompileerrorMatchingOverloadQArgument                Msg = 148
-	MsgRuntimeExportlibraryProgramLibraryExportLibrary             Msg = 149
-	MsgRuntimeImporterrorFindQLookedSQkSQlibUnder                  Msg = 150
-	MsgRuntimeTypeerrorListIndexInt                                Msg = 151
-	MsgRuntimeTypeerrorIndexedAssignmentSupportedS                 Msg = 152
-	MsgRuntimeTypeerrorGetIRequiresIntIndex                        Msg = 153
-	MsgRuntimeStringindexoutofboundserrorSubstringDD               Msg = 154
-	MsgRuntimeStringindexoutofboundserrorCharatDOut                Msg = 155
-	MsgRuntimeTypeerrorContainsRequiresStringArgument              Msg = 156
-	MsgRuntimeTypeerrorStartswithRequiresString                    Msg = 157
-	MsgRuntimeTypeerrorEndswithRequiresStringArgument              Msg = 158
-	MsgRuntimeTypeerrorIndexofRequiresStringArgument               Msg = 159
-	MsgRuntimeTypeerrorSubstringStartEndRequiresInt                Msg = 160
-	MsgRuntimeTypeerrorSubstringEndInt                             Msg = 161
-	MsgRuntimeTypeerrorSplitRequiresStringSeparator                Msg = 162
-	MsgRuntimeTypeerrorReplaceOldNewRequiresString                 Msg = 163
-	MsgRuntimeTypeerrorCharatRequiresIntIndex                      Msg = 164
-	MsgRuntimeIoerrorExecuteCommandV                               Msg = 165
-	MsgRuntimeIoerrorStartProgramV                                 Msg = 166
-	MsgRuntimeIoerrorCommandFailedV                                Msg = 167
-	MsgRuntimeIoerrorQkpopenOutputExceedsMbLimit                   Msg = 168
-	MsgRuntimeIoerrorRequestFailedV                                Msg = 169
-	MsgRuntimeIoerrorFailedReadResponseV                           Msg = 170
-	MsgRuntimeIoerrorResponseExceedsMibLimit                       Msg = 171
-	MsgRuntimeHttperrorStatusCodeD                                 Msg = 172
-	MsgRuntimeTypeerrorQkexecvArgumentListString                   Msg = 173
-	MsgRuntimeTypeerrorQkpopenCmdStringRequiresString              Msg = 174
-	MsgRuntimeTypeerrorQkjsonDumpsVRequiresOne                     Msg = 175
-	MsgRuntimeLibraryerrorLibrarySDoesDeclareFunction              Msg = 176
-	MsgRuntimeLibraryerrorSTooFewArguments                         Msg = 177
-	MsgRuntimeTypeerrorSArgumentSRequiresPointerNull               Msg = 178
-	MsgRuntimeTypeerrorSArgumentSRequiresIntBool                   Msg = 179
-	MsgRuntimeTypeerrorSArgumentSRequiresFloat                     Msg = 180
-	MsgRuntimeTypeerrorSArgumentSCurrentlySupports                 Msg = 181
-	MsgRuntimeFfierrorBuildCgoDisabledFfiSystem                    Msg = 182
-	MsgRuntimeFfierrorWindowsAbiShimSupportsMost                   Msg = 183
-	MsgRuntimeTypeerrorCallSFirstArgumentPrefix                    Msg = 184
-	MsgRuntimeTypeerrorCallSSecondArgumentOutRecord                Msg = 185
-	MsgRuntimeTypeerrorMemorizePrefixMissingWrapped                Msg = 186
-	MsgRuntimeTypeerrorPrefixFnFunction                            Msg = 187
-	MsgRuntimeTypeerrorRecList                                     Msg = 188
-	MsgRuntimeTypeerrorThreadTalkRequiresChannel                   Msg = 189
-	MsgRuntimeTypeerrorStyleconfigureFileRequiresFile              Msg = 190
-	MsgRuntimeTypeerrorSumSFirstArgumentFunction                   Msg = 191
-	MsgRuntimeTypeerrorSumSBeginInt                                Msg = 192
-	MsgRuntimeTypeerrorSumSStopInt                                 Msg = 193
-	MsgRuntimeTypeerrorSumSStepNonZeroInt                          Msg = 194
-	MsgRuntimeTypeerrorGenerateReturnInt                           Msg = 195
-	MsgRuntimeTypeerrorBitwiseRequiresInt                          Msg = 196
-	MsgRuntimeTypeerrorBitwiseComplementRequiresInt                Msg = 197
-	MsgRuntimeCompileerrorUndeclaredIdentifierQ                    Msg = 198
-	MsgRuntimeIndexoutofrangeerrorReferenceMovePastEnd             Msg = 199
-	MsgRuntimeTypeerrorSDeclaresLiteralElement                     Msg = 200
-	MsgRuntimeTypeerrorMovesReferenceVariable                      Msg = 201
-	MsgRuntimeTypeerrorNeedsReferenceQS                            Msg = 202
-	MsgRuntimeTypeerrorMovesElementReferencesIQ                    Msg = 203
-	MsgRuntimeTypeerrorTakeAddressFieldSStruct                     Msg = 204
-	MsgRuntimeTypeerrorTakeAddressElementSList                     Msg = 205
-	MsgRuntimeTypeerrorTakeAddressExpressionNeeds                  Msg = 206
-	MsgRuntimeTypeerrorTakeAddressUndeclaredIdentifier             Msg = 207
-	MsgRuntimeTypeerrorIoPrintlnNeedsIostreamGotS                  Msg = 208
-	MsgRuntimeTypeerrorListIndexIntGotS                            Msg = 209
-	MsgRuntimeTypeerror                                            Msg = 210
-	MsgRuntimeTypeerrorComplement                                  Msg = 211
-	MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ            Msg = 212
-	MsgFieldTypeerrorForInRequiresListOr                           Msg = 213
-	MsgFieldTypeerrorCannotAssignMemberS                           Msg = 214
-	MsgFieldTypeerrorNoMemberQOnS                                  Msg = 215
-	MsgFieldTypeerrorUnsupportedAssignmentTarget                   Msg = 216
-	MsgFieldTypeerrorStarRequiresListOrContainer                   Msg = 217
-	MsgFieldTypeerrorUnaryMinusRequiresNumberGot                   Msg = 218
-	MsgFieldInternalUnknownUnaryOperatorS                          Msg = 219
-	MsgFieldInternalUnknownExpressionNode                          Msg = 220
-	MsgFieldTypeerrorSignatureCanOnlyWrapDirect                    Msg = 221
-	MsgFieldCompileerrorSExpectsDArgsGot                           Msg = 222
-	MsgFieldTypeerrorExpressionNotCallable                         Msg = 223
-	MsgFieldCompileerrorUndeclaredFunctionQ                        Msg = 224
-	MsgFieldTypeerrorNoMethodQOnPointer                            Msg = 225
-	MsgFieldTypeerrorAppendallRequiresListGotS                     Msg = 226
-	MsgFieldTypeerrorTaskmDoneRequiresPidInt                       Msg = 227
-	MsgFieldTypeerrorNoMethodQOnS                                  Msg = 228
-	MsgFieldCompileerrorSCallExpectsDArgs                          Msg = 229
-	MsgFieldTypeerrorMemorizeNoStaticMethodQ                       Msg = 230
-	MsgFieldTypeerrorHashtableNoStaticMethodQ                      Msg = 231
-	MsgFieldTypeerrorListNoStaticMethodQ                           Msg = 232
-	MsgFieldTypeerrorTaskmGlobalVariableUseTaskm                   Msg = 233
-	MsgFieldTypeerrorIoSetinSFirstArg                              Msg = 234
-	MsgFieldTypeerrorIoSetoutSFirstArg                             Msg = 235
-	MsgFieldTypeerrorIoNoStaticMethodQ                             Msg = 236
-	MsgFieldCompileerrorUnknownScopeQ                              Msg = 237
-	MsgFieldInternalUnknownOperatorS                               Msg = 238
-	MsgFieldTypeerrorCannotOrderCompareSS                          Msg = 239
-	MsgFieldBadallocNewSInvalidAllocationSize                      Msg = 240
-	MsgFieldRuntimeerrorExecctxForSAlreadyExecuted                 Msg = 241
-	MsgFieldNullpointererrorAssignmentThroughNullPointer           Msg = 242
-	MsgFieldTypeerrorBINeedsWritableRaw                            Msg = 243
-	MsgFieldTypeerrorBitIndexRequiresRawBits                       Msg = 244
-	MsgFieldTypeerrorIndexingRequiresListGotS                      Msg = 245
-	MsgFieldTypeerrorIndexMustInt                                  Msg = 246
-	MsgFieldNullpointererrorDereferenceNullPointer                 Msg = 247
-	MsgFieldTypeerrorStyleconfigureFileString                      Msg = 248
-	MsgFieldIoerrorS                                               Msg = 249
-	MsgFieldJsonerrorS                                             Msg = 250
-	MsgFieldTypeerrorTaskmMergeFirstArgMust                        Msg = 251
-	MsgFieldRuntimeerrorUnknownTaskPidD                            Msg = 252
-	MsgFieldTypeerrorTaskmChannelNRequires0                        Msg = 253
-	MsgFieldTypeerrorWriteSString                                  Msg = 254
-	MsgFieldTypeerrorSetblockNRequiresPositiveInt                  Msg = 255
-	MsgFieldTypeerrorSSStaticMethodCall                            Msg = 256
-	MsgFieldTypeerrorFileNewNameString                             Msg = 257
-	MsgFieldTypeerrorIfstreamRequiresPathStringGot                 Msg = 258
-	MsgFieldIoerrorCannotOpenQV                                    Msg = 259
-	MsgFieldTypeerrorOfstreamRequiresPathStringGot                 Msg = 260
-	MsgFieldIoerrorCannotCreateQV                                  Msg = 261
-	MsgFieldPanicerrorS                                            Msg = 262
-	MsgFieldTypeerrorIofstreamRequiresPathStringGot                Msg = 263
-	MsgFieldTypeerrorQkexecCmdStringRetriesInt                     Msg = 264
-	MsgFieldTypeerrorQkexecvProgStringArgsList                     Msg = 265
-	MsgFieldTypeerrorQkhttpGetUrlStringRetries                     Msg = 266
-	MsgFieldTypeerrorQkhttpPostUrlBodyContenttype                  Msg = 267
-	MsgFieldJsonerrorV                                             Msg = 268
-	MsgFieldTypeerrorQkjsonLoadsSString                            Msg = 269
-	MsgFieldTypeerrorQkfileReadPathString                          Msg = 270
-	MsgFieldIoerrorV                                               Msg = 271
-	MsgFieldTypeerrorQkfileWritePathStringContent                  Msg = 272
-	MsgFieldTypeerrorQksignalEmitNodeNameString                    Msg = 273
-	MsgFieldRuntimeerrorThreadBusyMergeOnlyWhen                    Msg = 274
-	MsgFieldTypeerrorTaskmRequiresTaskOrPid                        Msg = 275
-	MsgFieldIndexoutofrangeerrorBitIndexDOutRange                  Msg = 276
-	MsgFieldTypeerrorRawBitsAdmitOnlyBitwise                       Msg = 277
-	MsgFieldDivisionbyzeroerrorFloatDivisionByZero                 Msg = 278
-	MsgFieldTypeerrorPercentRequiresIntOperands                    Msg = 279
-	MsgFieldInternalUnknownArithmeticOperatorS                     Msg = 280
-	MsgFieldCompileerrorDuplicateDeclarationQ                      Msg = 281
-	MsgFieldCompileerrorDuplicateTypeAliasQ                        Msg = 282
-	MsgFieldCompileerrorDuplicateStructQ                           Msg = 283
-	MsgFieldCompileerrorDuplicateInterfaceQ                        Msg = 284
-	MsgFieldCompileerrorDuplicateLibraryQ                          Msg = 285
-	MsgFieldCompileerrorStructSDTypeParameter                      Msg = 286
-	MsgFieldCompileerrorStructSNoTypeParameters                    Msg = 287
-	MsgFieldCompileerrorDuplicateMethodQOnS                        Msg = 288
-	MsgFieldCompileerrorUnknownInterfaceQ                          Msg = 289
-	MsgFieldCompileerrorImplSForSMissing                           Msg = 290
-	MsgFieldCompileerrorImplSForSMethod                            Msg = 291
-	MsgFieldCompileerrorMainMustTake13                             Msg = 292
-	MsgFieldTypeerrorCopydModifierNotTypeWrite                     Msg = 293
-	MsgFieldCompileerrorEmptyTypeAnnotation                        Msg = 294
-	MsgFieldCompileerrorS                                          Msg = 295
-	MsgFieldCompileerrorSTakesDTypeArgument                        Msg = 296
-	MsgFieldCompileerrorInterfaceSNotGenericBut                    Msg = 297
-	MsgFieldCompileerrorUnknownTypeQ                               Msg = 298
-	MsgFieldCompileerrorParameterQSMissingType                     Msg = 299
-	MsgFieldIndexoutofboundserrorIndexDOutRange0                   Msg = 300
-	MsgFieldRuntimeerrorUnresolvedCallTarget                       Msg = 301
-	MsgFieldDivisionbyzeroerrorIntegerDivisionByZero               Msg = 302
-	MsgFieldDivisionbyzeroerrorModuloByZero                        Msg = 303
-	MsgFieldTypeerrorUnsupportedIntegerOperation                   Msg = 304
-	MsgTypecheckSumGenerateBeginStopStepRequires                   Msg = 305
-	MsgTypecheckInterfaceSNoMethodQ                                Msg = 306
-	MsgTypecheckTypeerrorReturnTypeSGotS                           Msg = 307
-	MsgTypecheckCompileerrorBreakOnlyAllowedInsideWhile            Msg = 308
-	MsgTypecheckTypeerrorForLoopVariableTypeS                      Msg = 309
-	MsgTypecheckCompileerrorUnknownStructQ                         Msg = 310
-	MsgTypecheckTypeerrorSRequiresDFieldsBut                       Msg = 311
-	MsgTypecheckTypeerrorSNoFieldQ                                 Msg = 312
-	MsgTypecheckTypeerrorFieldQCannotAssignS                       Msg = 313
-	MsgTypecheckTypeerrorCannotAssignSS                            Msg = 314
-	MsgTypecheckTypeerrorCannotAssignQReferenceQ                   Msg = 315
-	MsgTypecheckTypeerrorCannotStoreSScopedReference               Msg = 316
-	MsgTypecheckCompileerrorConstVariableQCannotReassigned         Msg = 317
-	MsgTypecheckTypeerrorReferenceQPermissionQCannotWrittenThrough Msg = 318
-	MsgTypecheckTypeerrorCannotAssignSSI                           Msg = 319
-	MsgTypecheckTypeerrorIndexKeyMustSGot                          Msg = 320
-	MsgTypecheckTypeerrorValueMustSGotS                            Msg = 321
-	MsgTypecheckTypeerrorUnknownStructS                            Msg = 322
-	MsgTypecheckTypeerrorCannotAssignSSS                           Msg = 323
-	MsgTypecheckTypeerrorConditionMustBoolGotS                     Msg = 324
-	MsgTypecheckCompileerrorExpressionNestingDeeperThanD           Msg = 325
-	MsgTypecheckTypeerrorMovesReferenceVariableGotS                Msg = 326
-	MsgTypecheckTypeerrorNeedsReferencePermissionMBut              Msg = 327
-	MsgTypecheckTypeerrorReferenceQPermissionQCannotMoveM          Msg = 328
-	MsgTypecheckTypeerrorReferenceQPermissionQCannot               Msg = 329
-	MsgTypecheckCompileerrorVariableQUsedBeforeInitialization      Msg = 330
-	MsgTypecheckTypeerrorBitwiseComplementTildeRequiresInt         Msg = 331
-	MsgTypecheckTypeerrorBangRequiresBoolGotS                      Msg = 332
-	MsgTypecheckCompileerrorBitIndexDOutRange                      Msg = 333
-	MsgTypecheckTypeerrorBitIndexMustIntGot                        Msg = 334
-	MsgTypecheckTypeerrorIndexingRequiresListOrPointer             Msg = 335
-	MsgTypecheckTypeerrorIndexMustIntGotS                          Msg = 336
-	MsgTypecheckTypeerrorSShiftsRawBitsSo                          Msg = 337
-	MsgTypecheckTypeerrorSNeedsShiftCountInt                       Msg = 338
-	MsgTypecheckTypeerrorRawBitsAdmitNoArithmetic                  Msg = 339
-	MsgTypecheckTypeerrorRawBitsAdmitNoOrdering                    Msg = 340
-	MsgTypecheckTypeerrorRawBitsAdmitOnlyB                         Msg = 341
-	MsgTypecheckTypeerrorSSDifferentWidthsD                        Msg = 342
-	MsgTypecheckTypeerrorSOnSSMixes                                Msg = 343
-	MsgTypecheckTypeerrorSRequiresBoolOperandsGot                  Msg = 344
-	MsgTypecheckTypeerrorPlusRequiresNumbersOrString               Msg = 345
-	MsgTypecheckTypeerrorArithmeticRequiresNumbersGotS             Msg = 346
-	MsgTypecheckTypeerrorBitwiseShiftOperatorsRequireInt           Msg = 347
-	MsgTypecheckTypeerrorCannotCompareSS                           Msg = 348
-	MsgTypecheckTypeerrorNoMemberQOnAnonymous                      Msg = 349
-	MsgTypecheckTypeerrorNoMemberQOnPointer                        Msg = 350
-	MsgTypecheckTypeerrorUnknownInterfaceQ                         Msg = 351
-	MsgTypecheckTypeerrorSSExpectsDArguments                       Msg = 352
-	MsgTypecheckTypeerrorInterfaceSNoMethodQ                       Msg = 353
-	MsgTypecheckTypeerrorUnknownSystemLibraryQ                     Msg = 354
-	MsgTypecheckLibraryerrorSSExpectsDArguments                    Msg = 355
-	MsgTypecheckTypeerrorSSArgumentSRequires                       Msg = 356
-	MsgTypecheckLibraryerrorLibrarySNotExportFunction              Msg = 357
-	MsgTypecheckTypeerrorNoMethodQ                                 Msg = 358
-	MsgTypecheckTypeerrorFileNoMethodQ                             Msg = 359
-	MsgTypecheckTypeerrorSRequiresStringArgument                   Msg = 360
-	MsgTypecheckTypeerrorSubstringStartEndRequiresOne              Msg = 361
-	MsgTypecheckTypeerrorSubstringArgumentsMustInts                Msg = 362
-	MsgTypecheckTypeerrorGetIRequiresIntIndex                      Msg = 363
-	MsgTypecheckTypeerrorAppendExpectsSGotS                        Msg = 364
-	MsgTypecheckTypeerrorPutKeyExpectsSGot                         Msg = 365
-	MsgTypecheckTypeerrorPutValueExpectsSGot                       Msg = 366
-	MsgTypecheckTypeerrorSetinRequiresPathStringOr                 Msg = 367
-	MsgTypecheckTypeerrorSetoutRequiresPathStringOr                Msg = 368
-	MsgTypecheckCompileerrorThreadMergeFnArgsRequires              Msg = 369
-	MsgTypecheckTypeerrorThreadMergeSecondArgMust                  Msg = 370
-	MsgTypecheckTypeerrorThreadTalkRequiresChannelGot              Msg = 371
-	MsgTypecheckTypeerrorSetblockNRequiresIntBlock                 Msg = 372
-	MsgTypecheckCompileerrorTaskmSpawnTakesNoArgs                  Msg = 373
-	MsgTypecheckCompileerrorTaskmMergePidFnArgs                    Msg = 374
-	MsgTypecheckTypeerrorTaskmMergeFirstArgMust                    Msg = 375
-	MsgTypecheckTypeerrorTaskmMergeSecondArgMust                   Msg = 376
-	MsgTypecheckTypeerrorArgumentDSCannotAssign                    Msg = 377
-	MsgTypecheckTypeerrorTaskmBlockRequiresPidGot                  Msg = 378
-	MsgTypecheckTypeerrorTaskmChannelNRequiresInt                  Msg = 379
-	MsgTypecheckCompileerrorTaskmChannelExpects0Or                 Msg = 380
-	MsgTypecheckTypeerrorTypeSNoImpl                               Msg = 381
-	MsgTypecheckTypeerrorSStaticMethodCallVia                      Msg = 382
-	MsgTypecheckTypeerrorSSWidthMismatchS                          Msg = 383
-	MsgTypecheckTypeerrorSSNotConversionReinterpretation           Msg = 384
-	MsgTypecheckTypeerrorStyleconfigureCanOnlyWrapFunction         Msg = 385
-	MsgTypecheckCompileerrorSSignatureNameMustSign                 Msg = 386
-	MsgTypecheckCompileerrorSExpectsDArgsOptionally                Msg = 387
-	MsgTypecheckTypeerrorQkexecRequiresCommandStringGot            Msg = 388
-	MsgTypecheckTypeerrorQkexecvProgStringArgsList                 Msg = 389
-	MsgTypecheckTypeerrorQkpopenRequiresPathStringGot              Msg = 390
-	MsgTypecheckCompileerrorQkhttpGetExpects12                     Msg = 391
-	MsgTypecheckTypeerrorQkhttpGetRequiresUrlString                Msg = 392
-	MsgTypecheckCompileerrorQksignalEmitNodeNameString             Msg = 393
-	MsgTypecheckTypeerrorQkjsonLoadsRequiresStringGot              Msg = 394
-	MsgTypecheckCompileerrorQkhttpPostExpects34                    Msg = 395
-	MsgTypecheckTypeerrorQkhttpPostUrlBodyContenttype              Msg = 396
-	MsgTypecheckTypeerrorFileinputstreamRequiresPathStringGot      Msg = 397
-	MsgTypecheckTypeerrorFileoutputstreamRequiresPathStringGot     Msg = 398
-	MsgTypecheckCompileerrorSumGenerateBeginStopStep               Msg = 399
-	MsgTypecheckTypeerrorSumSFirstArgumentMust                     Msg = 400
-	MsgTypecheckTypeerrorSumSBoundArgumentsMust                    Msg = 401
-	MsgTypecheckTypeerrorArgumentDSV                               Msg = 402
-	MsgTypecheckInterfaceSMissingMethodQS                          Msg = 403
-	MsgTypecheckInterfaceSMethodQSignatureIncompatible             Msg = 404
-	MsgTypecheckTypeerrorSLiteralMustTakeNo                        Msg = 405
-	MsgTypecheckTypeerrorSDeclaresLiteralButNo                     Msg = 406
-	MsgTypecheckTypeerrorSElementMustTakeExactly                   Msg = 407
-	MsgTypecheckTypeerrorLiteralElementSButS                       Msg = 408
-	MsgTypecheckTypeerrorSV                                        Msg = 409
-	MsgTypecheckUnknownInterfaceS                                  Msg = 410
-	MsgTypecheckTypeSNotImplementInterfaceMethod                   Msg = 411
-	MsgTypecheckTypeerrorIoSetinRequiresPathString                 Msg = 412
-	MsgTypecheckTypeerrorIoSetoutRequiresPathString                Msg = 413
-	MsgTypecheckCompileerrorSSExpectsDArgs                         Msg = 414
-	MsgTypecheckTypeerrorArgumentDSSCannot                         Msg = 415
-	MsgTypecheckTypeerrorSNoStaticMethodQ                          Msg = 416
-	MsgTypecheckCompileerrorDuplicateOverloadQIdenticalSignature   Msg = 417
-	MsgCompilerExpression                                          Msg = 418
-	MsgCompilerNotQklibArtifactMagicMismatchS                      Msg = 419
-	MsgCompilerVariantSFailedVerificationContentModified           Msg = 420
-	MsgCompilerSTriedS                                             Msg = 421
-	MsgCompilerRedefiningBuiltinFunctionQNotSupported              Msg = 422
-	MsgCompilerOverloadingGenericFunctionQNotSupported             Msg = 423
-	MsgCompilerAGenericPlainFunctionSharingName                    Msg = 424
-	MsgCompilerDuplicateFunctionDefinitionSSameParameter           Msg = 425
-	MsgCompilerNoMainFunctionFoundCanonicalEntry                   Msg = 426
-	MsgCompilerOverloadingRedefiningMethodSSNot                    Msg = 427
-	MsgCompilerVoidTypeSNotSupportedYet                            Msg = 428
-	MsgCompilerSTypeQNotSupportedCompiler                          Msg = 429
-	MsgCompilerSTypeQNotSupportedNot                               Msg = 430
-	MsgCompilerIostreamSNotSupportedCompilerBinds                  Msg = 431
-	MsgCompilerSTypeQNotSupportedCompilerHandlesList               Msg = 432
-	MsgCompilerSTypeQNotSupportedYet                               Msg = 433
-	MsgCompilerSTypeQNotSupportedCompilerLowersT                   Msg = 434
-	MsgCompilerPointerCopyOnPassTypeQ                              Msg = 435
-	MsgCompilerUnknownTypeQSDeclaration                            Msg = 436
-	MsgCompilerDuplicateShadowedVariableQNotSupported              Msg = 437
-	MsgCompilerReturnTypeQNotSupportedCompiler                     Msg = 438
-	MsgCompilerImplInstanceMethodSMissingLeading                   Msg = 439
-	MsgCompilerCopydInterfaceParameterSNotSupported                Msg = 440
-	MsgCompilerCopydHashtableParameterSNotSupported                Msg = 441
-	MsgCompilerCopydListStringParametersNotSupported               Msg = 442
-	MsgCompilerCopydInterfaceFieldSInStruct                        Msg = 443
-	MsgCompilerAGenericMainFunctionNotSupported                    Msg = 444
-	MsgCompilerMainCannotReturnValueGotQ                           Msg = 445
-	MsgCompilerMainSFirstParameterMustIostream                     Msg = 446
-	MsgCompilerMainSQParameterNotSupported                         Msg = 447
-	MsgCompilerTheCopydModifierNotSupportedCopy                    Msg = 448
-	MsgCompilerIostreamMethodQNotSupportedCompiler                 Msg = 449
-	MsgCompilerAVoidFunctionCannotReturnValue                      Msg = 450
-	MsgCompilerReturningSValueFromSFunction                        Msg = 451
-	MsgCompilerCatchSSNotSupportedCompiler                         Msg = 452
-	MsgCompilerUsingQInsideCatchBodyNot                            Msg = 453
-	MsgCompilerDeleteOnNonVariableExpressionNot                    Msg = 454
-	MsgCompilerDeleteQNotSupportedCompilerHandles                  Msg = 455
-	MsgCompilerCompilerInternalErrorUnknownStatementType           Msg = 456
-	MsgCompilerForIterationOverSNotSupported                       Msg = 457
-	MsgCompilerIteratingListSNotSupportedCompiler                  Msg = 458
-	MsgCompilerForIterationOverNonVariableList                     Msg = 459
-	MsgCompilerForIterationOverSNotSupportedCompilerHandles        Msg = 460
-	MsgCompilerListStringQWithoutInitializerNot                    Msg = 461
-	MsgCompilerInitializingListStringWithSNot                      Msg = 462
-	MsgCompilerListIntQWithoutInitializerNot                       Msg = 463
-	MsgCompilerThisListIntInitializerNotSupported                  Msg = 464
-	MsgCompilerInitializingListIntWithSElements                    Msg = 465
-	MsgCompilerPrintingValueTypeSNotSupported                      Msg = 466
-	MsgCompilerASConditionNotSupportedYet                          Msg = 467
-	MsgCompilerAssignmentTargetQNotDeclared                        Msg = 468
-	MsgCompilerAssigningSSVariableQNot                             Msg = 469
-	MsgCompilerThisSubscriptAssignmentNotSupportedCompiler         Msg = 470
-	MsgCompilerIndexTypeSNotSupportedYet                           Msg = 471
-	MsgCompilerAssigningSListIntElementNot                         Msg = 472
-	MsgCompilerStructSNoFieldQ                                     Msg = 473
-	MsgCompilerAssigningSSSSNot                                    Msg = 474
-	MsgCompilerMemberAssignmentNotSupportedByCompiler              Msg = 475
-	MsgCompilerThisAssignmentTargetNotSupportedCompiler            Msg = 476
-	MsgCompilerUsingLibraryObjectQAsValue                          Msg = 477
-	MsgCompilerUndeclaredIdentifierQCompilerNotSupport             Msg = 478
-	MsgCompilerIostreamValueQNotSupportedYet                       Msg = 479
-	MsgCompilerThisSubscriptReadNotSupportedCompiler               Msg = 480
-	MsgCompilerNewSNNotSupportedYet                                Msg = 481
-	MsgCompilerNewSNotSupportedYetElement                          Msg = 482
-	MsgCompilerListLiteralSNotSupportedCompiler                    Msg = 483
-	MsgCompilerInitializingSWithSElementsNot                       Msg = 484
-	MsgCompilerCompilerInternalErrorUnknownExpressionType          Msg = 485
-	MsgCompilerAddingSSNotSupportedYet                             Msg = 486
-	MsgCompilerUsingQOnSSNot                                       Msg = 487
-	MsgCompilerUsingQOnSSNotSupportedShifts                        Msg = 488
-	MsgCompilerUsingQOnSSNotSupportedPointers                      Msg = 489
-	MsgCompilerUsingQOnSSNotSupportedNullable                      Msg = 490
-	MsgCompilerComparingNonVariableNullableReferenceNot            Msg = 491
-	MsgCompilerUsingQOnInterfaceNotSupported                       Msg = 492
-	MsgCompilerUsingQOnBoolNotSupported                            Msg = 493
-	MsgCompilerUsingQOnSSNotSupportedString                        Msg = 494
-	MsgCompilerOperatorQNotSupportedByCompiler                     Msg = 495
-	MsgCompilerNegatingSNotSupportedOperationOverloading           Msg = 496
-	MsgCompilerNegatingSNotSupportedYetBool                        Msg = 497
-	MsgCompilerDereferenceNotSupportedPointersInterpreterOnly      Msg = 498
-	MsgCompilerUnaryOperatorQNotSupported                          Msg = 499
-	MsgCompilerThisCallFormNotSupportedCompiler                    Msg = 500
-	MsgCompilerThisSignatureCallNotSupportedCompiler               Msg = 501
-	MsgCompilerUndeclaredSignatureInstanceQS                       Msg = 502
-	MsgCompilerSignatureInstanceQTypeSNot                          Msg = 503
-	MsgCompilerWrappingFunctionSReturnsSWith                       Msg = 504
-	MsgCompilerMemorizeWrappingSParameterNotSupported              Msg = 505
-	MsgCompilerASArgumentMemorizeNotSupported                      Msg = 506
-	MsgCompilerClockTakesNoArgumentsGotD                           Msg = 507
-	MsgCompilerSumGeneratorQMultipleIntS                           Msg = 508
-	MsgCompilerSumGeneratorQNoIntS                                 Msg = 509
-	MsgCompilerUnknownGeneratorFunctionQCompilerOnly               Msg = 510
-	MsgCompilerUnknownFunctionQCompilerOnlySupports                Msg = 511
-	MsgCompilerMergeTargetQSeveralOverloadsWith                    Msg = 512
-	MsgCompilerMergeTargetQNoOverloadWith                          Msg = 513
-	MsgCompilerNoMatchingOverloadForQArity                         Msg = 514
-	MsgCompilerPassingSArgumentSNotSupported                       Msg = 515
-	MsgCompilerThisSumGeneratorNotSupportedCompiler                Msg = 516
-	MsgCompilerThisGenericGeneratorSNotSupported                   Msg = 517
-	MsgCompilerSumSSArgumentNotSupported                           Msg = 518
-	MsgCompilerGeneratorQNotSupportedCompilerRequires              Msg = 519
-	MsgCompilerTostringTakesNoArguments                            Msg = 520
-	MsgCompilerListSizeTakesNoArguments                            Msg = 521
-	MsgCompilerListGetIRequires1Argument                           Msg = 522
-	MsgCompilerListGetWithSIndexNot                                Msg = 523
-	MsgCompilerListStringSNotSupportedYet                          Msg = 524
-	MsgCompilerListStringAppendWithSArgument                       Msg = 525
-	MsgCompilerListAppendVRequires1Argument                        Msg = 526
-	MsgCompilerListIntAppendWithSArgument                          Msg = 527
-	MsgCompilerListSCallTakesNoArguments                           Msg = 528
-	MsgCompilerListResetTakesNoArguments                           Msg = 529
-	MsgCompilerListAppendallL2Requires1Argument                    Msg = 530
-	MsgCompilerListAppendallRequiresListIntGot                     Msg = 531
-	MsgCompilerListSortTakesNoArguments                            Msg = 532
-	MsgCompilerListMethodQNotSupportedYet                          Msg = 533
-	MsgCompilerMethodSSRequiresDArguments                          Msg = 534
-	MsgCompilerCallingStaticMethodSSOn                             Msg = 535
-	MsgCompilerStructSNoMethodQInterpreter                         Msg = 536
-	MsgCompilerCallingMethodSOnSNot                                Msg = 537
-	MsgCompilerTaskmThreadsChannelsNotSupportedYet                 Msg = 538
-	MsgCompilerLibraryFfiCallSSNot                                 Msg = 539
-	MsgCompilerIoSReturnsNothingCannotUsed                         Msg = 540
-	MsgCompilerPassingSArgumentSSNot                               Msg = 541
-	MsgCompilerHashtableSWithSArgumentNot                          Msg = 542
-	MsgCompilerHashtableSizeTakesNoArguments                       Msg = 543
-	MsgCompilerHashtableKeysTakesNoArguments                       Msg = 544
-	MsgCompilerHashtableSSKeysNotSupported                         Msg = 545
-	MsgCompilerHashtablePutKVRequires2                             Msg = 546
-	MsgCompilerHashtableSSPutKeyMust                               Msg = 547
-	MsgCompilerHashtableSSPutValueMust                             Msg = 548
-	MsgCompilerHashtableGetKRequires1Argument                      Msg = 549
-	MsgCompilerHashtableSSGetKeyMust                               Msg = 550
-	MsgCompilerHashtableSKRequires1Argument                        Msg = 551
-	MsgCompilerHashtableSSSKeyMust                                 Msg = 552
-	MsgCompilerHashtableMethodQNotSupportedCompiler                Msg = 553
-	MsgCompilerHashtableSNotSupportedYetOnly                       Msg = 554
-	MsgCompilerMemorizeSNotSupportedYetOnly                        Msg = 555
-	MsgCompilerPassingSArgumentSSNotSupportedYet                   Msg = 556
-	MsgCompilerInterfaceMemberAccessSSNot                          Msg = 557
-	MsgCompilerLibraryMemberAccessSSNot                            Msg = 558
-	MsgCompilerMemberAccessSSNotSupported                          Msg = 559
-	MsgCompilerAGenericStructLiteralWhoseType                      Msg = 560
-	MsgCompilerAnonymousStructLiteralNotSupportedCompiler          Msg = 561
-	MsgCompilerStructSLiteralTooManyFields                         Msg = 562
-	MsgCompilerInitializingFieldSSWithS                            Msg = 563
-	MsgCompilerSRequiresStringArgumentGotS                         Msg = 564
-	MsgCompilerSRequiresIntArgumentGotS                            Msg = 565
-	MsgCompilerSplitSepRequires1Argument                           Msg = 566
-	MsgCompilerStaticMethodSStructSNot                             Msg = 567
-	MsgCompilerSpaceCallSSNotSupported                             Msg = 568
-	MsgCompilerSSInstanceMethodNeedsSelf                           Msg = 569
-	MsgCompilerSSNotSupportedYetSpace                              Msg = 570
-	MsgCompilerLibraryFfiTypeQNotSupported                         Msg = 571
-	MsgCompilerLibrarySNotDeclareFunctionQ                         Msg = 572
-	MsgCompilerLibraryFunctionSSRequiresD                          Msg = 573
-	MsgCompilerALibraryFunctionParameterCannotVoid                 Msg = 574
-	MsgCompilerLibraryFfiParameterTypeQNot                         Msg = 575
-	MsgCompilerTaskmRequiresThreadOrPidGot                         Msg = 576
-	MsgCompilerThisMergeTargetNotSupportedYet                      Msg = 577
-	MsgCompilerMergingGenericFunctionSNotSupported                 Msg = 578
-	MsgCompilerMergingWithDArgumentsNotSupported                   Msg = 579
-	MsgCompilerASMergeParameterNotSupported                        Msg = 580
-	MsgCompilerMergingFunctionSContainsLogNot                      Msg = 581
-	MsgCompilerTaskmSpawnTakesNoArgumentsGot                       Msg = 582
-	MsgCompilerTaskmChannelTakes0Or1                               Msg = 583
-	MsgCompilerTaskmChannelNRequiresIntCapacity                    Msg = 584
-	MsgCompilerTaskmBlockPidRequires1Argument                      Msg = 585
-	MsgCompilerTaskmDonePidRequires1Argument                       Msg = 586
-	MsgCompilerTaskmMergePidFnArgsRequires                         Msg = 587
-	MsgCompilerThreadTalkNotSupportedYetAvailable                  Msg = 588
-	MsgCompilerTaskmSNotSupportedYetCompiler                       Msg = 589
-	MsgCompilerTPidTakesNoArguments                                Msg = 590
-	MsgCompilerTMergeFnArgsRequires1                               Msg = 591
-	MsgCompilerTTalkCRequires1Argument                             Msg = 592
-	MsgCompilerThreadTalkRequiresChannelInstanceGot                Msg = 593
-	MsgCompilerThreadMethodQNotSupportedYet                        Msg = 594
-	MsgCompilerASMergeArgumentNotSupported                         Msg = 595
-	MsgCompilerCSendVRequires1Argument                             Msg = 596
-	MsgCompilerSendingSOverChannelNotSupported                     Msg = 597
-	MsgCompilerCRecvTakesNoArguments                               Msg = 598
-	MsgCompilerChannelMethodQNotSupportedYet                       Msg = 599
-	MsgCompilerQkcDebugPreprocessTarget                            Msg = 600
-	MsgCompilerQkcWroteLibraryArtifactSS                           Msg = 601
-	MsgCompilerQkcNoteLibrarySNoS                                  Msg = 602
-	MsgCompilerQkcLinkingLibrarySVS                                Msg = 603
-	MsgCompilerFunctionSRequiresDArgumentsGot                      Msg = 604
-	MsgCompilerAGenericCallWhoseTypeArguments                      Msg = 605
-	MsgCompilerUsingReturnValueLogContainingFunction               Msg = 606
-	MsgCompilerGenericMethodSSWhoseType                            Msg = 607
-	MsgCompilerMethodSInterfaceSNotImplemented                     Msg = 608
-	MsgCompilerMethodSInterfaceSDifferentParameter                 Msg = 609
-	MsgCompilerBoxingSValueIntoInterfaceNot                        Msg = 610
-	MsgCompilerPuttingSValueIntoInterfaceS                         Msg = 611
-	MsgCompilerInterfaceMethodSSRequiresD                          Msg = 612
-	MsgCompilerPassingSArgumentInterfaceMethodS                    Msg = 613
-	MsgCompilerCompilingProgramLibraryNotSupportedLibrary          Msg = 614
-	MsgCompilerQkcUnknownArgumentS                                 Msg = 615
-	MsgCompilerQkcOnlyOneSourceFileMay                             Msg = 616
-	MsgCompilerUsingSInitializeInterfaceSVariable                  Msg = 617
-	MsgCompilerUsingSInitializeSVariableQ                          Msg = 618
-	MsgCompilerTypeerrorPanicMsgStringTakesExactly                 Msg = 619
-	MsgCompilerSWithQNotSupportedBool                              Msg = 620
-	MsgCompilerABitIndexMustIntGot                                 Msg = 621
-	MsgCompilerAssigningSBitNotSupported                           Msg = 622
-	MsgCompilerBIVRequiresRawBits                                  Msg = 623
-	MsgCompilerSubscriptingBitRequiresRawBitsGot                   Msg = 624
-	MsgCompilerTheBitwiseComplementTildeRequiresInt                Msg = 625
-	MsgCompilerUsingQOnSNotSupported                               Msg = 626
-	MsgCompilerUsingQOnSSNotSupportedBitwise                       Msg = 627
-	MsgCompilerUsingQOnSSNotSupportedRaw                           Msg = 628
-	MsgCompilerUsingQOnSSNotSupportedWidths                        Msg = 629
-	MsgCompilerUsingSInitializeSVariableQNotSupported              Msg = 630
-	MsgCompilerCompilingSNotSupportedYetStorage                    Msg = 631
-	MsgCompilerCompilingAddressNotSupportedYetReferences           Msg = 632
-	MsgCompilerCompilingReferenceMoveNotSupportedYet               Msg = 633
-	MsgCompilerCompilingPermissionReferenceSSNot                   Msg = 634
+	MsgLintFixSelfAssignWhy                                        Msg = 115
+	MsgLintFixDeadStoreWhy                                         Msg = 116
+	MsgLintFixNoDeclaration                                        Msg = 117
+	MsgLintFixNoImpureRhs                                          Msg = 118
+	MsgLintFixNoSharedLine                                         Msg = 119
+	MsgLintFixNoImportSharedLine                                   Msg = 120
+	MsgLintFixNoLastRead                                           Msg = 121
+	MsgLintFixNoOperandEffect                                      Msg = 122
+	MsgLintFixNoOperandRead                                        Msg = 123
+	MsgLintFixNoCompareEmbedded                                    Msg = 124
+	MsgLintFixNoCompareSharedLine                                  Msg = 125
+	MsgLintFixConflict                                             Msg = 126
+	MsgLintFixUnusedImportWhy                                      Msg = 127
+	MsgLintFixSelfCompareWhy                                       Msg = 128
+	MsgLintFixNoOperandType                                        Msg = 129
+	MsgLintFixNoLineTaken                                          Msg = 130
+	MsgCliReplLoadNeedsFile                                        Msg = 131
+	MsgCliReplUnknownCommand                                       Msg = 132
+	MsgCliLspLNeedsDirectory                                       Msg = 133
+	MsgCliLspUsage                                                 Msg = 134
+	MsgCliLspUnknownArgument                                       Msg = 135
+	MsgCliLspDocumentNotOpened                                     Msg = 136
+	MsgCliLspInvalidContentLength                                  Msg = 137
+	MsgCliLspMissingContentLength                                  Msg = 138
+	MsgCliCheckLNeedsDirectory                                     Msg = 139
+	MsgCliCheckUnknownArgument                                     Msg = 140
+	MsgCliCheckNoFiles                                             Msg = 141
+	MsgCliCheckSummary                                             Msg = 142
+	MsgCliDocONeedsFile                                            Msg = 143
+	MsgCliDocTitleNeedsArgument                                    Msg = 144
+	MsgCliDocUnknownArgument                                       Msg = 145
+	MsgCliDocWroteFile                                             Msg = 146
+	MsgCliReplENeedsCode                                           Msg = 147
+	MsgCliReplUnknownArgument                                      Msg = 148
+	MsgCliReplBanner                                               Msg = 149
+	MsgCliDocHelpLine                                              Msg = 150
+	MsgCliReplHelpLine                                             Msg = 151
+	MsgCliQuarklangStaticAnalysisQk101Qk115Unused                  Msg = 152
+	MsgCliInterfaceNearMissVoidMisuseSelf                          Msg = 153
+	MsgCliCheckUsage                                               Msg = 154
+	MsgCliDocUsage                                                 Msg = 155
+	MsgCliReplUsage                                                Msg = 156
+	MsgCliReplHelpText                                             Msg = 157
+	MsgCliLspJsonParseFailedReply                                  Msg = 158
+	MsgCliLspMethodNotImplemented                                  Msg = 159
+	MsgCliCheckHelpLines                                           Msg = 160
+	MsgCliCheckFixFlagConflict                                     Msg = 161
+	MsgCliCheckFixPending                                          Msg = 162
+	MsgCliCheckFixWrote                                            Msg = 163
+	MsgCliCheckFixWroteNoDiags                                     Msg = 164
+	MsgCliCheckFixRemaining                                        Msg = 165
+	MsgCliCheckFixDelete                                           Msg = 166
+	MsgCliCheckFixReplace                                          Msg = 167
+	MsgCliCheckFixUnchanged                                        Msg = 168
+	MsgCliCheckFixSkipped                                          Msg = 169
+	MsgCliCheckFixFlagged                                          Msg = 170
+	MsgCliCheckFixCapped                                           Msg = 171
+	MsgRuntimeRunerrorErrorRunLibraryProgramLibrary                Msg = 172
+	MsgRuntimeParseerrorQValidInteger                              Msg = 173
+	MsgRuntimeParseerrorQValidFloat                                Msg = 174
+	MsgRuntimeCompileerrorMatchingOverloadQArgument                Msg = 175
+	MsgRuntimeExportlibraryProgramLibraryExportLibrary             Msg = 176
+	MsgRuntimeImporterrorFindQLookedSQkSQlibUnder                  Msg = 177
+	MsgRuntimeTypeerrorListIndexInt                                Msg = 178
+	MsgRuntimeTypeerrorIndexedAssignmentSupportedS                 Msg = 179
+	MsgRuntimeTypeerrorGetIRequiresIntIndex                        Msg = 180
+	MsgRuntimeStringindexoutofboundserrorSubstringDD               Msg = 181
+	MsgRuntimeStringindexoutofboundserrorCharatDOut                Msg = 182
+	MsgRuntimeTypeerrorContainsRequiresStringArgument              Msg = 183
+	MsgRuntimeTypeerrorStartswithRequiresString                    Msg = 184
+	MsgRuntimeTypeerrorEndswithRequiresStringArgument              Msg = 185
+	MsgRuntimeTypeerrorIndexofRequiresStringArgument               Msg = 186
+	MsgRuntimeTypeerrorSubstringStartEndRequiresInt                Msg = 187
+	MsgRuntimeTypeerrorSubstringEndInt                             Msg = 188
+	MsgRuntimeTypeerrorSplitRequiresStringSeparator                Msg = 189
+	MsgRuntimeTypeerrorReplaceOldNewRequiresString                 Msg = 190
+	MsgRuntimeTypeerrorCharatRequiresIntIndex                      Msg = 191
+	MsgRuntimeIoerrorExecuteCommandV                               Msg = 192
+	MsgRuntimeIoerrorStartProgramV                                 Msg = 193
+	MsgRuntimeIoerrorCommandFailedV                                Msg = 194
+	MsgRuntimeIoerrorQkpopenOutputExceedsMbLimit                   Msg = 195
+	MsgRuntimeIoerrorRequestFailedV                                Msg = 196
+	MsgRuntimeIoerrorFailedReadResponseV                           Msg = 197
+	MsgRuntimeIoerrorResponseExceedsMibLimit                       Msg = 198
+	MsgRuntimeHttperrorStatusCodeD                                 Msg = 199
+	MsgRuntimeTypeerrorQkexecvArgumentListString                   Msg = 200
+	MsgRuntimeTypeerrorQkpopenCmdStringRequiresString              Msg = 201
+	MsgRuntimeTypeerrorQkjsonDumpsVRequiresOne                     Msg = 202
+	MsgRuntimeLibraryerrorLibrarySDoesDeclareFunction              Msg = 203
+	MsgRuntimeLibraryerrorSTooFewArguments                         Msg = 204
+	MsgRuntimeTypeerrorSArgumentSRequiresPointerNull               Msg = 205
+	MsgRuntimeTypeerrorSArgumentSRequiresIntBool                   Msg = 206
+	MsgRuntimeTypeerrorSArgumentSRequiresFloat                     Msg = 207
+	MsgRuntimeTypeerrorSArgumentSCurrentlySupports                 Msg = 208
+	MsgRuntimeFfierrorBuildCgoDisabledFfiSystem                    Msg = 209
+	MsgRuntimeFfierrorWindowsAbiShimSupportsMost                   Msg = 210
+	MsgRuntimeTypeerrorCallSFirstArgumentPrefix                    Msg = 211
+	MsgRuntimeTypeerrorCallSSecondArgumentOutRecord                Msg = 212
+	MsgRuntimeTypeerrorMemorizePrefixMissingWrapped                Msg = 213
+	MsgRuntimeTypeerrorPrefixFnFunction                            Msg = 214
+	MsgRuntimeTypeerrorRecList                                     Msg = 215
+	MsgRuntimeTypeerrorThreadTalkRequiresChannel                   Msg = 216
+	MsgRuntimeTypeerrorStyleconfigureFileRequiresFile              Msg = 217
+	MsgRuntimeTypeerrorSumSFirstArgumentFunction                   Msg = 218
+	MsgRuntimeTypeerrorSumSBeginInt                                Msg = 219
+	MsgRuntimeTypeerrorSumSStopInt                                 Msg = 220
+	MsgRuntimeTypeerrorSumSStepNonZeroInt                          Msg = 221
+	MsgRuntimeTypeerrorGenerateReturnInt                           Msg = 222
+	MsgRuntimeTypeerrorBitwiseRequiresInt                          Msg = 223
+	MsgRuntimeTypeerrorBitwiseComplementRequiresInt                Msg = 224
+	MsgRuntimeCompileerrorUndeclaredIdentifierQ                    Msg = 225
+	MsgRuntimeIndexoutofrangeerrorReferenceMovePastEnd             Msg = 226
+	MsgRuntimeTypeerrorSDeclaresLiteralElement                     Msg = 227
+	MsgRuntimeTypeerrorMovesReferenceVariable                      Msg = 228
+	MsgRuntimeTypeerrorNeedsReferenceQS                            Msg = 229
+	MsgRuntimeTypeerrorMovesElementReferencesIQ                    Msg = 230
+	MsgRuntimeTypeerrorTakeAddressFieldSStruct                     Msg = 231
+	MsgRuntimeTypeerrorTakeAddressElementSList                     Msg = 232
+	MsgRuntimeTypeerrorTakeAddressExpressionNeeds                  Msg = 233
+	MsgRuntimeTypeerrorTakeAddressUndeclaredIdentifier             Msg = 234
+	MsgRuntimeTypeerrorIoPrintlnNeedsIostreamGotS                  Msg = 235
+	MsgRuntimeTypeerrorListIndexIntGotS                            Msg = 236
+	MsgRuntimeTypeerror                                            Msg = 237
+	MsgRuntimeTypeerrorComplement                                  Msg = 238
+	MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ            Msg = 239
+	MsgFieldTypeerrorForInRequiresListOr                           Msg = 240
+	MsgFieldTypeerrorCannotAssignMemberS                           Msg = 241
+	MsgFieldTypeerrorNoMemberQOnS                                  Msg = 242
+	MsgFieldTypeerrorUnsupportedAssignmentTarget                   Msg = 243
+	MsgFieldTypeerrorStarRequiresListOrContainer                   Msg = 244
+	MsgFieldTypeerrorUnaryMinusRequiresNumberGot                   Msg = 245
+	MsgFieldInternalUnknownUnaryOperatorS                          Msg = 246
+	MsgFieldInternalUnknownExpressionNode                          Msg = 247
+	MsgFieldTypeerrorSignatureCanOnlyWrapDirect                    Msg = 248
+	MsgFieldCompileerrorSExpectsDArgsGot                           Msg = 249
+	MsgFieldTypeerrorExpressionNotCallable                         Msg = 250
+	MsgFieldCompileerrorUndeclaredFunctionQ                        Msg = 251
+	MsgFieldTypeerrorNoMethodQOnPointer                            Msg = 252
+	MsgFieldTypeerrorAppendallRequiresListGotS                     Msg = 253
+	MsgFieldTypeerrorTaskmDoneRequiresPidInt                       Msg = 254
+	MsgFieldTypeerrorNoMethodQOnS                                  Msg = 255
+	MsgFieldCompileerrorSCallExpectsDArgs                          Msg = 256
+	MsgFieldTypeerrorMemorizeNoStaticMethodQ                       Msg = 257
+	MsgFieldTypeerrorHashtableNoStaticMethodQ                      Msg = 258
+	MsgFieldTypeerrorListNoStaticMethodQ                           Msg = 259
+	MsgFieldTypeerrorTaskmGlobalVariableUseTaskm                   Msg = 260
+	MsgFieldTypeerrorIoSetinSFirstArg                              Msg = 261
+	MsgFieldTypeerrorIoSetoutSFirstArg                             Msg = 262
+	MsgFieldTypeerrorIoNoStaticMethodQ                             Msg = 263
+	MsgFieldCompileerrorUnknownScopeQ                              Msg = 264
+	MsgFieldInternalUnknownOperatorS                               Msg = 265
+	MsgFieldTypeerrorCannotOrderCompareSS                          Msg = 266
+	MsgFieldBadallocNewSInvalidAllocationSize                      Msg = 267
+	MsgFieldRuntimeerrorExecctxForSAlreadyExecuted                 Msg = 268
+	MsgFieldNullpointererrorAssignmentThroughNullPointer           Msg = 269
+	MsgFieldTypeerrorBINeedsWritableRaw                            Msg = 270
+	MsgFieldTypeerrorBitIndexRequiresRawBits                       Msg = 271
+	MsgFieldTypeerrorIndexingRequiresListGotS                      Msg = 272
+	MsgFieldTypeerrorIndexMustInt                                  Msg = 273
+	MsgFieldNullpointererrorDereferenceNullPointer                 Msg = 274
+	MsgFieldTypeerrorStyleconfigureFileString                      Msg = 275
+	MsgFieldIoerrorS                                               Msg = 276
+	MsgFieldJsonerrorS                                             Msg = 277
+	MsgFieldTypeerrorTaskmMergeFirstArgMust                        Msg = 278
+	MsgFieldRuntimeerrorUnknownTaskPidD                            Msg = 279
+	MsgFieldTypeerrorTaskmChannelNRequires0                        Msg = 280
+	MsgFieldTypeerrorWriteSString                                  Msg = 281
+	MsgFieldTypeerrorSetblockNRequiresPositiveInt                  Msg = 282
+	MsgFieldTypeerrorSSStaticMethodCall                            Msg = 283
+	MsgFieldTypeerrorFileNewNameString                             Msg = 284
+	MsgFieldTypeerrorIfstreamRequiresPathStringGot                 Msg = 285
+	MsgFieldIoerrorCannotOpenQV                                    Msg = 286
+	MsgFieldTypeerrorOfstreamRequiresPathStringGot                 Msg = 287
+	MsgFieldIoerrorCannotCreateQV                                  Msg = 288
+	MsgFieldPanicerrorS                                            Msg = 289
+	MsgFieldTypeerrorIofstreamRequiresPathStringGot                Msg = 290
+	MsgFieldTypeerrorQkexecCmdStringRetriesInt                     Msg = 291
+	MsgFieldTypeerrorQkexecvProgStringArgsList                     Msg = 292
+	MsgFieldTypeerrorQkhttpGetUrlStringRetries                     Msg = 293
+	MsgFieldTypeerrorQkhttpPostUrlBodyContenttype                  Msg = 294
+	MsgFieldJsonerrorV                                             Msg = 295
+	MsgFieldTypeerrorQkjsonLoadsSString                            Msg = 296
+	MsgFieldTypeerrorQkfileReadPathString                          Msg = 297
+	MsgFieldIoerrorV                                               Msg = 298
+	MsgFieldTypeerrorQkfileWritePathStringContent                  Msg = 299
+	MsgFieldTypeerrorQksignalEmitNodeNameString                    Msg = 300
+	MsgFieldRuntimeerrorThreadBusyMergeOnlyWhen                    Msg = 301
+	MsgFieldTypeerrorTaskmRequiresTaskOrPid                        Msg = 302
+	MsgFieldIndexoutofrangeerrorBitIndexDOutRange                  Msg = 303
+	MsgFieldTypeerrorRawBitsAdmitOnlyBitwise                       Msg = 304
+	MsgFieldDivisionbyzeroerrorFloatDivisionByZero                 Msg = 305
+	MsgFieldTypeerrorPercentRequiresIntOperands                    Msg = 306
+	MsgFieldInternalUnknownArithmeticOperatorS                     Msg = 307
+	MsgFieldCompileerrorDuplicateDeclarationQ                      Msg = 308
+	MsgFieldCompileerrorDuplicateTypeAliasQ                        Msg = 309
+	MsgFieldCompileerrorDuplicateStructQ                           Msg = 310
+	MsgFieldCompileerrorDuplicateInterfaceQ                        Msg = 311
+	MsgFieldCompileerrorDuplicateLibraryQ                          Msg = 312
+	MsgFieldCompileerrorStructSDTypeParameter                      Msg = 313
+	MsgFieldCompileerrorStructSNoTypeParameters                    Msg = 314
+	MsgFieldCompileerrorDuplicateMethodQOnS                        Msg = 315
+	MsgFieldCompileerrorUnknownInterfaceQ                          Msg = 316
+	MsgFieldCompileerrorImplSForSMissing                           Msg = 317
+	MsgFieldCompileerrorImplSForSMethod                            Msg = 318
+	MsgFieldCompileerrorMainMustTake13                             Msg = 319
+	MsgFieldTypeerrorCopydModifierNotTypeWrite                     Msg = 320
+	MsgFieldCompileerrorEmptyTypeAnnotation                        Msg = 321
+	MsgFieldCompileerrorS                                          Msg = 322
+	MsgFieldCompileerrorSTakesDTypeArgument                        Msg = 323
+	MsgFieldCompileerrorInterfaceSNotGenericBut                    Msg = 324
+	MsgFieldCompileerrorUnknownTypeQ                               Msg = 325
+	MsgFieldCompileerrorParameterQSMissingType                     Msg = 326
+	MsgFieldIndexoutofboundserrorIndexDOutRange0                   Msg = 327
+	MsgFieldRuntimeerrorUnresolvedCallTarget                       Msg = 328
+	MsgFieldDivisionbyzeroerrorIntegerDivisionByZero               Msg = 329
+	MsgFieldDivisionbyzeroerrorModuloByZero                        Msg = 330
+	MsgFieldTypeerrorUnsupportedIntegerOperation                   Msg = 331
+	MsgTypecheckSumGenerateBeginStopStepRequires                   Msg = 332
+	MsgTypecheckInterfaceSNoMethodQ                                Msg = 333
+	MsgTypecheckTypeerrorReturnTypeSGotS                           Msg = 334
+	MsgTypecheckCompileerrorBreakOnlyAllowedInsideWhile            Msg = 335
+	MsgTypecheckTypeerrorForLoopVariableTypeS                      Msg = 336
+	MsgTypecheckCompileerrorUnknownStructQ                         Msg = 337
+	MsgTypecheckTypeerrorSRequiresDFieldsBut                       Msg = 338
+	MsgTypecheckTypeerrorSNoFieldQ                                 Msg = 339
+	MsgTypecheckTypeerrorFieldQCannotAssignS                       Msg = 340
+	MsgTypecheckTypeerrorCannotAssignSS                            Msg = 341
+	MsgTypecheckTypeerrorCannotAssignQReferenceQ                   Msg = 342
+	MsgTypecheckTypeerrorCannotStoreSScopedReference               Msg = 343
+	MsgTypecheckCompileerrorConstVariableQCannotReassigned         Msg = 344
+	MsgTypecheckTypeerrorReferenceQPermissionQCannotWrittenThrough Msg = 345
+	MsgTypecheckTypeerrorCannotAssignSSI                           Msg = 346
+	MsgTypecheckTypeerrorIndexKeyMustSGot                          Msg = 347
+	MsgTypecheckTypeerrorValueMustSGotS                            Msg = 348
+	MsgTypecheckTypeerrorUnknownStructS                            Msg = 349
+	MsgTypecheckTypeerrorCannotAssignSSS                           Msg = 350
+	MsgTypecheckTypeerrorConditionMustBoolGotS                     Msg = 351
+	MsgTypecheckCompileerrorExpressionNestingDeeperThanD           Msg = 352
+	MsgTypecheckTypeerrorMovesReferenceVariableGotS                Msg = 353
+	MsgTypecheckTypeerrorNeedsReferencePermissionMBut              Msg = 354
+	MsgTypecheckTypeerrorReferenceQPermissionQCannotMoveM          Msg = 355
+	MsgTypecheckTypeerrorReferenceQPermissionQCannot               Msg = 356
+	MsgTypecheckCompileerrorVariableQUsedBeforeInitialization      Msg = 357
+	MsgTypecheckTypeerrorBitwiseComplementTildeRequiresInt         Msg = 358
+	MsgTypecheckTypeerrorBangRequiresBoolGotS                      Msg = 359
+	MsgTypecheckCompileerrorBitIndexDOutRange                      Msg = 360
+	MsgTypecheckTypeerrorBitIndexMustIntGot                        Msg = 361
+	MsgTypecheckTypeerrorIndexingRequiresListOrPointer             Msg = 362
+	MsgTypecheckTypeerrorIndexMustIntGotS                          Msg = 363
+	MsgTypecheckTypeerrorSShiftsRawBitsSo                          Msg = 364
+	MsgTypecheckTypeerrorSNeedsShiftCountInt                       Msg = 365
+	MsgTypecheckTypeerrorRawBitsAdmitNoArithmetic                  Msg = 366
+	MsgTypecheckTypeerrorRawBitsAdmitNoOrdering                    Msg = 367
+	MsgTypecheckTypeerrorRawBitsAdmitOnlyB                         Msg = 368
+	MsgTypecheckTypeerrorSSDifferentWidthsD                        Msg = 369
+	MsgTypecheckTypeerrorSOnSSMixes                                Msg = 370
+	MsgTypecheckTypeerrorSRequiresBoolOperandsGot                  Msg = 371
+	MsgTypecheckTypeerrorPlusRequiresNumbersOrString               Msg = 372
+	MsgTypecheckTypeerrorArithmeticRequiresNumbersGotS             Msg = 373
+	MsgTypecheckTypeerrorBitwiseShiftOperatorsRequireInt           Msg = 374
+	MsgTypecheckTypeerrorCannotCompareSS                           Msg = 375
+	MsgTypecheckTypeerrorNoMemberQOnAnonymous                      Msg = 376
+	MsgTypecheckTypeerrorNoMemberQOnPointer                        Msg = 377
+	MsgTypecheckTypeerrorUnknownInterfaceQ                         Msg = 378
+	MsgTypecheckTypeerrorSSExpectsDArguments                       Msg = 379
+	MsgTypecheckTypeerrorInterfaceSNoMethodQ                       Msg = 380
+	MsgTypecheckTypeerrorUnknownSystemLibraryQ                     Msg = 381
+	MsgTypecheckLibraryerrorSSExpectsDArguments                    Msg = 382
+	MsgTypecheckTypeerrorSSArgumentSRequires                       Msg = 383
+	MsgTypecheckLibraryerrorLibrarySNotExportFunction              Msg = 384
+	MsgTypecheckTypeerrorNoMethodQ                                 Msg = 385
+	MsgTypecheckTypeerrorFileNoMethodQ                             Msg = 386
+	MsgTypecheckTypeerrorSRequiresStringArgument                   Msg = 387
+	MsgTypecheckTypeerrorSubstringStartEndRequiresOne              Msg = 388
+	MsgTypecheckTypeerrorSubstringArgumentsMustInts                Msg = 389
+	MsgTypecheckTypeerrorGetIRequiresIntIndex                      Msg = 390
+	MsgTypecheckTypeerrorAppendExpectsSGotS                        Msg = 391
+	MsgTypecheckTypeerrorPutKeyExpectsSGot                         Msg = 392
+	MsgTypecheckTypeerrorPutValueExpectsSGot                       Msg = 393
+	MsgTypecheckTypeerrorSetinRequiresPathStringOr                 Msg = 394
+	MsgTypecheckTypeerrorSetoutRequiresPathStringOr                Msg = 395
+	MsgTypecheckCompileerrorThreadMergeFnArgsRequires              Msg = 396
+	MsgTypecheckTypeerrorThreadMergeSecondArgMust                  Msg = 397
+	MsgTypecheckTypeerrorThreadTalkRequiresChannelGot              Msg = 398
+	MsgTypecheckTypeerrorSetblockNRequiresIntBlock                 Msg = 399
+	MsgTypecheckCompileerrorTaskmSpawnTakesNoArgs                  Msg = 400
+	MsgTypecheckCompileerrorTaskmMergePidFnArgs                    Msg = 401
+	MsgTypecheckTypeerrorTaskmMergeFirstArgMust                    Msg = 402
+	MsgTypecheckTypeerrorTaskmMergeSecondArgMust                   Msg = 403
+	MsgTypecheckTypeerrorArgumentDSCannotAssign                    Msg = 404
+	MsgTypecheckTypeerrorTaskmBlockRequiresPidGot                  Msg = 405
+	MsgTypecheckTypeerrorTaskmChannelNRequiresInt                  Msg = 406
+	MsgTypecheckCompileerrorTaskmChannelExpects0Or                 Msg = 407
+	MsgTypecheckTypeerrorTypeSNoImpl                               Msg = 408
+	MsgTypecheckTypeerrorSStaticMethodCallVia                      Msg = 409
+	MsgTypecheckTypeerrorSSWidthMismatchS                          Msg = 410
+	MsgTypecheckTypeerrorSSNotConversionReinterpretation           Msg = 411
+	MsgTypecheckTypeerrorStyleconfigureCanOnlyWrapFunction         Msg = 412
+	MsgTypecheckCompileerrorSSignatureNameMustSign                 Msg = 413
+	MsgTypecheckCompileerrorSExpectsDArgsOptionally                Msg = 414
+	MsgTypecheckTypeerrorQkexecRequiresCommandStringGot            Msg = 415
+	MsgTypecheckTypeerrorQkexecvProgStringArgsList                 Msg = 416
+	MsgTypecheckTypeerrorQkpopenRequiresPathStringGot              Msg = 417
+	MsgTypecheckCompileerrorQkhttpGetExpects12                     Msg = 418
+	MsgTypecheckTypeerrorQkhttpGetRequiresUrlString                Msg = 419
+	MsgTypecheckCompileerrorQksignalEmitNodeNameString             Msg = 420
+	MsgTypecheckTypeerrorQkjsonLoadsRequiresStringGot              Msg = 421
+	MsgTypecheckCompileerrorQkhttpPostExpects34                    Msg = 422
+	MsgTypecheckTypeerrorQkhttpPostUrlBodyContenttype              Msg = 423
+	MsgTypecheckTypeerrorFileinputstreamRequiresPathStringGot      Msg = 424
+	MsgTypecheckTypeerrorFileoutputstreamRequiresPathStringGot     Msg = 425
+	MsgTypecheckCompileerrorSumGenerateBeginStopStep               Msg = 426
+	MsgTypecheckTypeerrorSumSFirstArgumentMust                     Msg = 427
+	MsgTypecheckTypeerrorSumSBoundArgumentsMust                    Msg = 428
+	MsgTypecheckTypeerrorArgumentDSV                               Msg = 429
+	MsgTypecheckInterfaceSMissingMethodQS                          Msg = 430
+	MsgTypecheckInterfaceSMethodQSignatureIncompatible             Msg = 431
+	MsgTypecheckTypeerrorSLiteralMustTakeNo                        Msg = 432
+	MsgTypecheckTypeerrorSDeclaresLiteralButNo                     Msg = 433
+	MsgTypecheckTypeerrorSElementMustTakeExactly                   Msg = 434
+	MsgTypecheckTypeerrorLiteralElementSButS                       Msg = 435
+	MsgTypecheckTypeerrorSV                                        Msg = 436
+	MsgTypecheckUnknownInterfaceS                                  Msg = 437
+	MsgTypecheckTypeSNotImplementInterfaceMethod                   Msg = 438
+	MsgTypecheckTypeerrorIoSetinRequiresPathString                 Msg = 439
+	MsgTypecheckTypeerrorIoSetoutRequiresPathString                Msg = 440
+	MsgTypecheckCompileerrorSSExpectsDArgs                         Msg = 441
+	MsgTypecheckTypeerrorArgumentDSSCannot                         Msg = 442
+	MsgTypecheckTypeerrorSNoStaticMethodQ                          Msg = 443
+	MsgTypecheckCompileerrorDuplicateOverloadQIdenticalSignature   Msg = 444
+	MsgCompilerExpression                                          Msg = 445
+	MsgCompilerNotQklibArtifactMagicMismatchS                      Msg = 446
+	MsgCompilerVariantSFailedVerificationContentModified           Msg = 447
+	MsgCompilerSTriedS                                             Msg = 448
+	MsgCompilerRedefiningBuiltinFunctionQNotSupported              Msg = 449
+	MsgCompilerOverloadingGenericFunctionQNotSupported             Msg = 450
+	MsgCompilerAGenericPlainFunctionSharingName                    Msg = 451
+	MsgCompilerDuplicateFunctionDefinitionSSameParameter           Msg = 452
+	MsgCompilerNoMainFunctionFoundCanonicalEntry                   Msg = 453
+	MsgCompilerOverloadingRedefiningMethodSSNot                    Msg = 454
+	MsgCompilerVoidTypeSNotSupportedYet                            Msg = 455
+	MsgCompilerSTypeQNotSupportedCompiler                          Msg = 456
+	MsgCompilerSTypeQNotSupportedNot                               Msg = 457
+	MsgCompilerIostreamSNotSupportedCompilerBinds                  Msg = 458
+	MsgCompilerSTypeQNotSupportedCompilerHandlesList               Msg = 459
+	MsgCompilerSTypeQNotSupportedYet                               Msg = 460
+	MsgCompilerSTypeQNotSupportedCompilerLowersT                   Msg = 461
+	MsgCompilerPointerCopyOnPassTypeQ                              Msg = 462
+	MsgCompilerUnknownTypeQSDeclaration                            Msg = 463
+	MsgCompilerDuplicateShadowedVariableQNotSupported              Msg = 464
+	MsgCompilerReturnTypeQNotSupportedCompiler                     Msg = 465
+	MsgCompilerImplInstanceMethodSMissingLeading                   Msg = 466
+	MsgCompilerCopydInterfaceParameterSNotSupported                Msg = 467
+	MsgCompilerCopydHashtableParameterSNotSupported                Msg = 468
+	MsgCompilerCopydListStringParametersNotSupported               Msg = 469
+	MsgCompilerCopydInterfaceFieldSInStruct                        Msg = 470
+	MsgCompilerAGenericMainFunctionNotSupported                    Msg = 471
+	MsgCompilerMainCannotReturnValueGotQ                           Msg = 472
+	MsgCompilerMainSFirstParameterMustIostream                     Msg = 473
+	MsgCompilerMainSQParameterNotSupported                         Msg = 474
+	MsgCompilerTheCopydModifierNotSupportedCopy                    Msg = 475
+	MsgCompilerIostreamMethodQNotSupportedCompiler                 Msg = 476
+	MsgCompilerAVoidFunctionCannotReturnValue                      Msg = 477
+	MsgCompilerReturningSValueFromSFunction                        Msg = 478
+	MsgCompilerCatchSSNotSupportedCompiler                         Msg = 479
+	MsgCompilerUsingQInsideCatchBodyNot                            Msg = 480
+	MsgCompilerDeleteOnNonVariableExpressionNot                    Msg = 481
+	MsgCompilerDeleteQNotSupportedCompilerHandles                  Msg = 482
+	MsgCompilerCompilerInternalErrorUnknownStatementType           Msg = 483
+	MsgCompilerForIterationOverSNotSupported                       Msg = 484
+	MsgCompilerIteratingListSNotSupportedCompiler                  Msg = 485
+	MsgCompilerForIterationOverNonVariableList                     Msg = 486
+	MsgCompilerForIterationOverSNotSupportedCompilerHandles        Msg = 487
+	MsgCompilerListStringQWithoutInitializerNot                    Msg = 488
+	MsgCompilerInitializingListStringWithSNot                      Msg = 489
+	MsgCompilerListIntQWithoutInitializerNot                       Msg = 490
+	MsgCompilerThisListIntInitializerNotSupported                  Msg = 491
+	MsgCompilerInitializingListIntWithSElements                    Msg = 492
+	MsgCompilerPrintingValueTypeSNotSupported                      Msg = 493
+	MsgCompilerASConditionNotSupportedYet                          Msg = 494
+	MsgCompilerAssignmentTargetQNotDeclared                        Msg = 495
+	MsgCompilerAssigningSSVariableQNot                             Msg = 496
+	MsgCompilerThisSubscriptAssignmentNotSupportedCompiler         Msg = 497
+	MsgCompilerIndexTypeSNotSupportedYet                           Msg = 498
+	MsgCompilerAssigningSListIntElementNot                         Msg = 499
+	MsgCompilerStructSNoFieldQ                                     Msg = 500
+	MsgCompilerAssigningSSSSNot                                    Msg = 501
+	MsgCompilerMemberAssignmentNotSupportedByCompiler              Msg = 502
+	MsgCompilerThisAssignmentTargetNotSupportedCompiler            Msg = 503
+	MsgCompilerUsingLibraryObjectQAsValue                          Msg = 504
+	MsgCompilerUndeclaredIdentifierQCompilerNotSupport             Msg = 505
+	MsgCompilerIostreamValueQNotSupportedYet                       Msg = 506
+	MsgCompilerThisSubscriptReadNotSupportedCompiler               Msg = 507
+	MsgCompilerNewSNNotSupportedYet                                Msg = 508
+	MsgCompilerNewSNotSupportedYetElement                          Msg = 509
+	MsgCompilerListLiteralSNotSupportedCompiler                    Msg = 510
+	MsgCompilerInitializingSWithSElementsNot                       Msg = 511
+	MsgCompilerCompilerInternalErrorUnknownExpressionType          Msg = 512
+	MsgCompilerAddingSSNotSupportedYet                             Msg = 513
+	MsgCompilerUsingQOnSSNot                                       Msg = 514
+	MsgCompilerUsingQOnSSNotSupportedShifts                        Msg = 515
+	MsgCompilerUsingQOnSSNotSupportedPointers                      Msg = 516
+	MsgCompilerUsingQOnSSNotSupportedNullable                      Msg = 517
+	MsgCompilerComparingNonVariableNullableReferenceNot            Msg = 518
+	MsgCompilerUsingQOnInterfaceNotSupported                       Msg = 519
+	MsgCompilerUsingQOnBoolNotSupported                            Msg = 520
+	MsgCompilerUsingQOnSSNotSupportedString                        Msg = 521
+	MsgCompilerOperatorQNotSupportedByCompiler                     Msg = 522
+	MsgCompilerNegatingSNotSupportedOperationOverloading           Msg = 523
+	MsgCompilerNegatingSNotSupportedYetBool                        Msg = 524
+	MsgCompilerDereferenceNotSupportedPointersInterpreterOnly      Msg = 525
+	MsgCompilerUnaryOperatorQNotSupported                          Msg = 526
+	MsgCompilerThisCallFormNotSupportedCompiler                    Msg = 527
+	MsgCompilerThisSignatureCallNotSupportedCompiler               Msg = 528
+	MsgCompilerUndeclaredSignatureInstanceQS                       Msg = 529
+	MsgCompilerSignatureInstanceQTypeSNot                          Msg = 530
+	MsgCompilerWrappingFunctionSReturnsSWith                       Msg = 531
+	MsgCompilerMemorizeWrappingSParameterNotSupported              Msg = 532
+	MsgCompilerASArgumentMemorizeNotSupported                      Msg = 533
+	MsgCompilerClockTakesNoArgumentsGotD                           Msg = 534
+	MsgCompilerSumGeneratorQMultipleIntS                           Msg = 535
+	MsgCompilerSumGeneratorQNoIntS                                 Msg = 536
+	MsgCompilerUnknownGeneratorFunctionQCompilerOnly               Msg = 537
+	MsgCompilerUnknownFunctionQCompilerOnlySupports                Msg = 538
+	MsgCompilerMergeTargetQSeveralOverloadsWith                    Msg = 539
+	MsgCompilerMergeTargetQNoOverloadWith                          Msg = 540
+	MsgCompilerNoMatchingOverloadForQArity                         Msg = 541
+	MsgCompilerPassingSArgumentSNotSupported                       Msg = 542
+	MsgCompilerThisSumGeneratorNotSupportedCompiler                Msg = 543
+	MsgCompilerThisGenericGeneratorSNotSupported                   Msg = 544
+	MsgCompilerSumSSArgumentNotSupported                           Msg = 545
+	MsgCompilerGeneratorQNotSupportedCompilerRequires              Msg = 546
+	MsgCompilerTostringTakesNoArguments                            Msg = 547
+	MsgCompilerListSizeTakesNoArguments                            Msg = 548
+	MsgCompilerListGetIRequires1Argument                           Msg = 549
+	MsgCompilerListGetWithSIndexNot                                Msg = 550
+	MsgCompilerListStringSNotSupportedYet                          Msg = 551
+	MsgCompilerListStringAppendWithSArgument                       Msg = 552
+	MsgCompilerListAppendVRequires1Argument                        Msg = 553
+	MsgCompilerListIntAppendWithSArgument                          Msg = 554
+	MsgCompilerListSCallTakesNoArguments                           Msg = 555
+	MsgCompilerListResetTakesNoArguments                           Msg = 556
+	MsgCompilerListAppendallL2Requires1Argument                    Msg = 557
+	MsgCompilerListAppendallRequiresListIntGot                     Msg = 558
+	MsgCompilerListSortTakesNoArguments                            Msg = 559
+	MsgCompilerListMethodQNotSupportedYet                          Msg = 560
+	MsgCompilerMethodSSRequiresDArguments                          Msg = 561
+	MsgCompilerCallingStaticMethodSSOn                             Msg = 562
+	MsgCompilerStructSNoMethodQInterpreter                         Msg = 563
+	MsgCompilerCallingMethodSOnSNot                                Msg = 564
+	MsgCompilerTaskmThreadsChannelsNotSupportedYet                 Msg = 565
+	MsgCompilerLibraryFfiCallSSNot                                 Msg = 566
+	MsgCompilerIoSReturnsNothingCannotUsed                         Msg = 567
+	MsgCompilerPassingSArgumentSSNot                               Msg = 568
+	MsgCompilerHashtableSWithSArgumentNot                          Msg = 569
+	MsgCompilerHashtableSizeTakesNoArguments                       Msg = 570
+	MsgCompilerHashtableKeysTakesNoArguments                       Msg = 571
+	MsgCompilerHashtableSSKeysNotSupported                         Msg = 572
+	MsgCompilerHashtablePutKVRequires2                             Msg = 573
+	MsgCompilerHashtableSSPutKeyMust                               Msg = 574
+	MsgCompilerHashtableSSPutValueMust                             Msg = 575
+	MsgCompilerHashtableGetKRequires1Argument                      Msg = 576
+	MsgCompilerHashtableSSGetKeyMust                               Msg = 577
+	MsgCompilerHashtableSKRequires1Argument                        Msg = 578
+	MsgCompilerHashtableSSSKeyMust                                 Msg = 579
+	MsgCompilerHashtableMethodQNotSupportedCompiler                Msg = 580
+	MsgCompilerHashtableSNotSupportedYetOnly                       Msg = 581
+	MsgCompilerMemorizeSNotSupportedYetOnly                        Msg = 582
+	MsgCompilerPassingSArgumentSSNotSupportedYet                   Msg = 583
+	MsgCompilerInterfaceMemberAccessSSNot                          Msg = 584
+	MsgCompilerLibraryMemberAccessSSNot                            Msg = 585
+	MsgCompilerMemberAccessSSNotSupported                          Msg = 586
+	MsgCompilerAGenericStructLiteralWhoseType                      Msg = 587
+	MsgCompilerAnonymousStructLiteralNotSupportedCompiler          Msg = 588
+	MsgCompilerStructSLiteralTooManyFields                         Msg = 589
+	MsgCompilerInitializingFieldSSWithS                            Msg = 590
+	MsgCompilerSRequiresStringArgumentGotS                         Msg = 591
+	MsgCompilerSRequiresIntArgumentGotS                            Msg = 592
+	MsgCompilerSplitSepRequires1Argument                           Msg = 593
+	MsgCompilerStaticMethodSStructSNot                             Msg = 594
+	MsgCompilerSpaceCallSSNotSupported                             Msg = 595
+	MsgCompilerSSInstanceMethodNeedsSelf                           Msg = 596
+	MsgCompilerSSNotSupportedYetSpace                              Msg = 597
+	MsgCompilerLibraryFfiTypeQNotSupported                         Msg = 598
+	MsgCompilerLibrarySNotDeclareFunctionQ                         Msg = 599
+	MsgCompilerLibraryFunctionSSRequiresD                          Msg = 600
+	MsgCompilerALibraryFunctionParameterCannotVoid                 Msg = 601
+	MsgCompilerLibraryFfiParameterTypeQNot                         Msg = 602
+	MsgCompilerTaskmRequiresThreadOrPidGot                         Msg = 603
+	MsgCompilerThisMergeTargetNotSupportedYet                      Msg = 604
+	MsgCompilerMergingGenericFunctionSNotSupported                 Msg = 605
+	MsgCompilerMergingWithDArgumentsNotSupported                   Msg = 606
+	MsgCompilerASMergeParameterNotSupported                        Msg = 607
+	MsgCompilerMergingFunctionSContainsLogNot                      Msg = 608
+	MsgCompilerTaskmSpawnTakesNoArgumentsGot                       Msg = 609
+	MsgCompilerTaskmChannelTakes0Or1                               Msg = 610
+	MsgCompilerTaskmChannelNRequiresIntCapacity                    Msg = 611
+	MsgCompilerTaskmBlockPidRequires1Argument                      Msg = 612
+	MsgCompilerTaskmDonePidRequires1Argument                       Msg = 613
+	MsgCompilerTaskmMergePidFnArgsRequires                         Msg = 614
+	MsgCompilerThreadTalkNotSupportedYetAvailable                  Msg = 615
+	MsgCompilerTaskmSNotSupportedYetCompiler                       Msg = 616
+	MsgCompilerTPidTakesNoArguments                                Msg = 617
+	MsgCompilerTMergeFnArgsRequires1                               Msg = 618
+	MsgCompilerTTalkCRequires1Argument                             Msg = 619
+	MsgCompilerThreadTalkRequiresChannelInstanceGot                Msg = 620
+	MsgCompilerThreadMethodQNotSupportedYet                        Msg = 621
+	MsgCompilerASMergeArgumentNotSupported                         Msg = 622
+	MsgCompilerCSendVRequires1Argument                             Msg = 623
+	MsgCompilerSendingSOverChannelNotSupported                     Msg = 624
+	MsgCompilerCRecvTakesNoArguments                               Msg = 625
+	MsgCompilerChannelMethodQNotSupportedYet                       Msg = 626
+	MsgCompilerQkcDebugPreprocessTarget                            Msg = 627
+	MsgCompilerQkcWroteLibraryArtifactSS                           Msg = 628
+	MsgCompilerQkcNoteLibrarySNoS                                  Msg = 629
+	MsgCompilerQkcLinkingLibrarySVS                                Msg = 630
+	MsgCompilerFunctionSRequiresDArgumentsGot                      Msg = 631
+	MsgCompilerAGenericCallWhoseTypeArguments                      Msg = 632
+	MsgCompilerUsingReturnValueLogContainingFunction               Msg = 633
+	MsgCompilerGenericMethodSSWhoseType                            Msg = 634
+	MsgCompilerMethodSInterfaceSNotImplemented                     Msg = 635
+	MsgCompilerMethodSInterfaceSDifferentParameter                 Msg = 636
+	MsgCompilerBoxingSValueIntoInterfaceNot                        Msg = 637
+	MsgCompilerPuttingSValueIntoInterfaceS                         Msg = 638
+	MsgCompilerInterfaceMethodSSRequiresD                          Msg = 639
+	MsgCompilerPassingSArgumentInterfaceMethodS                    Msg = 640
+	MsgCompilerCompilingProgramLibraryNotSupportedLibrary          Msg = 641
+	MsgCompilerQkcUnknownArgumentS                                 Msg = 642
+	MsgCompilerQkcOnlyOneSourceFileMay                             Msg = 643
+	MsgCompilerUsingSInitializeInterfaceSVariable                  Msg = 644
+	MsgCompilerUsingSInitializeSVariableQ                          Msg = 645
+	MsgCompilerTypeerrorPanicMsgStringTakesExactly                 Msg = 646
+	MsgCompilerSWithQNotSupportedBool                              Msg = 647
+	MsgCompilerABitIndexMustIntGot                                 Msg = 648
+	MsgCompilerAssigningSBitNotSupported                           Msg = 649
+	MsgCompilerBIVRequiresRawBits                                  Msg = 650
+	MsgCompilerSubscriptingBitRequiresRawBitsGot                   Msg = 651
+	MsgCompilerTheBitwiseComplementTildeRequiresInt                Msg = 652
+	MsgCompilerUsingQOnSNotSupported                               Msg = 653
+	MsgCompilerUsingQOnSSNotSupportedBitwise                       Msg = 654
+	MsgCompilerUsingQOnSSNotSupportedRaw                           Msg = 655
+	MsgCompilerUsingQOnSSNotSupportedWidths                        Msg = 656
+	MsgCompilerUsingSInitializeSVariableQNotSupported              Msg = 657
+	MsgCompilerCompilingSNotSupportedYetStorage                    Msg = 658
+	MsgCompilerCompilingAddressNotSupportedYetReferences           Msg = 659
+	MsgCompilerCompilingReferenceMoveNotSupportedYet               Msg = 660
+	MsgCompilerCompilingPermissionReferenceSSNot                   Msg = 661
 )
 
 // msgLangs are the shipped languages, in blob-block order. The first is the source language.
 var msgLangs = [...]string{"en", "zh"}
 
 // msgOffsets has one entry per (language, message) pair plus a final sentinel: the pair at flat
-// index lang*635+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
+// index lang*662+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
 var msgOffsets = [...]uint32{
 	0,
 	42,
@@ -770,1173 +797,1227 @@ var msgOffsets = [...]uint32{
 	6141,
 	6150,
 	6158,
-	6188,
-	6218,
-	6250,
-	6299,
-	6318,
-	6341,
-	6373,
-	6409,
-	6450,
-	6479,
-	6509,
-	6560,
-	6594,
-	6628,
-	6655,
-	6682,
-	6716,
-	6744,
-	6823,
-	6908,
-	7004,
-	7134,
-	7284,
-	7371,
-	7440,
-	7480,
-	7928,
-	7956,
-	7989,
-	8281,
-	8384,
-	8421,
-	8456,
-	8527,
-	8604,
-	8670,
-	8706,
-	8758,
-	8797,
-	8863,
-	8922,
-	8968,
-	9016,
-	9062,
-	9107,
-	9163,
-	9202,
-	9246,
-	9300,
-	9339,
-	9374,
-	9407,
-	9434,
-	9480,
-	9507,
-	9543,
-	9584,
-	9609,
-	9659,
-	9715,
-	9763,
+	6189,
+	6241,
+	6346,
+	6454,
+	6549,
+	6663,
+	6743,
+	6843,
+	6924,
+	7036,
+	7133,
+	7191,
+	7229,
+	7271,
+	7376,
+	7449,
+	7479,
+	7509,
+	7541,
+	7590,
+	7609,
+	7632,
+	7664,
+	7700,
+	7741,
+	7770,
+	7800,
+	7851,
+	7885,
+	7919,
+	7946,
+	7973,
+	8007,
+	8035,
+	8114,
+	8199,
+	8295,
+	8425,
+	8575,
+	8678,
+	8747,
+	8787,
+	9235,
+	9263,
+	9296,
+	9588,
+	9632,
+	9681,
+	9714,
+	9765,
 	9816,
-	9854,
-	9906,
-	9952,
-	9994,
-	10060,
-	10134,
-	10193,
-	10249,
-	10309,
-	10370,
-	10408,
-	10440,
-	10490,
-	10546,
-	10619,
-	10656,
-	10692,
-	10736,
-	10774,
-	10833,
-	10894,
-	10932,
-	11018,
-	11071,
-	11132,
-	11177,
-	11257,
-	11323,
-	11390,
-	11485,
-	11547,
-	11594,
-	11635,
-	11694,
-	11755,
-	11807,
-	11892,
-	11929,
-	11958,
-	11998,
-	12069,
-	12115,
-	12150,
-	12183,
-	12242,
-	12282,
-	12324,
-	12360,
-	12394,
-	12438,
-	12488,
-	12517,
-	12559,
-	12602,
-	12646,
+	9845,
+	9860,
+	9877,
+	9890,
+	9954,
+	10034,
+	10137,
+	10174,
+	10209,
+	10280,
+	10357,
+	10423,
+	10459,
+	10511,
+	10550,
+	10616,
+	10675,
+	10721,
+	10769,
+	10815,
+	10860,
+	10916,
+	10955,
+	10999,
+	11053,
+	11092,
+	11127,
+	11160,
+	11187,
+	11233,
+	11260,
+	11296,
+	11337,
+	11362,
+	11412,
+	11468,
+	11516,
+	11569,
+	11607,
+	11659,
+	11705,
+	11747,
+	11813,
+	11887,
+	11946,
+	12002,
+	12062,
+	12123,
+	12161,
+	12193,
+	12243,
+	12299,
+	12372,
+	12409,
+	12445,
+	12489,
+	12527,
+	12586,
+	12647,
 	12685,
+	12771,
 	12824,
-	12884,
-	12945,
-	12982,
-	13012,
-	13041,
-	13082,
-	13129,
-	13174,
-	13223,
-	13271,
-	13328,
-	13371,
-	13399,
-	13444,
-	13483,
-	13494,
-	13507,
-	13559,
-	13592,
+	12885,
+	12930,
+	13010,
+	13076,
+	13143,
+	13238,
+	13300,
+	13347,
+	13388,
+	13447,
+	13508,
+	13560,
 	13645,
-	13671,
-	13728,
-	13788,
-	13821,
-	13871,
-	13898,
-	13948,
-	13977,
-	13991,
-	14042,
-	14086,
+	13682,
+	13711,
+	13751,
+	13822,
+	13868,
+	13903,
+	13936,
+	13995,
+	14035,
+	14077,
+	14113,
 	14147,
-	14195,
-	14252,
-	14265,
-	14298,
-	14333,
-	14344,
-	14396,
-	14451,
-	14514,
-	14561,
-	14632,
-	14694,
-	14737,
-	14773,
-	14813,
-	14854,
-	14891,
-	14924,
-	14960,
-	14994,
-	15105,
-	15173,
-	15212,
-	15246,
-	15293,
-	15371,
-	15443,
-	15539,
+	14191,
+	14241,
+	14270,
+	14312,
+	14355,
+	14399,
+	14438,
+	14577,
+	14637,
+	14698,
+	14735,
+	14765,
+	14794,
+	14835,
+	14882,
+	14927,
+	14976,
+	15024,
+	15081,
+	15124,
+	15152,
+	15197,
+	15236,
+	15247,
+	15260,
+	15312,
+	15345,
+	15398,
+	15424,
+	15481,
+	15541,
 	15574,
-	15590,
-	15640,
-	15717,
-	15746,
-	15807,
-	15858,
-	15894,
-	15939,
-	15974,
-	16014,
-	16082,
-	16111,
-	16147,
-	16205,
-	16272,
-	16303,
-	16363,
-	16392,
-	16435,
-	16468,
-	16558,
-	16670,
-	16722,
-	16808,
-	16849,
-	16888,
-	16923,
-	16951,
-	16992,
-	17033,
-	17170,
-	17218,
-	17278,
-	17350,
-	17425,
-	17477,
-	17546,
-	17582,
-	17639,
-	17681,
-	17743,
-	17779,
-	17854,
-	17914,
-	18024,
-	18132,
-	18214,
-	18326,
-	18434,
-	18478,
-	18536,
-	18589,
-	18663,
-	18698,
-	18744,
-	18778,
-	18809,
-	18854,
-	18894,
-	18930,
-	18978,
-	19026,
-	19078,
-	19101,
-	19133,
-	19173,
-	19240,
-	19283,
-	19330,
-	19366,
-	19403,
-	19442,
-	19507,
-	19574,
-	19637,
-	19708,
-	19757,
-	19814,
-	19863,
-	19939,
-	19999,
-	20069,
-	20121,
-	20166,
-	20226,
-	20283,
-	20313,
-	20370,
-	20463,
-	20612,
-	20678,
-	20771,
-	20837,
-	20888,
-	20938,
-	20987,
-	21053,
-	21102,
-	21160,
-	21207,
-	21284,
-	21365,
-	21422,
-	21480,
-	21562,
-	21630,
-	21683,
-	21715,
-	21754,
-	21827,
-	21876,
-	21953,
-	22018,
-	22079,
-	22096,
-	22116,
-	22162,
-	22231,
-	22302,
-	22346,
-	22402,
-	22439,
-	22511,
-	22521,
-	22563,
-	22616,
-	22630,
-	22713,
-	22817,
-	22925,
-	22989,
-	23065,
-	23194,
-	23227,
-	23316,
-	23377,
-	23452,
-	23517,
-	23572,
-	23655,
-	23772,
-	23804,
-	23921,
-	24009,
-	24070,
-	24179,
-	24271,
-	24365,
-	24456,
-	24500,
-	24535,
-	24616,
-	24690,
-	24760,
-	24843,
-	24960,
-	25020,
-	25093,
-	25180,
-	25283,
-	25363,
-	25413,
-	25484,
-	25569,
-	25664,
-	25752,
-	25864,
-	25998,
-	26138,
-	26213,
-	26269,
-	26370,
-	26421,
-	26457,
-	26504,
-	26584,
-	26636,
-	26688,
+	15624,
+	15651,
+	15701,
+	15730,
+	15744,
+	15795,
+	15839,
+	15900,
+	15948,
+	16005,
+	16018,
+	16051,
+	16086,
+	16097,
+	16149,
+	16204,
+	16267,
+	16314,
+	16385,
+	16447,
+	16490,
+	16526,
+	16566,
+	16607,
+	16644,
+	16677,
+	16713,
+	16747,
+	16858,
+	16926,
+	16965,
+	16999,
+	17046,
+	17124,
+	17196,
+	17292,
+	17327,
+	17343,
+	17393,
+	17470,
+	17499,
+	17560,
+	17611,
+	17647,
+	17692,
+	17727,
+	17767,
+	17835,
+	17864,
+	17900,
+	17958,
+	18025,
+	18056,
+	18116,
+	18145,
+	18188,
+	18221,
+	18311,
+	18423,
+	18475,
+	18561,
+	18602,
+	18641,
+	18676,
+	18704,
+	18745,
+	18786,
+	18923,
+	18971,
+	19031,
+	19103,
+	19178,
+	19230,
+	19299,
+	19335,
+	19392,
+	19434,
+	19496,
+	19532,
+	19607,
+	19667,
+	19777,
+	19885,
+	19967,
+	20079,
+	20187,
+	20231,
+	20289,
+	20342,
+	20416,
+	20451,
+	20497,
+	20531,
+	20562,
+	20607,
+	20647,
+	20683,
+	20731,
+	20779,
+	20831,
+	20854,
+	20886,
+	20926,
+	20993,
+	21036,
+	21083,
+	21119,
+	21156,
+	21195,
+	21260,
+	21327,
+	21390,
+	21461,
+	21510,
+	21567,
+	21616,
+	21692,
+	21752,
+	21822,
+	21874,
+	21919,
+	21979,
+	22036,
+	22066,
+	22123,
+	22216,
+	22365,
+	22431,
+	22524,
+	22590,
+	22641,
+	22691,
+	22740,
+	22806,
+	22855,
+	22913,
+	22960,
+	23037,
+	23118,
+	23175,
+	23233,
+	23315,
+	23383,
+	23436,
+	23468,
+	23507,
+	23580,
+	23629,
+	23706,
+	23771,
+	23832,
+	23849,
+	23869,
+	23915,
+	23984,
+	24055,
+	24099,
+	24155,
+	24192,
+	24264,
+	24274,
+	24316,
+	24369,
+	24383,
+	24466,
+	24570,
+	24678,
+	24742,
+	24818,
+	24947,
+	24980,
+	25069,
+	25130,
+	25205,
+	25270,
+	25325,
+	25408,
+	25525,
+	25557,
+	25674,
+	25762,
+	25823,
+	25932,
+	26024,
+	26118,
+	26209,
+	26253,
+	26288,
+	26369,
+	26443,
+	26513,
+	26596,
 	26713,
-	26756,
-	26847,
-	26959,
-	27040,
-	27132,
-	27217,
-	27291,
-	27412,
-	27478,
-	27559,
-	27608,
-	27659,
-	27752,
-	27845,
-	27908,
-	27974,
-	28051,
-	28149,
-	28204,
-	28275,
-	28361,
-	28436,
-	28521,
-	28569,
-	28631,
-	28665,
-	28757,
-	28860,
-	28898,
-	28991,
-	29099,
-	29180,
-	29254,
-	29288,
-	29350,
-	29390,
-	29498,
-	29584,
-	29656,
-	29706,
-	29755,
-	29817,
-	29893,
-	29973,
-	30026,
-	30091,
-	30120,
-	30150,
-	30181,
-	30241,
-	30337,
-	30414,
-	30448,
-	30519,
-	30547,
-	30578,
-	30616,
-	30657,
-	30691,
-	30815,
-	30857,
-	30941,
-	31019,
-	31106,
-	31185,
-	31259,
-	31352,
-	31417,
-	31469,
-	31504,
-	31539,
-	31678,
-	31718,
-	31762,
-	31808,
+	26773,
+	26846,
+	26933,
+	27036,
+	27116,
+	27166,
+	27237,
+	27322,
+	27417,
+	27505,
+	27617,
+	27751,
+	27891,
+	27966,
+	28022,
+	28123,
+	28174,
+	28210,
+	28257,
+	28337,
+	28389,
+	28441,
+	28466,
+	28509,
+	28600,
+	28712,
+	28793,
+	28885,
+	28970,
+	29044,
+	29165,
+	29231,
+	29312,
+	29361,
+	29412,
+	29505,
+	29598,
+	29661,
+	29727,
+	29804,
+	29902,
+	29957,
+	30028,
+	30114,
+	30189,
+	30274,
+	30322,
+	30384,
+	30418,
+	30510,
+	30613,
+	30651,
+	30744,
+	30852,
+	30933,
+	31007,
+	31041,
+	31103,
+	31143,
+	31251,
+	31337,
+	31409,
+	31459,
+	31508,
+	31570,
+	31646,
+	31726,
+	31779,
 	31844,
-	31888,
-	31923,
-	31966,
-	32059,
-	32128,
-	32195,
-	32261,
-	32346,
-	32420,
-	32503,
-	32626,
-	32713,
-	32750,
-	32804,
-	32841,
-	32876,
-	32906,
-	32989,
-	33128,
-	33183,
+	31873,
+	31903,
+	31934,
+	31994,
+	32090,
+	32167,
+	32201,
+	32272,
+	32300,
+	32331,
+	32369,
+	32410,
+	32444,
+	32568,
+	32610,
+	32694,
+	32772,
+	32859,
+	32938,
+	33012,
+	33105,
+	33170,
+	33222,
 	33257,
-	33297,
-	33336,
-	33388,
+	33292,
 	33431,
-	33538,
-	33576,
-	33645,
-	33724,
-	33809,
-	33887,
-	33975,
-	34015,
-	34061,
-	34110,
-	34154,
-	34197,
-	34278,
-	34341,
-	34425,
-	34451,
-	34522,
-	34551,
-	34598,
-	34674,
-	34714,
-	34743,
-	34823,
-	34850,
-	34922,
-	34953,
-	35023,
-	35124,
-	35188,
-	35229,
-	35358,
-	35478,
-	35590,
-	35680,
-	35807,
-	35925,
-	36020,
-	36072,
-	36154,
-	36255,
-	36280,
-	36337,
-	36401,
-	36455,
-	36508,
-	36551,
-	36582,
-	36620,
-	36654,
-	36698,
-	36756,
-	36819,
-	36902,
-	36964,
-	37019,
-	37131,
-	37226,
-	37324,
-	37412,
-	37510,
-	37553,
-	37629,
-	37653,
-	37713,
-	37762,
-	37793,
-	37830,
-	37869,
-	37923,
-	37960,
-	37998,
-	38034,
-	38078,
-	38131,
-	38200,
-	38289,
-	38336,
-	38399,
-	38444,
-	38476,
-	38506,
-	38533,
-	38577,
-	38612,
-	38694,
-	38749,
-	38804,
-	38843,
-	38890,
-	38917,
-	38992,
-	39067,
-	39104,
-	39184,
-	39251,
-	39315,
-	39397,
-	39485,
-	39504,
-	39537,
-	39575,
-	39598,
-	39623,
-	39664,
-	39700,
-	39726,
-	39758,
-	39791,
-	39830,
-	39869,
-	39927,
-	39940,
-	40026,
-	40057,
-	40083,
-	40106,
-	40149,
-	40171,
-	40195,
-	40217,
-	40240,
-	40267,
-	40295,
-	40315,
-	40332,
-	40399,
-	40442,
-	40485,
-	40518,
-	40524,
-	40533,
-	40539,
-	40551,
+	33471,
+	33515,
+	33561,
+	33597,
+	33641,
+	33676,
+	33719,
+	33812,
+	33881,
+	33948,
+	34014,
+	34099,
+	34173,
+	34256,
+	34379,
+	34466,
+	34503,
+	34557,
+	34594,
+	34629,
+	34659,
+	34742,
+	34881,
+	34936,
+	35010,
+	35050,
+	35089,
+	35141,
+	35184,
+	35291,
+	35329,
+	35398,
+	35477,
+	35562,
+	35640,
+	35728,
+	35768,
+	35814,
+	35863,
+	35907,
+	35950,
+	36031,
+	36094,
+	36178,
+	36204,
+	36275,
+	36304,
+	36351,
+	36427,
+	36467,
+	36496,
+	36576,
+	36603,
+	36675,
+	36706,
+	36776,
+	36877,
+	36941,
+	36982,
+	37111,
+	37231,
+	37343,
+	37433,
+	37560,
+	37678,
+	37773,
+	37825,
+	37907,
+	38008,
+	38033,
+	38090,
+	38154,
+	38208,
+	38261,
+	38304,
+	38335,
+	38373,
+	38407,
+	38451,
+	38509,
+	38572,
+	38655,
+	38717,
+	38772,
+	38884,
+	38979,
+	39077,
+	39165,
+	39263,
+	39306,
+	39382,
+	39406,
+	39466,
+	39515,
+	39546,
+	39583,
+	39622,
+	39676,
+	39713,
+	39751,
+	39787,
+	39831,
+	39884,
+	39953,
+	40042,
+	40089,
+	40152,
+	40197,
+	40229,
+	40259,
+	40286,
+	40330,
+	40365,
+	40447,
+	40502,
 	40557,
-	40563,
-	40572,
-	40575,
-	40581,
-	40587,
-	40593,
-	40599,
-	40602,
-	40611,
-	41848,
-	41885,
-	41898,
-	41926,
-	41957,
-	41996,
-	42036,
-	42058,
-	42119,
-	42191,
-	42224,
-	42251,
-	42349,
-	42458,
-	42516,
-	42561,
-	42626,
-	42691,
-	42775,
-	42808,
-	42841,
-	42917,
-	42996,
-	43044,
-	43093,
-	43158,
-	43228,
-	43240,
-	43252,
-	43322,
-	43328,
-	43334,
-	43364,
-	43403,
-	43430,
-	43488,
-	43503,
-	43524,
-	43555,
-	43587,
-	43623,
-	43648,
-	43686,
-	43735,
-	43769,
-	43801,
-	43824,
-	43859,
-	43888,
-	43912,
-	43988,
-	44071,
-	44154,
-	44281,
-	44412,
-	44499,
-	44568,
-	44608,
-	45029,
-	45057,
-	45085,
-	45344,
-	45431,
-	45464,
-	45500,
-	45565,
-	45639,
-	45710,
-	45746,
-	45785,
-	45820,
-	45880,
-	45933,
-	45973,
-	46015,
-	46055,
-	46094,
-	46145,
-	46187,
-	46227,
-	46276,
-	46311,
-	46343,
-	46375,
-	46407,
-	46447,
-	46473,
-	46505,
-	46538,
-	46561,
-	46608,
-	46666,
-	46711,
-	46753,
-	46782,
-	46829,
-	46868,
-	46904,
-	46960,
-	47020,
-	47066,
-	47117,
-	47171,
-	47222,
-	47255,
-	47287,
-	47334,
-	47389,
-	47449,
-	47487,
-	47524,
-	47567,
-	47603,
-	47658,
-	47709,
-	47747,
-	47829,
-	47888,
-	47950,
-	47992,
-	48071,
-	48134,
-	48191,
-	48277,
-	48331,
-	48380,
-	48428,
-	48487,
-	48548,
-	48596,
-	48683,
-	48722,
-	48762,
-	48797,
-	48864,
-	48910,
-	48947,
-	48981,
-	49031,
-	49079,
-	49117,
-	49152,
-	49194,
-	49238,
-	49291,
-	49331,
-	49381,
-	49422,
-	49464,
-	49501,
-	49644,
-	49713,
-	49783,
-	49818,
-	49853,
-	49884,
-	49930,
-	49965,
-	50010,
-	50059,
-	50107,
-	50164,
-	50207,
-	50235,
-	50280,
-	50319,
-	50330,
-	50343,
-	50395,
-	50428,
-	50481,
-	50507,
-	50564,
-	50624,
-	50657,
-	50707,
-	50734,
-	50784,
-	50813,
-	50827,
-	50878,
-	50922,
-	50983,
-	51031,
-	51088,
-	51101,
-	51134,
-	51169,
-	51180,
-	51232,
-	51287,
-	51350,
-	51397,
-	51468,
-	51530,
-	51573,
-	51609,
-	51649,
-	51690,
-	51727,
-	51760,
-	51796,
-	51830,
-	51941,
-	52009,
-	52048,
-	52082,
-	52129,
-	52207,
-	52279,
-	52375,
-	52410,
-	52426,
-	52476,
-	52553,
-	52582,
-	52643,
-	52694,
-	52730,
-	52775,
-	52810,
-	52850,
-	52918,
-	52943,
-	52984,
-	53036,
-	53101,
-	53136,
-	53190,
-	53219,
-	53263,
-	53296,
-	53369,
-	53478,
-	53526,
-	53600,
-	53644,
-	53685,
-	53720,
-	53752,
-	53796,
-	53839,
-	53944,
-	53994,
-	54050,
-	54115,
-	54180,
-	54231,
-	54291,
-	54329,
-	54383,
-	54428,
-	54487,
-	54529,
-	54609,
-	54673,
-	54796,
-	54925,
-	55018,
-	55127,
-	55244,
-	55291,
-	55347,
-	55401,
-	55472,
-	55505,
-	55547,
-	55589,
-	55615,
-	55663,
-	55699,
-	55728,
-	55779,
-	55827,
-	55869,
-	55895,
-	55926,
-	55960,
-	56019,
-	56059,
-	56106,
-	56145,
-	56187,
-	56229,
-	56293,
-	56359,
-	56423,
-	56498,
-	56547,
-	56602,
-	56657,
-	56737,
-	56812,
-	56886,
-	56946,
-	56991,
-	57048,
-	57114,
-	57146,
-	57206,
-	57289,
-	57409,
-	57467,
+	40596,
+	40643,
+	40670,
+	40745,
+	40820,
+	40857,
+	40937,
+	41004,
+	41068,
+	41150,
+	41238,
+	41257,
+	41290,
+	41328,
+	41351,
+	41376,
+	41417,
+	41453,
+	41479,
+	41511,
+	41544,
+	41583,
+	41622,
+	41680,
+	41693,
+	41779,
+	41810,
+	41836,
+	41859,
+	41902,
+	41924,
+	41948,
+	41970,
+	41993,
+	42020,
+	42048,
+	42068,
+	42085,
+	42152,
+	42195,
+	42238,
+	42271,
+	42277,
+	42286,
+	42292,
+	42304,
+	42310,
+	42316,
+	42325,
+	42328,
+	42334,
+	42340,
+	42346,
+	42352,
+	42355,
+	42364,
+	43601,
+	43638,
+	43651,
+	43679,
+	43710,
+	43749,
+	43789,
+	43811,
+	43872,
+	43944,
+	43977,
+	44004,
+	44102,
+	44211,
+	44269,
+	44314,
+	44379,
+	44444,
+	44528,
+	44561,
+	44594,
+	44670,
+	44749,
+	44797,
+	44846,
+	44911,
+	44981,
+	44993,
+	45005,
+	45075,
+	45081,
+	45087,
+	45114,
+	45162,
+	45240,
+	45324,
+	45408,
+	45498,
+	45578,
+	45665,
+	45734,
+	45815,
+	45899,
+	45947,
+	45989,
+	46031,
+	46130,
+	46193,
+	46223,
+	46262,
+	46289,
+	46347,
+	46362,
+	46383,
+	46414,
+	46446,
+	46482,
+	46507,
+	46545,
+	46594,
+	46628,
+	46660,
+	46683,
+	46718,
+	46747,
+	46771,
+	46847,
+	46930,
+	47013,
+	47140,
+	47271,
+	47374,
+	47443,
+	47483,
+	47904,
+	47932,
+	47960,
+	48219,
+	48263,
+	48316,
+	48350,
+	48399,
+	48449,
+	48481,
+	48503,
+	48521,
+	48541,
+	48601,
+	48674,
+	48761,
+	48794,
+	48830,
+	48895,
+	48969,
+	49040,
+	49076,
+	49115,
+	49150,
+	49210,
+	49263,
+	49303,
+	49345,
+	49385,
+	49424,
+	49475,
+	49517,
+	49557,
+	49606,
+	49641,
+	49673,
+	49705,
+	49737,
+	49777,
+	49803,
+	49835,
+	49868,
+	49891,
+	49938,
+	49996,
+	50041,
+	50083,
+	50112,
+	50159,
+	50198,
+	50234,
+	50290,
+	50350,
+	50396,
+	50447,
+	50501,
+	50552,
+	50585,
+	50617,
+	50664,
+	50719,
+	50779,
+	50817,
+	50854,
+	50897,
+	50933,
+	50988,
+	51039,
+	51077,
+	51159,
+	51218,
+	51280,
+	51322,
+	51401,
+	51464,
+	51521,
+	51607,
+	51661,
+	51710,
+	51758,
+	51817,
+	51878,
+	51926,
+	52013,
+	52052,
+	52092,
+	52127,
+	52194,
+	52240,
+	52277,
+	52311,
+	52361,
+	52409,
+	52447,
+	52482,
+	52524,
+	52568,
+	52621,
+	52661,
+	52711,
+	52752,
+	52794,
+	52831,
+	52974,
+	53043,
+	53113,
+	53148,
+	53183,
+	53214,
+	53260,
+	53295,
+	53340,
+	53389,
+	53437,
+	53494,
+	53537,
+	53565,
+	53610,
+	53649,
+	53660,
+	53673,
+	53725,
+	53758,
+	53811,
+	53837,
+	53894,
+	53954,
+	53987,
+	54037,
+	54064,
+	54114,
+	54143,
+	54157,
+	54208,
+	54252,
+	54313,
+	54361,
+	54418,
+	54431,
+	54464,
+	54499,
+	54510,
+	54562,
+	54617,
+	54680,
+	54727,
+	54798,
+	54860,
+	54903,
+	54939,
+	54979,
+	55020,
+	55057,
+	55090,
+	55126,
+	55160,
+	55271,
+	55339,
+	55378,
+	55412,
+	55459,
+	55537,
+	55609,
+	55705,
+	55740,
+	55756,
+	55806,
+	55883,
+	55912,
+	55973,
+	56024,
+	56060,
+	56105,
+	56140,
+	56180,
+	56248,
+	56273,
+	56314,
+	56366,
+	56431,
+	56466,
+	56520,
+	56549,
+	56593,
+	56626,
+	56699,
+	56808,
+	56856,
+	56930,
+	56974,
+	57015,
+	57050,
+	57082,
+	57126,
+	57169,
+	57274,
+	57324,
+	57380,
+	57445,
+	57510,
 	57561,
-	57618,
-	57667,
-	57717,
-	57767,
-	57844,
-	57895,
-	57953,
-	58002,
-	58090,
-	58153,
-	58211,
-	58270,
-	58352,
-	58412,
-	58464,
-	58504,
-	58536,
-	58605,
-	58649,
-	58723,
-	58785,
-	58854,
-	58871,
-	58886,
-	58920,
-	58988,
+	57621,
+	57659,
+	57713,
+	57758,
+	57817,
+	57859,
+	57939,
+	58003,
+	58126,
+	58255,
+	58348,
+	58457,
+	58574,
+	58621,
+	58677,
+	58731,
+	58802,
+	58835,
+	58877,
+	58919,
+	58945,
+	58993,
+	59029,
 	59058,
-	59110,
-	59174,
-	59209,
-	59268,
-	59277,
-	59323,
-	59366,
-	59388,
-	59458,
-	59533,
-	59611,
-	59665,
-	59735,
-	59838,
-	59865,
-	59950,
-	60002,
-	60068,
-	60127,
-	60192,
-	60269,
-	60382,
-	60412,
-	60503,
-	60585,
-	60624,
-	60703,
-	60771,
-	60848,
-	60940,
-	60970,
-	61005,
-	61089,
-	61156,
-	61217,
-	61292,
-	61380,
-	61418,
+	59109,
+	59157,
+	59199,
+	59225,
+	59256,
+	59290,
+	59349,
+	59389,
+	59436,
+	59475,
+	59517,
+	59559,
+	59623,
+	59689,
+	59753,
+	59828,
+	59877,
+	59932,
+	59987,
+	60067,
+	60142,
+	60216,
+	60276,
+	60321,
+	60378,
+	60444,
+	60476,
+	60536,
+	60619,
+	60739,
+	60797,
+	60891,
+	60948,
+	60997,
+	61047,
+	61097,
+	61174,
+	61225,
+	61283,
+	61332,
+	61420,
 	61483,
-	61559,
-	61642,
-	61707,
-	61752,
-	61816,
-	61891,
-	61968,
-	62049,
-	62136,
-	62257,
-	62354,
-	62441,
-	62485,
-	62574,
-	62622,
-	62647,
-	62689,
-	62750,
-	62790,
-	62835,
-	62860,
-	62902,
-	62962,
-	63050,
-	63121,
-	63191,
-	63261,
-	63322,
-	63421,
-	63480,
-	63561,
-	63598,
-	63646,
-	63719,
-	63809,
-	63874,
-	63936,
-	64004,
-	64083,
-	64143,
-	64205,
-	64285,
-	64330,
-	64412,
-	64454,
-	64507,
-	64537,
+	61541,
+	61600,
+	61682,
+	61742,
+	61794,
+	61834,
+	61866,
+	61935,
+	61979,
+	62053,
+	62115,
+	62184,
+	62201,
+	62216,
+	62250,
+	62318,
+	62388,
+	62440,
+	62504,
+	62539,
+	62598,
+	62607,
+	62653,
+	62696,
+	62718,
+	62788,
+	62863,
+	62941,
+	62995,
+	63065,
+	63168,
+	63195,
+	63280,
+	63332,
+	63398,
+	63457,
+	63522,
+	63599,
+	63712,
+	63742,
+	63833,
+	63915,
+	63954,
+	64033,
+	64101,
+	64178,
+	64270,
+	64300,
+	64335,
+	64419,
+	64486,
+	64547,
 	64622,
-	64704,
-	64740,
-	64820,
-	64904,
-	64979,
-	65051,
-	65083,
-	65139,
-	65177,
-	65267,
-	65336,
-	65400,
-	65444,
-	65502,
-	65552,
-	65626,
-	65694,
-	65740,
-	65797,
-	65823,
-	65850,
-	65880,
-	65931,
-	66023,
-	66088,
-	66121,
-	66180,
-	66205,
-	66233,
-	66270,
-	66310,
-	66341,
-	66454,
-	66495,
-	66576,
-	66640,
-	66695,
-	66753,
-	66811,
-	66886,
-	66939,
-	66978,
-	67010,
-	67042,
-	67161,
-	67199,
-	67242,
-	67285,
-	67320,
-	67363,
-	67397,
-	67439,
-	67526,
-	67593,
-	67658,
-	67712,
-	67786,
-	67853,
-	67904,
-	67999,
-	68075,
-	68106,
-	68154,
-	68186,
-	68215,
-	68244,
-	68314,
-	68423,
-	68472,
-	68531,
-	68568,
-	68600,
-	68649,
-	68683,
-	68777,
-	68813,
-	68874,
-	68929,
-	69005,
-	69074,
-	69141,
-	69179,
-	69228,
-	69271,
-	69315,
-	69358,
-	69445,
-	69490,
+	64710,
+	64748,
+	64813,
+	64889,
+	64972,
+	65037,
+	65082,
+	65146,
+	65221,
+	65298,
+	65379,
+	65466,
+	65587,
+	65684,
+	65771,
+	65815,
+	65904,
+	65952,
+	65977,
+	66019,
+	66080,
+	66120,
+	66165,
+	66190,
+	66232,
+	66292,
+	66380,
+	66451,
+	66521,
+	66591,
+	66652,
+	66751,
+	66810,
+	66891,
+	66928,
+	66976,
+	67049,
+	67139,
+	67204,
+	67266,
+	67334,
+	67413,
+	67473,
+	67535,
+	67615,
+	67660,
+	67742,
+	67784,
+	67837,
+	67867,
+	67952,
+	68034,
+	68070,
+	68150,
+	68234,
+	68309,
+	68381,
+	68413,
+	68469,
+	68507,
+	68597,
+	68666,
+	68730,
+	68774,
+	68832,
+	68882,
+	68956,
+	69024,
+	69070,
+	69127,
+	69153,
+	69180,
+	69210,
+	69261,
+	69353,
+	69418,
+	69451,
+	69510,
+	69535,
 	69563,
-	69586,
-	69663,
-	69691,
-	69736,
-	69801,
-	69833,
-	69861,
-	69925,
-	69949,
-	70010,
-	70039,
-	70108,
-	70209,
-	70270,
+	69600,
+	69640,
+	69671,
+	69784,
+	69825,
+	69906,
+	69970,
+	70025,
+	70083,
+	70141,
+	70216,
+	70269,
 	70308,
-	70392,
-	70483,
-	70561,
-	70633,
-	70723,
-	70826,
-	70898,
-	70945,
-	71010,
-	71090,
-	71111,
-	71162,
-	71209,
-	71250,
-	71300,
-	71345,
-	71379,
-	71414,
-	71450,
-	71492,
-	71544,
-	71606,
-	71683,
-	71752,
-	71806,
-	71901,
-	71974,
-	72045,
-	72114,
-	72181,
+	70340,
+	70372,
+	70491,
+	70529,
+	70572,
+	70615,
+	70650,
+	70693,
+	70727,
+	70769,
+	70856,
+	70923,
+	70988,
+	71042,
+	71116,
+	71183,
+	71234,
+	71329,
+	71405,
+	71436,
+	71484,
+	71516,
+	71545,
+	71574,
+	71644,
+	71753,
+	71802,
+	71861,
+	71898,
+	71930,
+	71979,
+	72013,
+	72107,
+	72143,
+	72204,
+	72259,
+	72335,
+	72404,
+	72471,
+	72509,
+	72558,
+	72601,
+	72645,
+	72688,
+	72775,
+	72820,
+	72893,
+	72916,
+	72993,
+	73021,
+	73066,
+	73131,
+	73163,
+	73191,
+	73255,
+	73279,
+	73340,
+	73369,
+	73438,
+	73539,
+	73600,
+	73638,
+	73722,
+	73813,
+	73891,
+	73963,
+	74053,
+	74156,
+	74228,
+	74275,
+	74340,
+	74420,
+	74441,
+	74492,
+	74539,
+	74580,
+	74630,
+	74675,
+	74709,
+	74744,
+	74780,
+	74822,
+	74874,
+	74936,
+	75013,
+	75082,
+	75136,
+	75231,
+	75304,
+	75375,
+	75444,
+	75511,
 }
 
 // msgBlob is every message in every language, back to back, in language-then-table order.
-const msgBlob = "ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires (\"message\")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> Form: `program  · imports: ## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n| Field | Type | Description |\n|---|---|---|\n| Member | Signature | Description |\n|---|---|---|\n_(no exported symbols)_\nfunctionstructinterfacetype aliasimplspacesystem librarymacroFunctionsTypesImplsSpacesMacrosSystem librariesusage: qkc [options] <file.qk>\n\n  (default)           emit LLVM IR to stdout\n  --emit-ir           same as above (explicit)\n  -run                compile to a native binary and run it\n  -c                  compile to a native binary only (do not run)\n  -o <path>           output path: binary with -c/-run; .qklib with --emit-lib; IR file otherwise\n  --target-os <os>    preprocessor target OS (linux/darwin/windows; defaults to the host)\n  --target-arch <a>   preprocessor target arch (x86_64/arm64; defaults to the host)\n  --emit-lib          compile to a **library artifact** .qklib (contains lib<name>.so + export manifest; no sources)\n  --obfuscate         obfuscate: rename internal symbols, strip debug/ident info (with --emit-lib or -c)\n  -L <lib.qklib>      link a library: inject its library declarations + install lib<name>.so next to the output (repeatable)\n  --lib-name <name>   library name (defaults to the output file name)\n  --lib-version <ver> library version (default 0.1.0)\n  --lib-targets <list> platform variants to emit, comma-separated (e.g. linux-x86_64,windows-x86_64,darwin-arm64)\n  --lang <zh|en>      output language (Chinese by default; QK_LANG works too)\n  --version, -V       print the version and engine generation\n  -h, --help          this help\n\nenvironment: QUARK_CACHE=cache dir  QUARK_CFLAGS=clang flags (default \"-O3 -flto=thin\")REPL: internal error (recovered): %vdefined %s\ndefined type struct%s %s;\ndefined type interface%s %s;\ndefined impl%s %s; (%d methods)\ndefined library %s; (%d symbols)\ndefined type %s %s;\n%s %s shadows an outer variable of the same name (declared on line %d)%s %s shadows a global function (calls with that name resolve to this local)%s %s is assigned but never read%s %s is declared but never usedfunction %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)unreachable code (statements after line %d never execute)self-assignment: %s is assigned to itself (no effect)the assignment to %s is overwritten on line %d before any readwhile (true) with no break/return in the body: possible infinite loopdivision by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)self-comparison: %s == %s is always trueself-comparison: %s != %s is always false%s::%s returns void but its result is used as a value (nil at runtime)function %s returns void but its result is used as a value (nil at runtime)%s (true): the condition is always true, so the branch always runs%s (false): the condition is always false, so the branch never runsimported %q but no symbol from it is used (the import can be removed)function %s is never called (dead code; functions in library files are exempt)loop variablecatch variabletype %s looks like it implements interface %s but is missing method %s (implemented: %s)parametervariable:load requires a file argumentunknown command %s (see :help)-L requires a directory argumentusage: qklsp [-L dir]...  (serves LSP over stdio)unknown argument %sdocument not opened: %sqklsp: invalid Content-Length %qqklsp: missing Content-Length headerqkcheck: -L requires a directory argumentqkcheck: unknown argument %s\nqkcheck: no .qk files to checkqkcheck: %d issue(s) (%d error(s) / %d warning(s))\nqkdoc: -o requires a file argumentqkdoc: -title requires an argumentqkdoc: unknown argument %s\nqkdoc: wrote %s (%d bytes)\nqkrepl: -e requires a code snippetqkrepl: unknown argument %s\nqkrepl %s — QuarkLang interactive evaluation (:help for help, :quit to exit)\n  QuarkLang API doc generator: /* */ and // comments + pub exports -> Markdown / HTML  QuarkLang interactive evaluation: multi-line blocks, persistent environment, :help/:load/:quit  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparisonusage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]commands:\n  :help            show this help\n  :quit / :exit    exit\n  :load <file.qk>  load a file: register its functions/types/impls (main is not run; call main(io) afterwards)\nnotes:\n  - an expression echoes its value; a statement ends with ; (added automatically when omitted)\n  - an unclosed block continues on the next line; variables/functions/types stay visible in later inputs\n  - log records and io.println output are shown as they happenqklsp: JSON parse failed: %wqklsp: method not implemented: %s  QuarkLang static analysis (QK101-QK115): unused vars/params/imports/functions, unreachable code,\n                           shadowing, missing return, interface near-miss, void misuse, self-assign,\n                           constant condition, division by zero, dead store, self-comparisonRunError: #error (\"cannot run a library\"): a program library is compiled as a library and cannot be runParseError: %q is not a valid integerParseError: %q is not a valid floatCompileError: no matching overload for %q (argument types do not match)ExportLibrary: only 'program library;' can export a library (current Kind=%q)ImportError: cannot find %q (looked for %s.qk or %s.qlib under %s)TypeError: list index must be an intTypeError: indexed assignment is not supported on %sTypeError: get(i) requires an int indexStringIndexOutOfBoundsError: substring(%d, %d) out of range [0,%d]StringIndexOutOfBoundsError: charAt(%d) out of range [0,%d)TypeError: contains requires a String argumentTypeError: startsWith requires a String argumentTypeError: endsWith requires a String argumentTypeError: indexOf requires a String argumentTypeError: substring(start, end?) requires int argumentsTypeError: substring end must be an intTypeError: split requires a String separatorTypeError: replace(old, new) requires String argumentsTypeError: charAt requires an int indexIOError: cannot execute command: %vIOError: cannot start program: %vIOError: command failed: %vIOError: qkpopen output exceeds the 8 MB limitIOError: request failed: %vIOError: failed to read response: %vIOError: response exceeds the 8 MiB limitHTTPError: status code %dTypeError: qkexecv argument must be a List<String>TypeError: qkpopen(cmd String) requires a string commandTypeError: qkjson_dumps(v) requires one argumentLibraryError: library %s does not declare function %qLibraryError: %s has too few argumentsTypeError: %s argument %s requires a pointer or nullTypeError: %s argument %s requires an int/boolTypeError: %s argument %s requires a floatTypeError: %s argument %s currently supports only String/int/floatFFIError: this build has cgo disabled (FFI / system libraries unavailable)FFIError: the Windows ABI shim supports at most 4 argumentsTypeError: call's first argument must be a prefix recordTypeError: call's second argument must be a .{in,out} recordTypeError: memorize prefix is missing the wrapped function fnTypeError: prefix.fn is not a functionTypeError: rec.in must be a ListTypeError: thread.talk requires a channel instanceTypeError: @styleConfigure(file) requires file or StringTypeError: sum's first argument must be the function reference 'generate'TypeError: sum's begin must be an intTypeError: sum's stop must be an intTypeError: sum's step must be a non-zero intTypeError: generate must return an intTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: undeclared identifier %qIndexOutOfRangeError: reference move past the end of the container (index %d, size %d)TypeError: %s declares __literal__ but no __element__TypeError: ++ moves a reference variable, not this expressionTypeError: ++ needs a reference, but %q is %sTypeError: ++ only moves element references (&a[i]); %q refers to something elseTypeError: cannot take the address of a field on %s (not a struct)TypeError: cannot take the address of an element of %s (not a list)TypeError: cannot take the address of this expression (needs a variable, field or list element)TypeError: cannot take the address of undeclared identifier %qTypeError: io.println needs an IOStream, got %sTypeError: list index must be int, got %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: assignment to undeclared identifier %qTypeError: for-in requires a List or a container with size() int and get(int), got %sTypeError: cannot assign member of %sTypeError: no member %q on %sTypeError: unsupported assignment targetTypeError: '*' requires a List or a container handle with get(), got %sTypeError: unary '-' requires a number, got %sinternal: unknown unary operator %sinternal: unknown expression nodeTypeError: a signature can only wrap a direct function callCompileError: %s expects %d args, got %dTypeError: this expression is not callableCompileError: undeclared function %qTypeError: no method %q on pointerTypeError: appendAll requires a List, got %sTypeError: taskm.done requires a pid (int), got %sTypeError: no method %q on %sCompileError: %s() expects %d args, got %dTypeError: memorize has no static method %qTypeError: HashTable has no static method %qTypeError: List has no static method %qTypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn's first arg must be an IOStream, got %sTypeError: IO::setOut's first arg must be an IOStream, got %sTypeError: IO has no static method %qCompileError: unknown scope %qinternal: unknown operator %sTypeError: cannot order-compare %s and %sbadAlloc: new %s has an invalid allocation sizeRuntimeError: execCtx for %s already executedNullPointerError: assignment through null pointerTypeError: b[i] needs a writable raw-bits targetTypeError: a bit index requires raw bits and an int indexTypeError: indexing requires a List, got %sTypeError: index must be intNullPointerError: dereference of null pointerTypeError: @styleConfigure(file String)IOError: %sJSONError: %sTypeError: taskm.merge first arg must be a pid (int)RuntimeError: unknown task pid %dTypeError: taskm.channel(n) requires 0 < n <= 1048576TypeError: write(s String)TypeError: setBlock(n) requires a positive int block sizeTypeError: %s.%s is a static method; call it via %s::%s(...)TypeError: file::new(name String)TypeError: ifstream requires a path string, got %sIOError: cannot open %q: %vTypeError: ofstream requires a path string, got %sIOError: cannot create %q: %vPanicError: %sTypeError: iofstream requires a path string, got %sTypeError: qkexec(cmd String[, retries int])TypeError: qkexecv(prog String, args List<String>[, retries])TypeError: qkhttp_get(url String[, retries int])TypeError: qkhttp_post(url, body, contentType[, retries])JSONError: %vTypeError: qkjson_loads(s String)TypeError: qkfile_read(path String)IOError: %vTypeError: qkfile_write(path String, content String)TypeError: qksignal_emit(node, name String [, args...])RuntimeError: thread busy — merge only when idle (taskm.done)TypeError: taskm requires a Task or pid, got %sIndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)TypeError: raw bits admit only the bitwise family and equalityDivisionByZeroError: float division by zeroTypeError: '%' requires int operandsinternal: unknown arithmetic operator %sCompileError: duplicate declaration of %qCompileError: duplicate type alias %qCompileError: duplicate struct %qCompileError: duplicate interface %qCompileError: duplicate library %qCompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)CompileError: struct %s has no type parameters, but impl declares %dCompileError: duplicate method %q on %sCompileError: unknown interface %qCompileError: impl %s for %s: missing method %qCompileError: impl %s for %s: method %q takes %d params, interface requires %dCompileError: main must take 1-3 params in order (io, env, args), got %dTypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)CompileError: empty type annotationCompileError: %sCompileError: %s takes %d type argument(s), got %dCompileError: interface %s is not generic, but %d type argument(s) were givenCompileError: unknown type %qCompileError: parameter %q of %s is missing a type annotationIndexOutOfBoundsError: index %d out of range [0,%d)RuntimeError: unresolved call targetDivisionByZeroError: integer division by zeroDivisionByZeroError: modulo by zeroTypeError: unsupported integer operationsum(generate, begin, stop[, step]) requires 3 or 4 arguments, got %dinterface %s has no method %qTypeError: return type is %s, got %sCompileError: break is only allowed inside while/for loopsTypeError: for-loop variable type %s does not match element type %sCompileError: unknown struct %qTypeError: %s requires %d fields but the literal provides %dTypeError: %s has no field %qTypeError: field %q: cannot assign %s to %sTypeError: cannot assign %s to %sTypeError: cannot assign a %q reference to a %q reference (the source is more restrictive)TypeError: cannot store a %s-scoped reference in a %s-scoped variable (the variable would outlive the reference)CompileError: const variable %q cannot be reassignedTypeError: reference %q has permission %q and cannot be written through (w is missing)TypeError: cannot assign %s to %s[i] (%s)TypeError: index key must be %s, got %sTypeError: value must be %s, got %sTypeError: unknown struct %sTypeError: cannot assign %s to %s.%s (%s)TypeError: condition must be bool, got %sCompileError: expression nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsTypeError: ++ moves a reference variable, got %sTypeError: ++ needs a reference (permission m), but %q is %sTypeError: reference %q has permission %q and cannot move (m is missing)TypeError: reference %q has permission %q and cannot be read (r is missing)CompileError: variable %q used before initializationTypeError: the bitwise complement '~' requires an int operand, got %sTypeError: '!' requires bool, got %sCompileError: bit index %d is out of range for %s (0..%d)TypeError: a bit index must be int, got %sTypeError: indexing requires a List or a pointer block, got %sTypeError: index must be int, got %sTypeError: %s shifts raw bits, so the left operand must be raw bits, got %sTypeError: %s needs a shift count of int or raw bits, got %sTypeError: raw bits admit no arithmetic: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)TypeError: raw bits admit no ordering: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)TypeError: raw bits admit only & | ^ ~ << >> == != and b[i], not '%s' (spec §3.3)TypeError: %s and %s have different widths (%d and %d bits): a bitwise operation needs equal widths (spec §3.4)TypeError: %s on %s and %s mixes raw bits with a view: both sides must be raw bits of one width (spec §3.3)TypeError: %s requires bool operands, got %sTypeError: '+' requires numbers or a String, got %s and %sTypeError: arithmetic requires numbers, got %s and %sTypeError: bitwise and shift operators require int operands, got %s and %sTypeError: cannot compare %s and %sTypeError: no member %q on an anonymous structTypeError: no member %q on pointerTypeError: unknown interface %qTypeError: %s.%s expects %d arguments, got %dTypeError: interface %s has no method %qTypeError: unknown system library %qLibraryError: %s.%s expects %d arguments, got %dTypeError: %s.%s argument %s requires %s, got %sLibraryError: library %s does not export function %qTypeError: no method %qTypeError: file has no method %qTypeError: %s requires a String argumentTypeError: substring(start, end?) requires one or two int argumentsTypeError: substring arguments must be intsTypeError: get(i) requires an int index, got %sTypeError: append expects %s, got %sTypeError: put key expects %s, got %sTypeError: put value expects %s, got %sTypeError: setIn requires a path String or an InputStream, got %sTypeError: setOut requires a path String or an OutputStream, got %sCompileError: thread.merge(fn, args...) requires at least 1 argTypeError: thread.merge second arg must be a function reference, got %sTypeError: thread.talk requires a channel, got %sTypeError: setBlock(n) requires an int block size, got %sCompileError: taskm.spawn() takes no args, got %dCompileError: taskm.merge(pid, fn, args...) requires at least 2 args, got %dTypeError: taskm.merge first arg must be a pid (int), got %sTypeError: taskm.merge second arg must be a function reference, got %sTypeError: argument %d of %s: cannot assign %s to %sTypeError: taskm.block requires a pid, got %sTypeError: taskm.channel(n) requires an int capacity, got %sCompileError: taskm.channel() expects 0 or 1 args, got %dTypeError: type %s has no implTypeError: %s is a static method; call it via %s::%s(...)TypeError: %s(%s) is a width mismatch: %s is %d bits wide and %s is %d bits wide (spec §3.4)TypeError: %s(%s) is not a conversion: a reinterpretation needs a view of the same width, and a value conversion needs two integer views (spec §3.4)TypeError: @styleConfigure can only wrap a function or method callCompileError: @%s — the signature name must be a Sign instance variable in scope (any name)CompileError: %s expects %d args (optionally plus retries), got %dTypeError: qkexec requires a command String, got %sTypeError: qkexecv(prog String, args List<String>)TypeError: qkpopen requires a path String, got %sCompileError: qkhttp_get expects 1-2 args (url[, retries]), got %dTypeError: qkhttp_get requires url String, got %sCompileError: qksignal_emit(node, name String [, args...])TypeError: qkjson_loads requires String, got %sCompileError: qkhttp_post expects 3-4 args (url, body, ct[, retries]), got %dTypeError: qkhttp_post(url, body, contentType) requires Strings for all argumentsTypeError: FileInputStream requires a path String, got %sTypeError: FileOutputStream requires a path String, got %sCompileError: sum(generate, begin, stop[, step]) requires 3 or 4 arguments, got %dTypeError: sum's first argument must be a function reference, got %sTypeError: sum's bound arguments must be ints, got %sTypeError: argument %d of %s: %vinterface %s is missing method %q of %sinterface %s method %q is signature-incompatible with %s (strict by type)TypeError: %s.__literal__ must take no parametersTypeError: %s declares __literal__ but no __element__ to receive the elementsTypeError: %s.__element__ must take exactly one element parameterTypeError: literal element is %s, but %s.__element__ takes %sTypeError: %s: %vunknown interface %stype %s does not implement interface method %qTypeError: IO::setIn requires a path String or an InputStream, got %sTypeError: IO::setOut requires a path String or an OutputStream, got %sCompileError: %s::%s expects %d args, got %dTypeError: argument %d of %s::%s: cannot assign %s to %sTypeError: %s has no static method %qCompileError: duplicate overload %q (identical signature already exists)expressionnot a .qklib artifact (magic mismatch): %svariant %s failed verification (content was modified)%s (tried: %s)redefining builtin function %q is not supported (the compiler treats %s as builtin)overloading a generic function %q is not supported (the compiler requires unique generic function names)a generic and a plain function sharing the name %q is not supported (the compiler requires one or the other)duplicate function definition %s (same parameter type signature)no main function found (canonical entry point: fn main(IOStream io) { ... })overloading/redefining method %s.%s is not supported (the compiler emits name-mangled functions and cannot distinguish overloads)void type %s is not supported yet%s type %q is not supported (the compiler handles List<int> and List<String>; element %s)%s type %q is not supported (not lowered by the compiler yet)IOStream %s is not supported (the compiler binds io only at the main entry)%s type %q is not supported (the compiler handles List<int> only)%s type %q is not supported yet (write HashTable<K, V>)%s type %q is not supported (the compiler lowers T& for scalars/String/struct only)pointer/copy-on-pass type %q is not supported (copyd as a parameter modifier is supported; there is no Copyd<T> type)unknown type %q (%s declaration)duplicate/shadowed variable %q is not supported (the compiler's variable table has no same-name variables; rename it)return type %q is not supported (the compiler handles int/bool/float/String/void/struct)impl instance method %s is missing its leading self parametercopyd interface parameter %s is not supported yet (the runtime type is unknown, so a deep copy is impossible)copyd HashTable parameter %s is not supported yet (deep-copying table values is not lowered)copyd List<String> parameters are not supported yet (deep-copying string lists is not lowered)copyd of interface field %s in struct %s is not supported yet (the runtime type is unknown)a generic main function is not supported yetmain cannot return a value (got %q)main's first parameter must be IOStream (canonical: fn main(IOStream io) { ... })main's %q parameter is not supported (the compiler binds IOStream io only)the copyd modifier is not supported (copy-on-pass is interpreter-only)IOStream method %q is not supported (the compiler handles io.println/io.print only)a void function cannot return a value (the interpreter ignores the value; the compiler refuses to ignore it silently)returning a %s value from a %s function is not supported yetcatch (%s %s) is not supported (the compiler handles catch (void e) only)using %q inside a catch body is not supported (error value passing is interpreter-only)delete on a non-variable expression is not supported (the compiler handles delete <List variable> only)delete %q is not supported (the compiler handles delete on a List variable only)compiler internal error: unknown statement type %Tfor-iteration over %s is not supported (the compiler handles List<int>)iterating List<%s> is not supported (the compiler handles List<int> and List<String>)for-iteration over a non-variable list is not supported (the compiler requires a List variable)for-iteration over %s is not supported (the compiler handles List<int> and List<String>)List<String> %q without an initializer is not supported (the compiler only lowers existing lists such as keys())initializing List<String> with %s is not supported (the compiler lowers literals, HashTable.keys() results and List<String> variables)List<int> %q without an initializer is not supported (the interpreter's zero value is an empty list; the compiler backend does not lower it)this List<int> initializer is not supported yet (only [a, b, ...] literals)initializing List<int> with %s elements is not supportedprinting a value of type %s is not supported (the compiler handles int/float/bool/String/interface{})a %s condition is not supported yet (bool required)assignment target %q is not declaredassigning %s to %s variable %q is not supportedthis subscript assignment is not supported (the compiler handles List<int> only)index of type %s is not supported yet (int required)assigning %s to a List<int> element is not supportedstruct %s has no field %qassigning %s to %s.%s (%s) is not supportedmember assignment is not supported by the compiler (interface dispatch is interpreter-only)this assignment target is not supported (the compiler handles variables, List subscripts and struct fields only)using library object %q as a value is not supported yet (FFI is interpreter-only)undeclared identifier %q (the compiler does not support function references or global names)IOStream value %q is not supported yet (the compiler binds io only at the main entry)this subscript read is not supported (the compiler handles List<int> only)new %s[n] is not supported yet (the interpreter yields List<T>&, which cannot be assigned to List<T>; use a [..] literal)new %s is not supported yet (the element type cannot be a pointer)list literal %s is not supported (the compiler lowers List<int> and List<String>)initializing %s with %s elements is not supportedcompiler internal error: unknown expression type %Tadding %s and %s is not supported yet (String concatenation requires both sides to be String)using %q on %s / %s is not supported (Operation overloading works for same-type structs only)using %q on %s / %s is not supported (shifts need int operands)using %q on %s / %s is not supported (pointers allow == / != only)using %q on %s / %s is not supported (nullable references allow == / != only)comparing a non-variable nullable reference is not supported (the compiler requires a T& variable)using %q on interface{} is not supported (only == / !=)using %q on bool is not supported (the interpreter allows == / != only)using %q on %s / %s is not supported (String/Operation comparison needs the same type)operator %q is not supported by the compiler (available in the interpreter)negating %s is not supported (Operation overloading works for same-type structs only)negating %s is not supported yet (bool required)dereference * is not supported (pointers are interpreter-only)unary operator %q is not supportedthis call form is not supported (the compiler handles f(...), obj.m(...) and T::m(...) only)this signature call is not supported (the compiler requires a direct function name: f(args) @sign(...))undeclared signature instance %q (@%s)signature instance %q of type %s is not supported yet (only the built-in memorize is lowered)wrapping function %s that returns %s with memorize is not supported yet (the runtime cache carries only int)memorize wrapping a %s parameter is not supported yet (cache keys carry only int)a %s argument to memorize is not supported yet (cache keys carry only int)clock() takes no arguments, got %dsum generator %q has multiple int(%s) overloads; cannot decidesum generator %q has no int(%s) overloadunknown generator function %q (the compiler only supports non-generic functions defined in the same program)unknown function %q (the compiler only supports functions defined in the same program)merge target %q has several overloads with the same arity; cannot decidemerge target %q has no overload with %d parametersno matching overload for %q (arity/type mismatch)passing a %s argument to %s is not supported yet (expected %s)this sum generator is not supported (the compiler requires a named function)this generic generator %s is not supported (the compiler requires fn<T> %s(T) T)sum's %s argument is not supported yet (int required)generator %q is not supported (the compiler requires int %s(int))toString() takes no argumentsList.size() takes no argumentsList.get(i) requires 1 argumentList.get with a %s index is not supported yet (int required)List<String>.%s is not supported yet (size/get/toString/append and for-in iteration are lowered)List<String>.append with a %s argument is not supported yet (String required)List.append(v) requires 1 argumentList<int>.append with a %s argument is not supported yet (int required)List.%s() takes no argumentsList.reset() takes no argumentsList.appendAll(l2) requires 1 argumentList.appendAll requires List<int>, got %sList.__sort__() takes no argumentsList method %q is not supported yet (the compiler supports size/get/append/head/tail/next/reset/appendAll/toString/__sort__)method %s.%s requires %d arguments, got %dcalling static method %s.%s on an instance is not supported (canonical: %s::%s(...))struct %s has no method %q (the interpreter reports this during type checking)calling method %s on %s is not supported by the compiler (available in the interpreter)taskm threads/channels are not supported yet (%s; available in the interpreter)library FFI call %s.%s is not supported yet (available in the interpreter)io.%s returns nothing and cannot be used in an expression (call it as a standalone statement)passing a %s argument to %s.%s is not supported yet (expected %s)HashTable.%s with a %s argument is not supported yetHashTable.size() takes no argumentsHashTable.keys() takes no argumentsHashTable<%s, %s>.keys() is not supported yet (the interpreter returns original keys; the compiler lowers only String keys to List<String>)HashTable.put(k, v) requires 2 argumentsHashTable<%s, %s>.put key must be %s, got %sHashTable<%s, %s>.put value must be %s, got %sHashTable.get(k) requires 1 argumentHashTable<%s, %s>.get key must be %s, got %sHashTable.%s(k) requires 1 argumentHashTable<%s, %s>.%s key must be %s, got %sHashTable method %q is not supported (the compiler handles put/get/contains/remove/size/keys)HashTable::%s is not supported yet (only HashTable::new() is lowered)memorize::%s is not supported yet (only memorize::new() is lowered)passing a %s argument to %s::%s is not supported yet (expected %s)interface member access %s.%s is not supported (dynamic dispatch is interpreter-only)library member access %s.%s is not supported yet (FFI is interpreter-only)member access %s.%s is not supported by the compiler (available in the interpreter)a generic struct literal .{...} whose type arguments cannot be inferred is not supported (%s; available in the interpreter)anonymous struct literal .{...} is not supported (the compiler requires a named struct)struct %s literal has too many fieldsinitializing field %s.%s with %s is not supported (%s)%s requires a String argument, got %s%s requires an int argument, got %ssplit(sep) requires 1 argumentstatic method %s of struct %s is not supported yet (no impl declared for that type)space call %s::%s is not supported yet (available in the interpreter; the compiler supports only spaces/impls declared in the same program)%s::%s is an instance method (it needs a self receiver)%s::%s is not supported yet (that space/type does not declare this method)library FFI type %q is not supported yetlibrary %s does not declare function %qlibrary function %s.%s requires %d arguments, got %da library function parameter cannot be voidlibrary FFI parameter type %q is not supported yet (the compiler supports int/bool/f32/float/double/String)taskm requires a thread or pid, got %sthis merge target is not supported yet (a named function is required)merging generic function %s is not supported yet (available in the interpreter)merging with %d arguments is not supported yet (a runtime thread carries 8 i64 slots)a %s merge parameter is not supported yet (scalar/String/struct/List required)merging function %s that contains log is not supported yet (its return value may be nil)taskm.spawn() takes no arguments, got %dtaskm.channel() takes 0 or 1 arguments, got %dtaskm.channel(n) requires an int capacity, got %staskm.block(pid) requires 1 argument, got %dtaskm.done(pid) requires 1 argument, got %dtaskm.merge(pid, fn[, args...]) requires 2..10 arguments (at most 8 args), got %dthread.talk is not supported yet (available in the interpreter)taskm.%s is not supported yet (the compiler supports spawn/merge/block/done/channel)t.pid() takes no argumentst.merge(fn[, args...]) requires 1..9 arguments (at most 8 args), got %dt.talk(c) requires 1 argumentthread.talk requires a channel instance, got %sthread method %q is not supported yet (the compiler supports merge/pid/talk)a %s merge argument is not supported yetc.send(v) requires 1 argumentsending %s over a channel is not supported yet (runtime channels carry only int)c.recv() takes no argumentschannel method %q is not supported yet (the compiler supports send/recv)qkc[debug]: preprocess target =qkc: wrote library artifact %s%s | platform variants: %s | %d exports\nqkc: note: library %s has no %s variant, falling back to %s (use --lib-targets to emit that variant)\nqkc: linking library %s v%s (variant %s, %d exported symbols%s)\nfunction %s requires %d arguments, got %da generic call whose type arguments cannot be inferred from the arguments is not supported yet: %s (available in the interpreter)using the return value of the log-containing function %s in an expression is not supported (the interpreter returns nil)generic method %s.%s whose type arguments cannot be inferred is not supported yet (available in the interpreter)method %s of interface %s is not implemented on %s (type checking should have caught this)method %s of interface %s has a different parameter count than the implementation on %s (type checking should have caught this)boxing a %s value into interface{} is not supported yet (the compiler supports int/float/bool/String/List<int>/struct)putting a %s value into interface %s is not supported yet (a struct implementation is required)interface method %s.%s requires %d arguments, got %dpassing a %s argument to interface method %s.%s is not supported yet (expected %s)compiling a program library is not supported (library form is handled by the interpreter/export flow)qkc: unknown argument %s\nqkc: only one source file may be given (already have %s)\nusing %s to initialize interface %s variable %q is not supportedusing %s to initialize %s variable %q is not supportedTypeError: panic(msg String) takes exactly 1 argument%s with %q is not supported (bool required)a bit index must be int, got %sassigning %s to a bit is not supportedb[i] = v requires raw bits, got %ssubscripting a bit requires raw bits, got %sthe bitwise complement '~' requires an int operand, got %susing %q on %s is not supported (raw bits admit == and != only)using %q on %s / %s is not supported (bitwise operators need int views or raw bits)using %q on %s / %s is not supported (raw bits need one width)using %q on %s / %s is not supported: the widths differusing %s to initialize %s variable %q is not supported (raw bits take raw bits of the same width, or a constant)compiling %s is not supported yet (=== storage identity is implemented in the interpreter only)compiling & (address-of) is not supported yet (references are implemented in the interpreter only)compiling ++ (reference move) is not supported yet (implemented in the interpreter only)compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)ParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 (\"消息\")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> 形态：`program \u3000·\u3000导入：## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| 成员 | 签名 | 说明 |\n|---|---|---|\n_（没有可导出的符号）_\n函数结构体接口类型别名实现空间系统库宏函数类型实现空间宏系统库usage: qkc [options] <file.qk>\n\n  （默认）            输出 LLVM IR 到 stdout\n  --emit-ir           同上（显式）\n  -run                编译为原生二进制并执行\n  -c                  只编译为原生二进制（不执行）\n  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件\n  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）\n  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）\n  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）\n  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）\n  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）\n  --lib-name <name>   库名（默认取输出文件名）\n  --lib-version <ver> 库版本（默认 0.1.0）\n  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）\n  --version, -V       打印版本与引擎代次\n  -h, --help          本帮助\n\n环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 \"-O3 -flto=thin\"）REPL: 内部错误（已恢复）: %v已定义 %s\n已定义 type struct%s %s;\n已定义 type interface%s %s;\n已定义 impl%s %s;（%d 个方法）\n已定义 library %s;（%d 个符号）\n已定义 type %s %s;\n%s %s 遮蔽外层同名变量（外层声明于第 %d 行）%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）%s %s 只被赋值、从未读取%s %s 声明后从未使用函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）不可达代码（第 %d 行之后的语句不会执行）自赋值：%s 赋值给自身（无效果）对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）while (true) 且循环体内无 break/return：可能的死循环常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）自身比较：%s == %s 恒为真自身比较：%s != %s 恒为假%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）%s (true)：条件恒为真，分支永远执行%s (false)：条件恒为假，分支永不执行导入了 %q 但未使用其任何符号（可删除该 import）函数 %s 从未被调用（死代码；库文件中的函数不报）循环变量catch 变量类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）形参变量:load 需要一个文件参数未知命令 %s（:help 查看帮助）-L 需要一个目录参数usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）未知参数 %s未打开的文档 %sqklsp: 非法 Content-Length %qqklsp: 缺少 Content-Length 头qkcheck: -L 需要一个目录参数qkcheck: 未知参数 %s\nqkcheck: 没有可检查的 .qk 文件qkcheck: %d 个问题（%d 错误 / %d 警告）\nqkdoc: -o 需要一个文件参数qkdoc: -title 需要一个参数qkdoc: 未知参数 %s\nqkdoc: 已写入 %s（%d 字节）\nqkrepl: -e 需要一段代码qkrepl: 未知参数 %s\nqkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]命令：\n  :help            显示本帮助\n  :quit / :exit    退出\n  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）\n说明：\n  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）\n  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见\n  - log 的记录、io.println 的输出会即时显示qklsp: JSON 解析失败: %wqklsp: 未实现的方法 %s  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·\n                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较RunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行ParseError: %q 不是合法整数ParseError: %q 不是合法浮点数CompileError: 未找到匹配重载 %q（参数类型不匹配）ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）TypeError: 列表索引必须是 intTypeError: 不支持对 %s 索引赋值TypeError: get(i) 需要 int 下标StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)TypeError: contains 需要 String 参数TypeError: startsWith 需要 String 参数TypeError: endsWith 需要 String 参数TypeError: indexOf 需要 String 参数TypeError: substring(start, end?) 需要 int 参数TypeError: substring 的 end 必须是 intTypeError: split 需要 String 分隔符TypeError: replace(old, new) 需要 String 参数TypeError: charAt 需要 int 索引IOError: 无法执行命令：%vIOError: 无法启动程序：%vIOError: 命令执行失败：%vIOError: qkpopen 输出超过 8MB 上限IOError: 请求失败：%vIOError: 读取响应失败：%vIOError: 响应超过 8MiB 上限HTTPError: 状态码 %dTypeError: qkexecv 参数必须是 List<String>TypeError: qkpopen(cmd String) 需要一个字符串命令TypeError: qkjson_dumps(v) 需要一个参数LibraryError: 库 %s 没有声明函数 %qLibraryError: %s 参数不足TypeError: %s 参数 %s 需要 pointer 或 nullTypeError: %s 参数 %s 需要 int/boolTypeError: %s 参数 %s 需要 floatTypeError: %s 参数 %s 目前仅支持 String/int/floatFFIError: 本构建未启用 cgo（FFI/系统库不可用）FFIError: windows 自研 ABI 支持 <=4 参数TypeError: call 第一参数必须是 prefix 记录TypeError: call 第二参数必须是 .{in,out} 记录TypeError: memorize prefix 缺少被包装函数 fnTypeError: prefix.fn 不是函数TypeError: rec.in 必须是 ListTypeError: thread.talk 需要 channel 类实例TypeError: @styleConfigure(file) 需要 file 或 StringTypeError: sum 第一个参数必须是函数引用 generateTypeError: sum 的 begin 必须是 intTypeError: sum 的 stop 必须是 intTypeError: sum 的 step 必须是非零 intTypeError: generate 必须返回 intTypeError: 位运算与移位运算需要 int 操作数TypeError: 取反运算符 '~' 需要 int 操作数CompileError: 未声明的标识符 %qIndexOutOfRangeError: 引用移动越过了容器末尾（下标 %d，大小 %d）TypeError: %s 声明了 __literal__，却没有 __element__TypeError: ++ 移动的是引用变量，不是这个表达式TypeError: ++ 需要引用，但 %q 是 %sTypeError: ++ 只能移动元素引用（&a[i]）；%q 指向的是别的对象TypeError: 无法取 %s 上字段的地址（不是结构体）TypeError: 无法取 %s 元素的地址（不是列表）TypeError: 无法取这个表达式的地址（需要变量、字段或列表元素）TypeError: 无法取未声明的标识符 %q 的地址TypeError: io.println 需要 IOStream，得到 %sTypeError: 列表索引必须是 int，得到 %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: 对未声明的标识符 %q 赋值TypeError: for-in 需要 List，或具备 size() int 与 get(int) 的容器，得到 %sTypeError: 不能给 %s 的成员赋值TypeError: 成员 %q 在 %s 上不存在TypeError: 不支持的赋值目标TypeError: '*' 需要 List 或带 get() 的容器句柄，得到 %sTypeError: 一元 '-' 需要数字，得到 %sinternal: 未知的一元运算符 %sinternal: 未知的表达式节点TypeError: 签名只能包装直接的函数调用CompileError: %s 需要 %d 个参数，得到 %dTypeError: 这个表达式不可调用CompileError: 未声明的函数 %qTypeError: 方法 %q 在指针上不存在TypeError: appendAll 需要 List，得到 %sTypeError: taskm.done 需要 pid（int），得到 %sTypeError: 方法 %q 在 %s 上不存在CompileError: %s() 需要 %d 个参数，得到 %dTypeError: memorize 没有静态方法 %qTypeError: HashTable 没有静态方法 %qTypeError: List 没有静态方法 %qTypeError: taskm 是全局变量 —— 请使用 taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn 的第一个参数必须是 IOStream，得到 %sTypeError: IO::setOut 的第一个参数必须是 IOStream，得到 %sTypeError: IO 没有静态方法 %qCompileError: 未知的作用域 %qinternal: 未知的运算符 %sTypeError: 无法对 %s 和 %s 做大小比较badAlloc: new %s 申请大小非法RuntimeError: execCtx for %s already executedNullPointerError: assignment through null pointerTypeError: b[i] needs a writable raw-bits targetTypeError: a bit index requires raw bits and an int indexTypeError: indexing requires a List, got %sTypeError: index must be intNullPointerError: dereference of null pointerTypeError: @styleConfigure(file String)IOError: %sJSONError: %sTypeError: taskm.merge first arg must be a pid (int)RuntimeError: unknown task pid %dTypeError: taskm.channel(n) requires 0 < n <= 1048576TypeError: write(s String)TypeError: setBlock(n) requires a positive int block sizeTypeError: %s.%s is a static method; call it via %s::%s(...)TypeError: file::new(name String)TypeError: ifstream requires a path string, got %sIOError: cannot open %q: %vTypeError: ofstream requires a path string, got %sIOError: cannot create %q: %vPanicError: %sTypeError: iofstream requires a path string, got %sTypeError: qkexec(cmd String[, retries int])TypeError: qkexecv(prog String, args List<String>[, retries])TypeError: qkhttp_get(url String[, retries int])TypeError: qkhttp_post(url, body, contentType[, retries])JSONError: %vTypeError: qkjson_loads(s String)TypeError: qkfile_read(path String)IOError: %vTypeError: qkfile_write(path String, content String)TypeError: qksignal_emit(node, name String [, args...])RuntimeError: thread busy — merge only when idle (taskm.done)TypeError: taskm requires a Task or pid, got %sIndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)TypeError: raw bits admit only the bitwise family and equalityDivisionByZeroError: float division by zeroTypeError: '%' requires int operandsinternal: unknown arithmetic operator %sCompileError: duplicate declaration of %qCompileError: duplicate type alias %qCompileError: duplicate struct %qCompileError: duplicate interface %qCompileError: duplicate library %qCompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)CompileError: struct %s has no type parameters, but impl declares %dCompileError: duplicate method %q on %sCompileError: unknown interface %qCompileError: impl %s for %s: missing method %qCompileError: impl %s for %s: method %q takes %d params, interface requires %dCompileError: main must take 1-3 params in order (io, env, args), got %dTypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)CompileError: empty type annotationCompileError: %sCompileError: %s takes %d type argument(s), got %dCompileError: interface %s is not generic, but %d type argument(s) were givenCompileError: unknown type %qCompileError: parameter %q of %s is missing a type annotationIndexOutOfBoundsError: index %d out of range [0,%d)RuntimeError: unresolved call targetDivisionByZeroError: integer division by zeroDivisionByZeroError: modulo by zeroTypeError: unsupported integer operationsum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %d接口 %s 没有方法 %qTypeError: 返回类型是 %s，得到 %sCompileError: break 只能在 while/for 循环体内TypeError: for 迭代变量类型 %s 与元素类型 %s 不匹配CompileError: 未知的结构体 %qTypeError: %s 需要 %d 个字段，字面量给了 %dTypeError: %s 没有字段 %qTypeError: 字段 %q: cannot assign %s to %sTypeError: 不能把 %s 赋给 %sTypeError: 不能把 %q 引用赋给 %q 引用（来源的限制更严）TypeError: 不能把 %s 作用域的引用存入 %s 作用域的变量（变量的存活期会长于引用）CompileError: const 变量 %q 不可重新赋值TypeError: 引用 %q 的权限是 %q，不能透过它写入（缺少 w）TypeError: 不能把 %s 赋给 %s[i]（%s）TypeError: 索引键需要 %s，给了 %sTypeError: 值需要 %s，给了 %sTypeError: 未知的结构体 %sTypeError: 不能把 %s 赋给 %s.%s（%s）TypeError: 条件必须是 bool，得到 %sCompileError: 表达式嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句TypeError: ++ 移动的是引用变量，得到 %sTypeError: ++ 需要引用（权限 m），但 %q 是 %sTypeError: 引用 %q 的权限是 %q，不能移动（缺少 m）TypeError: 引用 %q 的权限是 %q，不能读取（缺少 r）CompileError: 变量 %q 在初始化之前被使用TypeError: 取反运算符 '~' 需要 int 操作数，got %sTypeError: '!' 需要 bool，得到 %sCompileError: 位下标 %d 超出 %s 的范围 (0..%d)TypeError: 位下标必须是 int，得到 %sTypeError: 索引操作需要 List 或指针块，得到 %sTypeError: 下标必须是 int，得到 %sTypeError: %s 是原始位的移位，左操作数必须是原始位，得到 %sTypeError: %s 的移位次数需要 int 或原始位，得到 %sTypeError: 原始位不支持算术：'%s' 作用于 %s —— 请先转换为视图，例如 int(b) %s 1（规范 §3.3）TypeError: 原始位不支持比较大小：'%s' 作用于 %s —— 请先转换为视图，例如 int(b) %s 1（规范 §3.3）TypeError: 原始位只支持 & | ^ ~ << >> == != 和 b[i]，不支持 '%s'（规范 §3.3）TypeError: %s 与 %s 宽度不同（%d 位与 %d 位）：位运算要求两侧宽度相同（规范 §3.4）TypeError: %s 作用于 %s 与 %s：原始位与视图混用，两侧必须是同宽度的原始位（规范 §3.3）TypeError: %s 需要 bool 操作数，得到 %sTypeError: '+' 需要数字或 String，得到 %s 和 %sTypeError: 算术运算需要数字，得到 %s 和 %sTypeError: 位运算与移位运算需要 int 操作数，got %s and %sTypeError: 无法比较 %s 和 %sTypeError: no member %q on 匿名结构体TypeError: 成员 %q 在指针上不存在TypeError: 未知接口 %qTypeError: %s.%s 需要 %d 个参数，给了 %dTypeError: 接口 %s 没有方法 %qTypeError: 未知系统库 %qLibraryError: %s.%s 需要 %d 个参数，给了 %dTypeError: %s.%s 参数 %s 需要 %s，给了 %sLibraryError: 库 %s 没有导出函数 %qTypeError: 没有方法 %qTypeError: file 没有方法 %qTypeError: %s 需要 String 参数TypeError: substring(start, end?) 需要 1-2 个 int 参数TypeError: substring 参数必须是 intTypeError: get(i) 需要 int 下标，得到 %sTypeError: append 需要 %s，得到 %sTypeError: put 的键需要 %s，得到 %sTypeError: put 的值需要 %s，得到 %sTypeError: setIn 需要路径 String 或 InputStream，得到 %sTypeError: setOut 需要路径 String 或 OutputStream，得到 %sCompileError: thread.merge(fn, args...) 至少需要 1 个参数TypeError: thread.merge 的第二个参数必须是函数引用，得到 %sTypeError: thread.talk 需要 channel，得到 %sTypeError: setBlock(n) 需要 int 块大小，得到 %sCompileError: taskm.spawn() 不接受参数，得到 %dCompileError: taskm.merge(pid, fn, args...) 至少需要 2 个参数，得到 %dTypeError: taskm.merge 的第一个参数必须是 pid（int），得到 %sTypeError: taskm.merge 的第二个参数必须是函数引用，得到 %sTypeError: 第 %d 个参数（%s）：不能把 %s 赋给 %sTypeError: taskm.block 需要 pid，得到 %sTypeError: taskm.channel(n) 需要 int 容量，得到 %sCompileError: taskm.channel() 需要 0 或 1 个参数，得到 %dTypeError: 类型 %s 没有 implTypeError: %s 是静态方法；请改用 %s::%s(...) 调用TypeError: %s(%s) 宽度不匹配：%s 为 %d 位，%s 为 %d 位（规范 §3.4）TypeError: %s(%s) 不是转换：重解释需要同宽度的视图，值转换需要两个整数视图（规范 §3.4）TypeError: @styleConfigure 只能包装函数/方法调用CompileError: @%s —— 签名名必须是作用域中的 Sign 实例变量（名字任意）CompileError: %s expects %d args (可加 retries), got %dTypeError: qkexec 需要命令 String，得到 %sTypeError: qkexecv(prog String, args List<String>)TypeError: qkpopen 需要路径 String，得到 %sCompileError: qkhttp_get 需要 1-2 个参数（url[, retries]），得到 %dTypeError: qkhttp_get 需要 url String，得到 %sCompileError: qksignal_emit(node, name String [, args...])TypeError: qkjson_loads 需要 String，得到 %sCompileError: qkhttp_post 需要 3-4 个参数（url, body, ct[, retries]），得到 %dTypeError: qkhttp_post(url, body, contentType) 全部为 StringTypeError: FileInputStream 需要路径 String，得到 %sTypeError: FileOutputStream 需要路径 String，得到 %sCompileError: sum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %dTypeError: sum 第一个参数必须是函数引用，got %sTypeError: sum 的边界参数必须是 int，got %sTypeError: 第 %d 个参数（%s）：%v接口 %s 缺少 %s 的方法 %q接口 %s 的方法 %q 与 %s 的签名不兼容（按类型严格）TypeError: %s.__literal__ 不能接收参数TypeError: %s 声明了 __literal__，却没有接收元素的 __element__TypeError: %s.__element__ 必须正好接收一个元素参数TypeError: 字面量元素是 %s，但 %s.__element__ 接收的是 %sTypeError: %s: %v未知接口 %s类型 %s 未实现接口方法 %qTypeError: IO::setIn 需要路径 String 或 InputStream，得到 %sTypeError: IO::setOut 需要路径 String 或 OutputStream，得到 %sCompileError: %s::%s 需要 %d 个参数，得到 %dTypeError: 第 %d 个参数（%s::%s）：不能把 %s 赋给 %sTypeError: %s 没有静态方法 %qCompileError: duplicate overload %q (与已有签名相同)表达式不是 .qklib 制品（magic 不匹配）：%s变体 %s 校验失败（内容被改动）%s（尝试过：%s）暂未支持重定义内置函数 %q（编译器将 %s 视为内建）暂未支持泛型函数重载 %q（编译器要求泛型函数名唯一）暂未支持泛型函数与普通函数同名 %q（编译器要求二选一）重复的函数定义 %s（参数类型签名相同）未找到 main 函数（正典入口：fn main(IOStream io) { ... }）暂未支持重载/重定义方法 %s.%s（编译器按名字修饰生成函数，无法区分重载）暂未支持 void 类型 %s暂未支持 %s 类型 %q（编译器支持 List<int> 与 List<String>，元素 %s）暂未支持 %s 类型 %q（编译器暂未 lower）暂未支持 IOStream %s（编译器仅在 main 入口绑定 io）暂未支持 %s 类型 %q（编译器仅支持 List<int>）暂未支持 %s 类型 %q（HashTable 写法：HashTable<K, V>）暂未支持 %s 类型 %q（编译器只 lower 标量/String/struct 的 T&）暂未支持指针/传时复制类型 %q（copyd 作为形参修饰已支持；Copyd<T> 形参见 copyd 语义）未知类型 %q（%s 声明）暂未支持变量重名/遮蔽 %q（编译器变量表不支持同名变量，请改名）暂未支持返回类型 %q（编译器支持 int/bool/float/String/void/struct）impl 实例方法 %s 缺少 self 首参暂未支持 copyd 接口形参 %s（运行期类型未知，无法深拷贝）暂未支持 copyd HashTable 形参 %s（表值深拷贝未 lower）暂未支持 copyd List<String> 形参（字符串列表深拷贝未 lower）暂未支持 copyd struct %s 的接口字段 %s（运行期类型未知，无法深拷贝）暂未支持泛型 main 函数main 不能有返回值（got %q）main 的第一个参数必须是 IOStream（正典：fn main(IOStream io) { ... }）暂未支持 main 的 %q 参数（编译器只绑定 IOStream io）暂未支持 copyd 修饰（传时复制仅解释器可用）暂未支持 IOStream 方法 %q（编译器仅支持 io.println/io.print）void 函数不能 return 值（解释器会忽略返回值，编译器不静默忽略）暂未支持从 %s 函数返回 %s 值暂未支持 catch (%s %s)（编译器仅支持 catch (void e)）暂未支持在 catch 体内使用 %q（错误值传递仅解释器可用）暂未支持 delete 非变量表达式（编译器仅支持 delete <List 变量>）暂未支持 delete %q（编译器仅支持 delete List 变量）compiler 内部错误：未知语句类型 %T暂未支持对 %s 的 for 迭代（编译器支持 List<int>）暂未支持迭代 List<%s>（编译器支持 List<int> 与 List<String>）暂未支持对非变量列表的 for 迭代（编译器要求 List 变量）暂未支持对 %s 的 for 迭代（编译器支持 List<int> 与 List<String>）暂未支持无初值的 List<String> %q（编译器只 lower keys() 等已有列表）暂未支持用 %s 初始化 List<String>（编译器 lower 字面量、HashTable.keys() 结果与 List<String> 变量）暂未支持无初值的 List<int> %q（解释器零值为空列表，编译器后端未 lower）暂未支持 List<int> 的这种初始化（编译器仅支持 [a, b, ...] 字面量）暂未支持用 %s 元素初始化 List<int>暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String/interface{}）暂未支持 %s 类型的条件（需要 bool）赋值目标 %q 未声明暂未支持用 %s 给 %s 变量 %q 赋值暂未支持该下标赋值（编译器仅支持 List<int>）暂未支持下标为 %s（需要 int）暂未支持用 %s 赋值给 List<int> 元素struct %s 没有字段 %q暂未支持用 %s 给 %s.%s（%s）赋值暂未支持成员赋值（接口分发仅解释器可用）暂未支持该赋值目标（编译器仅支持变量、List 下标与 struct 字段）暂未支持 library 库对象 %q 作为值（FFI 仅解释器可用）未声明的标识符 %q（编译器不支持函数引用/全局名）暂未支持 IOStream 值 %q（编译器仅在 main 入口绑定 io）暂未支持该下标访问（编译器仅支持 List<int>）暂未支持 new %s[n]（解释器产出 List<T>&，无法赋给 List<T>；请用 [..] 字面量）暂未支持 new %s（new 的元素类型不能是指针）暂未支持列表字面量 %s（编译器已 lower List<int> 与 List<String>）暂未支持用 %s 元素初始化 %scompiler 内部错误：未知表达式类型 %T暂未支持 %s 与 %s 相加（String 拼接要求两侧都是 String）暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）暂未支持对 %s / %s 使用 %q（位移需要 int 操作数）暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）暂未支持对 %s / %s 使用 %q（可空引用只支持 == / !=）暂未支持对非变量的可空引用做比较（编译器要求 T& 变量）暂未支持对 interface{} 使用 %q（只支持 == / !=）暂未支持对 bool 使用 %q（解释器只允许 == / !=）暂未支持对 %s / %s 使用 %q（String/Operation 比较仅同类型可用）暂未支持运算符 %q（解释器可用）暂未支持对 %s 取负（Operation 运算符重载仅同类型 struct 可用）暂未支持对 %s 取反（需要 bool）暂未支持解引用 *（指针仅解释器可用）暂未支持一元运算符 %q暂未支持该调用形式（编译器仅支持 f(...)、obj.m(...) 与 T::m(...)）暂未支持该签名调用（编译器要求直接函数名 f(args) @sign(...)）未声明的签名实例 %q（@%s）暂未支持 %s 类型的签名实例 %q（编译器只 lower 内置 memorize）暂未支持 memorize 包装返回 %s 的函数 %s（运行时缓存只承载 int）暂未支持 memorize 包装 %s 形参（运行时缓存键只承载 int）暂未支持 memorize 的 %s 实参（运行时缓存键只承载 int）clock() 不接受参数，got %dsum 生成器 %q 有多个 int(%s) 重载，无法确定sum 生成器 %q 没有 int(%s) 重载未知生成器函数 %q（编译器只支持同一程序内定义且无泛型的函数）未知函数 %q（编译器只支持同一程序内定义的函数）merge 目标 %q 有多个同参数个数的重载，无法确定merge 目标 %q 没有 %d 个参数的重载未找到匹配重载 %q（参数个数/类型不匹配）暂未支持向 %s 传递 %s 参数（需要 %s）暂未支持该 sum 生成器（编译器要求生成器是具名函数）暂未支持该泛型生成器 %s（编译器要求 fn<T> %s(T) T）暂未支持 sum 的 %s 参数（需要 int）暂未支持生成器 %q（编译器要求 int %s(int)）toString() 不接受参数List.size() 不接受参数List.get(i) 需要 1 个参数暂未支持 List.get 的 %s 下标（需要 int）暂未支持 List<String>.%s（编译器 lower size/get/toString/append 与 for-in 迭代）暂未支持 List<String>.append 的 %s 参数（需要 String）List.append(v) 需要 1 个参数暂未支持 List<int>.append 的 %s 参数（需要 int）List.%s() 不接受参数List.reset() 不接受参数List.appendAll(l2) 需要 1 个参数List.appendAll 需要 List<int>，got %sList.__sort__() 不接受参数暂未支持 List 方法 %q（编译器支持 size/get/append/head/tail/next/reset/appendAll/toString/__sort__）方法 %s.%s 需要 %d 个参数，got %d暂未支持静态方法以实例方式调用 %s.%s（正典写法 %s::%s(...)）struct %s 没有方法 %q（解释器在类型检查期报错）暂未支持对 %s 调用方法 %s（解释器可用）暂未支持 taskm 线程/通道（%s，解释器可用）暂未支持 library FFI 调用 %s.%s（解释器可用）io.%s 无返回值，不能用于表达式（请作为独立语句调用）暂未支持向 %s.%s 传递 %s 参数（需要 %s）暂未支持 HashTable.%s 的 %s 参数HashTable.size() 不接受参数HashTable.keys() 不接受参数暂未支持 HashTable<%s, %s>.keys()（解释器返回键的原值；编译器只 lower String 键 → List<String>）HashTable.put(k, v) 需要 2 个参数HashTable<%s, %s>.put 键需要 %s，got %sHashTable<%s, %s>.put 值需要 %s，got %sHashTable.get(k) 需要 1 个参数HashTable<%s, %s>.get 键需要 %s，got %sHashTable.%s(k) 需要 1 个参数HashTable<%s, %s>.%s 键需要 %s，got %s暂未支持 HashTable 方法 %q（编译器支持 put/get/contains/remove/size/keys）暂未支持 HashTable::%s（编译器只 lower HashTable::new()）暂未支持 memorize::%s（编译器只 lower memorize::new()）暂未支持向 %s::%s 传递 %s 参数（需要 %s）暂未支持接口成员访问 %s.%s（dynamic 分发仅解释器可用）暂未支持 library 成员访问 %s.%s（FFI 仅解释器可用）暂未支持成员访问 %s.%s（解释器可用）暂未支持无法推断类型实参的泛型 struct 字面量 .{...}（%s，解释器可用）暂未支持匿名 struct 字面量 .{...}（编译器要求有名 struct）struct %s 字面量字段过多暂未支持用 %s 初始化字段 %s.%s（%s）%s 需要 String 参数，got %s%s 需要 int 参数，got %ssplit(sep) 需要 1 个参数暂未支持 struct %s 的静态方法 %s（该类型未声明 impl）暂未支持 space 调用 %s::%s（解释器可用；编译器只支持同一程序内声明的 space/impl）%s::%s 是实例方法（需要 self 接收者）暂未支持 %s::%s（该 space/类型未声明此方法）暂未支持 library FFI 的类型 %qlibrary %s 没有声明函数 %qlibrary 函数 %s.%s 需要 %d 个参数，got %dlibrary 函数参数不能是 void暂未支持 library FFI 参数类型 %q（编译器支持 int/bool/f32/float/double/String）taskm 需要 thread 或 pid，got %s暂未支持该 merge 目标（编译器要求具名函数）暂未支持 merge 泛型函数 %s（解释器可用）暂未支持 merge 传 %d 个参数（运行时线程携带 8 个 i64 槽）暂未支持 merge 的 %s 形参（需要标量/String/struct/List）暂未支持 merge 含 log 的函数 %s（返回值可能为 nil）taskm.spawn() 不接受参数，got %dtaskm.channel() 需要 0 或 1 个参数，got %dtaskm.channel(n) 需要 int 容量，got %staskm.block(pid) 需要 1 个参数，got %dtaskm.done(pid) 需要 1 个参数，got %dtaskm.merge(pid, fn[, args...]) 需要 2..10 个参数（最多 8 个实参），got %d暂未支持 thread.talk（解释器可用）暂未支持 taskm.%s（编译器支持 spawn/merge/block/done/channel）t.pid() 不接受参数t.merge(fn[, args...]) 需要 1..9 个参数（最多 8 个实参），got %dt.talk(c) 需要 1 个参数thread.talk 需要 channel 类实例，got %s暂未支持 thread 方法 %q（编译器支持 merge/pid/talk）暂未支持 merge 的 %s 实参c.send(v) 需要 1 个参数暂未支持 channel 发送 %s（运行时通道只承载 int）c.recv() 不接受参数暂未支持 channel 方法 %q（编译器支持 send/recv）qkc[debug]: 预处理目标 =qkc: 已生成库制品 %s%s ｜ 平台变体：%s ｜ 导出 %d 个\nqkc: 提示：库 %s 无 %s 变体，退回 %s（跨系统请用 --lib-targets 生成对应变体）\nqkc: 引用库 %s v%s（变体 %s，导出 %d 个符号%s）\n函数 %s 需要 %d 个参数，got %d暂未支持无法从实参推断类型参数的泛型调用 %s（解释器可用）暂未支持在表达式中使用含 log 的函数 %s 的返回值（解释器返回 nil）暂未支持无法推断类型参数的泛型方法 %s.%s（解释器可用）接口 %s 的方法 %s 在 %s 上未实现（类型检查本应拦截）接口 %s 的方法 %s 与 %s 的实现参数个数不一致（类型检查本应拦截）暂未支持把 %s 值装箱成 interface{}（编译器支持 int/float/bool/String/List<int>/struct）暂未支持把 %s 值装入接口 %s（编译器需要 struct 实现）接口方法 %s.%s 需要 %d 个参数，got %d暂未支持向接口方法 %s.%s 传递 %s 参数（需要 %s）暂未支持编译 program library（库形态由解释器/导出流程处理）qkc: 未知参数 %s\nqkc: 只能指定一个源文件（已给出 %s）\n暂未支持用 %s 初始化接口 %s 变量 %q暂未支持用 %s 初始化 %s 变量 %qTypeError: panic(msg String) 只接受 1 个参数暂未支持对 %s 使用 %q（需要 bool）位下标必须是 int，得到 %s暂未支持把 %s 赋给一个 bitb[i] = v 需要原始位，得到 %s对位取下标需要原始位，得到 %s取反运算符 '~' 需要 int 操作数，得到 %s暂未支持对 %s 使用 %q（原始位只支持 == 与 !=）暂未支持对 %s / %s 使用 %q（位运算需要 int 视图或原始位）暂未支持对 %s / %s 使用 %q（原始位需要统一的宽度）暂未支持对 %s / %s 使用 %q：两侧宽度不同暂未支持用 %s 初始化 %s 变量 %q（原始位只接受同宽度的原始位或常量）暂未支持编译 %s（=== 的存储同一性仅在解释器中实现）暂未支持编译 &（取地址）（引用仅在解释器中实现）暂未支持编译 ++（引用移动）（仅在解释器中实现）暂未支持编译权限引用 &%s %s（仅在解释器中实现）"
+const msgBlob = "ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires (\"message\")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> Form: `program  · imports: ## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n| Field | Type | Description |\n|---|---|---|\n| Member | Signature | Description |\n|---|---|---|\n_(no exported symbols)_\nfunctionstructinterfacetype aliasimplspacesystem librarymacroFunctionsTypesImplsSpacesMacrosSystem librariesusage: qkc [options] <file.qk>\n\n  (default)           emit LLVM IR to stdout\n  --emit-ir           same as above (explicit)\n  -run                compile to a native binary and run it\n  -c                  compile to a native binary only (do not run)\n  -o <path>           output path: binary with -c/-run; .qklib with --emit-lib; IR file otherwise\n  --target-os <os>    preprocessor target OS (linux/darwin/windows; defaults to the host)\n  --target-arch <a>   preprocessor target arch (x86_64/arm64; defaults to the host)\n  --emit-lib          compile to a **library artifact** .qklib (contains lib<name>.so + export manifest; no sources)\n  --obfuscate         obfuscate: rename internal symbols, strip debug/ident info (with --emit-lib or -c)\n  -L <lib.qklib>      link a library: inject its library declarations + install lib<name>.so next to the output (repeatable)\n  --lib-name <name>   library name (defaults to the output file name)\n  --lib-version <ver> library version (default 0.1.0)\n  --lib-targets <list> platform variants to emit, comma-separated (e.g. linux-x86_64,windows-x86_64,darwin-arm64)\n  --lang <zh|en>      output language (Chinese by default; QK_LANG works too)\n  --version, -V       print the version and engine generation\n  -h, --help          this help\n\nenvironment: QUARK_CACHE=cache dir  QUARK_CFLAGS=clang flags (default \"-O3 -flto=thin\")REPL: internal error (recovered): %vdefined %s\ndefined type struct%s %s;\ndefined type interface%s %s;\ndefined impl%s %s; (%d methods)\ndefined library %s; (%d symbols)\ndefined type %s %s;\n%s %s shadows an outer variable of the same name (declared on line %d)%s %s shadows a global function (calls with that name resolve to this local)%s %s is assigned but never read%s %s is declared but never usedfunction %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)unreachable code (statements after line %d never execute)self-assignment: %s is assigned to itself (no effect)the assignment to %s is overwritten on line %d before any readwhile (true) with no break/return in the body: possible infinite loopdivision by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)self-comparison: %s == %s is always trueself-comparison: %s != %s is always false%s::%s returns void but its result is used as a value (nil at runtime)function %s returns void but its result is used as a value (nil at runtime)%s (true): the condition is always true, so the branch always runs%s (false): the condition is always false, so the branch never runsimported %q but no symbol from it is used (the import can be removed)function %s is never called (dead code; functions in library files are exempt)loop variablecatch variabletype %s looks like it implements interface %s but is missing method %s (implemented: %s)parametervariablea self-assignment has no effectthe value it computes is overwritten before any readthe overwritten write is the declaration initializer, and deleting it would delete the declaration itselfthe overwritten right-hand side calls or writes something, so deleting the assignment would drop that effectthe statement shares its line with other code, so deleting the line would remove something elsethe line holds more than this one import (or something else follows it), and the linter only rewrites a whole linerewriting it would drop the last read of %s and leave a new QK101 finding behindthe operand calls or writes something, so evaluating it could have an effect the constant would dropthe operand is not a plain read, so its value cannot be shown to be constant herethe comparison is not a statement of its own, so replacing it would change the program rather than only its formthe comparison shares its line with other code, so replacing the line would remove something elseanother fix rewrites the same line instead (%q becomes %q)no symbol of the imported file is useda value compared with itself is a constantits type %s cannot be shown to use the language's own equality, and a type may overload == through __eq__another correction already rewrites this line, so this one is not applied:load requires a file argumentunknown command %s (see :help)-L requires a directory argumentusage: qklsp [-L dir]...  (serves LSP over stdio)unknown argument %sdocument not opened: %sqklsp: invalid Content-Length %qqklsp: missing Content-Length headerqkcheck: -L requires a directory argumentqkcheck: unknown argument %s\nqkcheck: no .qk files to checkqkcheck: %d issue(s) (%d error(s) / %d warning(s))\nqkdoc: -o requires a file argumentqkdoc: -title requires an argumentqkdoc: unknown argument %s\nqkdoc: wrote %s (%d bytes)\nqkrepl: -e requires a code snippetqkrepl: unknown argument %s\nqkrepl %s — QuarkLang interactive evaluation (:help for help, :quit to exit)\n  QuarkLang API doc generator: /* */ and // comments + pub exports -> Markdown / HTML  QuarkLang interactive evaluation: multi-line blocks, persistent environment, :help/:load/:quit  QuarkLang static analysis (QK101-QK115): unused variable/parameter/import/function, unreachable code, shadowing, missing return,                           interface near-miss, void misuse, self-assignment, constant condition, constant divide-by-zero, dead store, self-comparisonusage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [-fix] [-check] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]commands:\n  :help            show this help\n  :quit / :exit    exit\n  :load <file.qk>  load a file: register its functions/types/impls (main is not run; call main(io) afterwards)\nnotes:\n  - an expression echoes its value; a statement ends with ; (added automatically when omitted)\n  - an unclosed block continues on the next line; variables/functions/types stay visible in later inputs\n  - log records and io.println output are shown as they happenqklsp: JSON parse failed: %wqklsp: method not implemented: %s  QuarkLang static analysis (QK101-QK115): unused vars/params/imports/functions, unreachable code,\n                           shadowing, missing return, interface near-miss, void misuse, self-assign,\n                           constant condition, division by zero, dead store, self-comparisonqkcheck: -fix and -check cannot be combined\nqkcheck: %d pending fix(es); nothing was written\nqkcheck: rewrote %s (%d line(s))\nqkcheck: rewrote %s (%d line(s)); no issues remain\nqkcheck: %d issue(s) remain that no fix applies to\n  fix: delete this line (%s)\n  fix: %s (%s)\n  fix: unchanged\n  no fix: %s\n  fix: -check does not write this; run qkcheck -fix to apply it\nqkcheck: stopped after %d passes with corrections still pending; run -fix again\nRunError: #error (\"cannot run a library\"): a program library is compiled as a library and cannot be runParseError: %q is not a valid integerParseError: %q is not a valid floatCompileError: no matching overload for %q (argument types do not match)ExportLibrary: only 'program library;' can export a library (current Kind=%q)ImportError: cannot find %q (looked for %s.qk or %s.qlib under %s)TypeError: list index must be an intTypeError: indexed assignment is not supported on %sTypeError: get(i) requires an int indexStringIndexOutOfBoundsError: substring(%d, %d) out of range [0,%d]StringIndexOutOfBoundsError: charAt(%d) out of range [0,%d)TypeError: contains requires a String argumentTypeError: startsWith requires a String argumentTypeError: endsWith requires a String argumentTypeError: indexOf requires a String argumentTypeError: substring(start, end?) requires int argumentsTypeError: substring end must be an intTypeError: split requires a String separatorTypeError: replace(old, new) requires String argumentsTypeError: charAt requires an int indexIOError: cannot execute command: %vIOError: cannot start program: %vIOError: command failed: %vIOError: qkpopen output exceeds the 8 MB limitIOError: request failed: %vIOError: failed to read response: %vIOError: response exceeds the 8 MiB limitHTTPError: status code %dTypeError: qkexecv argument must be a List<String>TypeError: qkpopen(cmd String) requires a string commandTypeError: qkjson_dumps(v) requires one argumentLibraryError: library %s does not declare function %qLibraryError: %s has too few argumentsTypeError: %s argument %s requires a pointer or nullTypeError: %s argument %s requires an int/boolTypeError: %s argument %s requires a floatTypeError: %s argument %s currently supports only String/int/floatFFIError: this build has cgo disabled (FFI / system libraries unavailable)FFIError: the Windows ABI shim supports at most 4 argumentsTypeError: call's first argument must be a prefix recordTypeError: call's second argument must be a .{in,out} recordTypeError: memorize prefix is missing the wrapped function fnTypeError: prefix.fn is not a functionTypeError: rec.in must be a ListTypeError: thread.talk requires a channel instanceTypeError: @styleConfigure(file) requires file or StringTypeError: sum's first argument must be the function reference 'generate'TypeError: sum's begin must be an intTypeError: sum's stop must be an intTypeError: sum's step must be a non-zero intTypeError: generate must return an intTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: undeclared identifier %qIndexOutOfRangeError: reference move past the end of the container (index %d, size %d)TypeError: %s declares __literal__ but no __element__TypeError: ++ moves a reference variable, not this expressionTypeError: ++ needs a reference, but %q is %sTypeError: ++ only moves element references (&a[i]); %q refers to something elseTypeError: cannot take the address of a field on %s (not a struct)TypeError: cannot take the address of an element of %s (not a list)TypeError: cannot take the address of this expression (needs a variable, field or list element)TypeError: cannot take the address of undeclared identifier %qTypeError: io.println needs an IOStream, got %sTypeError: list index must be int, got %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: assignment to undeclared identifier %qTypeError: for-in requires a List or a container with size() int and get(int), got %sTypeError: cannot assign member of %sTypeError: no member %q on %sTypeError: unsupported assignment targetTypeError: '*' requires a List or a container handle with get(), got %sTypeError: unary '-' requires a number, got %sinternal: unknown unary operator %sinternal: unknown expression nodeTypeError: a signature can only wrap a direct function callCompileError: %s expects %d args, got %dTypeError: this expression is not callableCompileError: undeclared function %qTypeError: no method %q on pointerTypeError: appendAll requires a List, got %sTypeError: taskm.done requires a pid (int), got %sTypeError: no method %q on %sCompileError: %s() expects %d args, got %dTypeError: memorize has no static method %qTypeError: HashTable has no static method %qTypeError: List has no static method %qTypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn's first arg must be an IOStream, got %sTypeError: IO::setOut's first arg must be an IOStream, got %sTypeError: IO has no static method %qCompileError: unknown scope %qinternal: unknown operator %sTypeError: cannot order-compare %s and %sbadAlloc: new %s has an invalid allocation sizeRuntimeError: execCtx for %s already executedNullPointerError: assignment through null pointerTypeError: b[i] needs a writable raw-bits targetTypeError: a bit index requires raw bits and an int indexTypeError: indexing requires a List, got %sTypeError: index must be intNullPointerError: dereference of null pointerTypeError: @styleConfigure(file String)IOError: %sJSONError: %sTypeError: taskm.merge first arg must be a pid (int)RuntimeError: unknown task pid %dTypeError: taskm.channel(n) requires 0 < n <= 1048576TypeError: write(s String)TypeError: setBlock(n) requires a positive int block sizeTypeError: %s.%s is a static method; call it via %s::%s(...)TypeError: file::new(name String)TypeError: ifstream requires a path string, got %sIOError: cannot open %q: %vTypeError: ofstream requires a path string, got %sIOError: cannot create %q: %vPanicError: %sTypeError: iofstream requires a path string, got %sTypeError: qkexec(cmd String[, retries int])TypeError: qkexecv(prog String, args List<String>[, retries])TypeError: qkhttp_get(url String[, retries int])TypeError: qkhttp_post(url, body, contentType[, retries])JSONError: %vTypeError: qkjson_loads(s String)TypeError: qkfile_read(path String)IOError: %vTypeError: qkfile_write(path String, content String)TypeError: qksignal_emit(node, name String [, args...])RuntimeError: thread busy — merge only when idle (taskm.done)TypeError: taskm requires a Task or pid, got %sIndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)TypeError: raw bits admit only the bitwise family and equalityDivisionByZeroError: float division by zeroTypeError: '%' requires int operandsinternal: unknown arithmetic operator %sCompileError: duplicate declaration of %qCompileError: duplicate type alias %qCompileError: duplicate struct %qCompileError: duplicate interface %qCompileError: duplicate library %qCompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)CompileError: struct %s has no type parameters, but impl declares %dCompileError: duplicate method %q on %sCompileError: unknown interface %qCompileError: impl %s for %s: missing method %qCompileError: impl %s for %s: method %q takes %d params, interface requires %dCompileError: main must take 1-3 params in order (io, env, args), got %dTypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)CompileError: empty type annotationCompileError: %sCompileError: %s takes %d type argument(s), got %dCompileError: interface %s is not generic, but %d type argument(s) were givenCompileError: unknown type %qCompileError: parameter %q of %s is missing a type annotationIndexOutOfBoundsError: index %d out of range [0,%d)RuntimeError: unresolved call targetDivisionByZeroError: integer division by zeroDivisionByZeroError: modulo by zeroTypeError: unsupported integer operationsum(generate, begin, stop[, step]) requires 3 or 4 arguments, got %dinterface %s has no method %qTypeError: return type is %s, got %sCompileError: break is only allowed inside while/for loopsTypeError: for-loop variable type %s does not match element type %sCompileError: unknown struct %qTypeError: %s requires %d fields but the literal provides %dTypeError: %s has no field %qTypeError: field %q: cannot assign %s to %sTypeError: cannot assign %s to %sTypeError: cannot assign a %q reference to a %q reference (the source is more restrictive)TypeError: cannot store a %s-scoped reference in a %s-scoped variable (the variable would outlive the reference)CompileError: const variable %q cannot be reassignedTypeError: reference %q has permission %q and cannot be written through (w is missing)TypeError: cannot assign %s to %s[i] (%s)TypeError: index key must be %s, got %sTypeError: value must be %s, got %sTypeError: unknown struct %sTypeError: cannot assign %s to %s.%s (%s)TypeError: condition must be bool, got %sCompileError: expression nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsTypeError: ++ moves a reference variable, got %sTypeError: ++ needs a reference (permission m), but %q is %sTypeError: reference %q has permission %q and cannot move (m is missing)TypeError: reference %q has permission %q and cannot be read (r is missing)CompileError: variable %q used before initializationTypeError: the bitwise complement '~' requires an int operand, got %sTypeError: '!' requires bool, got %sCompileError: bit index %d is out of range for %s (0..%d)TypeError: a bit index must be int, got %sTypeError: indexing requires a List or a pointer block, got %sTypeError: index must be int, got %sTypeError: %s shifts raw bits, so the left operand must be raw bits, got %sTypeError: %s needs a shift count of int or raw bits, got %sTypeError: raw bits admit no arithmetic: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)TypeError: raw bits admit no ordering: '%s' on %s — convert to a view first, e.g. int(b) %s 1 (spec §3.3)TypeError: raw bits admit only & | ^ ~ << >> == != and b[i], not '%s' (spec §3.3)TypeError: %s and %s have different widths (%d and %d bits): a bitwise operation needs equal widths (spec §3.4)TypeError: %s on %s and %s mixes raw bits with a view: both sides must be raw bits of one width (spec §3.3)TypeError: %s requires bool operands, got %sTypeError: '+' requires numbers or a String, got %s and %sTypeError: arithmetic requires numbers, got %s and %sTypeError: bitwise and shift operators require int operands, got %s and %sTypeError: cannot compare %s and %sTypeError: no member %q on an anonymous structTypeError: no member %q on pointerTypeError: unknown interface %qTypeError: %s.%s expects %d arguments, got %dTypeError: interface %s has no method %qTypeError: unknown system library %qLibraryError: %s.%s expects %d arguments, got %dTypeError: %s.%s argument %s requires %s, got %sLibraryError: library %s does not export function %qTypeError: no method %qTypeError: file has no method %qTypeError: %s requires a String argumentTypeError: substring(start, end?) requires one or two int argumentsTypeError: substring arguments must be intsTypeError: get(i) requires an int index, got %sTypeError: append expects %s, got %sTypeError: put key expects %s, got %sTypeError: put value expects %s, got %sTypeError: setIn requires a path String or an InputStream, got %sTypeError: setOut requires a path String or an OutputStream, got %sCompileError: thread.merge(fn, args...) requires at least 1 argTypeError: thread.merge second arg must be a function reference, got %sTypeError: thread.talk requires a channel, got %sTypeError: setBlock(n) requires an int block size, got %sCompileError: taskm.spawn() takes no args, got %dCompileError: taskm.merge(pid, fn, args...) requires at least 2 args, got %dTypeError: taskm.merge first arg must be a pid (int), got %sTypeError: taskm.merge second arg must be a function reference, got %sTypeError: argument %d of %s: cannot assign %s to %sTypeError: taskm.block requires a pid, got %sTypeError: taskm.channel(n) requires an int capacity, got %sCompileError: taskm.channel() expects 0 or 1 args, got %dTypeError: type %s has no implTypeError: %s is a static method; call it via %s::%s(...)TypeError: %s(%s) is a width mismatch: %s is %d bits wide and %s is %d bits wide (spec §3.4)TypeError: %s(%s) is not a conversion: a reinterpretation needs a view of the same width, and a value conversion needs two integer views (spec §3.4)TypeError: @styleConfigure can only wrap a function or method callCompileError: @%s — the signature name must be a Sign instance variable in scope (any name)CompileError: %s expects %d args (optionally plus retries), got %dTypeError: qkexec requires a command String, got %sTypeError: qkexecv(prog String, args List<String>)TypeError: qkpopen requires a path String, got %sCompileError: qkhttp_get expects 1-2 args (url[, retries]), got %dTypeError: qkhttp_get requires url String, got %sCompileError: qksignal_emit(node, name String [, args...])TypeError: qkjson_loads requires String, got %sCompileError: qkhttp_post expects 3-4 args (url, body, ct[, retries]), got %dTypeError: qkhttp_post(url, body, contentType) requires Strings for all argumentsTypeError: FileInputStream requires a path String, got %sTypeError: FileOutputStream requires a path String, got %sCompileError: sum(generate, begin, stop[, step]) requires 3 or 4 arguments, got %dTypeError: sum's first argument must be a function reference, got %sTypeError: sum's bound arguments must be ints, got %sTypeError: argument %d of %s: %vinterface %s is missing method %q of %sinterface %s method %q is signature-incompatible with %s (strict by type)TypeError: %s.__literal__ must take no parametersTypeError: %s declares __literal__ but no __element__ to receive the elementsTypeError: %s.__element__ must take exactly one element parameterTypeError: literal element is %s, but %s.__element__ takes %sTypeError: %s: %vunknown interface %stype %s does not implement interface method %qTypeError: IO::setIn requires a path String or an InputStream, got %sTypeError: IO::setOut requires a path String or an OutputStream, got %sCompileError: %s::%s expects %d args, got %dTypeError: argument %d of %s::%s: cannot assign %s to %sTypeError: %s has no static method %qCompileError: duplicate overload %q (identical signature already exists)expressionnot a .qklib artifact (magic mismatch): %svariant %s failed verification (content was modified)%s (tried: %s)redefining builtin function %q is not supported (the compiler treats %s as builtin)overloading a generic function %q is not supported (the compiler requires unique generic function names)a generic and a plain function sharing the name %q is not supported (the compiler requires one or the other)duplicate function definition %s (same parameter type signature)no main function found (canonical entry point: fn main(IOStream io) { ... })overloading/redefining method %s.%s is not supported (the compiler emits name-mangled functions and cannot distinguish overloads)void type %s is not supported yet%s type %q is not supported (the compiler handles List<int> and List<String>; element %s)%s type %q is not supported (not lowered by the compiler yet)IOStream %s is not supported (the compiler binds io only at the main entry)%s type %q is not supported (the compiler handles List<int> only)%s type %q is not supported yet (write HashTable<K, V>)%s type %q is not supported (the compiler lowers T& for scalars/String/struct only)pointer/copy-on-pass type %q is not supported (copyd as a parameter modifier is supported; there is no Copyd<T> type)unknown type %q (%s declaration)duplicate/shadowed variable %q is not supported (the compiler's variable table has no same-name variables; rename it)return type %q is not supported (the compiler handles int/bool/float/String/void/struct)impl instance method %s is missing its leading self parametercopyd interface parameter %s is not supported yet (the runtime type is unknown, so a deep copy is impossible)copyd HashTable parameter %s is not supported yet (deep-copying table values is not lowered)copyd List<String> parameters are not supported yet (deep-copying string lists is not lowered)copyd of interface field %s in struct %s is not supported yet (the runtime type is unknown)a generic main function is not supported yetmain cannot return a value (got %q)main's first parameter must be IOStream (canonical: fn main(IOStream io) { ... })main's %q parameter is not supported (the compiler binds IOStream io only)the copyd modifier is not supported (copy-on-pass is interpreter-only)IOStream method %q is not supported (the compiler handles io.println/io.print only)a void function cannot return a value (the interpreter ignores the value; the compiler refuses to ignore it silently)returning a %s value from a %s function is not supported yetcatch (%s %s) is not supported (the compiler handles catch (void e) only)using %q inside a catch body is not supported (error value passing is interpreter-only)delete on a non-variable expression is not supported (the compiler handles delete <List variable> only)delete %q is not supported (the compiler handles delete on a List variable only)compiler internal error: unknown statement type %Tfor-iteration over %s is not supported (the compiler handles List<int>)iterating List<%s> is not supported (the compiler handles List<int> and List<String>)for-iteration over a non-variable list is not supported (the compiler requires a List variable)for-iteration over %s is not supported (the compiler handles List<int> and List<String>)List<String> %q without an initializer is not supported (the compiler only lowers existing lists such as keys())initializing List<String> with %s is not supported (the compiler lowers literals, HashTable.keys() results and List<String> variables)List<int> %q without an initializer is not supported (the interpreter's zero value is an empty list; the compiler backend does not lower it)this List<int> initializer is not supported yet (only [a, b, ...] literals)initializing List<int> with %s elements is not supportedprinting a value of type %s is not supported (the compiler handles int/float/bool/String/interface{})a %s condition is not supported yet (bool required)assignment target %q is not declaredassigning %s to %s variable %q is not supportedthis subscript assignment is not supported (the compiler handles List<int> only)index of type %s is not supported yet (int required)assigning %s to a List<int> element is not supportedstruct %s has no field %qassigning %s to %s.%s (%s) is not supportedmember assignment is not supported by the compiler (interface dispatch is interpreter-only)this assignment target is not supported (the compiler handles variables, List subscripts and struct fields only)using library object %q as a value is not supported yet (FFI is interpreter-only)undeclared identifier %q (the compiler does not support function references or global names)IOStream value %q is not supported yet (the compiler binds io only at the main entry)this subscript read is not supported (the compiler handles List<int> only)new %s[n] is not supported yet (the interpreter yields List<T>&, which cannot be assigned to List<T>; use a [..] literal)new %s is not supported yet (the element type cannot be a pointer)list literal %s is not supported (the compiler lowers List<int> and List<String>)initializing %s with %s elements is not supportedcompiler internal error: unknown expression type %Tadding %s and %s is not supported yet (String concatenation requires both sides to be String)using %q on %s / %s is not supported (Operation overloading works for same-type structs only)using %q on %s / %s is not supported (shifts need int operands)using %q on %s / %s is not supported (pointers allow == / != only)using %q on %s / %s is not supported (nullable references allow == / != only)comparing a non-variable nullable reference is not supported (the compiler requires a T& variable)using %q on interface{} is not supported (only == / !=)using %q on bool is not supported (the interpreter allows == / != only)using %q on %s / %s is not supported (String/Operation comparison needs the same type)operator %q is not supported by the compiler (available in the interpreter)negating %s is not supported (Operation overloading works for same-type structs only)negating %s is not supported yet (bool required)dereference * is not supported (pointers are interpreter-only)unary operator %q is not supportedthis call form is not supported (the compiler handles f(...), obj.m(...) and T::m(...) only)this signature call is not supported (the compiler requires a direct function name: f(args) @sign(...))undeclared signature instance %q (@%s)signature instance %q of type %s is not supported yet (only the built-in memorize is lowered)wrapping function %s that returns %s with memorize is not supported yet (the runtime cache carries only int)memorize wrapping a %s parameter is not supported yet (cache keys carry only int)a %s argument to memorize is not supported yet (cache keys carry only int)clock() takes no arguments, got %dsum generator %q has multiple int(%s) overloads; cannot decidesum generator %q has no int(%s) overloadunknown generator function %q (the compiler only supports non-generic functions defined in the same program)unknown function %q (the compiler only supports functions defined in the same program)merge target %q has several overloads with the same arity; cannot decidemerge target %q has no overload with %d parametersno matching overload for %q (arity/type mismatch)passing a %s argument to %s is not supported yet (expected %s)this sum generator is not supported (the compiler requires a named function)this generic generator %s is not supported (the compiler requires fn<T> %s(T) T)sum's %s argument is not supported yet (int required)generator %q is not supported (the compiler requires int %s(int))toString() takes no argumentsList.size() takes no argumentsList.get(i) requires 1 argumentList.get with a %s index is not supported yet (int required)List<String>.%s is not supported yet (size/get/toString/append and for-in iteration are lowered)List<String>.append with a %s argument is not supported yet (String required)List.append(v) requires 1 argumentList<int>.append with a %s argument is not supported yet (int required)List.%s() takes no argumentsList.reset() takes no argumentsList.appendAll(l2) requires 1 argumentList.appendAll requires List<int>, got %sList.__sort__() takes no argumentsList method %q is not supported yet (the compiler supports size/get/append/head/tail/next/reset/appendAll/toString/__sort__)method %s.%s requires %d arguments, got %dcalling static method %s.%s on an instance is not supported (canonical: %s::%s(...))struct %s has no method %q (the interpreter reports this during type checking)calling method %s on %s is not supported by the compiler (available in the interpreter)taskm threads/channels are not supported yet (%s; available in the interpreter)library FFI call %s.%s is not supported yet (available in the interpreter)io.%s returns nothing and cannot be used in an expression (call it as a standalone statement)passing a %s argument to %s.%s is not supported yet (expected %s)HashTable.%s with a %s argument is not supported yetHashTable.size() takes no argumentsHashTable.keys() takes no argumentsHashTable<%s, %s>.keys() is not supported yet (the interpreter returns original keys; the compiler lowers only String keys to List<String>)HashTable.put(k, v) requires 2 argumentsHashTable<%s, %s>.put key must be %s, got %sHashTable<%s, %s>.put value must be %s, got %sHashTable.get(k) requires 1 argumentHashTable<%s, %s>.get key must be %s, got %sHashTable.%s(k) requires 1 argumentHashTable<%s, %s>.%s key must be %s, got %sHashTable method %q is not supported (the compiler handles put/get/contains/remove/size/keys)HashTable::%s is not supported yet (only HashTable::new() is lowered)memorize::%s is not supported yet (only memorize::new() is lowered)passing a %s argument to %s::%s is not supported yet (expected %s)interface member access %s.%s is not supported (dynamic dispatch is interpreter-only)library member access %s.%s is not supported yet (FFI is interpreter-only)member access %s.%s is not supported by the compiler (available in the interpreter)a generic struct literal .{...} whose type arguments cannot be inferred is not supported (%s; available in the interpreter)anonymous struct literal .{...} is not supported (the compiler requires a named struct)struct %s literal has too many fieldsinitializing field %s.%s with %s is not supported (%s)%s requires a String argument, got %s%s requires an int argument, got %ssplit(sep) requires 1 argumentstatic method %s of struct %s is not supported yet (no impl declared for that type)space call %s::%s is not supported yet (available in the interpreter; the compiler supports only spaces/impls declared in the same program)%s::%s is an instance method (it needs a self receiver)%s::%s is not supported yet (that space/type does not declare this method)library FFI type %q is not supported yetlibrary %s does not declare function %qlibrary function %s.%s requires %d arguments, got %da library function parameter cannot be voidlibrary FFI parameter type %q is not supported yet (the compiler supports int/bool/f32/float/double/String)taskm requires a thread or pid, got %sthis merge target is not supported yet (a named function is required)merging generic function %s is not supported yet (available in the interpreter)merging with %d arguments is not supported yet (a runtime thread carries 8 i64 slots)a %s merge parameter is not supported yet (scalar/String/struct/List required)merging function %s that contains log is not supported yet (its return value may be nil)taskm.spawn() takes no arguments, got %dtaskm.channel() takes 0 or 1 arguments, got %dtaskm.channel(n) requires an int capacity, got %staskm.block(pid) requires 1 argument, got %dtaskm.done(pid) requires 1 argument, got %dtaskm.merge(pid, fn[, args...]) requires 2..10 arguments (at most 8 args), got %dthread.talk is not supported yet (available in the interpreter)taskm.%s is not supported yet (the compiler supports spawn/merge/block/done/channel)t.pid() takes no argumentst.merge(fn[, args...]) requires 1..9 arguments (at most 8 args), got %dt.talk(c) requires 1 argumentthread.talk requires a channel instance, got %sthread method %q is not supported yet (the compiler supports merge/pid/talk)a %s merge argument is not supported yetc.send(v) requires 1 argumentsending %s over a channel is not supported yet (runtime channels carry only int)c.recv() takes no argumentschannel method %q is not supported yet (the compiler supports send/recv)qkc[debug]: preprocess target =qkc: wrote library artifact %s%s | platform variants: %s | %d exports\nqkc: note: library %s has no %s variant, falling back to %s (use --lib-targets to emit that variant)\nqkc: linking library %s v%s (variant %s, %d exported symbols%s)\nfunction %s requires %d arguments, got %da generic call whose type arguments cannot be inferred from the arguments is not supported yet: %s (available in the interpreter)using the return value of the log-containing function %s in an expression is not supported (the interpreter returns nil)generic method %s.%s whose type arguments cannot be inferred is not supported yet (available in the interpreter)method %s of interface %s is not implemented on %s (type checking should have caught this)method %s of interface %s has a different parameter count than the implementation on %s (type checking should have caught this)boxing a %s value into interface{} is not supported yet (the compiler supports int/float/bool/String/List<int>/struct)putting a %s value into interface %s is not supported yet (a struct implementation is required)interface method %s.%s requires %d arguments, got %dpassing a %s argument to interface method %s.%s is not supported yet (expected %s)compiling a program library is not supported (library form is handled by the interpreter/export flow)qkc: unknown argument %s\nqkc: only one source file may be given (already have %s)\nusing %s to initialize interface %s variable %q is not supportedusing %s to initialize %s variable %q is not supportedTypeError: panic(msg String) takes exactly 1 argument%s with %q is not supported (bool required)a bit index must be int, got %sassigning %s to a bit is not supportedb[i] = v requires raw bits, got %ssubscripting a bit requires raw bits, got %sthe bitwise complement '~' requires an int operand, got %susing %q on %s is not supported (raw bits admit == and != only)using %q on %s / %s is not supported (bitwise operators need int views or raw bits)using %q on %s / %s is not supported (raw bits need one width)using %q on %s / %s is not supported: the widths differusing %s to initialize %s variable %q is not supported (raw bits take raw bits of the same width, or a constant)compiling %s is not supported yet (=== storage identity is implemented in the interpreter only)compiling & (address-of) is not supported yet (references are implemented in the interpreter only)compiling ++ (reference move) is not supported yet (implemented in the interpreter only)compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)ParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 (\"消息\")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence> 形态：`program \u3000·\u3000导入：## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| 成员 | 签名 | 说明 |\n|---|---|---|\n_（没有可导出的符号）_\n函数结构体接口类型别名实现空间系统库宏函数类型实现空间宏系统库usage: qkc [options] <file.qk>\n\n  （默认）            输出 LLVM IR 到 stdout\n  --emit-ir           同上（显式）\n  -run                编译为原生二进制并执行\n  -c                  只编译为原生二进制（不执行）\n  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件\n  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）\n  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）\n  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）\n  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）\n  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）\n  --lib-name <name>   库名（默认取输出文件名）\n  --lib-version <ver> 库版本（默认 0.1.0）\n  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）\n  --version, -V       打印版本与引擎代次\n  -h, --help          本帮助\n\n环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 \"-O3 -flto=thin\"）REPL: 内部错误（已恢复）: %v已定义 %s\n已定义 type struct%s %s;\n已定义 type interface%s %s;\n已定义 impl%s %s;（%d 个方法）\n已定义 library %s;（%d 个符号）\n已定义 type %s %s;\n%s %s 遮蔽外层同名变量（外层声明于第 %d 行）%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）%s %s 只被赋值、从未读取%s %s 声明后从未使用函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）不可达代码（第 %d 行之后的语句不会执行）自赋值：%s 赋值给自身（无效果）对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）while (true) 且循环体内无 break/return：可能的死循环常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）自身比较：%s == %s 恒为真自身比较：%s != %s 恒为假%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）%s (true)：条件恒为真，分支永远执行%s (false)：条件恒为假，分支永不执行导入了 %q 但未使用其任何符号（可删除该 import）函数 %s 从未被调用（死代码；库文件中的函数不报）循环变量catch 变量类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）形参变量自赋值没有任何效果它算出的值在被读取之前就被覆盖了被覆盖的那次写是声明初始化式，删掉它会连声明一起删掉被覆盖的右值调用了函数或有写入，删除该赋值会丢掉这个效果该语句与其他代码共处一行，删除整行会连同别的东西一起删掉该行不止这一条导入（或其后还有别的内容），而本工具只整行改写改写它会丢掉 %s 的最后一次读取，并留下一个新的 QK101 问题操作数调用了函数或有写入，求值它可能带有常量会丢掉的副作用操作数不是单纯的读取，无法在此证明它的值是常量该比较不是独立语句，替换它会改变程序本身而不只是其形式该比较与其他代码共处一行，替换整行会连同别的东西一起删掉同一行已有另一处修复（%q 变为 %q）该导入文件没有任何符号被用到一个值与自身比较的结果是常量无法证明其类型 %s 使用语言内建的相等比较，而类型可以通过 __eq__ 重载 ==同一行已有另一处修复，因此这一处不会被应用:load 需要一个文件参数未知命令 %s（:help 查看帮助）-L 需要一个目录参数usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）未知参数 %s未打开的文档 %sqklsp: 非法 Content-Length %qqklsp: 缺少 Content-Length 头qkcheck: -L 需要一个目录参数qkcheck: 未知参数 %s\nqkcheck: 没有可检查的 .qk 文件qkcheck: %d 个问题（%d 错误 / %d 警告）\nqkdoc: -o 需要一个文件参数qkdoc: -title 需要一个参数qkdoc: 未知参数 %s\nqkdoc: 已写入 %s（%d 字节）\nqkrepl: -e 需要一段代码qkrepl: 未知参数 %s\nqkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n  QuarkLang API 文档生成：/* */ 与 // 注释 + pub 导出 → Markdown / HTML  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较usage: qkcheck [-json] [-params] [-no-typecheck] [-L dir] [-exit0] [-fix] [-check] [--version] files...usage: qkdoc [-o file] [-html] [-all] [-title T] [--version] files...usage: qkrepl [-e code] [-q] [--version]命令：\n  :help            显示本帮助\n  :quit / :exit    退出\n  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）\n说明：\n  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）\n  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见\n  - log 的记录、io.println 的输出会即时显示qklsp: JSON 解析失败: %wqklsp: 未实现的方法 %s  QuarkLang 静态检查（QK101–QK115）：未使用变量/形参/导入/函数 · 不可达代码 · 遮蔽 · 缺返回 ·\n                           接口近失配 · void 误用 · 自赋值 · 常量条件 · 常量除零 · 死存储 · 自身比较qkcheck: -fix 与 -check 不能同时使用\nqkcheck: 有 %d 处待修复；未写入任何文件\nqkcheck: 已重写 %s（%d 行）\nqkcheck: 已重写 %s（%d 行）；已无问题\nqkcheck: 仍有 %d 个问题没有可用的修复\n  修复：删除本行（%s）\n  修复：%s（%s）\n  修复：不变\n  无法修复：%s\n  修复：-check 不会写入；运行 qkcheck -fix 应用\nqkcheck: 已达 %d 轮上限，仍有待修复项；请再次运行 -fix\nRunError: #error (\"cannot run a library\"): program library; 编译为库，不可运行ParseError: %q 不是合法整数ParseError: %q 不是合法浮点数CompileError: 未找到匹配重载 %q（参数类型不匹配）ExportLibrary: 只有 program library; 才能导出库（当前 Kind=%q）ImportError: 找不到 %q（搜索目录 %s 下的 %s.qk 或 %s.qlib）TypeError: 列表索引必须是 intTypeError: 不支持对 %s 索引赋值TypeError: get(i) 需要 int 下标StringIndexOutOfBoundsError: substring(%d, %d) 越界 [0,%d]StringIndexOutOfBoundsError: charAt(%d) 越界 [0,%d)TypeError: contains 需要 String 参数TypeError: startsWith 需要 String 参数TypeError: endsWith 需要 String 参数TypeError: indexOf 需要 String 参数TypeError: substring(start, end?) 需要 int 参数TypeError: substring 的 end 必须是 intTypeError: split 需要 String 分隔符TypeError: replace(old, new) 需要 String 参数TypeError: charAt 需要 int 索引IOError: 无法执行命令：%vIOError: 无法启动程序：%vIOError: 命令执行失败：%vIOError: qkpopen 输出超过 8MB 上限IOError: 请求失败：%vIOError: 读取响应失败：%vIOError: 响应超过 8MiB 上限HTTPError: 状态码 %dTypeError: qkexecv 参数必须是 List<String>TypeError: qkpopen(cmd String) 需要一个字符串命令TypeError: qkjson_dumps(v) 需要一个参数LibraryError: 库 %s 没有声明函数 %qLibraryError: %s 参数不足TypeError: %s 参数 %s 需要 pointer 或 nullTypeError: %s 参数 %s 需要 int/boolTypeError: %s 参数 %s 需要 floatTypeError: %s 参数 %s 目前仅支持 String/int/floatFFIError: 本构建未启用 cgo（FFI/系统库不可用）FFIError: windows 自研 ABI 支持 <=4 参数TypeError: call 第一参数必须是 prefix 记录TypeError: call 第二参数必须是 .{in,out} 记录TypeError: memorize prefix 缺少被包装函数 fnTypeError: prefix.fn 不是函数TypeError: rec.in 必须是 ListTypeError: thread.talk 需要 channel 类实例TypeError: @styleConfigure(file) 需要 file 或 StringTypeError: sum 第一个参数必须是函数引用 generateTypeError: sum 的 begin 必须是 intTypeError: sum 的 stop 必须是 intTypeError: sum 的 step 必须是非零 intTypeError: generate 必须返回 intTypeError: 位运算与移位运算需要 int 操作数TypeError: 取反运算符 '~' 需要 int 操作数CompileError: 未声明的标识符 %qIndexOutOfRangeError: 引用移动越过了容器末尾（下标 %d，大小 %d）TypeError: %s 声明了 __literal__，却没有 __element__TypeError: ++ 移动的是引用变量，不是这个表达式TypeError: ++ 需要引用，但 %q 是 %sTypeError: ++ 只能移动元素引用（&a[i]）；%q 指向的是别的对象TypeError: 无法取 %s 上字段的地址（不是结构体）TypeError: 无法取 %s 元素的地址（不是列表）TypeError: 无法取这个表达式的地址（需要变量、字段或列表元素）TypeError: 无法取未声明的标识符 %q 的地址TypeError: io.println 需要 IOStream，得到 %sTypeError: 列表索引必须是 int，得到 %sTypeError: bitwise and shift operators require int operandsTypeError: the bitwise complement '~' requires an int operandCompileError: 对未声明的标识符 %q 赋值TypeError: for-in 需要 List，或具备 size() int 与 get(int) 的容器，得到 %sTypeError: 不能给 %s 的成员赋值TypeError: 成员 %q 在 %s 上不存在TypeError: 不支持的赋值目标TypeError: '*' 需要 List 或带 get() 的容器句柄，得到 %sTypeError: 一元 '-' 需要数字，得到 %sinternal: 未知的一元运算符 %sinternal: 未知的表达式节点TypeError: 签名只能包装直接的函数调用CompileError: %s 需要 %d 个参数，得到 %dTypeError: 这个表达式不可调用CompileError: 未声明的函数 %qTypeError: 方法 %q 在指针上不存在TypeError: appendAll 需要 List，得到 %sTypeError: taskm.done 需要 pid（int），得到 %sTypeError: 方法 %q 在 %s 上不存在CompileError: %s() 需要 %d 个参数，得到 %dTypeError: memorize 没有静态方法 %qTypeError: HashTable 没有静态方法 %qTypeError: List 没有静态方法 %qTypeError: taskm 是全局变量 —— 请使用 taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])TypeError: IO::setIn 的第一个参数必须是 IOStream，得到 %sTypeError: IO::setOut 的第一个参数必须是 IOStream，得到 %sTypeError: IO 没有静态方法 %qCompileError: 未知的作用域 %qinternal: 未知的运算符 %sTypeError: 无法对 %s 和 %s 做大小比较badAlloc: new %s 申请大小非法RuntimeError: execCtx for %s already executedNullPointerError: assignment through null pointerTypeError: b[i] needs a writable raw-bits targetTypeError: a bit index requires raw bits and an int indexTypeError: indexing requires a List, got %sTypeError: index must be intNullPointerError: dereference of null pointerTypeError: @styleConfigure(file String)IOError: %sJSONError: %sTypeError: taskm.merge first arg must be a pid (int)RuntimeError: unknown task pid %dTypeError: taskm.channel(n) requires 0 < n <= 1048576TypeError: write(s String)TypeError: setBlock(n) requires a positive int block sizeTypeError: %s.%s is a static method; call it via %s::%s(...)TypeError: file::new(name String)TypeError: ifstream requires a path string, got %sIOError: cannot open %q: %vTypeError: ofstream requires a path string, got %sIOError: cannot create %q: %vPanicError: %sTypeError: iofstream requires a path string, got %sTypeError: qkexec(cmd String[, retries int])TypeError: qkexecv(prog String, args List<String>[, retries])TypeError: qkhttp_get(url String[, retries int])TypeError: qkhttp_post(url, body, contentType[, retries])JSONError: %vTypeError: qkjson_loads(s String)TypeError: qkfile_read(path String)IOError: %vTypeError: qkfile_write(path String, content String)TypeError: qksignal_emit(node, name String [, args...])RuntimeError: thread busy — merge only when idle (taskm.done)TypeError: taskm requires a Task or pid, got %sIndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)TypeError: raw bits admit only the bitwise family and equalityDivisionByZeroError: float division by zeroTypeError: '%' requires int operandsinternal: unknown arithmetic operator %sCompileError: duplicate declaration of %qCompileError: duplicate type alias %qCompileError: duplicate struct %qCompileError: duplicate interface %qCompileError: duplicate library %qCompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)CompileError: struct %s has no type parameters, but impl declares %dCompileError: duplicate method %q on %sCompileError: unknown interface %qCompileError: impl %s for %s: missing method %qCompileError: impl %s for %s: method %q takes %d params, interface requires %dCompileError: main must take 1-3 params in order (io, env, args), got %dTypeError: Copyd is a modifier, not a type: write `copyd <type> <name>` (e.g. copyd List<int> a)CompileError: empty type annotationCompileError: %sCompileError: %s takes %d type argument(s), got %dCompileError: interface %s is not generic, but %d type argument(s) were givenCompileError: unknown type %qCompileError: parameter %q of %s is missing a type annotationIndexOutOfBoundsError: index %d out of range [0,%d)RuntimeError: unresolved call targetDivisionByZeroError: integer division by zeroDivisionByZeroError: modulo by zeroTypeError: unsupported integer operationsum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %d接口 %s 没有方法 %qTypeError: 返回类型是 %s，得到 %sCompileError: break 只能在 while/for 循环体内TypeError: for 迭代变量类型 %s 与元素类型 %s 不匹配CompileError: 未知的结构体 %qTypeError: %s 需要 %d 个字段，字面量给了 %dTypeError: %s 没有字段 %qTypeError: 字段 %q: cannot assign %s to %sTypeError: 不能把 %s 赋给 %sTypeError: 不能把 %q 引用赋给 %q 引用（来源的限制更严）TypeError: 不能把 %s 作用域的引用存入 %s 作用域的变量（变量的存活期会长于引用）CompileError: const 变量 %q 不可重新赋值TypeError: 引用 %q 的权限是 %q，不能透过它写入（缺少 w）TypeError: 不能把 %s 赋给 %s[i]（%s）TypeError: 索引键需要 %s，给了 %sTypeError: 值需要 %s，给了 %sTypeError: 未知的结构体 %sTypeError: 不能把 %s 赋给 %s.%s（%s）TypeError: 条件必须是 bool，得到 %sCompileError: 表达式嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句TypeError: ++ 移动的是引用变量，得到 %sTypeError: ++ 需要引用（权限 m），但 %q 是 %sTypeError: 引用 %q 的权限是 %q，不能移动（缺少 m）TypeError: 引用 %q 的权限是 %q，不能读取（缺少 r）CompileError: 变量 %q 在初始化之前被使用TypeError: 取反运算符 '~' 需要 int 操作数，got %sTypeError: '!' 需要 bool，得到 %sCompileError: 位下标 %d 超出 %s 的范围 (0..%d)TypeError: 位下标必须是 int，得到 %sTypeError: 索引操作需要 List 或指针块，得到 %sTypeError: 下标必须是 int，得到 %sTypeError: %s 是原始位的移位，左操作数必须是原始位，得到 %sTypeError: %s 的移位次数需要 int 或原始位，得到 %sTypeError: 原始位不支持算术：'%s' 作用于 %s —— 请先转换为视图，例如 int(b) %s 1（规范 §3.3）TypeError: 原始位不支持比较大小：'%s' 作用于 %s —— 请先转换为视图，例如 int(b) %s 1（规范 §3.3）TypeError: 原始位只支持 & | ^ ~ << >> == != 和 b[i]，不支持 '%s'（规范 §3.3）TypeError: %s 与 %s 宽度不同（%d 位与 %d 位）：位运算要求两侧宽度相同（规范 §3.4）TypeError: %s 作用于 %s 与 %s：原始位与视图混用，两侧必须是同宽度的原始位（规范 §3.3）TypeError: %s 需要 bool 操作数，得到 %sTypeError: '+' 需要数字或 String，得到 %s 和 %sTypeError: 算术运算需要数字，得到 %s 和 %sTypeError: 位运算与移位运算需要 int 操作数，got %s and %sTypeError: 无法比较 %s 和 %sTypeError: no member %q on 匿名结构体TypeError: 成员 %q 在指针上不存在TypeError: 未知接口 %qTypeError: %s.%s 需要 %d 个参数，给了 %dTypeError: 接口 %s 没有方法 %qTypeError: 未知系统库 %qLibraryError: %s.%s 需要 %d 个参数，给了 %dTypeError: %s.%s 参数 %s 需要 %s，给了 %sLibraryError: 库 %s 没有导出函数 %qTypeError: 没有方法 %qTypeError: file 没有方法 %qTypeError: %s 需要 String 参数TypeError: substring(start, end?) 需要 1-2 个 int 参数TypeError: substring 参数必须是 intTypeError: get(i) 需要 int 下标，得到 %sTypeError: append 需要 %s，得到 %sTypeError: put 的键需要 %s，得到 %sTypeError: put 的值需要 %s，得到 %sTypeError: setIn 需要路径 String 或 InputStream，得到 %sTypeError: setOut 需要路径 String 或 OutputStream，得到 %sCompileError: thread.merge(fn, args...) 至少需要 1 个参数TypeError: thread.merge 的第二个参数必须是函数引用，得到 %sTypeError: thread.talk 需要 channel，得到 %sTypeError: setBlock(n) 需要 int 块大小，得到 %sCompileError: taskm.spawn() 不接受参数，得到 %dCompileError: taskm.merge(pid, fn, args...) 至少需要 2 个参数，得到 %dTypeError: taskm.merge 的第一个参数必须是 pid（int），得到 %sTypeError: taskm.merge 的第二个参数必须是函数引用，得到 %sTypeError: 第 %d 个参数（%s）：不能把 %s 赋给 %sTypeError: taskm.block 需要 pid，得到 %sTypeError: taskm.channel(n) 需要 int 容量，得到 %sCompileError: taskm.channel() 需要 0 或 1 个参数，得到 %dTypeError: 类型 %s 没有 implTypeError: %s 是静态方法；请改用 %s::%s(...) 调用TypeError: %s(%s) 宽度不匹配：%s 为 %d 位，%s 为 %d 位（规范 §3.4）TypeError: %s(%s) 不是转换：重解释需要同宽度的视图，值转换需要两个整数视图（规范 §3.4）TypeError: @styleConfigure 只能包装函数/方法调用CompileError: @%s —— 签名名必须是作用域中的 Sign 实例变量（名字任意）CompileError: %s expects %d args (可加 retries), got %dTypeError: qkexec 需要命令 String，得到 %sTypeError: qkexecv(prog String, args List<String>)TypeError: qkpopen 需要路径 String，得到 %sCompileError: qkhttp_get 需要 1-2 个参数（url[, retries]），得到 %dTypeError: qkhttp_get 需要 url String，得到 %sCompileError: qksignal_emit(node, name String [, args...])TypeError: qkjson_loads 需要 String，得到 %sCompileError: qkhttp_post 需要 3-4 个参数（url, body, ct[, retries]），得到 %dTypeError: qkhttp_post(url, body, contentType) 全部为 StringTypeError: FileInputStream 需要路径 String，得到 %sTypeError: FileOutputStream 需要路径 String，得到 %sCompileError: sum(generate, begin, stop[, step]) 需要 3 或 4 个参数，got %dTypeError: sum 第一个参数必须是函数引用，got %sTypeError: sum 的边界参数必须是 int，got %sTypeError: 第 %d 个参数（%s）：%v接口 %s 缺少 %s 的方法 %q接口 %s 的方法 %q 与 %s 的签名不兼容（按类型严格）TypeError: %s.__literal__ 不能接收参数TypeError: %s 声明了 __literal__，却没有接收元素的 __element__TypeError: %s.__element__ 必须正好接收一个元素参数TypeError: 字面量元素是 %s，但 %s.__element__ 接收的是 %sTypeError: %s: %v未知接口 %s类型 %s 未实现接口方法 %qTypeError: IO::setIn 需要路径 String 或 InputStream，得到 %sTypeError: IO::setOut 需要路径 String 或 OutputStream，得到 %sCompileError: %s::%s 需要 %d 个参数，得到 %dTypeError: 第 %d 个参数（%s::%s）：不能把 %s 赋给 %sTypeError: %s 没有静态方法 %qCompileError: duplicate overload %q (与已有签名相同)表达式不是 .qklib 制品（magic 不匹配）：%s变体 %s 校验失败（内容被改动）%s（尝试过：%s）暂未支持重定义内置函数 %q（编译器将 %s 视为内建）暂未支持泛型函数重载 %q（编译器要求泛型函数名唯一）暂未支持泛型函数与普通函数同名 %q（编译器要求二选一）重复的函数定义 %s（参数类型签名相同）未找到 main 函数（正典入口：fn main(IOStream io) { ... }）暂未支持重载/重定义方法 %s.%s（编译器按名字修饰生成函数，无法区分重载）暂未支持 void 类型 %s暂未支持 %s 类型 %q（编译器支持 List<int> 与 List<String>，元素 %s）暂未支持 %s 类型 %q（编译器暂未 lower）暂未支持 IOStream %s（编译器仅在 main 入口绑定 io）暂未支持 %s 类型 %q（编译器仅支持 List<int>）暂未支持 %s 类型 %q（HashTable 写法：HashTable<K, V>）暂未支持 %s 类型 %q（编译器只 lower 标量/String/struct 的 T&）暂未支持指针/传时复制类型 %q（copyd 作为形参修饰已支持；Copyd<T> 形参见 copyd 语义）未知类型 %q（%s 声明）暂未支持变量重名/遮蔽 %q（编译器变量表不支持同名变量，请改名）暂未支持返回类型 %q（编译器支持 int/bool/float/String/void/struct）impl 实例方法 %s 缺少 self 首参暂未支持 copyd 接口形参 %s（运行期类型未知，无法深拷贝）暂未支持 copyd HashTable 形参 %s（表值深拷贝未 lower）暂未支持 copyd List<String> 形参（字符串列表深拷贝未 lower）暂未支持 copyd struct %s 的接口字段 %s（运行期类型未知，无法深拷贝）暂未支持泛型 main 函数main 不能有返回值（got %q）main 的第一个参数必须是 IOStream（正典：fn main(IOStream io) { ... }）暂未支持 main 的 %q 参数（编译器只绑定 IOStream io）暂未支持 copyd 修饰（传时复制仅解释器可用）暂未支持 IOStream 方法 %q（编译器仅支持 io.println/io.print）void 函数不能 return 值（解释器会忽略返回值，编译器不静默忽略）暂未支持从 %s 函数返回 %s 值暂未支持 catch (%s %s)（编译器仅支持 catch (void e)）暂未支持在 catch 体内使用 %q（错误值传递仅解释器可用）暂未支持 delete 非变量表达式（编译器仅支持 delete <List 变量>）暂未支持 delete %q（编译器仅支持 delete List 变量）compiler 内部错误：未知语句类型 %T暂未支持对 %s 的 for 迭代（编译器支持 List<int>）暂未支持迭代 List<%s>（编译器支持 List<int> 与 List<String>）暂未支持对非变量列表的 for 迭代（编译器要求 List 变量）暂未支持对 %s 的 for 迭代（编译器支持 List<int> 与 List<String>）暂未支持无初值的 List<String> %q（编译器只 lower keys() 等已有列表）暂未支持用 %s 初始化 List<String>（编译器 lower 字面量、HashTable.keys() 结果与 List<String> 变量）暂未支持无初值的 List<int> %q（解释器零值为空列表，编译器后端未 lower）暂未支持 List<int> 的这种初始化（编译器仅支持 [a, b, ...] 字面量）暂未支持用 %s 元素初始化 List<int>暂未支持打印 %s 类型的值（编译器支持 int/float/bool/String/interface{}）暂未支持 %s 类型的条件（需要 bool）赋值目标 %q 未声明暂未支持用 %s 给 %s 变量 %q 赋值暂未支持该下标赋值（编译器仅支持 List<int>）暂未支持下标为 %s（需要 int）暂未支持用 %s 赋值给 List<int> 元素struct %s 没有字段 %q暂未支持用 %s 给 %s.%s（%s）赋值暂未支持成员赋值（接口分发仅解释器可用）暂未支持该赋值目标（编译器仅支持变量、List 下标与 struct 字段）暂未支持 library 库对象 %q 作为值（FFI 仅解释器可用）未声明的标识符 %q（编译器不支持函数引用/全局名）暂未支持 IOStream 值 %q（编译器仅在 main 入口绑定 io）暂未支持该下标访问（编译器仅支持 List<int>）暂未支持 new %s[n]（解释器产出 List<T>&，无法赋给 List<T>；请用 [..] 字面量）暂未支持 new %s（new 的元素类型不能是指针）暂未支持列表字面量 %s（编译器已 lower List<int> 与 List<String>）暂未支持用 %s 元素初始化 %scompiler 内部错误：未知表达式类型 %T暂未支持 %s 与 %s 相加（String 拼接要求两侧都是 String）暂未支持对 %s / %s 使用 %q（Operation 运算符重载仅同类型 struct 可用）暂未支持对 %s / %s 使用 %q（位移需要 int 操作数）暂未支持对 %s / %s 使用 %q（指针只支持 == / !=）暂未支持对 %s / %s 使用 %q（可空引用只支持 == / !=）暂未支持对非变量的可空引用做比较（编译器要求 T& 变量）暂未支持对 interface{} 使用 %q（只支持 == / !=）暂未支持对 bool 使用 %q（解释器只允许 == / !=）暂未支持对 %s / %s 使用 %q（String/Operation 比较仅同类型可用）暂未支持运算符 %q（解释器可用）暂未支持对 %s 取负（Operation 运算符重载仅同类型 struct 可用）暂未支持对 %s 取反（需要 bool）暂未支持解引用 *（指针仅解释器可用）暂未支持一元运算符 %q暂未支持该调用形式（编译器仅支持 f(...)、obj.m(...) 与 T::m(...)）暂未支持该签名调用（编译器要求直接函数名 f(args) @sign(...)）未声明的签名实例 %q（@%s）暂未支持 %s 类型的签名实例 %q（编译器只 lower 内置 memorize）暂未支持 memorize 包装返回 %s 的函数 %s（运行时缓存只承载 int）暂未支持 memorize 包装 %s 形参（运行时缓存键只承载 int）暂未支持 memorize 的 %s 实参（运行时缓存键只承载 int）clock() 不接受参数，got %dsum 生成器 %q 有多个 int(%s) 重载，无法确定sum 生成器 %q 没有 int(%s) 重载未知生成器函数 %q（编译器只支持同一程序内定义且无泛型的函数）未知函数 %q（编译器只支持同一程序内定义的函数）merge 目标 %q 有多个同参数个数的重载，无法确定merge 目标 %q 没有 %d 个参数的重载未找到匹配重载 %q（参数个数/类型不匹配）暂未支持向 %s 传递 %s 参数（需要 %s）暂未支持该 sum 生成器（编译器要求生成器是具名函数）暂未支持该泛型生成器 %s（编译器要求 fn<T> %s(T) T）暂未支持 sum 的 %s 参数（需要 int）暂未支持生成器 %q（编译器要求 int %s(int)）toString() 不接受参数List.size() 不接受参数List.get(i) 需要 1 个参数暂未支持 List.get 的 %s 下标（需要 int）暂未支持 List<String>.%s（编译器 lower size/get/toString/append 与 for-in 迭代）暂未支持 List<String>.append 的 %s 参数（需要 String）List.append(v) 需要 1 个参数暂未支持 List<int>.append 的 %s 参数（需要 int）List.%s() 不接受参数List.reset() 不接受参数List.appendAll(l2) 需要 1 个参数List.appendAll 需要 List<int>，got %sList.__sort__() 不接受参数暂未支持 List 方法 %q（编译器支持 size/get/append/head/tail/next/reset/appendAll/toString/__sort__）方法 %s.%s 需要 %d 个参数，got %d暂未支持静态方法以实例方式调用 %s.%s（正典写法 %s::%s(...)）struct %s 没有方法 %q（解释器在类型检查期报错）暂未支持对 %s 调用方法 %s（解释器可用）暂未支持 taskm 线程/通道（%s，解释器可用）暂未支持 library FFI 调用 %s.%s（解释器可用）io.%s 无返回值，不能用于表达式（请作为独立语句调用）暂未支持向 %s.%s 传递 %s 参数（需要 %s）暂未支持 HashTable.%s 的 %s 参数HashTable.size() 不接受参数HashTable.keys() 不接受参数暂未支持 HashTable<%s, %s>.keys()（解释器返回键的原值；编译器只 lower String 键 → List<String>）HashTable.put(k, v) 需要 2 个参数HashTable<%s, %s>.put 键需要 %s，got %sHashTable<%s, %s>.put 值需要 %s，got %sHashTable.get(k) 需要 1 个参数HashTable<%s, %s>.get 键需要 %s，got %sHashTable.%s(k) 需要 1 个参数HashTable<%s, %s>.%s 键需要 %s，got %s暂未支持 HashTable 方法 %q（编译器支持 put/get/contains/remove/size/keys）暂未支持 HashTable::%s（编译器只 lower HashTable::new()）暂未支持 memorize::%s（编译器只 lower memorize::new()）暂未支持向 %s::%s 传递 %s 参数（需要 %s）暂未支持接口成员访问 %s.%s（dynamic 分发仅解释器可用）暂未支持 library 成员访问 %s.%s（FFI 仅解释器可用）暂未支持成员访问 %s.%s（解释器可用）暂未支持无法推断类型实参的泛型 struct 字面量 .{...}（%s，解释器可用）暂未支持匿名 struct 字面量 .{...}（编译器要求有名 struct）struct %s 字面量字段过多暂未支持用 %s 初始化字段 %s.%s（%s）%s 需要 String 参数，got %s%s 需要 int 参数，got %ssplit(sep) 需要 1 个参数暂未支持 struct %s 的静态方法 %s（该类型未声明 impl）暂未支持 space 调用 %s::%s（解释器可用；编译器只支持同一程序内声明的 space/impl）%s::%s 是实例方法（需要 self 接收者）暂未支持 %s::%s（该 space/类型未声明此方法）暂未支持 library FFI 的类型 %qlibrary %s 没有声明函数 %qlibrary 函数 %s.%s 需要 %d 个参数，got %dlibrary 函数参数不能是 void暂未支持 library FFI 参数类型 %q（编译器支持 int/bool/f32/float/double/String）taskm 需要 thread 或 pid，got %s暂未支持该 merge 目标（编译器要求具名函数）暂未支持 merge 泛型函数 %s（解释器可用）暂未支持 merge 传 %d 个参数（运行时线程携带 8 个 i64 槽）暂未支持 merge 的 %s 形参（需要标量/String/struct/List）暂未支持 merge 含 log 的函数 %s（返回值可能为 nil）taskm.spawn() 不接受参数，got %dtaskm.channel() 需要 0 或 1 个参数，got %dtaskm.channel(n) 需要 int 容量，got %staskm.block(pid) 需要 1 个参数，got %dtaskm.done(pid) 需要 1 个参数，got %dtaskm.merge(pid, fn[, args...]) 需要 2..10 个参数（最多 8 个实参），got %d暂未支持 thread.talk（解释器可用）暂未支持 taskm.%s（编译器支持 spawn/merge/block/done/channel）t.pid() 不接受参数t.merge(fn[, args...]) 需要 1..9 个参数（最多 8 个实参），got %dt.talk(c) 需要 1 个参数thread.talk 需要 channel 类实例，got %s暂未支持 thread 方法 %q（编译器支持 merge/pid/talk）暂未支持 merge 的 %s 实参c.send(v) 需要 1 个参数暂未支持 channel 发送 %s（运行时通道只承载 int）c.recv() 不接受参数暂未支持 channel 方法 %q（编译器支持 send/recv）qkc[debug]: 预处理目标 =qkc: 已生成库制品 %s%s ｜ 平台变体：%s ｜ 导出 %d 个\nqkc: 提示：库 %s 无 %s 变体，退回 %s（跨系统请用 --lib-targets 生成对应变体）\nqkc: 引用库 %s v%s（变体 %s，导出 %d 个符号%s）\n函数 %s 需要 %d 个参数，got %d暂未支持无法从实参推断类型参数的泛型调用 %s（解释器可用）暂未支持在表达式中使用含 log 的函数 %s 的返回值（解释器返回 nil）暂未支持无法推断类型参数的泛型方法 %s.%s（解释器可用）接口 %s 的方法 %s 在 %s 上未实现（类型检查本应拦截）接口 %s 的方法 %s 与 %s 的实现参数个数不一致（类型检查本应拦截）暂未支持把 %s 值装箱成 interface{}（编译器支持 int/float/bool/String/List<int>/struct）暂未支持把 %s 值装入接口 %s（编译器需要 struct 实现）接口方法 %s.%s 需要 %d 个参数，got %d暂未支持向接口方法 %s.%s 传递 %s 参数（需要 %s）暂未支持编译 program library（库形态由解释器/导出流程处理）qkc: 未知参数 %s\nqkc: 只能指定一个源文件（已给出 %s）\n暂未支持用 %s 初始化接口 %s 变量 %q暂未支持用 %s 初始化 %s 变量 %qTypeError: panic(msg String) 只接受 1 个参数暂未支持对 %s 使用 %q（需要 bool）位下标必须是 int，得到 %s暂未支持把 %s 赋给一个 bitb[i] = v 需要原始位，得到 %s对位取下标需要原始位，得到 %s取反运算符 '~' 需要 int 操作数，得到 %s暂未支持对 %s 使用 %q（原始位只支持 == 与 !=）暂未支持对 %s / %s 使用 %q（位运算需要 int 视图或原始位）暂未支持对 %s / %s 使用 %q（原始位需要统一的宽度）暂未支持对 %s / %s 使用 %q：两侧宽度不同暂未支持用 %s 初始化 %s 变量 %q（原始位只接受同宽度的原始位或常量）暂未支持编译 %s（=== 的存储同一性仅在解释器中实现）暂未支持编译 &（取地址）（引用仅在解释器中实现）暂未支持编译 ++（引用移动）（仅在解释器中实现）暂未支持编译权限引用 &%s %s（仅在解释器中实现）"
 
 // msgText returns the value of a message in one language block, read out of the blob. One index
 // computation and one slice: no map, no hash of the message text, no fallback branch.
 func msgText(id Msg, block int) string {
-	if block < 0 || block >= 2 || int(id) >= 635 {
+	if block < 0 || block >= 2 || int(id) >= 662 {
 		return ""
 	}
-	k := block*635 + int(id)
+	k := block*662 + int(id)
 	return msgBlob[msgOffsets[k]:msgOffsets[k+1]]
 }
 
@@ -2070,6 +2151,22 @@ func MsgKeys() []string {
 		"lint.interface_near_miss",
 		"lint.kind_parameter",
 		"lint.kind_variable",
+		"lint.fix_self_assign_why",
+		"lint.fix_dead_store_why",
+		"lint.fix_no_declaration",
+		"lint.fix_no_impure_rhs",
+		"lint.fix_no_shared_line",
+		"lint.fix_no_import_shared_line",
+		"lint.fix_no_last_read",
+		"lint.fix_no_operand_effect",
+		"lint.fix_no_operand_read",
+		"lint.fix_no_compare_embedded",
+		"lint.fix_no_compare_shared_line",
+		"lint.fix_conflict",
+		"lint.fix_unused_import_why",
+		"lint.fix_self_compare_why",
+		"lint.fix_no_operand_type",
+		"lint.fix_no_line_taken",
 		"cli.repl_load_needs_file",
 		"cli.repl_unknown_command",
 		"cli.lsp_l_needs_directory",
@@ -2100,6 +2197,17 @@ func MsgKeys() []string {
 		"cli.lsp_json_parse_failed_reply",
 		"cli.lsp_method_not_implemented",
 		"cli.check_help_lines",
+		"cli.check_fix_flag_conflict",
+		"cli.check_fix_pending",
+		"cli.check_fix_wrote",
+		"cli.check_fix_wrote_no_diags",
+		"cli.check_fix_remaining",
+		"cli.check_fix_delete",
+		"cli.check_fix_replace",
+		"cli.check_fix_unchanged",
+		"cli.check_fix_skipped",
+		"cli.check_fix_flagged",
+		"cli.check_fix_capped",
 		"runtime.runerror_error_run_library_program_library",
 		"runtime.parseerror_q_valid_integer",
 		"runtime.parseerror_q_valid_float",

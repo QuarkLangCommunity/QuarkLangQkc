@@ -309,7 +309,7 @@ The three Go modules in play:
 
 | Tool | Location | Contract |
 |---|---|---|
-| `qkcheck` (linter) | `cmd/qkcheck/main.go:1-13` | 15 stable codes `QK101`–`QK115` (`internal/lang/lint.go:20-35`); `-json`, `-params`, `-no-typecheck`, `-L`, `-exit0`, `--lang` |
+| `qkcheck` (linter) | `cmd/qkcheck/main.go:1-20` | 15 stable codes `QK101`–`QK115` (`internal/lang/lint.go:20-35`); `-json`, `-params`, `-no-typecheck`, `-L`, `-exit0`, `--lang`, and the corrections: `-fix` applies a diagnostic's mechanical correction in place and re-checks, `-check`/`-dry-run` writes nothing and exits 3 when one is pending (`cmd/qkcheck/README.md`: the fixable/report-only inventory, the gates, and the corpus proof) |
 | `qkdoc` | `cmd/qkdoc/main.go:1-12` | `Doc`/`DocItem` from `internal/lang/docrender.go`; Markdown by default, `-html` self-contained |
 | `qkrepl` | `cmd/qkrepl/main.go:1-11`; `internal/lang/repl.go:106` | `-e` snippets; interactive `qk> ` prompt; batch mode when stdin is not a terminal, continuing after errors |
 | `qklsp` | `cmd/qklsp/main.go:1-8` | diagnostics, definition, completion, hover, symbols; self-implemented JSON-RPC, **zero third-party deps** |
