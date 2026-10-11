@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -224,21 +223,17 @@ func Load(opts Options) (*Sources, error) {
 	if err != nil {
 		return nil, err
 	}
-	files, err := filepath.Glob(filepath.Join(opts.SourceDir, "*.tsv"))
+	order, err := readTableOrder(opts.SourceDir)
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(files)
 	var msgs []Message
-	for _, f := range files {
-		if filepath.Base(f) == "languages.tsv" {
-			continue
-		}
-		raw, rerr := os.ReadFile(f)
+	for _, name := range order {
+		raw, rerr := os.ReadFile(filepath.Join(opts.SourceDir, name))
 		if rerr != nil {
 			return nil, rerr
 		}
-		part, perr := ParseMessages(filepath.Base(f), raw, langs)
+		part, perr := ParseMessages(name, raw, langs)
 		if perr != nil {
 			return nil, perr
 		}
@@ -253,6 +248,61 @@ func Load(opts Options) (*Sources, error) {
 		src.ModuleRaw = raw
 	}
 	return src, nil
+}
+
+// readTableOrder reads tables.tsv: the message tables in load order, one file name per line.
+//
+// The order used to be the alphabetical order of source/*.tsv, which was wrong in a way nothing would
+// have caught until it mattered: a message's number is its position in the concatenated tables, and
+// internal/lang answers a qkparser.ID by converting it straight to a Msg. The module's IDs are
+// positions in the module's own table, so the tables this repository imports must come first, in the
+// module's order. A table named docgen.tsv sorts before parser.tsv, so adding one domain under the old
+// rule renumbered all 63 syntax-layer messages and the conversion silently started meaning different
+// messages on the two sides of the seam.
+//
+// It is a list rather than a rule because a rule that has to be inferred from file names is exactly how
+// this broke. Every *.tsv that is neither languages.tsv nor tables.tsv must appear here, so a table
+// cannot be added and silently ignored.
+func readTableOrder(dir string) ([]string, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "tables.tsv"))
+	if err != nil {
+		return nil, fmt.Errorf("source/tables.tsv (the load order of the message tables): %w", err)
+	}
+	var order []string
+	seen := map[string]bool{}
+	err = parseRows("tables.tsv", raw, 1, func(line int, fields []string) error {
+		name := fields[0]
+		if !strings.HasSuffix(name, ".tsv") || strings.ContainsAny(name, `/\`) {
+			return fmt.Errorf("tables.tsv:%d: %q is not a table file name", line, name)
+		}
+		if name == "tables.tsv" || name == "languages.tsv" {
+			return fmt.Errorf("tables.tsv:%d: %s is read by the generator, not a message table", line, name)
+		}
+		if seen[name] {
+			return fmt.Errorf("tables.tsv:%d: %s is listed twice", line, name)
+		}
+		seen[name] = true
+		order = append(order, name)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(order) == 0 {
+		return nil, fmt.Errorf("tables.tsv: no message tables listed")
+	}
+	present, gerr := filepath.Glob(filepath.Join(dir, "*.tsv"))
+	if gerr != nil {
+		return nil, gerr
+	}
+	for _, path := range present {
+		base := filepath.Base(path)
+		if (base == "tables.tsv" || base == "languages.tsv") || seen[base] {
+			continue
+		}
+		return nil, fmt.Errorf("source/%s is not listed in tables.tsv, so generation would ignore it", base)
+	}
+	return order, nil
 }
 
 // Complete reports every message that has no value in a shipped language. It cannot happen through

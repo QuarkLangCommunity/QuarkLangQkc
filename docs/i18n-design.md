@@ -579,7 +579,7 @@ point. Steps 0-2 are this branch.
 | **1 ✔ done** | Migrate the syntax layer's `msg()` surface: 25 rows in `source/parser.tsv`, `internal/i18n/msg_gen.go`, the module's own IDs and blob, the `Localizer` seam, `proof/byte_identical.sh`. | nothing observable: the 25 renderings removed from `table_macro.go`, `table_compiler.go` and `table_lexer.go` are byte-identical to the values the blob now carries, which the corpus checks | revert the commit; the tables come back with it |
 | **2 ✔ done (module branch pushed)** | **qkparser** gains `i18n/source/messages.tsv`, `cmd/mkmsg`, `messages_gen.go` and the ID-based `Localizer`; this repository's generator reads that table at the pinned revision and checks its IDs. | the pin moves, so `compiler/go.mod` follows; **the module must merge first**, and the pin bump is the second PR | revert the pin bump. ⚠ A revision without `i18n/source/messages.tsv` makes `go list` succeed but `Load` fail on the missing file — a hard failure, which is the honest behaviour, but it means the pin and the module must move together. When the module's `Localizer` interface changed from text-keyed `T` to `Msg(ID, …)`, this repository's `internal/lang` had to change in the same commit: there is no deprecation window in the prototype, and the final design owes one (§9) |
 | **3 ✔ done (module + consumer)** | The rest of the syntax layer: the `errf(…)` templates in `qkparser`, then this repository's 13 `table_lexer.go` messages, whose call sites are all in the module. Measured surface, not the estimate this row used to carry: **40 call sites, 38 distinct templates** — 13 written in Chinese and 25 English-only. See §7.2 and §7.3. | the module's `errf` becomes `errfID` and the two `errf` methods are deleted, so there is no text-keyed path left in the module; every `src` value in `parser.tsv` moves to its English text, and a `src` that no longer matches the pin fails generation — which is the intended coupling | per-commit revert |
-| **4** | The eight in-repository domains: `shared` (1), `docgen` (7), `repl` (13), `lint` (22), `cli` (27), `runtime` (65), `typecheck` (142), `compiler` (252). One commit each, largest last. | each commit deletes that domain's rows; unmigrated domains keep working through `T` | per-domain revert |
+| **4 ⚠ in progress: `docgen` done, 7 domains left** | The eight in-repository domains: `shared` (1), `docgen` (7), `repl` (13), `lint` (22), `cli` (27), `runtime` (65), `typecheck` (142), `compiler` (252). One commit each, largest last. See §7.4 for what the first domain cost and what is left, with call-site counts measured rather than estimated. | each commit deletes that domain's rows; unmigrated domains keep working through `T` | per-domain revert |
 | **5** | Delete the shim: `Localizer.T`, `i18n.T`, `Load`, `Catalog`, `miss.go`, the `table_*.go` files, and the retired ratchets (§4). Point `TestCatalogIntegrity`/`TestVerbSetsMatch` at the generated data. | any out-of-tree consumer of `i18n.T` — none: the package is `internal/`, so it is unreachable outside this module | revert |
 
 ### 7.1 What breaks at each step — the honest list
@@ -676,9 +676,20 @@ module an English source, and this repository's pin bump carries the 63 IDs and 
 | P2 `(message, language)` pairs that fail generation when dropped | 25 | 63 |
 | P2 imported IDs checked against the pin | 25 | 63 |
 | P3 corpus runs | 18 | 50 (8 of them a declared EN fix) |
-| `TestEnglishSourceRatchet` (R-2) | 277 | 277 — **did not move; see §7.1** |
+| `TestEnglishSourceRatchet` (R-2) | 277 | 277 — **did not move in step 3; see §7.1** |
 | `TestDecouplingRatchet` | 25 | 25 |
 | imported rows whose `zh` repeats the source | 25 (uncounted) | 25, ratcheted by `TestProofUntranslatedImportsAreCounted` |
+
+After step 4's first domain (`docgen`, §7.4):
+
+| Quantity | Before | After |
+|---|---|---|
+| wired templates | 485 | 479 |
+| Chinese-source wired templates (R-2) | 277 | 271, and `allowed` lowered to the measured 271 |
+| text-keyed catalog entries | 529 | 522 |
+| generated messages | 63 | 69 |
+| P2 `(message, language)` pairs | 63 | 69 |
+| P3 runs | 50 | 56 (2 of them a declared EN fix, for the rendered document) |
 
 Three things the design did not predict, recorded rather than smoothed over:
 
@@ -705,6 +716,56 @@ deliberate and it is the honest state: they shipped English-only, there was no C
 move, and inventing one would have changed what a Chinese reader sees, which P3 forbids. The difference
 is that the gap is now a row in a table, an ID in the catalog and a number in a ratchet, instead of a
 silent English string in a Go file two repositories away.
+
+### 7.4 Step 4's first domain, and what the rest actually costs
+
+`docgen` is migrated. Three things came out of doing the smallest domain first, and the first two were
+prerequisites for every domain after it:
+
+1. **The table load order had to be stated, not inferred.** A message's number is its position in the
+   concatenated tables, and `internal/lang` answers a `qkparser.ID` by converting it straight to a `Msg`.
+   The module's IDs are positions in the module's own table, so the imported block must be the *prefix* of
+   this repository's numbering. The order was the alphabetical order of `source/*.tsv`, and `docgen.tsv`
+   sorts before `parser.tsv`: adding this one domain would have renumbered all 63 syntax-layer messages
+   and silently changed which message the conversion meant. `source/tables.tsv` now lists the tables in
+   load order, generation fails when a `*.tsv` is not listed in it, and the change was verified to be a
+   no-op by regenerating — the committed catalog is byte-identical. `TestModuleIDsAndCatalogIDsAgree`
+   would have caught the renumbering, but only after the fact.
+
+2. **The scanner cannot see a hardcoded message, and this domain was full of them.** `kindLabel` returned
+   nine Chinese string literals from a switch and the section table held six more; none ever reached an
+   i18n boundary, so `QK_LANG=en` produced a Chinese document and no gate in the repository could see it.
+   That is strictly worse than the leak step 3 fixed — at least `errf` handed its literal to *something*.
+   They are 14 IDs now, not 9: a table cell names one symbol (`function`) and a heading titles a group of
+   them (`Functions`), so identical Chinese in two contexts stays two messages that can diverge. **This is
+   the finding that matters for the remaining domains**: the tables are not the surface. Anything in a
+   migrated domain that a user reads has to be found by reading the domain, not by counting catalog rows.
+   The `en`-output "no Han rune" check added to P3 is the mechanical version of that, and it should be
+   extended to every domain as it moves.
+
+3. **R-2 does not move for the second commit either** (271 before, 271 after; it fell 277 → 271 for the
+   table rows). The 14 labels were never counted, for the reason in 2. A ratchet is not lowered to a
+   number no run produced, so `allowed` stays 271.
+
+Measured call-site inventory for the domains that remain, from a scan that mirrors the coverage scanner's
+callee/argument table — these are the numbers the next commits start from:
+
+| Domain | Catalog rows | Call sites | Where the call sites are |
+|---|---|---|---|
+| `shared` | 1 | 1 | `compiler/main.go` (a multi-line raw literal: the qkc usage text) |
+| `repl` | 13 | 7 | `internal/lang/repl.go` |
+| `lint` | 22 | 21 | `internal/lang/lint.go` (through `(*linter).warn`) |
+| `cli` | 27 | 25 | `cmd/qkcheck`, `cmd/qkdoc`, `cmd/qklsp` (direct `i18n.T(`) |
+| `runtime` | 65 | 77 | `internal/lang` |
+| `typecheck` | 142 | 158 | `compiler/internal/cgen`, `internal/lang` |
+| `compiler` | 252 | 243 | `compiler`, `compiler/internal/cgen` |
+
+Two consequences worth stating before the work is scheduled. `cli` has 25 direct `i18n.T(` call sites —
+the count `TestDecouplingRatchet` freezes — and they live in four `cmd/` packages that have no localizer
+of their own, so that domain needs an ID-rendering path introduced per package before a single row can
+move. And the two largest domains are in the `compiler` module, which pins this one by a relative
+`replace`; their tables are read from this repository's `internal/i18n`, so they migrate here, but every
+gate for them has to run in both modules.
 
 ---
 

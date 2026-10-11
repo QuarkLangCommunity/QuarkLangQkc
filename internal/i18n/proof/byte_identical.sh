@@ -153,4 +153,83 @@ if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
 fi
-echo "all identical (interpreter: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"
+
+# ---- the docgen domain: a rendered document, not a diagnostic ------------------------------------
+#
+# A document is not one message, so the per-message fix table above does not fit it. Two claims do, and
+# they are the two that matter:
+#
+#   * under QK_LANG=zh the document is byte-identical, like every other case here;
+#   * under QK_LANG=en it contains no Han rune, and the baseline's did. The docgen domain had nine
+#     Chinese labels hardcoded in the renderer (kindLabel's 函数/结构体/接口/… and the section titles),
+#     never handed to a localizer at all, so an English reader got a Chinese document and no scanner
+#     could see it: a hardcoded message is invisible to a tool that looks for literals passed to an
+#     i18n boundary. This is the check that would have caught it.
+#
+# The EN rendering is allowed to differ, and saying so explicitly is the point: for this domain the
+# difference is the fix, and the Han check is what keeps "it differs" from being a blank cheque.
+
+doc_corpus="$work/docgen"
+rm -rf "$doc_corpus"
+mkdir -p "$doc_corpus"
+cat > "$doc_corpus/all.qk" <<'QK'
+/* A documented module. */
+
+pub type struct {
+    int x; /* the x coordinate */
+    int y; /* the y coordinate */
+} Point;
+
+pub type interface {
+    fn area() int; /* the area */
+} Shape;
+
+pub fn origin() int {
+    return 1;
+}
+QK
+cat > "$doc_corpus/empty.qk" <<'QK'
+/* Nothing public here. */
+fn hidden() int {
+    return 1;
+}
+QK
+
+build_qkdoc() { ( cd "$1" && go build -o "$2" ./cmd/qkdoc ) || { echo "qkdoc build failed: $1" >&2; exit 1; }; }
+build_qkdoc "$base_tree" "$work/bin/baseline-qkdoc"
+build_qkdoc "$root" "$work/bin/prototype-qkdoc"
+
+doc_fail=0
+for f in "$doc_corpus"/*.qk; do
+  name="$(basename "$f")"
+  b_zh="$(run "$work/bin/baseline-qkdoc" zh "$f")"
+  p_zh="$(run "$work/bin/prototype-qkdoc" zh "$f")"
+  b_en="$(run "$work/bin/baseline-qkdoc" en "$f")"
+  p_en="$(run "$work/bin/prototype-qkdoc" en "$f")"
+  total=$((total + 3))
+
+  if [ "$b_zh" != "$p_zh" ]; then
+    doc_fail=$((doc_fail + 1))
+    printf 'zh  doc/%-26s DIFFERS\n' "$name"
+    diff <(printf '%s\n' "$b_zh") <(printf '%s\n' "$p_zh") | head -10
+  else
+    printf '%-3s %-30s identical (%d bytes)\n' "zh" "doc/$name" "$(printf '%s' "$b_zh" | wc -c)"
+  fi
+
+  printf '%s' "$b_en" > "$work/baseline.out"
+  printf '%s' "$p_en" > "$work/prototype.out"
+  if python3 "$here/check_docgen_en.py" "$work/baseline.out" "$work/prototype.out"; then
+    fixed=$((fixed + 1))
+    printf '%-3s %-30s fixed (Chinese labels, then English)\n' "en" "doc/$name"
+  else
+    doc_fail=$((doc_fail + 1))
+    printf '%-3s %-30s DIFFERS\n' "en" "doc/$name"
+  fi
+done
+fail=$((fail + doc_fail))
+
+if [ "$fail" -ne 0 ]; then
+  echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
+  exit 1
+fi
+echo "all identical (interpreter and qkdoc: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"

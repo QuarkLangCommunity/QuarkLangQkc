@@ -1,0 +1,42 @@
+# The docgen domain: the fragments a generated document is assembled from, not diagnostics.
+#
+# Columns, tab-separated:
+#   id     dotted <domain>.<snake_case>, stable forever, never renumbered, never recycled
+#   owner  "local" (this repository owns the text) or "import" (the pinned module does)
+#   ctx    where the message is raised, for the translator
+#   note   what it means, for the translator
+#   src    for a local row, the same text as the source-language value; for an imported one, what the
+#          pinned module ships, checked against it at generation time
+#   en     the English rendering (the source language)
+#   zh     the Chinese rendering
+#
+# Both text columns are copied out of internal/i18n/table_docgen.go by the migration script, never
+# retyped: transcription is the migration's real risk, and a hand-typed row got a full-width parenthesis
+# wrong on the first attempt. The column-by-column diff against the old table is the mitigation.
+#
+# Order is load order within this file and file order across files; see tables.tsv. New rows append.
+#
+# One row of the old text-keyed table is deliberately not here: the "_（没有可导出的符号）_" entry with no
+# trailing newline. It had no call site anywhere in the repository and no lookup against it, so it was
+# unreachable in the old design too — a text-keyed catalog cannot tell a dead entry from a live one,
+# because nothing maps an entry to the code that uses it.
+docgen.form_prefix	local	docrender	the 'Form:' line that introduces a documented declaration	"> Form: `program "	"> Form: `program "	"> 形态：`program "
+docgen.imports_separator	local	docrender	separates the imports in the heading of a documented program	" · imports: "	" · imports: "	"　·　导入："
+docgen.overview_heading	local	docrender	the header row of the overview table	"## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n"	"## Overview\n\n| Kind | Name | Signature | Summary |\n|---|---|---|---|\n"	"## 概览\n\n| 类别 | 名称 | 签名 | 摘要 |\n|---|---|---|---|\n"
+docgen.fields_heading	local	docrender	the header row of a struct's field table	"| Field | Type | Description |\n|---|---|---|\n"	"| Field | Type | Description |\n|---|---|---|\n"	"| 字段 | 类型 | 说明 |\n|---|---|---|\n"
+docgen.members_heading	local	docrender	the header row of an interface's member table	"| Member | Signature | Description |\n|---|---|---|\n"	"| Member | Signature | Description |\n|---|---|---|\n"	"| 成员 | 签名 | 说明 |\n|---|---|---|\n"
+docgen.no_exported_symbols	local	docrender	the body of an export list that has nothing in it	"_(no exported symbols)_\n"	"_(no exported symbols)_\n"	"_（没有可导出的符号）_\n"
+docgen.kind_function	local	docrender	the kind of a function in the overview table	"function"	"function"	"函数"
+docgen.kind_struct	local	docrender	the kind of a struct in the overview table	"struct"	"struct"	"结构体"
+docgen.kind_interface	local	docrender	the kind of an interface in the overview table	"interface"	"interface"	"接口"
+docgen.kind_alias	local	docrender	the kind of a type alias in the overview table	"type alias"	"type alias"	"类型别名"
+docgen.kind_impl	local	docrender	the kind of an impl block in the overview table	"impl"	"impl"	"实现"
+docgen.kind_space	local	docrender	the kind of a space in the overview table	"space"	"space"	"空间"
+docgen.kind_library	local	docrender	the kind of a system library in the overview table	"system library"	"system library"	"系统库"
+docgen.kind_macro	local	docrender	the kind of a macro in the overview table	"macro"	"macro"	"宏"
+docgen.section_functions	local	docrender	the heading of the functions section	"Functions"	"Functions"	"函数"
+docgen.section_types	local	docrender	the heading of the types section	"Types"	"Types"	"类型"
+docgen.section_impls	local	docrender	the heading of the impls section	"Impls"	"Impls"	"实现"
+docgen.section_spaces	local	docrender	the heading of the spaces section	"Spaces"	"Spaces"	"空间"
+docgen.section_macros	local	docrender	the heading of the macros section	"Macros"	"Macros"	"宏"
+docgen.section_libraries	local	docrender	the heading of the system libraries section	"System libraries"	"System libraries"	"系统库"
