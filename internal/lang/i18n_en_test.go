@@ -75,17 +75,24 @@ func TestChineseLocalizerRendersTemplates(t *testing.T) {
 		t.Errorf("Chinese mode should render the Chinese template, got %q", diags[0].Msg)
 	}
 
-	for _, template := range []string{
-		"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements",
+	// The parser's nesting refusal is generated now: the message is an ID, so the assertion names the
+	// ID rather than repeating the wording — which is the point of the migration, since this test used
+	// to break whenever the English text was corrected. The type checker's own, separate message is
+	// still a catalog key and stays asserted by text.
+	for _, msg := range []i18n.Msg{i18n.MsgParserNestingTooDeep, i18n.MsgParserPpUnclosedIf} {
+		got := i18n.New(nil, i18n.ZH).Msg(msg, MaxExprDepth)
+		if !hanRe.MatchString(got) {
+			t.Errorf("Chinese mode did not render Chinese for %s: %q", i18n.MsgKey(msg), got)
+		}
+	}
+	got := i18n.New(nil, i18n.ZH).T(
 		"CompileError: expression nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements",
-	} {
-		got := i18n.New(nil, i18n.ZH).T(template, MaxExprDepth)
-		if !strings.Contains(got, "嵌套深度超过本实现的") {
-			t.Errorf("Chinese mode did not render the catalog's Chinese for %q: %q", template, got)
-		}
-		if strings.Contains(got, "nesting is deeper than") {
-			t.Errorf("Chinese mode leaked the English template for %q: %q", template, got)
-		}
+		MaxExprDepth)
+	if !strings.Contains(got, "嵌套深度超过本实现的") {
+		t.Errorf("Chinese mode did not render the catalog's Chinese: %q", got)
+	}
+	if strings.Contains(got, "nesting is deeper than") {
+		t.Errorf("Chinese mode leaked the English template: %q", got)
 	}
 
 	if misses := i18n.Misses(); len(misses) != 0 {
