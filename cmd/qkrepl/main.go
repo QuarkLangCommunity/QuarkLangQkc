@@ -39,18 +39,9 @@ func main() {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "usage: qkrepl [-e code] [-q] [--version]")
-	fmt.Fprintln(w, i18n.T("  QuarkLang 交互式求值：多行块、跨输入持久环境、:help/:load/:quit"))
+	fmt.Fprintln(w, msgID(i18n.MsgCliReplUsage))
+	fmt.Fprintln(w, msgID(i18n.MsgCliReplHelpLine))
 }
-
-const helpText = `命令：
-  :help            显示本帮助
-  :quit / :exit    退出
-  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）
-说明：
-  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）
-  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见
-  - log 的记录、io.println 的输出会即时显示`
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	quiet := false
@@ -60,7 +51,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		switch a {
 		case "-e":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, i18n.T("qkrepl: -e 需要一段代码"))
+				fmt.Fprintln(stderr, msgID(i18n.MsgCliReplENeedsCode))
 				return 2
 			}
 			i++
@@ -82,7 +73,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			usage(stdout)
 			return 0
 		default:
-			fmt.Fprintf(stderr, i18n.T("qkrepl: 未知参数 %s\n"), a)
+			fmt.Fprintf(stderr, msgID(i18n.MsgCliReplUnknownArgument), a)
 			usage(stderr)
 			return 2
 		}
@@ -113,7 +104,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	interactive := isTerminal(stdin)
 	if interactive && !quiet {
-		fmt.Fprintf(stdout, i18n.T("qkrepl %s —— QuarkLang 交互式求值（:help 帮助，:quit 退出）\n"), version)
+		fmt.Fprintf(stdout, msgID(i18n.MsgCliReplBanner), version)
 	}
 
 	reader := bufio.NewReader(stdin)
@@ -176,13 +167,13 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 	fields := strings.Fields(line)
 	switch fields[0] {
 	case ":help", ":h", ":?":
-		fmt.Fprintln(stdout, i18n.T(helpText))
+		fmt.Fprintln(stdout, msgID(i18n.MsgCliReplHelpText))
 		return false, nil
 	case ":quit", ":q", ":exit":
 		return true, nil
 	case ":load":
 		if len(fields) < 2 {
-			return false, errors.New(i18n.T(":load 需要一个文件参数"))
+			return false, errors.New(msgID(i18n.MsgCliReplLoadNeedsFile))
 		}
 		path := fields[1]
 		data, err := os.ReadFile(path)
@@ -196,7 +187,7 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 		}
 		return false, nil
 	}
-	return false, errors.New(i18n.T("未知命令 %s（:help 查看帮助）", fields[0]))
+	return false, errors.New(msgID(i18n.MsgCliReplUnknownCommand, fields[0]))
 }
 
 // isTerminal reports whether the input comes from a terminal (no third-party dependencies: character device check).

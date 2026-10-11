@@ -49,7 +49,7 @@ func parseArgs(args []string) ([]string, error) {
 		switch args[i] {
 		case "-L":
 			if i+1 >= len(args) {
-				return nil, errors.New(i18n.T("-L 需要一个目录参数"))
+				return nil, errors.New(msgID(i18n.MsgCliLspLNeedsDirectory))
 			}
 			i++
 			libDirs = append(libDirs, args[i])
@@ -65,10 +65,10 @@ func parseArgs(args []string) ([]string, error) {
 			fmt.Println("qklsp", version)
 			os.Exit(0)
 		case "-h", "--help":
-			fmt.Println(i18n.T("usage: qklsp [-L dir]...  （stdio 上提供 LSP 服务）"))
+			fmt.Println(msgID(i18n.MsgCliLspUsage))
 			os.Exit(0)
 		default:
-			return nil, errors.New(i18n.T("未知参数 %s", args[i]))
+			return nil, errors.New(msgID(i18n.MsgCliLspUnknownArgument, args[i]))
 		}
 	}
 	return libDirs, nil
@@ -174,7 +174,7 @@ func (s *server) handle(msg rpcMessage) error {
 	}
 	// Unimplemented methods: requests reply null (error code -32601), notifications are ignored
 	if msg.isRequest() {
-		return s.conn.replyErr(msg.ID, -32601, "qklsp: 未实现的方法 %s", msg.Method)
+		return s.conn.replyErr(msg.ID, -32601, i18n.MsgCliLspMethodNotImplemented, msg.Method)
 	}
 	return nil
 }
@@ -194,7 +194,7 @@ func (s *server) docAt(msg rpcMessage) (*Document, lspPosition, error) {
 	}
 	d, ok := s.docs[p.TextDocument.URI]
 	if !ok {
-		return nil, p.Position, errors.New(i18n.T("未打开的文档 %s", p.TextDocument.URI))
+		return nil, p.Position, errors.New(msgID(i18n.MsgCliLspDocumentNotOpened, p.TextDocument.URI))
 	}
 	return d, p.Position, nil
 }
