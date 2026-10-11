@@ -5,6 +5,7 @@ package i18n
 // than when a sample drifts. See docs/i18n-design.md §6.
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,87 @@ func loadAuthored(t *testing.T) *i18ngen.Sources {
 func TestGeneratedCatalogIsCurrent(t *testing.T) {
 	if problems := i18ngen.Run(generatedOptions(t, true)); len(problems) > 0 {
 		t.Fatalf("the committed catalog is not current:\n  %s", strings.Join(problems, "\n  "))
+	}
+}
+
+// docOptions describes the generated review document and the checkout it measures. It is separate from
+// generatedOptions because a caller that only wants the catalog must not need the document, and because
+// the document's scan is anchored at the repository root rather than at this package.
+func docOptions(t *testing.T, check bool) i18ngen.Options {
+	t.Helper()
+	opts := generatedOptions(t, check)
+	opts.Root = repoRoot(t)
+	opts.DocFile = filepath.Join(opts.Root, filepath.FromSlash(i18ngen.BacklogDocPath))
+	return opts
+}
+
+// TestBacklogDocumentIsCurrent is the same standing gate for docs/i18n-backlog.md that
+// TestGeneratedCatalogIsCurrent is for msg_gen.go: the committed document must be exactly what the
+// generator writes today, so it cannot be hand-maintained. Editing the document to record a translation
+// that was never authored, or filling a row in without re-running the generator, fails here.
+func TestBacklogDocumentIsCurrent(t *testing.T) {
+	opts := docOptions(t, true)
+	problems := i18ngen.Run(opts)
+	if len(problems) > 0 {
+		t.Fatalf("the committed backlog document is not current:\n  %s", strings.Join(problems, "\n  "))
+	}
+	if b, err := os.ReadFile(opts.DocFile); err != nil {
+		t.Fatalf("reading %s: %v", opts.DocFile, err)
+	} else if !bytes.Contains(b, []byte(i18ngen.BacklogTitle)) {
+		t.Fatalf("%s does not contain its own title %q, so the check compared something else", opts.DocFile, i18ngen.BacklogTitle)
+	}
+}
+
+// TestProofBacklogDocumentIsStaleWhenTheTablesMove is the proof that the gate above is not vacuous: it
+// perturbs a copy of the authored rows in memory — the way a translator would by editing a .tsv — and
+// requires the regenerated document to differ, and the staleness check to fail. In-memory perturbation
+// is deliberate: it names the row that moved rather than depending on which rows are untranslated today.
+func TestProofBacklogDocumentIsStaleWhenTheTablesMove(t *testing.T) {
+	src := loadAuthored(t)
+	before, err := i18ngen.Backlog(docOptions(t, false), src)
+	if err != nil {
+		t.Fatalf("rendering the document: %v", err)
+	}
+	if !bytes.Contains(before, []byte(i18ngen.BacklogTitle)) {
+		t.Fatalf("the rendered document does not carry its title")
+	}
+
+	// Translating one row must remove it from the document, which is what makes the row counts in the
+	// document a measurement rather than a transcription.
+	const id = "parser.unexpected_character"
+	zh := src.Table.Languages[1].Code
+	if !strings.Contains(src.Value(id, zh), "unexpected character") {
+		t.Fatalf("%s is not an untranslated row any more, so this proof no longer proves anything", id)
+	}
+	perturbed := src.Clone()
+	if !perturbed.SetValue(id, zh, "\u610f\u5916\u7684\u5b57\u7b26 %q") {
+		t.Fatalf("could not perturb %s", id)
+	}
+	after, err := i18ngen.Backlog(docOptions(t, false), perturbed)
+	if err != nil {
+		t.Fatalf("rendering the perturbed document: %v", err)
+	}
+	if bytes.Equal(before, after) {
+		t.Fatalf("translating %s did not change the document, so the document is not rendered from the tables", id)
+	}
+	if bytes.Contains(after, []byte(id)) {
+		t.Errorf("the translated row %s is still listed in the document", id)
+	}
+
+	// And the staleness check itself must fail for a document that is not what the tables say.
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "i18n-backlog.md")
+	if err := os.WriteFile(stale, before, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := docOptions(t, true)
+	opts.DocFile = stale
+	problems := i18ngen.RunWith(opts, perturbed)
+	if len(problems) == 0 {
+		t.Fatalf("the staleness check accepted a document that does not match the tables")
+	}
+	if !strings.Contains(strings.Join(problems, "\n"), "out of date") {
+		t.Errorf("the staleness check failed for another reason: %v", problems)
 	}
 }
 
