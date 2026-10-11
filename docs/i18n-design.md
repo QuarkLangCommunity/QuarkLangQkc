@@ -607,6 +607,51 @@ point. Steps 0-2 are this branch.
 * **Reviewer cost.** Steps 3-4 are large mechanical diffs (~540 messages). They are deliberately boring
   and split by domain: no reviewer should have to hold two domains in their head.
 
+### 7.2 F-1 is already fixed — and the leak that actually remains
+
+F-1 was reported in §8 as "one module message has no catalog entry". That was true at `7e8e366`; it is
+**not** true at `926d24a`. The prototype's step 1 migrated the whole 25-row `msg()` surface, and
+`"%s:%d: #%s 没有对应的 #if"` is row 21 of `internal/i18n/source/parser.tsv`
+(`parser.pp_branch_without_if`). Re-verified on the inherited revision by running the built
+interpreter on `#else` and `#endif` with no open `#if`:
+
+```
+$ QK_LANG=en ./quark else.qk      error: else.qk:1: #else without a matching #if
+$ QK_LANG=zh ./quark else.qk      error: else.qk:1: #else 没有对应的 #if
+```
+
+`qkparser/preproc.go:145` reaches it as `msgID(IDPpBranchWithoutIf, filename, i+1, m[1])`, so the
+rendering goes through the consumer's catalog and both languages are correct. No change is owed here.
+
+The leak that *is* live is the surface step 3 exists to move, and it is larger than "one message": the
+module's `errf` path does not consult any localizer at all. `parser.go:71` and `token.go:196` are
+`fmt.Sprintf(format, args...)`, so every `errf` call site renders its own literal in **both** languages,
+and the consumer's `table_lexer.go` translations for those templates are unreachable:
+
+```
+$ QK_LANG=en ./quark func.qk
+error: ParseError: 函数声明关键字是 fn：func main(...) 应写为 fn main(...) at line 1, col 1
+$ QK_LANG=zh ./quark func.qk
+error: ParseError: 函数声明关键字是 fn：func main(...) 应写为 fn main(...) at line 1, col 1
+```
+
+The `en` run and the `zh` run are byte-identical, and the English text
+`the function keyword is 'fn': write fn main(...) rather than func main(...)` exists in the repository
+but is never selected. Measured surface at `926d24a`:
+
+| Quantity | Value |
+|---|---|
+| `errf(` call sites in `qkparser` (excluding the two definitions) | 40 |
+| distinct `errf` templates | 29 |
+| of those, Han-containing (dead `table_lexer.go` keys today) | 13 |
+| of those, English-only (migrating *adds* coverage) | 16 |
+| `errfID(` call sites before step 3 | 1 |
+
+The scanner cannot see any of this, because the templates live in the pinned module rather than in this
+repository, and the miss counter does not fire, because a template that renders identically in both
+languages looks like a message that was never translated *from* anywhere rather than one that is
+missing a translation.
+
 ---
 
 ## 8. Evidence index
