@@ -716,8 +716,8 @@ func (in *interp) putCtx(ctx *execCtx) {
 
 // ---- IO objects (spec §9) ----
 
-// IOStream is the default main() parameter: input + output + redirectable, with mu serialising the
-// stream — reads share it, writes and redirections take it exclusively.
+// IOStream is the default main() parameter: input + output + redirectable, with mu a readers-writer
+// lock because readln may share the stream while a write or a redirection must not interleave with it.
 type IOStream struct {
 	In  io.Reader
 	Out io.Writer
