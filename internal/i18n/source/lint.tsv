@@ -43,3 +43,4 @@ lint.fix_conflict	local	linter		"another fix rewrites the same line instead (%q 
 lint.fix_unused_import_why	local	linter		"no symbol of the imported file is used"	"no symbol of the imported file is used"	"该导入文件没有任何符号被用到"
 lint.fix_self_compare_why	local	linter		"a value compared with itself is a constant"	"a value compared with itself is a constant"	"一个值与自身比较的结果是常量"
 lint.fix_no_operand_type	local	linter		"its type %s cannot be shown to use the language's own equality, and a type may overload == through __eq__"	"its type %s cannot be shown to use the language's own equality, and a type may overload == through __eq__"	"无法证明其类型 %s 使用语言内建的相等比较，而类型可以通过 __eq__ 重载 =="
+lint.fix_no_line_taken	local	linter		"another correction already rewrites this line, so this one is not applied"	"another correction already rewrites this line, so this one is not applied"	"同一行已有另一处修复，因此这一处不会被应用"

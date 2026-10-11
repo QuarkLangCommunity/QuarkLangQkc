@@ -52,11 +52,14 @@ type FixPlan struct {
 	Skip  []SkipReason // corrections withheld, and why (never silently dropped)
 }
 
-// AppliedFix binds one diagnostic index to the correction proposed for it.
+// AppliedFix binds one diagnostic index to the correction proposed for it. Merged says whether the
+// correction reached the plan: two diagnostics can name one line, and then only one of the two
+// corrections is applied, so the diagnostic that lost has to say so rather than claim a fix.
 type AppliedFix struct {
 	DiagIndex int
 	Code      string
 	Fix       Fix
+	Merged    bool
 }
 
 // LineChange is one line of the file after the plan is applied.
@@ -437,6 +440,16 @@ func attachFixes(diags []Diag, cands []fixCandidate, sf srcLines, reads map[stri
 		plan.Fixes = append(plan.Fixes, AppliedFix{DiagIndex: idx, Code: c.code, Fix: f})
 	}
 	plan.merge()
+	// A diagnostic whose correction did not reach the plan must not look as if it had one: the report
+	// would print "fix: ..." for a line no fix run touches, and -check would count it as pending.
+	for _, af := range plan.Fixes {
+		if af.Merged {
+			continue
+		}
+		diags[af.DiagIndex].Fix = nil
+		plan.Skip = append(plan.Skip, SkipReason{Code: af.Code, Line: af.Fix.Line,
+			Reason: msgID(i18n.MsgLintFixNoLineTaken)})
+	}
 	sort.SliceStable(diags, func(i, j int) bool {
 		a, b := diags[i], diags[j]
 		if a.Pos.Line != b.Pos.Line {
@@ -468,17 +481,19 @@ func (p *FixPlan) merge() {
 		}
 		return fixPriority(p.Fixes[i].Code) < fixPriority(p.Fixes[j].Code)
 	})
-	for _, af := range p.Fixes {
+	for i := range p.Fixes {
+		af := &p.Fixes[i]
 		if n := len(p.Lines); n > 0 {
 			if prev := p.Lines[n-1]; prev.Line == af.Fix.Line {
-				if prev.Old != af.Fix.Original || prev.New != af.Fix.Replacement() {
-					p.Skip = append(p.Skip, SkipReason{Code: af.Code, Line: af.Fix.Line,
-						Reason: msgID(i18n.MsgLintFixConflict, prev.Old, prev.New)})
-				}
-				continue // two diagnostics, one correction
+				// Two diagnostics naming one line. When their corrections agree (a self-assignment is
+				// also a dead store) the one rewrite already is both, and this one is applied with it;
+				// when they disagree only the higher-priority one is, and the other is left out.
+				af.Merged = prev.Old == af.Fix.Original && prev.New == af.Fix.Replacement() && prev.Delete == af.Fix.Delete
+				continue
 			}
 		}
 		p.Lines = append(p.Lines, LineChange{Line: af.Fix.Line, Old: af.Fix.Original, New: af.Fix.Replacement(), Delete: af.Fix.Delete})
+		af.Merged = true
 	}
 }
 
