@@ -207,6 +207,11 @@ func TestDocMarkdownNoPubRendersAll(t *testing.T) {
 }
 
 func TestDocHTML(t *testing.T) {
+	// The assertions below are the Chinese wording, so the language is pinned rather than inherited from
+	// the environment. They used to pass under any process language, because the kind labels and section
+	// titles were Chinese string literals in the renderer; now that they are messages, a test that asserts
+	// Chinese has to say so, the way TestDocMarkdownPubFilter already does.
+	withLocalizer(t, i18n.New(nil, i18n.ZH))
 	d, _ := buildFixtureDoc(t)
 	h := d.HTML(DocOptions{Path: "mathlib.qk"})
 	for _, want := range []string{"<!doctype html>", "<title>mathlib.qk</title>", "<table>", "<pre><code>fn double(int n) int</code></pre>", "<h2>函数</h2>"} {
@@ -271,6 +276,9 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 
 // Macro definitions are cut out of the AST before parsing, so the doc model must collect them explicitly (BuildDocWithMacros).
 func TestDocMacros(t *testing.T) {
+	// Asserts the Chinese section title and kind label, so it pins the language for the same reason
+	// TestDocHTML does: the labels are messages now, not literals.
+	withLocalizer(t, i18n.New(nil, i18n.ZH))
 	src := `/* Utility macro library. */
 program library;
 

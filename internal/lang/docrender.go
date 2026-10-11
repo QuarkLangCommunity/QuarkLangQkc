@@ -45,24 +45,28 @@ func (d *Doc) title(opts DocOptions) string {
 	return "QuarkLang API"
 }
 
+// kindLabel names what one symbol is. The labels used to be Chinese string literals returned from
+// this switch: they never reached an i18n boundary at all, so under QK_LANG=en the overview table said
+// 结构体 and no gate in the repository could see it — a hardcoded message is invisible to a scanner that
+// looks for literals passed to a localizer. They are message IDs now.
 func kindLabel(kind string) string {
 	switch kind {
 	case DocFunc:
-		return "函数"
+		return msgID(i18n.MsgDocgenKindFunction)
 	case DocStruct:
-		return "结构体"
+		return msgID(i18n.MsgDocgenKindStruct)
 	case DocInterface:
-		return "接口"
+		return msgID(i18n.MsgDocgenKindInterface)
 	case DocAlias:
-		return "类型别名"
+		return msgID(i18n.MsgDocgenKindAlias)
 	case DocImpl:
-		return "实现"
+		return msgID(i18n.MsgDocgenKindImpl)
 	case DocSpace:
-		return "空间"
+		return msgID(i18n.MsgDocgenKindSpace)
 	case DocLibrary:
-		return "系统库"
+		return msgID(i18n.MsgDocgenKindLibrary)
 	case DocMacro:
-		return "宏"
+		return msgID(i18n.MsgDocgenKindMacro)
 	}
 	return kind
 }
@@ -122,12 +126,14 @@ func (d *Doc) Markdown(opts DocOptions) string {
 		title string
 		items []*DocItem
 	}{
-		{"函数", d.Funcs},
-		{"类型", d.Types},
-		{"实现", impls},
-		{"空间", spaces},
-		{"宏", d.Macros},
-		{"系统库", d.Libraries},
+		// Section titles are their own messages, not the kind labels above: a heading titles a group
+		// and a table cell names one member of it, and a language may need them to differ.
+		{msgID(i18n.MsgDocgenSectionFunctions), d.Funcs},
+		{msgID(i18n.MsgDocgenSectionTypes), d.Types},
+		{msgID(i18n.MsgDocgenSectionImpls), impls},
+		{msgID(i18n.MsgDocgenSectionSpaces), spaces},
+		{msgID(i18n.MsgDocgenSectionMacros), d.Macros},
+		{msgID(i18n.MsgDocgenSectionLibraries), d.Libraries},
 	}
 	for _, sec := range sections {
 		var vis []*DocItem
