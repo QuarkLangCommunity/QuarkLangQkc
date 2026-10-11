@@ -560,23 +560,5 @@ func main() {
 
 // qkcUsage prints the command-line usage.
 func qkcUsage() {
-	fmt.Fprintln(os.Stderr, msg(`usage: qkc [options] <file.qk>
-
-  （默认）            输出 LLVM IR 到 stdout
-  --emit-ir           同上（显式）
-  -run                编译为原生二进制并执行
-  -c                  只编译为原生二进制（不执行）
-  -o <path>           输出路径：配合 -c/-run 为二进制；--emit-lib 为 .qklib；否则为 IR 文件
-  --target-os <os>    预处理目标系统（linux/darwin/windows；默认宿主）
-  --target-arch <a>   预处理目标架构（x86_64/arm64；默认宿主）
-  --emit-lib          编译为**库制品** .qklib（内含 lib<名>.so + 导出清单；不发源码）
-  --obfuscate         混淆：内部符号改名 + 去调试/去标识（配合 --emit-lib 或 -c）
-  -L <lib.qklib>      引用库：注入 library 声明 + 把 lib<名>.so 装到输出目录（可重复）
-  --lib-name <name>   库名（默认取输出文件名）
-  --lib-version <ver> 库版本（默认 0.1.0）
-  --lib-targets <列表> 出库时生成的平台变体，逗号分隔（如 linux-x86_64,windows-x86_64,darwin-arm64）
-  --version, -V       打印版本与引擎代次
-  -h, --help          本帮助
-
-环境：QUARK_CACHE=缓存目录  QUARK_CFLAGS=clang 旗标（默认 "-O3 -flto=thin"）`))
+	fmt.Fprintln(os.Stderr, msgID(i18n.MsgSharedUsageQkcHelp))
 }

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Assert the docgen domain's English fix: the document used to be Chinese, and now it is not.
+"""Assert the docgen domain's English document: a rendered document, checked by outcome rather than by
+byte-equality against the baseline.
 
-Two claims, both about the renderings the proof just produced:
+A document is not one message, so the per-message fix table in byte_identical.sh does not fit it. Two
+admissible outcomes, and neither is a blank cheque:
 
-  1. the baseline's English document contained Han runes, and this tree's does not. The domain had nine
-     Chinese labels hardcoded in the renderer — kindLabel's 函数 / 结构体 / 接口 / … and the section titles
-     — which were never handed to a localizer, so an English reader got a Chinese document and no gate
-     in the repository could see it. A hardcoded message is invisible to a scanner that looks for
-     literals passed to an i18n boundary, which is why this has to be asserted on the output.
-  2. this tree's English document still looks like the baseline's: same number of lines, and the
-     non-label text (headings' line positions, the table's pipes, the code spans, the file path) is
-     unchanged. Otherwise "no Han runes" would be satisfied by rendering nothing at all.
+  * the baseline's English document carried Han runes — the domain had nine Chinese labels hardcoded in
+    the renderer (kindLabel's 函数 / 结构体 / 接口 / … and the section titles), never handed to a
+    localizer, so an English reader got a Chinese document and no gate could see it. Then this tree's
+    document must carry none, and must still be a document: the same non-blank line count, the same table
+    skeleton, the same headings.
+  * the baseline's English document was already Han-free. That is the case for a domain whose leak has
+    already merged, because the baseline revision is origin/main and origin/main then carries the fix.
+    Then this tree's document must be byte-identical to the baseline's: a migration must not disturb a
+    document that was already right, and this is the half that catches it.
 
 Usage: check_docgen_en.py <baseline-rendering> <prototype-rendering>
 """
@@ -25,8 +28,18 @@ def main():
     proto = open(sys.argv[2], encoding="utf-8").read()
 
     if not HAN.search(base):
-        print("the baseline's English document had no Chinese in it, so there was no leak to fix", file=sys.stderr)
-        return 1
+        if base != proto:
+            print("the baseline document was already Han-free, so this tree must reproduce it exactly",
+                  file=sys.stderr)
+            a, b = base.split("\n"), proto.split("\n")
+            for i in range(max(len(a), len(b))):
+                x = a[i] if i < len(a) else "<missing>"
+                y = b[i] if i < len(b) else "<missing>"
+                if x != y:
+                    print("  line %d: %r -> %r" % (i + 1, x, y), file=sys.stderr)
+            return 1
+        return 0
+
     bad = HAN.findall(proto)
     if bad:
         print("the English document still contains %d Han rune(s): %s" % (len(bad), "".join(sorted(set(bad)))), file=sys.stderr)
