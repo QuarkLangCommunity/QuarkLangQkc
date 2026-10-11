@@ -393,16 +393,16 @@ func TestTypeCheckErrors(t *testing.T) {
 	}{
 		{"badarith", `fn main(IOStream io) {
     io.println("s" - 1);
-}`, "arithmetic requires numbers"},
+}`, "算术运算需要数字"},
 		{"star_nonlist", `fn main(IOStream io) {
     int n = 5;
     io.println(*n);
-}`, "requires a List"},
+}`, "需要 List"},
 		{"cond_not_bool", `fn main(IOStream io) {
     if (1) {
         io.println("x");
     }
-}`, "condition must be bool"},
+}`, "条件必须是 bool"},
 		{"arg_count", `fn f(int a) int {
     return a;
 }
@@ -414,10 +414,10 @@ fn main(IOStream io) {
 }
 fn main(IOStream io) {
     f(42);
-}`, "cannot assign int to String"},
+}`, "不能把 int 赋给 String"},
 		{"undeclared", `fn main(IOStream io) {
     x = 5;
-}`, "undeclared"},
+}`, "未声明的标识符"},
 		{"duplicate", `fn main(IOStream io) {
     List<int> l = [1];
     List<int> l = [2];
@@ -425,11 +425,11 @@ fn main(IOStream io) {
 		{"use_before_init", `fn main(IOStream io) {
     List<int> l;
     io.println(l.size());
-}`, "used before initialization"},
+}`, "在初始化之前被使用"},
 		{"unknown_member", `fn main(IOStream io) {
     int n = 5;
     n.append(1);
-}`, "no method"},
+}`, "没有方法"},
 		{"missing_ret", `fn f() {
 }`, "必须声明返回类型"},
 	}

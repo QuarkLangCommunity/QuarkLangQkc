@@ -28,29 +28,29 @@ func TestInterpreterOnlyConstructsAreRefusedNotMiscompiled(t *testing.T) {
 		{
 			name: "storage identity === on variables",
 			src:  "fn main(IOStream io) {\n    int x = 5;\n    io.println(x === x);\n}\n",
-			want: "=== storage identity is implemented in the interpreter only",
+			want: "=== 的存储同一性仅在解释器中实现",
 		},
 		{
 			name: "storage identity === on two variables",
 			src:  "fn main(IOStream io) {\n    int x = 5;\n    int y = 5;\n    io.println(x === y);\n}\n",
-			want: "=== storage identity is implemented in the interpreter only",
+			want: "=== 的存储同一性仅在解释器中实现",
 		},
 		{
 			name: "permission reference declaration",
 			src:  "fn main(IOStream io) {\n    int x = 5;\n    &rw u int p = &x;\n    p = 7;\n    io.println(x);\n}\n",
-			want: "compiling a permission reference",
+			want: "暂未支持编译权限引用",
 		},
 		{
 			name: "address-of",
 			src:  "fn main(IOStream io) {\n    int x = 5;\n    int& p = &x;\n    io.println(p);\n}\n",
-			want: "compiling & (address-of) is not supported yet",
+			want: "暂未支持编译 &（取地址）",
 		},
 		{
 			name: "reference move",
 			// A bare reference declaration compiles, so the refusal below comes from ++ itself;
 			// with a permissioned declaration the permission error would (correctly) fire first.
 			src:  "fn main(IOStream io) {\n    int& q = new int;\n    q++;\n}\n",
-			want: "compiling ++ (reference move) is not supported yet",
+			want: "暂未支持编译 ++（引用移动）",
 		},
 	}
 	for _, tc := range cases {
