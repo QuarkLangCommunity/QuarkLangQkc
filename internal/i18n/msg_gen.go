@@ -11,38 +11,76 @@ type Msg uint16
 
 // Message constants, in table order.
 const (
-	MsgParserMacroUnbalancedDelimiters Msg = 0
-	MsgParserMacroArgCountMismatch     Msg = 1
-	MsgParserMacroExpandFailed         Msg = 2
-	MsgParserPpSharpNeedsCommand       Msg = 3
-	MsgParserPpUnknownDirective        Msg = 4
-	MsgParserPpRequiresParens          Msg = 5
-	MsgParserPpErrorNeedsMessage       Msg = 6
-	MsgParserPpErrorDirective          Msg = 7
-	MsgParserPpInsertNotMacroParam     Msg = 8
-	MsgParserPpExecuteNeedsName        Msg = 9
-	MsgParserPpUnknownCommand          Msg = 10
-	MsgParserPpInsertNeedsAst          Msg = 11
-	MsgParserMacroNeedsName            Msg = 12
-	MsgParserMacroMissingParamList     Msg = 13
-	MsgParserMacroParamListDelimiters  Msg = 14
-	MsgParserMacroParamsMustBeNames    Msg = 15
-	MsgParserMacroMissingBody          Msg = 16
-	MsgParserMacroBodyDelimiters       Msg = 17
-	MsgParserPpIncludeTooDeep          Msg = 18
-	MsgParserPpElifWithoutIf           Msg = 19
-	MsgParserPpBranchWithoutIf         Msg = 20
-	MsgParserPpIncludeFailed           Msg = 21
-	MsgParserPpUnclosedIf              Msg = 22
-	MsgParserPpUnrecognizedCondition   Msg = 23
-	MsgParserNestingTooDeep            Msg = 24
+	MsgParserMacroUnbalancedDelimiters    Msg = 0
+	MsgParserMacroArgCountMismatch        Msg = 1
+	MsgParserMacroExpandFailed            Msg = 2
+	MsgParserPpSharpNeedsCommand          Msg = 3
+	MsgParserPpUnknownDirective           Msg = 4
+	MsgParserPpRequiresParens             Msg = 5
+	MsgParserPpErrorNeedsMessage          Msg = 6
+	MsgParserPpErrorDirective             Msg = 7
+	MsgParserPpInsertNotMacroParam        Msg = 8
+	MsgParserPpExecuteNeedsName           Msg = 9
+	MsgParserPpUnknownCommand             Msg = 10
+	MsgParserPpInsertNeedsAst             Msg = 11
+	MsgParserMacroNeedsName               Msg = 12
+	MsgParserMacroMissingParamList        Msg = 13
+	MsgParserMacroParamListDelimiters     Msg = 14
+	MsgParserMacroParamsMustBeNames       Msg = 15
+	MsgParserMacroMissingBody             Msg = 16
+	MsgParserMacroBodyDelimiters          Msg = 17
+	MsgParserPpIncludeTooDeep             Msg = 18
+	MsgParserPpElifWithoutIf              Msg = 19
+	MsgParserPpBranchWithoutIf            Msg = 20
+	MsgParserPpIncludeFailed              Msg = 21
+	MsgParserPpUnclosedIf                 Msg = 22
+	MsgParserPpUnrecognizedCondition      Msg = 23
+	MsgParserNestingTooDeep               Msg = 24
+	MsgParserNamedStructRequiresType      Msg = 25
+	MsgParserNamedInterfaceRequiresType   Msg = 26
+	MsgParserLibraryBodySignaturesOnly    Msg = 27
+	MsgParserProgramOnlyMainOrLibrary     Msg = 28
+	MsgParserDuplicateProgramMacro        Msg = 29
+	MsgParserAnonStructHasNoName          Msg = 30
+	MsgParserAnonInterfaceHasNoName       Msg = 31
+	MsgParserPubTypeOnlyStructOrInterface Msg = 32
+	MsgParserPubPrefixRestricted          Msg = 33
+	MsgParserFunctionKeywordIsFn          Msg = 34
+	MsgParserFunctionNeedsReturnType      Msg = 35
+	MsgParserAnonStructNoGenerics         Msg = 36
+	MsgParserAnonInterfaceNoGenerics      Msg = 37
+	MsgParserExpectedGot                  Msg = 38
+	MsgParserUnterminatedTypeArguments    Msg = 39
+	MsgParserUnterminatedStructBody       Msg = 40
+	MsgParserUnterminatedSpaceBody        Msg = 41
+	MsgParserUnterminatedLibraryBody      Msg = 42
+	MsgParserUnterminatedInterfaceBody    Msg = 43
+	MsgParserUnterminatedImplBody         Msg = 44
+	MsgParserUnterminatedFunctionType     Msg = 45
+	MsgParserUnterminatedBlock            Msg = 46
+	MsgParserUnexpectedTokenInExpression  Msg = 47
+	MsgParserSignatureMustFollowCall      Msg = 48
+	MsgParserScopeRequiresIdentifier      Msg = 49
+	MsgParserIntLiteralOutOfRange         Msg = 50
+	MsgParserExpectedFn                   Msg = 51
+	MsgParserExpectedTopLevelDeclaration  Msg = 52
+	MsgParserDuplicateSignature           Msg = 53
+	MsgParserUnterminatedBlockComment     Msg = 54
+	MsgParserUnexpectedCharacter          Msg = 55
+	MsgParserInvalidHexLiteralNoDigits    Msg = 56
+	MsgParserInvalidHexLiteral            Msg = 57
+	MsgParserInvalidFloatLiteral          Msg = 58
+	MsgParserInvalidIntLiteral            Msg = 59
+	MsgParserUnterminatedRawString        Msg = 60
+	MsgParserUnterminatedStringLiteral    Msg = 61
+	MsgParserUnterminatedEscapeSequence   Msg = 62
 )
 
 // msgLangs are the shipped languages, in blob-block order. The first is the source language.
 var msgLangs = [...]string{"en", "zh"}
 
 // msgOffsets has one entry per (language, message) pair plus a final sentinel: the pair at flat
-// index lang*25+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
+// index lang*63+id occupies msgBlob[msgOffsets[k]:msgOffsets[k+1]].
 var msgOffsets = [...]uint32{
 	0,
 	42,
@@ -70,43 +108,119 @@ var msgOffsets = [...]uint32{
 	1055,
 	1092,
 	1204,
-	1247,
-	1323,
-	1347,
-	1407,
-	1456,
-	1487,
-	1524,
-	1563,
-	1617,
-	1654,
-	1692,
-	1728,
-	1772,
-	1825,
-	1894,
-	1983,
-	2030,
-	2093,
-	2138,
+	1259,
+	1320,
+	1372,
+	1426,
+	1462,
+	1534,
+	1612,
+	1653,
+	1729,
+	1804,
+	1877,
+	1964,
+	2057,
+	2076,
+	2109,
+	2147,
 	2170,
-	2200,
-	2227,
-	2271,
-	2306,
-	2388,
+	2195,
+	2236,
+	2272,
+	2298,
+	2330,
+	2363,
+	2402,
+	2441,
+	2499,
+	2512,
+	2598,
+	2629,
+	2655,
+	2678,
+	2721,
+	2743,
+	2767,
+	2789,
+	2812,
+	2839,
+	2867,
+	2910,
+	2986,
+	3010,
+	3070,
+	3119,
+	3150,
+	3187,
+	3226,
+	3280,
+	3317,
+	3355,
+	3391,
+	3435,
+	3488,
+	3557,
+	3646,
+	3693,
+	3756,
+	3801,
+	3833,
+	3863,
+	3890,
+	3934,
+	3969,
+	4051,
+	4106,
+	4161,
+	4200,
+	4247,
+	4274,
+	4349,
+	4424,
+	4461,
+	4541,
+	4608,
+	4672,
+	4754,
+	4842,
+	4861,
+	4894,
+	4932,
+	4955,
+	4980,
+	5021,
+	5057,
+	5083,
+	5115,
+	5148,
+	5187,
+	5226,
+	5284,
+	5297,
+	5383,
+	5414,
+	5440,
+	5463,
+	5506,
+	5528,
+	5552,
+	5574,
+	5597,
+	5624,
+	5652,
 }
 
 // msgBlob is every message in every language, back to back, in language-then-table order.
-const msgBlob = `ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires ("message")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 ("消息")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句`
+const msgBlob = `ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires ("message")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequenceParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 ("消息")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%q嵌套深度超过本实现的 %d 层上限：请把表达式拆成更小的语句实名结构体必须写 type：type struct { ... } %s;实名接口必须写 type：type interface { ... } %s;library 体内只能有 fn 符号签名program 声明只支持 main / library（lib）重复的 program 预制宏pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;pub 的匿名接口没有名字可导出：pub type interface { ... } Name;pub type 只支持 struct / interfacepub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）函数声明关键字是 fn：func main(...) 应写为 fn main(...)函数必须声明返回类型：fn %s(...) 返回类型 { ... }匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence`
 
 // msgText returns the value of a message in one language block, read out of the blob. One index
 // computation and one slice: no map, no hash of the message text, no fallback branch.
 func msgText(id Msg, block int) string {
-	if block < 0 || block >= 2 || int(id) >= 25 {
+	if block < 0 || block >= 2 || int(id) >= 63 {
 		return ""
 	}
-	k := block*25 + int(id)
+	k := block*63 + int(id)
 	return msgBlob[msgOffsets[k]:msgOffsets[k+1]]
 }
 
@@ -150,6 +264,44 @@ func MsgKeys() []string {
 		"parser.pp_unclosed_if",
 		"parser.pp_unrecognized_condition",
 		"parser.nesting_too_deep",
+		"parser.named_struct_requires_type",
+		"parser.named_interface_requires_type",
+		"parser.library_body_signatures_only",
+		"parser.program_only_main_or_library",
+		"parser.duplicate_program_macro",
+		"parser.anon_struct_has_no_name",
+		"parser.anon_interface_has_no_name",
+		"parser.pub_type_only_struct_or_interface",
+		"parser.pub_prefix_restricted",
+		"parser.function_keyword_is_fn",
+		"parser.function_needs_return_type",
+		"parser.anon_struct_no_generics",
+		"parser.anon_interface_no_generics",
+		"parser.expected_got",
+		"parser.unterminated_type_arguments",
+		"parser.unterminated_struct_body",
+		"parser.unterminated_space_body",
+		"parser.unterminated_library_body",
+		"parser.unterminated_interface_body",
+		"parser.unterminated_impl_body",
+		"parser.unterminated_function_type",
+		"parser.unterminated_block",
+		"parser.unexpected_token_in_expression",
+		"parser.signature_must_follow_call",
+		"parser.scope_requires_identifier",
+		"parser.int_literal_out_of_range",
+		"parser.expected_fn",
+		"parser.expected_top_level_declaration",
+		"parser.duplicate_signature",
+		"parser.unterminated_block_comment",
+		"parser.unexpected_character",
+		"parser.invalid_hex_literal_no_digits",
+		"parser.invalid_hex_literal",
+		"parser.invalid_float_literal",
+		"parser.invalid_int_literal",
+		"parser.unterminated_raw_string",
+		"parser.unterminated_string_literal",
+		"parser.unterminated_escape_sequence",
 	}
 }
 

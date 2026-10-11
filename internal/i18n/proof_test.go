@@ -434,6 +434,50 @@ func TestModuleIDsAndCatalogIDsAgree(t *testing.T) {
 	t.Logf("%d imported messages share their number with the pinned module", seen)
 }
 
+// TestProofUntranslatedImportsAreCounted replaces the measurement TestEnglishSourceRatchet makes for
+// this domain. That ratchet counts Han templates at call sites in this repository, and it reported 277
+// before step 3 and 277 after it: the templates step 3 migrated live in the pinned module, where the
+// scanner cannot reach them, so the number could not move and never measured the backlog it was taken
+// for. This one counts what actually shipped untranslated — an imported ID whose zh value repeats its
+// English one — and freezes it. It may only go down.
+//
+// The rows it counts are not a defect of the migration: they are the messages that had no ID and no
+// catalog entry at all before step 3, so they rendered English under QK_LANG=zh and nothing counted
+// them. Migrating them could not invent a translation without changing the rendering, which P3 forbids,
+// so the column repeats the source and the backlog is now a number somebody can work off.
+func TestProofUntranslatedImportsAreCounted(t *testing.T) {
+	const allowed = 25 // measured on step 3; the English-only errf templates that gained an ID and a row
+	src, err := i18ngen.Load(i18ngen.Options{
+		SourceDir:    filepath.Join("source"),
+		OutFile:      "msg_gen.go",
+		ModuleSource: i18ngen.DefaultModuleSource,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	en, zh := src.Table.Languages[0].Code, src.Table.Languages[1].Code
+	var untranslated []string
+	for _, m := range src.Table.Messages {
+		if m.Owner != "import" {
+			continue
+		}
+		if src.Value(m.ID, en) == src.Value(m.ID, zh) {
+			untranslated = append(untranslated, m.ID)
+		}
+	}
+	if len(untranslated) > allowed {
+		t.Errorf("untranslated imported messages grew to %d (limit %d): an English-only message needs a Chinese value, not a repeated column", len(untranslated), allowed)
+		for i, id := range untranslated {
+			if i == 10 {
+				t.Errorf("  … and %d more", len(untranslated)-i)
+				break
+			}
+			t.Errorf("  %s", id)
+		}
+	}
+	t.Logf("imported messages whose zh repeats the source: %d (limit %d)", len(untranslated), allowed)
+}
+
 // TestParserModuleMessagesReachTheRealInterpreter is the end-to-end seam: an error raised inside the
 // pinned syntax layer renders the value this catalog holds, in both languages, through the localizer
 // internal/lang installs. It fails if the module's IDs stop lining up with the generated ones.

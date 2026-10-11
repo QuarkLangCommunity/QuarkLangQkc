@@ -7,4 +7,4 @@ go 1.26
 // parser from the module proxy with no sibling checkout on disk. A relative replace is honoured
 // only inside this checkout and is ignored by importers, which is exactly how moving the syntax
 // layer out broke CI on all three platforms.
-require github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261011032322-3dc0e291e59d
+require github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261011044519-5316b66c4d5b
