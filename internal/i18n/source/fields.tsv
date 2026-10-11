@@ -1,0 +1,57 @@
+# The struct-field table: messages that no callee-based gate in this repository can see.
+#
+# A message written into a struct field — `&RunError{Msg: fmt.Sprintf("...", x)}` — is not an argument
+# to anything, so the coverage scanner (which reads literals passed to `msg`, `T`, `warn`, `errf`,
+# `replyErr`) never sees it, the ratchets never count it, and the catalog's Chinese for it is never
+# reached. docs/i18n-design.md 7.5 measures the surface: 94 distinct literals, 29 of which the shipped
+# catalog already translates and 64 of which it does not.
+#
+# The rows are listed by the shape that hid them rather than by domain, because they are not one
+# domain: the sites are in internal/lang/{eval,typecheck,vm,value}.go and their translations were
+# written down under typecheck and compiler. Splitting them by owner now would put one message in two
+# tables and reintroduce exactly the disagreement this migration removes.
+#
+# A row whose zh repeats its en is NOT a translation. It is the backlog: the message shipped
+# English-only, no Chinese for it exists anywhere in this repository or in the pinned module, and
+# inventing one would change what a reader sees. Those Chinese values have to come from a speaker, and
+# TestProofUntranslatedFieldMessagesAreCounted freezes the count so it can only shrink.
+#
+# id     dotted <domain>.<snake_case>, stable forever, never renumbered, never recycled
+# owner  "local": this repository owns the text
+# ctx    the site the message was found at, for the translator
+# note   what the message means, for the translator
+# src    the text this repository ships; for a local id the generator requires it to repeat the source
+# en     the English rendering
+# zh     the Chinese rendering
+#
+# The one message here that was written in Chinese. It has no English source anywhere, so the
+# English text below is authored by this commit and is a declared P3 exception: the EN run changes
+# (it used to print Chinese), the ZH run does not. Its Chinese value is the shipped text, copied.
+field.compileerror_assignment_undeclared_identifier_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:172	the catalog already shipped this translation; the site bypassed it (struct field)	"CompileError: assignment to undeclared identifier %q"	"CompileError: assignment to undeclared identifier %q"	"CompileError: 对未声明的标识符 %q 赋值"
+field.typeerror_for_in_requires_list_or	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:850	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: for-in requires a List or a container with size() int and get(int), got %s"	"TypeError: for-in requires a List or a container with size() int and get(int), got %s"	"TypeError: for-in 需要 List，或具备 size() int 与 get(int) 的容器，得到 %s"
+field.typeerror_cannot_assign_member_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1007	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: cannot assign member of %s"	"TypeError: cannot assign member of %s"	"TypeError: 不能给 %s 的成员赋值"
+field.typeerror_no_member_q_on_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1011	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: no member %q on %s"	"TypeError: no member %q on %s"	"TypeError: 成员 %q 在 %s 上不存在"
+field.typeerror_unsupported_assignment_target	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1016	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: unsupported assignment target"	"TypeError: unsupported assignment target"	"TypeError: 不支持的赋值目标"
+field.typeerror_star_requires_list_or_container	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1185	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: '*' requires a List or a container handle with get(), got %s"	"TypeError: '*' requires a List or a container handle with get(), got %s"	"TypeError: '*' 需要 List 或带 get() 的容器句柄，得到 %s"
+field.typeerror_unary_minus_requires_number_got	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1205	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: unary '-' requires a number, got %s"	"TypeError: unary '-' requires a number, got %s"	"TypeError: 一元 '-' 需要数字，得到 %s"
+field.internal_unknown_unary_operator_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1225	the catalog already shipped this translation; the site bypassed it (struct field)	"internal: unknown unary operator %s"	"internal: unknown unary operator %s"	"internal: 未知的一元运算符 %s"
+field.internal_unknown_expression_node	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1376	the catalog already shipped this translation; the site bypassed it (struct field)	"internal: unknown expression node"	"internal: unknown expression node"	"internal: 未知的表达式节点"
+field.typeerror_signature_can_only_wrap_direct	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1483	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: a signature can only wrap a direct function call"	"TypeError: a signature can only wrap a direct function call"	"TypeError: 签名只能包装直接的函数调用"
+field.compileerror_s_expects_d_args_got	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1497	the catalog already shipped this translation; the site bypassed it (struct field)	"CompileError: %s expects %d args, got %d"	"CompileError: %s expects %d args, got %d"	"CompileError: %s 需要 %d 个参数，得到 %d"
+field.typeerror_expression_not_callable	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1544	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: this expression is not callable"	"TypeError: this expression is not callable"	"TypeError: 这个表达式不可调用"
+field.compileerror_undeclared_function_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1579	the catalog already shipped this translation; the site bypassed it (struct field)	"CompileError: undeclared function %q"	"CompileError: undeclared function %q"	"CompileError: 未声明的函数 %q"
+field.typeerror_no_method_q_on_pointer	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1937	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: no method %q on pointer"	"TypeError: no method %q on pointer"	"TypeError: 方法 %q 在指针上不存在"
+field.typeerror_appendall_requires_list_got_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1995	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: appendAll requires a List, got %s"	"TypeError: appendAll requires a List, got %s"	"TypeError: appendAll 需要 List，得到 %s"
+field.typeerror_taskm_done_requires_pid_int	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2120	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: taskm.done requires a pid (int), got %s"	"TypeError: taskm.done requires a pid (int), got %s"	"TypeError: taskm.done 需要 pid（int），得到 %s"
+field.typeerror_no_method_q_on_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2544	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: no method %q on %s"	"TypeError: no method %q on %s"	"TypeError: 方法 %q 在 %s 上不存在"
+field.compileerror_s_call_expects_d_args	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2549	the catalog already shipped this translation; the site bypassed it (struct field)	"CompileError: %s() expects %d args, got %d"	"CompileError: %s() expects %d args, got %d"	"CompileError: %s() 需要 %d 个参数，得到 %d"
+field.typeerror_memorize_no_static_method_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2627	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: memorize has no static method %q"	"TypeError: memorize has no static method %q"	"TypeError: memorize 没有静态方法 %q"
+field.typeerror_hashtable_no_static_method_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2632	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: HashTable has no static method %q"	"TypeError: HashTable has no static method %q"	"TypeError: HashTable 没有静态方法 %q"
+field.typeerror_list_no_static_method_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2637	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: List has no static method %q"	"TypeError: List has no static method %q"	"TypeError: List 没有静态方法 %q"
+field.typeerror_taskm_global_variable_use_taskm	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2640	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])"	"TypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])"	"TypeError: taskm 是全局变量 —— 请使用 taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])"
+field.typeerror_io_setin_s_first_arg	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2648	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: IO::setIn's first arg must be an IOStream, got %s"	"TypeError: IO::setIn's first arg must be an IOStream, got %s"	"TypeError: IO::setIn 的第一个参数必须是 IOStream，得到 %s"
+field.typeerror_io_setout_s_first_arg	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2660	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: IO::setOut's first arg must be an IOStream, got %s"	"TypeError: IO::setOut's first arg must be an IOStream, got %s"	"TypeError: IO::setOut 的第一个参数必须是 IOStream，得到 %s"
+field.typeerror_io_no_static_method_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2668	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: IO has no static method %q"	"TypeError: IO has no static method %q"	"TypeError: IO 没有静态方法 %q"
+field.compileerror_unknown_scope_q	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2679	the catalog already shipped this translation; the site bypassed it (struct field)	"CompileError: unknown scope %q"	"CompileError: unknown scope %q"	"CompileError: 未知的作用域 %q"
+field.internal_unknown_operator_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3594	the catalog already shipped this translation; the site bypassed it (struct field)	"internal: unknown operator %s"	"internal: unknown operator %s"	"internal: 未知的运算符 %s"
+field.typeerror_cannot_order_compare_s_s	local	/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3693	the catalog already shipped this translation; the site bypassed it (struct field)	"TypeError: cannot order-compare %s and %s"	"TypeError: cannot order-compare %s and %s"	"TypeError: 无法对 %s 和 %s 做大小比较"

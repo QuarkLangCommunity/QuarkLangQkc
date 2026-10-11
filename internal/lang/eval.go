@@ -169,7 +169,7 @@ func (s *scope) set(name string, v Value, pos Pos) error {
 			return nil
 		}
 	}
-	return &RunError{Msg: fmt.Sprintf("CompileError: assignment to undeclared identifier %q", name), Pos: pos}
+	return &RunError{Msg: msgID(i18n.MsgFieldCompileerrorAssignmentUndeclaredIdentifierQ, name), Pos: pos}
 }
 
 func (s *scope) get(name string, pos Pos) (Value, error) {
@@ -187,7 +187,7 @@ func (s *scope) get(name string, pos Pos) (Value, error) {
 			return v.deref(), nil
 		}
 	}
-	return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: undeclared identifier %q", name), Pos: pos}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgRuntimeCompileerrorUndeclaredIdentifierQ, name), Pos: pos}
 }
 
 // signDef is a registered signature: name -> call implementation.
@@ -847,7 +847,7 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 					return nil
 				}
 			}
-			return &RunError{Msg: fmt.Sprintf("TypeError: for-in requires a List or a container with size() int and get(int), got %s", v.TypeName()), Pos: s.Pos, Ctx: ctx}
+			return &RunError{Msg: msgID(i18n.MsgFieldTypeerrorForInRequiresListOr, v.TypeName()), Pos: s.Pos, Ctx: ctx}
 		}
 		l := v.List()
 		inner := newScope(sc)
@@ -1004,16 +1004,16 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 				obj = c.V
 			}
 			if !obj.IsStruct() {
-				return &RunError{Msg: fmt.Sprintf("TypeError: cannot assign member of %s", obj.TypeName()), Pos: s.Pos, Ctx: ctx}
+				return &RunError{Msg: msgID(i18n.MsgFieldTypeerrorCannotAssignMemberS, obj.TypeName()), Pos: s.Pos, Ctx: ctx}
 			}
 			sv := obj.Struct()
 			if _, exists := sv.Fields[t.Name]; !exists {
-				return &RunError{Msg: fmt.Sprintf("TypeError: no member %q on %s", t.Name, sv.SType), Pos: t.Pos, Ctx: ctx}
+				return &RunError{Msg: msgID(i18n.MsgFieldTypeerrorNoMemberQOnS, t.Name, sv.SType), Pos: t.Pos, Ctx: ctx}
 			}
 			sv.Fields[t.Name] = v
 			return nil
 		}
-		return &RunError{Msg: "TypeError: unsupported assignment target", Pos: s.Pos, Ctx: ctx}
+		return &RunError{Msg: msgID(i18n.MsgFieldTypeerrorUnsupportedAssignmentTarget), Pos: s.Pos, Ctx: ctx}
 	}
 	return nil
 }
@@ -1182,7 +1182,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 				}
 			}
 			if !v.IsList() {
-				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: '*' requires a List or a container handle with get(), got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorStarRequiresListOrContainer, v.TypeName()), Pos: x.Pos, Ctx: ctx}
 			}
 			l := v.List()
 			item, err := l.Peek()
@@ -1202,7 +1202,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 					return in.callFunc(fn, []Value{v}, x.Pos, ctx.depth)
 				}
 			}
-			return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: unary '-' requires a number, got %s", v.TypeName()), Pos: x.Pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorUnaryMinusRequiresNumberGot, v.TypeName()), Pos: x.Pos, Ctx: ctx}
 		case "~":
 			if x.Bits > 0 {
 				// Raw bits: the complement keeps the operand's width, so it is masked to it (spec §3.3).
@@ -1222,7 +1222,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 			}
 			return BoolV(!b), nil
 		}
-		return NilV(), &RunError{Msg: "internal: unknown unary operator " + x.Op, Pos: x.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldInternalUnknownUnaryOperatorS, x.Op), Pos: x.Pos, Ctx: ctx}
 	case *BinOp:
 		// === is the storage-identity primitive: it compares where the operands live, never their
 		// values, and it is deliberately not overloadable (no operation method, no user hook).
@@ -1373,7 +1373,7 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		}
 		return item, nil
 	}
-	return NilV(), &RunError{Msg: "internal: unknown expression node", Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldInternalUnknownExpressionNode), Ctx: ctx}
 }
 
 // evalMember reads a plain member (no call) — e.g. execCtx.head/tail/log.
@@ -1390,9 +1390,9 @@ func evalMember(obj Value, name string, pos Pos, ctx *execCtx) (Value, error) {
 		if v, exists := o.Fields[name]; exists {
 			return v, nil
 		}
-		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: no member %q on %s", name, obj.TypeName()), Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorNoMemberQOnS, name, obj.TypeName()), Pos: pos, Ctx: ctx}
 	}
-	return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: no member %q on %s", name, obj.TypeName()), Pos: pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorNoMemberQOnS, name, obj.TypeName()), Pos: pos, Ctx: ctx}
 }
 
 func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) {
@@ -1480,7 +1480,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 	if c.Sign != nil {
 		id, ok := c.Fn.(*Ident)
 		if !ok {
-			return NilV(), &RunError{Msg: "TypeError: a signature can only wrap a direct function call", Pos: c.Pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorSignatureCanOnlyWrapDirect), Pos: c.Pos, Ctx: ctx}
 		}
 		mark := len(ctx.argArena)
 		defer func() { ctx.argArena = ctx.argArena[:mark] }()
@@ -1494,7 +1494,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 			return NilV(), &RunError{Msg: overloadErr(in.allDefs(id.Name), id.Name, len(argVals)), Pos: id.Pos, Ctx: ctx}
 		}
 		if len(argVals) != len(fn.Params) {
-			return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(argVals)), Pos: id.Pos, Ctx: ctx}
+			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(argVals)), Pos: id.Pos, Ctx: ctx}
 		}
 		// v2 signature: f(args) @instance(prefix) ≡ instance.call(prefix)(.{in, out})
 		// 1) instance is a variable (a Sign instance, any name); 2) the prefix carries the wrapped function fn; 3) record .{in: List(args), out: nil}
@@ -1541,7 +1541,7 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 
 	id, ok := c.Fn.(*Ident)
 	if !ok {
-		return NilV(), &RunError{Msg: "TypeError: this expression is not callable", Pos: c.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorExpressionNotCallable), Pos: c.Pos, Ctx: ctx}
 	}
 	mark := len(ctx.argArena)
 	argVals, err := in.evalCallArgs(c, sc, ctx)
@@ -1576,7 +1576,7 @@ func (in *interp) dispatchPlainCall(c *CallExpr, id *Ident, argVals []Value, sc 
 	if b, ok := in.builtins[id.Name]; ok {
 		return b(derefArgs(argVals), id.Pos, ctx) // builtins accept values only
 	}
-	return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: undeclared function %q", id.Name), Pos: id.Pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldCompileerrorUndeclaredFunctionQ, id.Name), Pos: id.Pos, Ctx: ctx}
 }
 
 // callFunc (v2): a call returns what return produced (a log-terminated function returns nil).
@@ -1588,7 +1588,7 @@ func (in *interp) callFunc(fn *Func, args []Value, pos Pos, parentDepth int) (Va
 		}
 	}
 	if len(args) != len(fn.Params) {
-		return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(args)), Pos: pos}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(args)), Pos: pos}
 	}
 	if parentDepth >= MaxCallDepth {
 		return NilV(), &RunError{Msg: MaxCallDepthMessage, Pos: pos}
@@ -1934,7 +1934,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			}
 			return StrV(obj.String()), nil
 		}
-		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: no method %q on pointer", name), Pos: pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorNoMethodQOnPointer, name), Pos: pos, Ctx: ctx}
 	}
 	if obj.IsList() {
 		o := obj.List()
@@ -1992,7 +1992,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), err
 			}
 			if !args[0].IsList() {
-				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: appendAll requires a List, got %s", args[0].TypeName()), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorAppendallRequiresListGotS, args[0].TypeName()), Pos: pos, Ctx: ctx}
 			}
 			l := args[0].List()
 			o.AppendAll(l)
@@ -2085,7 +2085,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), &RunError{Msg: err.Error(), Pos: pos, Ctx: ctx}
 			}
 			if len(args)-2 != len(fn.Params) {
-				return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(args)-2), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(args)-2), Pos: pos, Ctx: ctx}
 			}
 			if err := in.runOnThread(t, fn, args[2:], pos); err != nil {
 				return NilV(), err
@@ -2117,7 +2117,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), wantArity("taskm.done", 1, len(args), pos, ctx)
 			}
 			if !args[0].IsInt() {
-				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: taskm.done requires a pid (int), got %s", args[0].TypeName()), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorTaskmDoneRequiresPidInt, args[0].TypeName()), Pos: pos, Ctx: ctx}
 			}
 			pid := args[0].Int()
 			t, ok := in.lookupTask(int(pid))
@@ -2152,7 +2152,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 				return NilV(), &RunError{Msg: err.Error(), Pos: pos, Ctx: ctx}
 			}
 			if len(args)-1 != len(fn.Params) {
-				return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: %s expects %d args, got %d", fn.Name, len(fn.Params), len(args)-1), Pos: pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldCompileerrorSExpectsDArgsGot, fn.Name, len(fn.Params), len(args)-1), Pos: pos, Ctx: ctx}
 			}
 			if err := in.runOnThread(o.t, fn, args[1:], pos); err != nil {
 				return NilV(), err
@@ -2541,12 +2541,12 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: %s.%s is a static method; call it via %s::%s(...)", o.SType, name, o.SType, name), Pos: pos, Ctx: ctx}
 		}
 	}
-	return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: no method %q on %s", name, obj.TypeName()), Pos: pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorNoMethodQOnS, name, obj.TypeName()), Pos: pos, Ctx: ctx}
 }
 
 func wantArity(name string, want, got int, pos Pos, ctx *execCtx) error {
 	if want != got {
-		return &RunError{Msg: fmt.Sprintf("CompileError: %s() expects %d args, got %d", name, want, got), Pos: pos, Ctx: ctx}
+		return &RunError{Msg: msgID(i18n.MsgFieldCompileerrorSCallExpectsDArgs, name, want, got), Pos: pos, Ctx: ctx}
 	}
 	return nil
 }
@@ -2624,20 +2624,20 @@ func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, e
 		if x.Name == "new" && len(args) == 0 {
 			return MemorizeV(&MemorizeBuffer{Table: NewHashTable()}), nil
 		}
-		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: memorize has no static method %q", x.Name), Pos: x.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorMemorizeNoStaticMethodQ, x.Name), Pos: x.Pos, Ctx: ctx}
 	case "HashTable":
 		if x.Name == "new" && len(args) == 0 {
 			return TableV(NewHashTable()), nil
 		}
-		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: HashTable has no static method %q", x.Name), Pos: x.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorHashtableNoStaticMethodQ, x.Name), Pos: x.Pos, Ctx: ctx}
 	case "List":
 		if x.Name == "new" && len(args) == 0 {
 			return ListV(NewList()), nil
 		}
-		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: List has no static method %q", x.Name), Pos: x.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorListNoStaticMethodQ, x.Name), Pos: x.Pos, Ctx: ctx}
 	case "taskm":
 		// taskm is a global variable: the correct syntax is taskm.spawn(...) / taskm.block(...) etc.
-		return NilV(), &RunError{Msg: "TypeError: taskm is a global variable — use taskm.spawn(...) / taskm.block(pid) / taskm.done(pid) / taskm.merge(pid) / taskm.channel([n])", Pos: x.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorTaskmGlobalVariableUseTaskm), Pos: x.Pos, Ctx: ctx}
 	case "IO":
 		switch x.Name {
 		case "setIn":
@@ -2645,7 +2645,7 @@ func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, e
 				return NilV(), wantArity("IO::setIn", 2, len(args), x.Pos, ctx)
 			}
 			if !args[0].IsIO() {
-				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: IO::setIn's first arg must be an IOStream, got %s", args[0].TypeName()), Pos: x.Pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorIoSetinSFirstArg, args[0].TypeName()), Pos: x.Pos, Ctx: ctx}
 			}
 			ioObj := args[0].IO()
 			if err := setInput(ioObj, args[1]); err != nil {
@@ -2657,7 +2657,7 @@ func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, e
 				return NilV(), wantArity("IO::setOut", 2, len(args), x.Pos, ctx)
 			}
 			if !args[0].IsIO() {
-				return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: IO::setOut's first arg must be an IOStream, got %s", args[0].TypeName()), Pos: x.Pos, Ctx: ctx}
+				return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorIoSetoutSFirstArg, args[0].TypeName()), Pos: x.Pos, Ctx: ctx}
 			}
 			ioObj := args[0].IO()
 			if err := setOutput(ioObj, args[1]); err != nil {
@@ -2665,7 +2665,7 @@ func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, e
 			}
 			return NilV(), nil
 		}
-		return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: IO has no static method %q", x.Name), Pos: x.Pos, Ctx: ctx}
+		return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorIoNoStaticMethodQ, x.Name), Pos: x.Pos, Ctx: ctx}
 	}
 	if x.Scope == "file" && x.Name == "new" {
 		if len(args) != 1 || !args[0].IsStr() {
@@ -2676,7 +2676,7 @@ func (in *interp) evalScopeCall(x *ScopeCall, sc *scope, ctx *execCtx) (Value, e
 	if fn := in.staticMethodOf(x.Scope, x.Name); fn != nil {
 		return in.callFunc(fn, args, x.Pos, ctx.depth)
 	}
-	return NilV(), &RunError{Msg: fmt.Sprintf("CompileError: unknown scope %q", x.Scope), Pos: x.Pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldCompileerrorUnknownScopeQ, x.Scope), Pos: x.Pos, Ctx: ctx}
 }
 
 // allDefs returns every definition of a function (primary + overloads).
@@ -2727,7 +2727,7 @@ func (in *interp) bestMatchV(defs []*Func, args []Value) *Func {
 func overloadErr(defs []*Func, name string, n int) string {
 	for _, d := range defs {
 		if len(d.Params) != n {
-			return fmt.Sprintf("CompileError: %s expects %d args, got %d", name, len(d.Params), n)
+			return msgID(i18n.MsgFieldCompileerrorSExpectsDArgsGot, name, len(d.Params), n)
 		}
 	}
 	return fmt.Sprintf(msgID(i18n.MsgRuntimeCompileerrorMatchingOverloadQArgument), name)
@@ -3416,7 +3416,7 @@ func lookupFunc(v Value, in *interp) (*Func, error) {
 		if fn, ok := in.fns[v.Str()]; ok {
 			return fn, nil
 		}
-		return nil, fmt.Errorf("CompileError: undeclared function %q", v.Str())
+		return nil, errors.New(msgID(i18n.MsgFieldCompileerrorUndeclaredFunctionQ, v.Str()))
 	}
 	return nil, fmt.Errorf("TypeError: taskm::spawn requires a function reference, got %s", v.TypeName())
 }
@@ -3591,7 +3591,7 @@ func binOp(op string, l, r Value, bits int, pos Pos, ctx *execCtx) (Value, error
 	case "==", "!=", "<", "<=", ">", ">=":
 		return cmp(op, l, r, pos, ctx)
 	}
-	return NilV(), &RunError{Msg: "internal: unknown operator " + op, Pos: pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldInternalUnknownOperatorS, op), Pos: pos, Ctx: ctx}
 }
 
 func arith(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
@@ -3690,7 +3690,7 @@ func cmp(op string, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 			return BoolV(ordCmpStr(l.Str(), r.Str(), op)), nil
 		}
 	}
-	return NilV(), &RunError{Msg: fmt.Sprintf("TypeError: cannot order-compare %s and %s", l.TypeName(), r.TypeName()), Pos: pos, Ctx: ctx}
+	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorCannotOrderCompareSS, l.TypeName(), r.TypeName()), Pos: pos, Ctx: ctx}
 }
 
 func ordCmp(a, b float64, op string) bool {
