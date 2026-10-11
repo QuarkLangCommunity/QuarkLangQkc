@@ -498,7 +498,8 @@ Key optimizations (all profile-driven):
 - **taskm concurrency**: `t thread = taskm.spawn(); t.merge(fn, args); taskm.block(t.pid()); taskm.done(pid);
   c channel = taskm.channel(); c.send(v); c.recv();` — user-space tasks + thread pool (pthread carrier in the compiled path).
 - **Macro system**: `#macro name (params) { body }` with named parameters; `()`/`[]`/`{}` delimiters are interchangeable;
-  the body supports `#when(compile/run)` and `#error` — **interpreter and compiler share the same token-level expansion**.
+  the body supports `#error`, and `#ifdef COMPILE` / `#ifdef EXPLAIN` select a body per engine — the
+  interpreter and the compiler share both the token-level expansion and the line-level preprocessor.
 - **delete/clear semantics**: `delete` returns memory to the free queue (data preserved, reusable);
   `clear` actually wipes free blocks (in-use blocks are untouched — data safety).
 - **List<int>**: literals, indexing, `size()`, `get(i)`, `append(v)` (geometric growth).

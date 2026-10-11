@@ -7,9 +7,9 @@ import (
 // #insert(#ast(parameter)) and #execute restored: explicit direct insertion / identifier splicing
 func TestMacroInsertDirectives(t *testing.T) {
 	out, err := runSrc(t, `#macro pair (a, b) {
-    #when (run) {
+    #ifdef EXPLAIN
         #return #insert(#ast(a)) + #insert(#ast(b))
-    }
+    #endif
 }
 
 fn main(IOStream io) {
@@ -29,9 +29,9 @@ func TestMacroInsertAll(t *testing.T) {
     return a + b;
 }
 #macro calladd (a, b) {
-    #when (run) {
+    #ifdef EXPLAIN
         #return add2(#insert(#ast(...)))
-    }
+    #endif
 }
 
 fn main(IOStream io) {
@@ -51,9 +51,9 @@ func TestMacroExecuteSplice(t *testing.T) {
     return 7;
 }
 #macro callit () {
-    #when (run) {
+    #ifdef EXPLAIN
         #return #execute(give)()
-    }
+    #endif
 }
 
 fn main(IOStream io) {

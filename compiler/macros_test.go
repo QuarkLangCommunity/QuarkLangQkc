@@ -51,7 +51,7 @@ func TestExpandMacrosKeepsStringLiteralTokens(t *testing.T) {
 	if !found {
 		t.Fatal("test source has no string literal to compare against")
 	}
-	toks, err := expandMacros(idMacroSource, "compile")
+	toks, err := expandMacros(idMacroSource)
 	if err != nil {
 		t.Fatalf("expandMacros: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestTranspileTokensKeepsMacroStringLiterals(t *testing.T) {
 		{"escapes and a raw string", escapedMacroSource, []string{"here", "quoted", "slash", "raw, no escapes"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			toks, err := expandMacros(tc.src, "compile")
+			toks, err := expandMacros(tc.src)
 			if err != nil {
 				t.Fatalf("expandMacros: %v", err)
 			}
@@ -104,7 +104,7 @@ func TestTranspileTokensMergesImports(t *testing.T) {
 	mainPath := filepath.Join(dir, "main.qk")
 	const src = "import \"greet\";\n\n#macro id (x) {\n    #return x\n}\n\n" +
 		"fn main(IOStream io) {\n    io.println(id(\"hi from the macro\"));\n    io.println(shout(\"hi from the import\"));\n}\n"
-	toks, err := expandMacros(src, "compile")
+	toks, err := expandMacros(src)
 	if err != nil {
 		t.Fatalf("expandMacros: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestExpandMacrosReportsMacroErrors(t *testing.T) {
 		{"malformed definition", "#macro (x) {\n}\n\nfn main(IOStream io) {\n}\n", "#macro"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			toks, err := expandMacros(tc.src, "compile")
+			toks, err := expandMacros(tc.src)
 			if err == nil {
 				t.Fatalf("a macro failure must be an error, got %d tokens and no error", len(toks))
 			}
@@ -154,7 +154,7 @@ func TestExpandMacrosLeavesMacroFreeSourceUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	toks, err := expandMacros(src, "compile")
+	toks, err := expandMacros(src)
 	if err != nil {
 		t.Fatalf("expandMacros on macro-free source: %v", err)
 	}
@@ -165,5 +165,32 @@ func TestExpandMacrosLeavesMacroFreeSourceUntouched(t *testing.T) {
 		if toks[i] != ref[i] {
 			t.Fatalf("token %d changed: %+v → %+v", i, ref[i], toks[i])
 		}
+	}
+}
+
+// TestWhenSpellingIsRejectedAsItWasBefore pins the ruling: `#when` was the implementation's own
+// operation-time switch, not a directive the standard defines, and it is gone. The compiler and the
+// interpreter report the same parse error at the same position for the fixture below, which is the
+// source that used to print 222 interpreted and 111 compiled (docs/ARCHITECTURE.md §6.6).
+//
+// The fixture carries a .rejected suffix rather than .qk: the linter gate walks compiler/testdata and
+// refuses to lint a file that is broken on purpose, and the interpreter is compared against it by hand
+// (the two engines print the same message).
+func TestWhenSpellingIsRejectedAsItWasBefore(t *testing.T) {
+	const src = "testdata/when_rejected.qk.rejected"
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = expandMacros(string(raw))
+	if err == nil {
+		t.Fatal("#when must not be accepted anywhere")
+	}
+	// The refusal names the spelling, so a reader of the message learns it does not exist rather than
+	// getting a parse error about a brace three tokens later. The wording follows the engine's own
+	// locale, so both renderings are accepted and nothing here depends on which one is active.
+	msg := err.Error()
+	if !strings.Contains(msg, "#when") || (!strings.Contains(msg, "预处理指令") && !strings.Contains(msg, "preprocessor directive")) {
+		t.Fatalf("the refusal changed: %v", err)
 	}
 }

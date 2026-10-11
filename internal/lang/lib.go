@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkparser"
 )
 
 // ============ Binary library interop (cross-platform) ============
@@ -273,8 +275,17 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 	if filename != "" {
 		dir = filepath.Dir(filename)
 	}
+	// The runtime directives decide which lines this program is, and both engines must decide the same
+	// way: the interpreter predefines EXPLAIN, the compiler COMPILE (spec §7.2), and neither branches on
+	// which engine is running. One context serves the whole program, so a #define in one file is visible
+	// in the next, exactly as it is for the compiler.
+	pp := NewPreproc("EXPLAIN")
+	mainText, mainLines, err := Preprocess(pp, src, filename)
+	if err != nil {
+		return nil, nil, err
+	}
 	var merged mapBuilder
-	merged.append(src+"\n", filename)
+	merged.append(mainText+"\n", filename)
 	// Token mode: the caller expanded the main file's macros already, so the merged stream replaces the
 	// re-lex of the merged text. Text mode (mainToks == nil) is what the tools and the interpreter use.
 	tokenMode := mainToks != nil
@@ -284,8 +295,8 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 	}
 	visited := map[string]bool{}
 	// Recursive merge: handle imports in the main file and in each library file (visited guards against cycles)
-	var collect func(text, base, file string, toks []Token) error
-	collect = func(text, base, file string, toks []Token) error {
+	var collect func(text, base, file string, toks []Token, lines qkparser.LineMap) error
+	collect = func(text, base, file string, toks []Token, lines qkparser.LineMap) error {
 		if toks == nil {
 			var err error
 			toks, err = lexExpanded(text)
@@ -325,23 +336,33 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 				}
 				return &CheckError{Msg: err.Error(), Pos: pos}
 			}
-			stripped, srcLines := stripProgramDeclMapped(imported)
+			incText, incLines, err := Preprocess(pp, imported, impFile)
+			if err != nil {
+				return err
+			}
+			stripped, srcLines := stripProgramDeclMapped(incText)
+			// srcLines are lines of the *preprocessed* import; lineMap puts them back into the file the
+			// author wrote, which is the coordinate every diagnostic and the source map use.
+			lineMap := originLines(incLines)
+			for k, l := range srcLines {
+				srcLines[k] = lineMap[l]
+			}
 			lineOff := merged.lineCount()
 			merged.appendMapped(stripped+"\n", impFile, srcLines)
 			var itoks []Token
 			if tokenMode {
-				if itoks, err = lexExpanded(imported); err != nil {
+				if itoks, err = lexExpanded(incText); err != nil {
 					return err
 				}
 				acc = append(acc, streamIn(itoks, srcLineMap(srcLines), lineOff)...)
 			}
-			if err := collect(imported, base0, impFile, itoks); err != nil {
+			if err := collect(incText, base0, impFile, itoks, incLines); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	if err := collect(src, dir, filename, mainToks); err != nil {
+	if err := collect(mainText, dir, filename, mainToks, mainLines); err != nil {
 		return nil, merged.srcMap(), err
 	}
 	if !tokenMode {
@@ -361,7 +382,7 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 }
 
 // lexExpanded lexes source and applies the macro step the interpreter uses: split the definitions out and
-// expand every call in the explain state ("explain" also fires #when (run) branches).
+// expand every call (the engine's own name for itself, `#ifdef EXPLAIN`, was decided before lexing).
 func lexExpanded(text string) ([]Token, error) {
 	toks, err := Lex(text)
 	if err != nil {
@@ -374,7 +395,28 @@ func lexExpanded(text string) ([]Token, error) {
 	if len(macros) == 0 {
 		return rest, nil
 	}
-	return ExpandMacros(rest, macros, "explain")
+	return ExpandMacros(rest, macros)
+}
+
+// NewPreproc builds a preprocessing context for the interpreter (or a tool that reads the same programs)
+// with the engine's own symbol defined; the context carries every #define of the program, so one is
+// created per compilation rather than per file.
+func NewPreproc(defines ...string) *qkparser.Context { return qkparser.NewContext(defines...) }
+
+// Preprocess applies the runtime directives to one file and returns the surviving text with the map from
+// its lines back to the file's own lines — the interpreter's half of the runtime the compiler also
+// applies, so `#ifdef` decides the same way in both engines (spec §7.2).
+func Preprocess(ctx *qkparser.Context, src, filename string) (string, qkparser.LineMap, error) {
+	r, err := ctx.ProcessMapped(src, filename)
+	return r.Text, r.Map, err
+}
+
+// originLines indexes a line map for the coordinate conversion the merge needs: lineMap[i] is the source
+// line of preprocessed line i+1 (0 when the line has no source, which an #include's lines do not).
+func originLines(m qkparser.LineMap) []int {
+	out := make([]int, len(m.Original)+1)
+	copy(out[1:], m.Original)
+	return out
 }
 
 // streamIn copies a file's tokens into merged-source coordinates: the end-of-file marker is dropped (the

@@ -93,14 +93,21 @@ func mainBody(prog *Program) *Block {
 	return &Block{}
 }
 
-// Compile lexes, parses and statically type-checks source code (spec §11.1: strict checks run at compile time).
+// Compile runs the runtime directives, lexes, parses and statically type-checks source code (spec §11.1:
+// strict checks run at compile time). The directives are the interpreter's half of the runtime (§7.2), so
+// a program guarded by `#ifdef COMPILE` / `#ifdef EXPLAIN` compiles to the same AST here and in the
+// compiler; the file name is empty because a caller that has one goes through CompileWithImports.
 func Compile(src string) (*Program, error) {
 	h := sha256.Sum256([]byte(src))
 	key := string(h[:])
 	if p, ok := compileCache.Load(key); ok {
 		return p.(*Program), nil
 	}
-	prog, err := compileSlow(src)
+	pre, _, err := Preprocess(NewPreproc("EXPLAIN"), src, "")
+	if err != nil {
+		return nil, err
+	}
+	prog, err := compileSlow(pre)
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +121,15 @@ func compileSlow(src string) (*Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Macro system: split out macro definitions, expand at token level (run state for the interpreter), then parse
+	// Macro system: split out macro definitions, expand at token level, then parse. Which engine is
+	// expanding was already decided by the preprocessor, which ran before this text was lexed: the
+	// interpreter defines EXPLAIN, the compiler COMPILE (spec §7.2).
 	macros, rest, err := SplitMacroDefs(toks)
 	if err != nil {
 		return nil, err
 	}
 	if len(macros) > 0 {
-		rest, err = ExpandMacros(rest, macros, "explain") // interpreter = at the explain operation time (xmind §operation time)
+		rest, err = ExpandMacros(rest, macros)
 		if err != nil {
 			return nil, err
 		}

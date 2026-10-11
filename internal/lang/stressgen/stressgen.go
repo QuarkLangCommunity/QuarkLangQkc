@@ -220,14 +220,10 @@ func manyFields() []byte {
 // expander that re-scans its own output never terminates.
 func recursiveMacro() []byte {
 	return []byte(`#macro ping (x) {
-  #when (run) {
-    #return pong(x)
-  }
+  #return pong(x)
 }
 #macro pong (x) {
-  #when (run) {
-    #return ping(x)
-  }
+  #return ping(x)
 }
 fn main(IOStream io) {
   ping(io.println("mutual"));

@@ -188,22 +188,36 @@ func LexWithComments(src string) ([]Token, []Comment, error) { return qkparser.L
 func Parse(toks []Token) (*Program, error) { return qkparser.Parse(toks) }
 
 // ParseSource does the frontend only — lexing, macro expansion, parsing — with no import resolution and no type checking.
-func ParseSource(src string) (*Program, error) { return qkparser.ParseSource(src) }
+func ParseSource(src string) (*Program, error) { return qkparser.ParseSource(preprocessAligned(src)) }
 
 // ParseSourceWithComments is ParseSource plus the comments in the source, in order of appearance.
 func ParseSourceWithComments(src string) (*Program, []Comment, error) {
-	return qkparser.ParseSourceWithComments(src)
+	return qkparser.ParseSourceWithComments(preprocessAligned(src))
 }
 
 // ParseSourceAll is ParseSourceWithComments plus the #macro definitions, which are cut out before parsing and so are absent from the AST.
 func ParseSourceAll(src string) (*Program, []Comment, []*MacroDef, error) {
-	return qkparser.ParseSourceAll(src)
+	return qkparser.ParseSourceAll(preprocessAligned(src))
+}
+
+// preprocessAligned applies the runtime directives to a single file for the tools — the linter, the
+// language server, the doc renderer, the REPL — which report positions in the file the author wrote and
+// so need the line numbering kept (Context.Aligned): a consumed line stays as an empty one.
+func preprocessAligned(src string) string {
+	ctx := qkparser.NewContext("EXPLAIN")
+	ctx.Aligned = true
+	out, err := ctx.Process(src, "")
+	if err != nil {
+		return src // the parser reports the failure with a position of its own
+	}
+	return out
 }
 
 // SplitMacroDefs splits every #macro definition out of a token stream, returning the macro list and the remaining tokens.
 func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) { return qkparser.SplitMacroDefs(toks) }
 
-// ExpandMacros rewrites macro calls in a token stream, with mode selecting the #when operation time.
-func ExpandMacros(toks []Token, macros []*MacroDef, mode string) ([]Token, error) {
-	return qkparser.ExpandMacros(toks, macros, mode)
+// ExpandMacros rewrites macro calls in a token stream; which engine is expanding was decided before
+// lexing, by the symbol the preprocessor defined (spec §7.2).
+func ExpandMacros(toks []Token, macros []*MacroDef) ([]Token, error) {
+	return qkparser.ExpandMacros(toks, macros)
 }
