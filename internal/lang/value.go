@@ -747,10 +747,11 @@ type MemorizeBuffer struct{ Table *HashTable }
 func (m *MemorizeBuffer) TypeName() string { return "memorize" }
 func (m *MemorizeBuffer) String() string   { return "<memorize buffer>" }
 
-// Memory is the default concrete instance of the global memory struct
-// (block-managed; spec §14). v0.1: memory is backed by the host Go GC;
-// compact() returns nothing (no value) and BlockSize is the dynamic
-// block-granularity setting (memory.setBlock(n)).
+// Memory is the default concrete instance of the global memory struct: the reference interpreter
+// implements the block policy of spec §10 in its MemoryManager, a logical layer above the host
+// allocator (the host's own collector is a property of the host runtime, not of the language
+// contract), so compact() returns nothing at language level and BlockSize is the dynamic
+// block-granularity setting behind memory.setBlock(n).
 type Memory struct{ BlockSize int }
 
 func (m *Memory) TypeName() string { return "memory" }
