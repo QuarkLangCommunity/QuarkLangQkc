@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 // Diagnostic codes (stable identifiers for CI / editor filtering).
@@ -180,6 +182,13 @@ func (l *linter) warn(pos Pos, code, format string, args ...interface{}) {
 	l.diags = append(l.diags, Diag{Pos: pos, Code: code, Sev: "warning", Msg: msg(format, args...)})
 }
 
+// warnID records a diagnostic whose message is a generated ID, rendered in the requested language. It is
+// the ID-rendering counterpart of warn and is what a migrated lint call site uses; both disappear at
+// step 5, when the text-keyed catalog does.
+func (l *linter) warnID(pos Pos, code string, id i18n.Msg, args ...interface{}) {
+	l.diags = append(l.diags, Diag{Pos: pos, Code: code, Sev: "warning", Msg: msgID(id, args...)})
+}
+
 func (l *linter) push() {
 	l.scope = &lscope{outer: l.scope, vars: map[string]*lvar{}}
 }
@@ -225,7 +234,7 @@ func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) 
 	}
 	if outer := l.lookupOuter(name); outer != nil {
 		v.outer = outer
-		l.warn(pos, CodeShadow, "%s %s 遮蔽外层同名变量（外层声明于第 %d 行）", lintKindName(kind), name, outer.pos.Line)
+		l.warnID(pos, CodeShadow, i18n.MsgLintShadowOuterVariable, msgID(lintKindName(kind)), name, outer.pos.Line)
 	}
 	// QK112: a declaration inside a function shadows a global symbol (function/type/space/library/macro) — call sites would suddenly resolve to the local
 	if isRefType(declTypeOf(l, name)) {
@@ -233,7 +242,7 @@ func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) 
 	}
 	if l.inFn {
 		if cat, isGlobal := l.globals[name]; isGlobal && cat == "fn" {
-			l.warn(pos, CodeShadowGlobal, "%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）", lintKindName(kind), name)
+			l.warnID(pos, CodeShadowGlobal, i18n.MsgLintShadowGlobalFunction, msgID(lintKindName(kind)), name)
 		}
 	}
 	l.scope.vars[name] = v
@@ -241,16 +250,21 @@ func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) 
 	return v
 }
 
-func lintKindName(kind string) string {
+// lintKindName names the kind of a local binding for a shadowing diagnostic, as a message ID: the
+// caller renders it in the diagnostic's language instead of one being baked in here. It returned
+// `msg(…)` of a Chinese literal before, and two of those four literals had no catalog entry at all, so
+// an English reader got "形参"/"变量" inside an otherwise English sentence. No ratchet saw it: the
+// coverage scanner reads literals passed *to* an i18n boundary, not what a helper returns through one.
+func lintKindName(kind string) i18n.Msg {
 	switch kind {
 	case "param":
-		return msg("形参")
+		return i18n.MsgLintKindParameter
 	case "forvar":
-		return msg("循环变量")
+		return i18n.MsgLintKindLoopVariable
 	case "catch":
-		return msg("catch 变量")
+		return i18n.MsgLintKindCatchVariable
 	default:
-		return msg("变量")
+		return i18n.MsgLintKindVariable
 	}
 }
 
@@ -260,25 +274,6 @@ func (l *linter) use(name string) {
 		v.reads++
 	}
 	delete(l.pending, name)
-}
-
-// lintGlobalName is the display name of a global symbol category.
-func lintGlobalName(cat string) string {
-	switch cat {
-	case "fn":
-		return "函数"
-	case "type":
-		return "类型"
-	case "space":
-		return "空间"
-	case "library":
-		return "系统库"
-	case "macro":
-		return "宏"
-	case "alias":
-		return "类型别名"
-	}
-	return "符号"
 }
 
 // write records an assignment.
@@ -327,18 +322,18 @@ func (l *linter) checkBody(f *FuncDecl, body *Block, implType string) {
 			continue // catch variables are not checked by default: ignoring the error object is idiomatic
 		}
 		if v.writes > 0 {
-			l.warn(v.pos, codeForKind(v.kind), "%s %s 只被赋值、从未读取", lintKindName(v.kind), v.name)
+			l.warnID(v.pos, codeForKind(v.kind), i18n.MsgLintAssignedNeverRead, msgID(lintKindName(v.kind)), v.name)
 		} else {
-			l.warn(v.pos, codeForKind(v.kind), "%s %s 声明后从未使用", lintKindName(v.kind), v.name)
+			l.warnID(v.pos, codeForKind(v.kind), i18n.MsgLintDeclaredNeverUsed, msgID(lintKindName(v.kind)), v.name)
 		}
 	}
 	// Missing return: a non-void return type is declared but some path produces no value (yields nil at runtime)
 	if ret := strings.TrimSpace(f.Ret); ret != "" && ret != "void" && f.Name != "main" {
 		switch {
 		case !term:
-			l.warn(f.Pos, CodeMissingRet, "函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）", f.Name, ret)
+			l.warnID(f.Pos, CodeMissingRet, i18n.MsgLintMissingReturnPath, f.Name, ret)
 		case !allRet:
-			l.warn(f.Pos, CodeMissingRet, "函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）", f.Name, ret)
+			l.warnID(f.Pos, CodeMissingRet, i18n.MsgLintMissingReturnLogPath, f.Name, ret)
 		}
 	}
 	l.curFn, l.fnVars, l.scope = prevFn, prevVars, prevScope
@@ -363,7 +358,7 @@ func (l *linter) block(b *Block) (term bool, allRet bool) {
 	dead := false
 	for i, st := range b.Stmts {
 		if dead {
-			l.warn(posOfStmt(st), CodeUnreachable, "不可达代码（第 %d 行之后的语句不会执行）", posOfStmt(b.Stmts[i-1]).Line)
+			l.warnID(posOfStmt(st), CodeUnreachable, i18n.MsgLintUnreachableCode, posOfStmt(b.Stmts[i-1]).Line)
 			break
 		}
 		t, r := l.stmt(st)
@@ -442,7 +437,7 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 	case *AssignStmt:
 		// QK108: self assignment x = x (including the structurally equivalent p.x / l[i] forms)
 		if sameExpr(t.Target, t.X) {
-			l.warn(t.Pos, CodeSelfAssign, "自赋值：%s 赋值给自身（无效果）", exprText(t.Target))
+			l.warnID(t.Pos, CodeSelfAssign, i18n.MsgLintSelfAssignment, exprText(t.Target))
 		}
 		// Evaluate the right-hand side and the target subexpressions first: a read in `x = x + 1` clears the "assigned but unread" record,
 		// otherwise reading a variable in terms of itself would be misjudged as a dead store (a QK113 false-positive source).
@@ -452,7 +447,7 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 			// QK113: the previous assignment to the same variable (including its declaration initializer) was never read → dead store.
 			// Two exemptions (prefer a missed report over a false one): write-through of reference types; assignments inside loops are read on the next round.
 			if prev, ok := l.pending[tg.Name]; ok && !l.refVars[tg.Name] && l.loopDepth == 0 {
-				l.warn(prev, CodeDeadStore, "对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）", tg.Name, t.Pos.Line)
+				l.warnID(prev, CodeDeadStore, i18n.MsgLintDeadStoreOverwritten, tg.Name, t.Pos.Line)
 			}
 			l.write(tg.Name)
 			if l.loopDepth == 0 && !l.refVars[tg.Name] {
@@ -485,7 +480,7 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 		l.expr(t.Cond, true, "")
 		l.checkConstCond(t.Cond, posOf(t.Cond), "while")
 		if bl, ok := t.Cond.(*BoolLit); ok && bl.V && !hasBreak(t.Body) && !hasReturn(t.Body) {
-			l.warn(posOf(t.Cond), CodeConstCond, "while (true) 且循环体内无 break/return：可能的死循环")
+			l.warnID(posOf(t.Cond), CodeConstCond, i18n.MsgLintWhileTrueNoBreak)
 		}
 		l.branch(t.Body)
 		l.loopDepth++
@@ -564,16 +559,16 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 		// QK110: division/modulo by a constant zero (exempt inside try: that is deliberate error handling)
 		if (t.Op == "/" || t.Op == "%") && l.tryDepth == 0 {
 			if n, ok := t.R.(*IntLit); ok && n.V == 0 {
-				l.warn(t.Pos, CodeDivZero, "常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）", t.Op)
+				l.warnID(t.Pos, CodeDivZero, i18n.MsgLintConstantDivisionByZero, t.Op)
 			}
 		}
 		// QK114: self comparison x == x / x != x (only for addressable forms: identifier/member/index)
 		if (t.Op == "==" || t.Op == "!=") && isRefLike(t.L) && sameExpr(t.L, t.R) {
 			name := exprText(t.L)
 			if t.Op == "==" {
-				l.warn(t.Pos, CodeSelfCompare, "自身比较：%s == %s 恒为真", name, name)
+				l.warnID(t.Pos, CodeSelfCompare, i18n.MsgLintSelfComparisonTrue, name, name)
 			} else {
-				l.warn(t.Pos, CodeSelfCompare, "自身比较：%s != %s 恒为假", name, name)
+				l.warnID(t.Pos, CodeSelfCompare, i18n.MsgLintSelfComparisonFalse, name, name)
 			}
 		}
 	case *UnOp:
@@ -589,7 +584,7 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 		}
 		if valueCtx {
 			if fn := l.spaceFunc(t.Scope, t.Name); fn != nil && isVoidRet(fn.Ret) && !l.overloaded(t.Scope, t.Name) {
-				l.warn(t.Pos, CodeVoidAsValue, "%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）", t.Scope, t.Name)
+				l.warnID(t.Pos, CodeVoidAsValue, i18n.MsgLintVoidResultUsedMethod, t.Scope, t.Name)
 			}
 		}
 	case *CallExpr:
@@ -606,7 +601,7 @@ func (l *linter) expr(e Expr, valueCtx bool, implType string) {
 		if valueCtx {
 			if id, ok := t.Fn.(*Ident); ok {
 				if fn := l.singleFunc(id.Name); fn != nil && isVoidRet(fn.Ret) {
-					l.warn(t.Pos, CodeVoidAsValue, "函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）", id.Name)
+					l.warnID(t.Pos, CodeVoidAsValue, i18n.MsgLintVoidResultUsedFunction, id.Name)
 				}
 			}
 		}
@@ -693,8 +688,7 @@ func (l *linter) checkInterfaces(prog *Program) {
 			}
 			sort.Strings(missing)
 			sort.Strings(present)
-			l.warn(typePos[typ], CodeIfaceMissing,
-				"类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）",
+			l.warnID(typePos[typ], CodeIfaceMissing, i18n.MsgLintInterfaceNearMiss,
 				typ, iface.Name, strings.Join(missing, ", "), strings.Join(present, ", "))
 		}
 	}
@@ -825,9 +819,9 @@ func (l *linter) checkConstCond(cond Expr, pos Pos, kw string) {
 		return // left to the while(true) exit analysis
 	}
 	if bl.V {
-		l.warn(pos, CodeConstCond, "%s (true)：条件恒为真，分支永远执行", kw)
+		l.warnID(pos, CodeConstCond, i18n.MsgLintConstantConditionTrue, kw)
 	} else {
-		l.warn(pos, CodeConstCond, "%s (false)：条件恒为假，分支永不执行", kw)
+		l.warnID(pos, CodeConstCond, i18n.MsgLintConstantConditionFalse, kw)
 	}
 }
 
@@ -1093,7 +1087,7 @@ func (l *linter) checkImports(prog *Program) {
 		if i < len(prog.ImportPos) {
 			pos = prog.ImportPos[i]
 		}
-		l.warn(pos, CodeUnusedImport, "导入了 %q 但未使用其任何符号（可删除该 import）", imp)
+		l.warnID(pos, CodeUnusedImport, i18n.MsgLintUnusedImport, imp)
 	}
 }
 
@@ -1112,7 +1106,7 @@ func (l *linter) checkUnusedFuncs(prog *Program) {
 		if f.Name == "main" || l.usesNames[f.Name] {
 			continue
 		}
-		l.warn(f.Pos, CodeUnusedFunc, "函数 %s 从未被调用（死代码；库文件中的函数不报）", f.Name)
+		l.warnID(f.Pos, CodeUnusedFunc, i18n.MsgLintFunctionNeverCalled, f.Name)
 	}
 }
 

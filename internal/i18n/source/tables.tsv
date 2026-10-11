@@ -15,3 +15,4 @@ parser.tsv
 docgen.tsv
 shared.tsv
 repl.tsv
+lint.tsv

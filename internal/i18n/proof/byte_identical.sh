@@ -275,8 +275,73 @@ else
 fi
 fail=$((fail + repl_fail))
 
+# ---- the lint domain: qkcheck's diagnostics ---------------------------------------------------------
+#
+# Every one of the domain's 22 rows reaches `warn`/`warnID`, and `qkcheck` prints the result, so a
+# process-level corpus does reach them. Both languages are asserted byte-identical, and this domain
+# declares no EN fix. That is a measurement, not an assumption: the migration's reading found
+# `lintKindName` returning `msg("形参")`/`msg("变量")`, which looks like the docgen class of leak — the
+# labels are not in the lint table — but it is not one, because this domain's labels resolve through the
+# shared `compiler` table's `"形参": "parameter"` row. An English reader got "parameter x shadows …"
+# before and gets it now. The rows are the compiler domain's, and they are deleted when that domain
+# migrates, which is where the label lineage has to be checked; this harness is the half of that check
+# that lives here.
+#
+# The label rows the migration DID move (loop variable, catch variable, and the two with no catalog entry
+# at all) are pinned by TestLintKindLabelsAreMessages in internal/lang, which renders them in both
+# languages, because no corpus reaches all four kinds.
+lint_corpus="$work/lint"
+rm -rf "$lint_corpus"
+mkdir -p "$lint_corpus"
+cat > "$lint_corpus/kinds.qk" <<'QK'
+fn used(int a) int {
+    int shadow = a;
+    if (true) {
+        int a = shadow;
+        io.println(a);
+    }
+    return shadow;
+}
+fn main(IOStream io) void {
+    int dead = used(1);
+}
+QK
+cat > "$lint_corpus/mixed.qk" <<'QK'
+/* Nothing public here. */
+fn hidden(int p) int {
+    int q = p;
+    return q;
+}
+fn main(IOStream io) void {
+    int unused = 1;
+    io.println(2);
+}
+QK
+
+build_qkcheck() { ( cd "$1" && go build -o "$2" ./cmd/qkcheck ) || { echo "qkcheck build failed: $1" >&2; exit 1; }; }
+build_qkcheck "$base_tree" "$work/bin/baseline-qkcheck"
+build_qkcheck "$root" "$work/bin/prototype-qkcheck"
+
+lint_fail=0
+for f in "$lint_corpus"/*.qk; do
+  name="$(basename "$f")"
+  for lang in en zh; do
+    b="$(run "$work/bin/baseline-qkcheck" "$lang" "$f")"
+    p="$(run "$work/bin/prototype-qkcheck" "$lang" "$f")"
+    total=$((total + 1))
+    if [ "$b" != "$p" ]; then
+      lint_fail=$((lint_fail + 1))
+      printf '%-3s %-30s DIFFERS\n' "$lang" "lint/$name"
+      diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | head -10
+    else
+      printf '%-3s %-30s identical (%d bytes)\n' "$lang" "lint/$name" "$(printf '%s' "$b" | wc -c)"
+    fi
+  done
+done
+fail=$((fail + lint_fail))
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
 fi
-echo "all identical (interpreter, qkdoc and qkc: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"
+echo "all identical (interpreter, qkdoc, qkc, repl, qkcheck: $baseline_rev == this tree), en and zh  [$total runs, $fixed of them a declared EN fix]"
