@@ -267,7 +267,7 @@ func TestDecouplingRatchet(t *testing.T) {
 // set was written the other way round, which also made Chinese the *default* rendering; the count may
 // only go down as those messages are migrated.
 func TestEnglishSourceRatchet(t *testing.T) {
-	const allowed = 263 // lowered from 270: the repl domain migrated in step 4 (7 messages moved to IDs)
+	const allowed = 239 // lowered from 263: the lint domain migrated in step 4 (24 messages moved to IDs)
 	wired := wiredTemplates(t)
 	n := 0
 	var sample []string

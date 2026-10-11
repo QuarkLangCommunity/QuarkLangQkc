@@ -1,0 +1,30 @@
+# The lint domain.
+#
+# Columns, tab-separated: id, owner, ctx, note, src, then one value column per language
+# (see languages.tsv for the order). Both text columns are copied out of the old
+# text-keyed table by script, never retyped: transcription is the migration's real risk.
+#
+lint.shadow_outer_variable	local	linter		"%s %s shadows an outer variable of the same name (declared on line %d)"	"%s %s shadows an outer variable of the same name (declared on line %d)"	"%s %s 遮蔽外层同名变量（外层声明于第 %d 行）"
+lint.shadow_global_function	local	linter		"%s %s shadows a global function (calls with that name resolve to this local)"	"%s %s shadows a global function (calls with that name resolve to this local)"	"%s %s 遮蔽全局函数（同名调用会被解析为该局部变量）"
+lint.assigned_never_read	local	linter		"%s %s is assigned but never read"	"%s %s is assigned but never read"	"%s %s 只被赋值、从未读取"
+lint.declared_never_used	local	linter		"%s %s is declared but never used"	"%s %s is declared but never used"	"%s %s 声明后从未使用"
+lint.missing_return_path	local	linter		"function %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)"	"function %s declares return type %s but has a path that reaches the end of the function (yields nil at runtime)"	"函数 %s 声明返回类型 %s，但存在执行到函数末尾的路径（运行期得到 nil）"
+lint.missing_return_log_path	local	linter		"function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)"	"function %s declares return type %s but a terminating path ends with log and produces no value (yields nil at runtime)"	"函数 %s 声明返回类型 %s，但终止路径以 log 结束、不产生返回值（运行期得到 nil）"
+lint.unreachable_code	local	linter		"unreachable code (statements after line %d never execute)"	"unreachable code (statements after line %d never execute)"	"不可达代码（第 %d 行之后的语句不会执行）"
+lint.self_assignment	local	linter		"self-assignment: %s is assigned to itself (no effect)"	"self-assignment: %s is assigned to itself (no effect)"	"自赋值：%s 赋值给自身（无效果）"
+lint.dead_store_overwritten	local	linter		"the assignment to %s is overwritten on line %d before any read"	"the assignment to %s is overwritten on line %d before any read"	"对 %s 的赋值被第 %d 行的赋值覆盖（其间未读取）"
+lint.while_true_no_break	local	linter		"while (true) with no break/return in the body: possible infinite loop"	"while (true) with no break/return in the body: possible infinite loop"	"while (true) 且循环体内无 break/return：可能的死循环"
+lint.constant_division_by_zero	local	linter		"division by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)"	"division by a constant zero: %s 0 (runtime error; put it inside a try block if intentional)"	"常量除零：%s 0（运行期报错；若为刻意错误处理请放进 try 块）"
+lint.self_comparison_true	local	linter		"self-comparison: %s == %s is always true"	"self-comparison: %s == %s is always true"	"自身比较：%s == %s 恒为真"
+lint.self_comparison_false	local	linter		"self-comparison: %s != %s is always false"	"self-comparison: %s != %s is always false"	"自身比较：%s != %s 恒为假"
+lint.void_result_used_method	local	linter		"%s::%s returns void but its result is used as a value (nil at runtime)"	"%s::%s returns void but its result is used as a value (nil at runtime)"	"%s::%s 返回 void，其调用结果被当作值使用（运行期为 nil）"
+lint.void_result_used_function	local	linter		"function %s returns void but its result is used as a value (nil at runtime)"	"function %s returns void but its result is used as a value (nil at runtime)"	"函数 %s 返回 void，其调用结果被当作值使用（运行期为 nil）"
+lint.constant_condition_true	local	linter		"%s (true): the condition is always true, so the branch always runs"	"%s (true): the condition is always true, so the branch always runs"	"%s (true)：条件恒为真，分支永远执行"
+lint.constant_condition_false	local	linter		"%s (false): the condition is always false, so the branch never runs"	"%s (false): the condition is always false, so the branch never runs"	"%s (false)：条件恒为假，分支永不执行"
+lint.unused_import	local	linter		"imported %q but no symbol from it is used (the import can be removed)"	"imported %q but no symbol from it is used (the import can be removed)"	"导入了 %q 但未使用其任何符号（可删除该 import）"
+lint.function_never_called	local	linter		"function %s is never called (dead code; functions in library files are exempt)"	"function %s is never called (dead code; functions in library files are exempt)"	"函数 %s 从未被调用（死代码；库文件中的函数不报）"
+lint.kind_loop_variable	local	linter	the kind of a local binding, in a shadowing diagnostic	"loop variable"	"loop variable"	"循环变量"
+lint.kind_catch_variable	local	linter	the kind of a local binding, in a shadowing diagnostic	"catch variable"	"catch variable"	"catch 变量"
+lint.interface_near_miss	local	linter		"type %s looks like it implements interface %s but is missing method %s (implemented: %s)"	"type %s looks like it implements interface %s but is missing method %s (implemented: %s)"	"类型 %s 疑似实现接口 %s，但缺少方法 %s（已实现 %s）"
+lint.kind_parameter	local	lint	the kind of a local binding, in a shadowing diagnostic	"parameter"	"parameter"	"形参"
+lint.kind_variable	local	lint	the kind of a local binding, in a shadowing diagnostic	"variable"	"variable"	"变量"
