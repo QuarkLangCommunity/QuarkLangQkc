@@ -189,6 +189,20 @@ func (m *SrcMap) Map(line int) (string, int) {
 	return l.file, l.line
 }
 
+// AtAuthorLine returns a runtime error whose position is moved out of the merged-source coordinates and
+// back to the line of the file the author wrote, which is the line a diagnostic has to name; an error of
+// another kind, or a line the map does not cover, is returned unchanged.
+func AtAuthorLine(err error, sm *SrcMap) error {
+	re, ok := err.(*RunError)
+	if !ok {
+		return err
+	}
+	if _, line := sm.Map(re.Pos.Line); line != 0 {
+		re.Pos.Line = line
+	}
+	return err
+}
+
 // mapBuilder accumulates the merged source while recording each line's origin.
 type mapBuilder struct {
 	b    strings.Builder
@@ -267,6 +281,12 @@ func CompileTokensWithImports(toks []Token, src, filename string) (*Program, err
 	return prog, err
 }
 
+// CompileTokensWithImportsMapped is CompileTokensWithImports plus the source position mapping table, which
+// a caller that reports a runtime error's line in the file the author wrote needs (the compiler does).
+func CompileTokensWithImportsMapped(toks []Token, src, filename string) (*Program, *SrcMap, error) {
+	return compileWithImportPaths(src, filename, nil, toks)
+}
+
 // compileWithImportPaths is the single import-merge implementation: it walks the main file and every file
 // it imports (that file's directory first, then extraPaths, then the standard library), appends each file's
 // text to the merged source used for positions, and — when mainToks is non-nil — each file's tokens to a
@@ -287,7 +307,10 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 		return nil, nil, err
 	}
 	var merged mapBuilder
-	merged.append(mainText+"\n", filename)
+	// The main file's lines are recorded with the line the author wrote rather than the line of the
+	// preprocessed text: preprocessing drops the directives, so a runtime error raised after one would
+	// otherwise name a line that does not exist in the file (the map is 1-based, the builder indexes from 0).
+	merged.appendMapped(mainText+"\n", filename, authorLines(mainLines)[1:])
 	// Token mode: the caller expanded the main file's macros already, so the merged stream replaces the
 	// re-lex of the merged text. Text mode (mainToks == nil) is what the tools and the interpreter use.
 	tokenMode := mainToks != nil
@@ -334,6 +357,9 @@ func compileWithImportPaths(src, filename string, extraPaths []string, mainToks 
 				pos := Pos{}
 				if i < len(prog.ImportPos) {
 					pos = prog.ImportPos[i]
+					if l, ok := lines.SourceLine(pos.Line); ok {
+						pos.Line = l // the author's line: mergedLine is indexed by those, not by the preprocessed ones
+					}
 					pos.Line = merged.mergedLine(file, pos.Line) // convert to merged-source coordinates, so the CLI can map back to the real file
 				}
 				return &CheckError{Msg: err.Error(), Pos: pos}
@@ -419,6 +445,40 @@ func originLines(m qkparser.LineMap) []int {
 	out := make([]int, len(m.Original)+1)
 	copy(out[1:], m.Original)
 	return out
+}
+
+// authorLines is originLines with the lines an #include spliced in given a source line of their own, so
+// that every position a diagnostic can name is a line of the file the author wrote.
+func authorLines(m qkparser.LineMap) []int {
+	out := originLines(m)
+	for i := 1; i < len(out); i++ {
+		if out[i] != 0 {
+			continue
+		}
+		site, last := spliceSite(out, i)
+		for ; i <= last; i++ {
+			out[i] = site
+		}
+	}
+	return out
+}
+
+// spliceSite is the line of the #include that produced the run of source-less result lines starting at
+// first, together with the last index of that run: a line map has no file dimension, so the text an
+// include spliced in cannot name the included file and is attributed to the directive that pulled it in
+// — the line the run displaced, which is the one before the next line that has a source.
+func spliceSite(lines []int, first int) (int, int) {
+	for j := first; j < len(lines); j++ {
+		if lines[j] != 0 {
+			return lines[j] - 1, j - 1
+		}
+	}
+	for j := first - 1; j >= 1; j-- { // the run ends the file: the directive is the line after the last source line
+		if lines[j] != 0 {
+			return lines[j] + 1, len(lines) - 1
+		}
+	}
+	return 1, len(lines) - 1
 }
 
 // streamIn copies a file's tokens into merged-source coordinates: the end-of-file marker is dropped (the
