@@ -1,30 +1,29 @@
 // Package i18n renders user-facing messages in the user's language.
 //
-// Design (deliberately small, immutable and injectable):
+// The design is deliberately small, and after step 5 of docs/i18n-design.md it is smaller than it was:
+// there is exactly one way to write a message and one way to render it.
 //
-//   - Lang is a plain value and Detect is a pure function over the environment: no hidden
-//     per-call state.
-//   - Catalog is immutable data assembled from the per-domain table_*.go files (runtime,
-//     typecheck, lint, lexer, macro, docgen, repl, cli, compiler). Keys are the exact source
-//     templates, so a call site and its translation cannot drift apart silently —
-//     TestTemplatesRegistered fails when they do.
-//   - Localizer is a value type (catalog + language). Pass it down instead of reaching for a
-//     package-level variable: `L := i18n.Default()` once per tool interpreter, then `L.T(...)`.
-//     A template that has to fall back to the other language is counted (Misses) rather than
-//     silently ignored, so tests can assert "no silent fallback" instead of trusting a source scan.
+//   - A message is an ID. The IDs, their per-language values and the blob they are packed into are
+//     generated from the authored tables under source/ by internal/i18ngen and committed (msg_gen.go),
+//     so a build never needs the generator to run and a missing language is a missing column at
+//     generation time rather than a fallback at run time.
+//   - Lang is a plain value and Detect is a pure function over the environment: no hidden per-call
+//     state.
+//   - Localizer is a value type (language only). Pass it down instead of reaching for a package-level
+//     variable: `L := i18n.Default()` once per tool, then `L.Msg(...)`.
 //
-// The package-level T/SetLocale/Locale functions exist for call sites written before the
-// Localizer existed; they delegate to Default. New code should carry a Localizer.
+// There is no text-keyed lookup, no catalog, no direction sniff and no miss counter. Those existed to
+// tolerate the defect this migration removed: a message whose identity was its own text, which could be
+// rendered in the wrong language without anything failing. A text-keyed entry point is what made that
+// unfixable, so step 5 deleted it, and TestDecouplingRatchet now asserts that none comes back.
 package i18n
 
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode"
 )
 
 // Lang is a supported output language.
@@ -65,115 +64,14 @@ func Detect() Lang {
 	return EN // global default: the documentation is English-first
 }
 
-// Catalog holds the translations, grouped by the domain that owns them.
-type Catalog struct {
-	domains map[string]map[string]string // domain -> template -> translation
-	byKey   map[string]map[Lang]string   // template -> lang -> translation (lookup index)
-	keys    []string                     // sorted, for diagnostics and tests
-}
-
-// Load assembles the catalog from the per-domain tables compiled into the binary. Each table maps the
-// template written at the call site to the same message in the other language, so the direction is a
-// property of the key: the legacy entries are Chinese-source and carry their English translation, the
-// migrated ones are English-source and carry their Chinese translation. Reading the direction off the
-// key is what keeps an English-source message English under EN — indexing every table as if its key
-// were the Chinese text rendered the Chinese value of exactly the messages that were already migrated.
-// The result is immutable; callers may share it freely.
-func Load() *Catalog {
-	c := &Catalog{
-		domains: make(map[string]map[string]string, 10),
-		byKey:   make(map[string]map[Lang]string, 512),
-	}
-	for domain, table := range domainTables() {
-		c.domains[domain] = table
-		for template, translated := range table {
-			m, ok := c.byKey[template]
-			if !ok {
-				m = make(map[Lang]string, 2)
-				c.byKey[template] = m
-				c.keys = append(c.keys, template)
-			}
-			if needsTranslation(template) { // Chinese source: the value is its English translation
-				m[EN] = translated
-				m[ZH] = template
-			} else { // English source: the value is its Chinese translation
-				m[EN] = template
-				m[ZH] = translated
-			}
-		}
-	}
-	sort.Strings(c.keys)
-	return c
-}
-
-// Domains returns the domain names, sorted.
-func (c *Catalog) Domains() []string {
-	out := make([]string, 0, len(c.domains))
-	for d := range c.domains {
-		out = append(out, d)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// Domain returns one domain's table (never nil).
-func (c *Catalog) Domain(name string) map[string]string { return c.domains[name] }
-
-// Keys returns every known template, sorted.
-func (c *Catalog) Keys() []string { return append([]string(nil), c.keys...) }
-
-// Lookup returns the translation of a template. ok is false when the template is unknown.
-func (c *Catalog) Lookup(template string, l Lang) (string, bool) {
-	m, ok := c.byKey[template]
-	if !ok {
-		return "", false
-	}
-	s, ok := m[l]
-	return s, ok
-}
-
-// Has reports whether the template is registered (in any language).
-func (c *Catalog) Has(template string) bool {
-	_, ok := c.byKey[template]
-	return ok
-}
-
-var stdCatalog = Load()
-
-// Std returns the process-wide immutable catalog.
-func Std() *Catalog { return stdCatalog }
-
-// domainTables collects the generated per-domain tables. Keeping the list here (rather than in
-// the table files) makes adding a domain a one-line change and the merge explicit.
-func domainTables() map[string]map[string]string {
-	return map[string]map[string]string{
-		"cli":       cliTable,
-		"compiler":  compilerTable,
-		"lexer":     lexerTable,
-		"lint":      lintTable,
-		"repl":      replTable,
-		"runtime":   runtimeTable,
-		"shared":    sharedTable,
-		"typecheck": typecheckTable,
-	}
-}
-
-// ---- Localizer: a value, not a global ----
-
-// Localizer renders messages in one language from one catalog. It is a value type: copy it
-// freely, keep one per tool or interpreter, and never mutate shared state to change language.
+// Localizer renders messages in one language. It is a value type: copy it freely, keep one per tool or
+// interpreter, and never mutate shared state to change language.
 type Localizer struct {
-	cat  *Catalog
 	lang Lang
 }
 
-// New builds a localizer for an explicit catalog and language (nil catalog = the standard one).
-func New(cat *Catalog, l Lang) Localizer {
-	if cat == nil {
-		cat = stdCatalog
-	}
-	return Localizer{cat: cat, lang: l}
-}
+// New builds a localizer for an explicit language.
+func New(l Lang) Localizer { return Localizer{lang: l} }
 
 // WithLang returns a copy that renders in another language; the receiver is unchanged.
 func (L Localizer) WithLang(l Lang) Localizer {
@@ -189,34 +87,10 @@ func (L Localizer) Lang() Lang {
 	return L.lang
 }
 
-// T renders a template in the localizer's language: the catalog's entry for that language when there
-// is one, otherwise the template itself. The lookup is not English-only — an English-source message
-// (the migration's direction) carries its Chinese text in the catalog, so asking for EN only would
-// render that message in English under QK_LANG=zh.
-//
-// A template that falls back to the language it was written in renders correctly and needs no entry;
-// one that falls back to the *other* language is a missing translation and is counted (see Misses).
-func (L Localizer) T(template string, args ...any) string {
-	format := template
-	lang := L.Lang()
-	if translated, ok := L.catalog().Lookup(template, lang); ok {
-		format = translated
-	} else if sourceLang(template) != lang {
-		countMiss(template)
-	}
-	if len(args) == 0 {
-		return format
-	}
-	return fmt.Sprintf(format, args...)
-}
-
-// Has reports whether a template is registered.
-func (L Localizer) Has(template string) bool { return L.catalog().Has(template) }
-
 // Msg renders a generated message in the localizer's language. The message is an ID and the value is
-// read out of the generated blob by index (msg_gen.go): no map keyed by the text, no direction sniff,
-// no fallback to count. It is the interface the syntax layer renders its messages through
-// (qkparser.Localizer), so a module's messages are localized by this catalog without the module
+// read out of the generated blob by index (msg_gen.go): one index and one slice, no map keyed by the
+// text, no direction sniff, no fallback to count. It is also the interface the syntax layer renders its
+// messages through (qkparser.Localizer), so the module's messages are localized without the module
 // knowing anything about it.
 func (L Localizer) Msg(id Msg, args ...any) string {
 	text := msgText(id, langBlock(string(L.Lang())))
@@ -224,34 +98,6 @@ func (L Localizer) Msg(id Msg, args ...any) string {
 		return text
 	}
 	return fmt.Sprintf(text, args...)
-}
-
-// needsTranslation reports whether a template contains Han characters, i.e. whether rendering it
-// under English without a catalog entry would leak Chinese to the user.
-func needsTranslation(s string) bool {
-	for _, r := range s {
-		if unicode.Is(unicode.Han, r) {
-			return true
-		}
-	}
-	return false
-}
-
-// sourceLang reports the language a template is written in: the same property that decides the
-// direction of a catalog entry (see Load), so a call site and its translation are read the same way
-// wherever the language of a bare template matters.
-func sourceLang(template string) Lang {
-	if needsTranslation(template) {
-		return ZH
-	}
-	return EN
-}
-
-func (L Localizer) catalog() *Catalog {
-	if L.cat == nil {
-		return stdCatalog
-	}
-	return L.cat
 }
 
 // ---- process default: resolved once, replaceable only by tests and --lang ----
@@ -272,7 +118,7 @@ func defaultLang() Lang {
 
 // Default returns the process default localizer. The environment is read once; afterwards the
 // language changes only through SetLocale (tests, --lang) or WithLang.
-func Default() Localizer { return New(stdCatalog, defaultLang()) }
+func Default() Localizer { return New(defaultLang()) }
 
 // SetLocale overrides the process default language. Intended for tests and the tools'
 // --lang flag; elsewhere pass a Localizer around instead of mutating process state.
@@ -283,21 +129,3 @@ func SetLocale(l Lang) {
 
 // Locale returns the process default language.
 func Locale() Lang { return defaultLang() }
-
-// T renders a template with the process default localizer. Prefer holding a Localizer.
-func T(template string, args ...any) string { return Default().T(template, args...) }
-
-// Has reports whether a template is registered in the standard catalog.
-func Has(template string) bool { return stdCatalog.Has(template) }
-
-// Untranslated filters templates that are not registered.
-func Untranslated(templates []string) []string {
-	var out []string
-	for _, t := range templates {
-		if !stdCatalog.Has(t) {
-			out = append(out, t)
-		}
-	}
-	sort.Strings(out)
-	return out
-}

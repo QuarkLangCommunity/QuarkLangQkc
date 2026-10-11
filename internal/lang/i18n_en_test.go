@@ -15,7 +15,7 @@ import (
 var hanRe = regexp.MustCompile(`[\p{Han}]`)
 
 func TestEnglishModeRendersEnglish(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 
 	t.Run("type check error", func(t *testing.T) {
 		_, err := Compile("fn main(IOStream io) void {\n    int x = \"s\";\n}\n")
@@ -53,15 +53,12 @@ func TestEnglishModeRendersEnglish(t *testing.T) {
 	})
 }
 
-// The Chinese path renders the catalog's Chinese, English-source messages included: a message migrated to an
-// English template carries its Chinese in the catalog, so a Chinese localizer has to consult it instead of
-// assuming the call-site template is already Chinese. This test used to assert the opposite — that Chinese
-// rendering needed no translation and produced no misses — which is the behaviour that printed English under
-// QK_LANG=zh. The catalog-wide check lives in internal/i18n (TestTRendersTheCatalogForTheRequestedLanguage);
-// the pair below is the one the bug was reported on, asserted end to end through this package's localizer.
+// The Chinese path renders the Chinese the catalog holds, English-source messages included. It used to
+// assert the opposite — that Chinese rendering needed no translation and produced no misses — which is
+// the behaviour that printed English under QK_LANG=zh; the miss counter it leaned on is gone with the
+// text-keyed catalog (step 5), so what is left is the rendering itself.
 func TestChineseLocalizerRendersTemplates(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH))
-	i18n.Misses() // the counters are process-wide; other tests share them
+	withLocalizer(t, i18n.New(i18n.ZH))
 
 	prog, err := ParseSource("fn main(IOStream io) void {\n    int unused = 1;\n    io.println(\"ok\");\n}\n")
 	if err != nil {
@@ -84,40 +81,25 @@ func TestChineseLocalizerRendersTemplates(t *testing.T) {
 		i18n.MsgParserPpUnclosedIf,
 		i18n.MsgTypecheckCompileerrorExpressionNestingDeeperThanD,
 	} {
-		got := i18n.New(nil, i18n.ZH).Msg(msg, MaxExprDepth)
+		got := i18n.New(i18n.ZH).Msg(msg, MaxExprDepth)
 		if !hanRe.MatchString(got) {
 			t.Errorf("Chinese mode did not render Chinese for %s: %q", i18n.MsgKey(msg), got)
 		}
 	}
-	got := i18n.New(nil, i18n.ZH).Msg(i18n.MsgTypecheckCompileerrorExpressionNestingDeeperThanD, MaxExprDepth)
+	got := i18n.New(i18n.ZH).Msg(i18n.MsgTypecheckCompileerrorExpressionNestingDeeperThanD, MaxExprDepth)
 	if !strings.Contains(got, "嵌套深度超过本实现的") {
 		t.Errorf("Chinese mode did not render the catalog's Chinese: %q", got)
 	}
 	if strings.Contains(got, "nesting is deeper than") {
 		t.Errorf("Chinese mode leaked the English template: %q", got)
 	}
-
-	if misses := i18n.Misses(); len(misses) != 0 {
-		t.Errorf("every message above resolves through the catalog, so rendering them must not count misses: %v", misses)
-	}
 }
 
-// English rendering must resolve every message it touches: a miss means a template is missing from
-// the catalog, which used to fall back to Chinese silently.
-func TestEnglishRenderingHasNoMisses(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
-	i18n.Misses() // clear
-
-	_, _ = Compile("fn main(IOStream io) void {\n    int x = \"s\";\n}\n")
-	_, _ = ParseSource("fn main(IOStream io) void {\n    int x = ;\n}\n")
-	if prog, err := ParseSource("fn main(IOStream io) void {\n    int unused = 1;\n    io.println(\"ok\");\n}\n"); err == nil {
-		_ = Lint(prog, LintOptions{})
-	}
-
-	if misses := i18n.Misses(); len(misses) != 0 {
-		t.Errorf("%d templates rendered their Chinese fallback under English mode: %v", len(misses), misses)
-	}
-}
+// TestEnglishRenderingHasNoMisses is deleted, not weakened: it asserted that rendering under English
+// counted no fallback to Chinese, and the counter it read existed to tolerate exactly the defect this
+// migration removed. With IDs there is no fallback to count — a message with no English value fails
+// generation (TestProofMissingLanguageFails) rather than falling back at run time — so the test has no
+// subject. Step 5 of docs/i18n-design.md deletes Misses/miss.go with it.
 
 // withLocalizer swaps the package localizer for the duration of one test and restores it after.
 func withLocalizer(t *testing.T, L i18n.Localizer) {

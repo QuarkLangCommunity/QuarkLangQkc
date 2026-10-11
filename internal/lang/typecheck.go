@@ -1101,12 +1101,8 @@ func splitTopCommas(s string) []string {
 	return parts
 }
 
-func (c *checker) errf(pos Pos, format string, args ...interface{}) error {
-	return &CheckError{Msg: msg(format, args...), Pos: pos}
-}
-
-// errfID is the ID-rendering counterpart of errf for a message that is a generated ID rather than a
-// template. The two exist side by side while the typecheck domain is migrating; both go at step 5.
+// errfID builds a check error from a generated message ID; it is the only way this package reports a
+// diagnostic, the text-keyed errf it replaced having gone at step 5 with the catalog.
 func (c *checker) errfID(pos Pos, id i18n.Msg, args ...interface{}) error {
 	return &CheckError{Msg: msgID(id, args...), Pos: pos}
 }
@@ -1661,7 +1657,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 		}
 		v := sc.lookup(id.Name)
 		if v == nil {
-			return nil, c.errf(x.Pos, msgID(i18n.MsgRuntimeCompileerrorUndeclaredIdentifierQ, id.Name))
+			return nil, c.errfID(x.Pos, i18n.MsgRuntimeCompileerrorUndeclaredIdentifierQ, id.Name)
 		}
 		if !isRefKind(v.typ) {
 			return nil, c.errfID(x.Pos, i18n.MsgTypecheckTypeerrorNeedsReferencePermissionMBut, id.Name, v.typ)
@@ -1734,7 +1730,7 @@ func (c *checker) inferNode(e Expr, sc *cScope) (*Type, error) {
 			switch x.X.(type) {
 			case *Ident, *MemberExpr, *IndexExpr:
 			default:
-				return nil, c.errf(x.Pos, msgID(i18n.MsgRuntimeTypeerrorTakeAddressExpressionNeeds))
+				return nil, c.errfID(x.Pos, i18n.MsgRuntimeTypeerrorTakeAddressExpressionNeeds)
 			}
 			t, err := c.infer(x.X, sc)
 			if err != nil {

@@ -230,7 +230,7 @@ func main() {
 			if len(args) >= 2 {
 				if l, ok := i18n.ParseLang(args[1]); ok {
 					i18n.SetLocale(l)
-					cgen.SetLocalizer(i18n.New(nil, l)) // lowering diagnostics
+					cgen.SetLocalizer(i18n.New(l)) // lowering diagnostics
 				} // zh | en; an unknown value keeps the current language
 				args = args[2:]
 			} else {

@@ -67,7 +67,7 @@ fn main(IOStream io) { int x = 1; int y = 2; y++; }`,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			got, err := runSrc(t, tc.src)
 			if tc.wantErr != "" {
 				if err == nil {

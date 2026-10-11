@@ -43,7 +43,7 @@ fn main(IOStream io) { S a = .{1}; S b = .{1}; io.println(a.v === a.v); io.print
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			got, err := runSrc(t, tc.src)
 			if err != nil {
 				t.Fatalf("run error: %v", err)
@@ -58,7 +58,7 @@ fn main(IOStream io) { S a = .{1}; S b = .{1}; io.println(a.v === a.v); io.print
 // TestStrictEqNotOverloadable pins the primitive's second defining property: a user-defined __eq__
 // changes == but never ===.
 func TestStrictEqNotOverloadable(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	src := `program main;
 type struct { int v; } S;
 impl {

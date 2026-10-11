@@ -20,7 +20,7 @@ import (
 // runWithStdlib copies the repository's stdlib into a temp dir alongside the program and runs it.
 func runWithStdlib(t *testing.T, src string) (string, error) {
 	t.Helper()
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	dir := t.TempDir()
 	lib, err := os.ReadFile(filepath.Join("..", "..", "stdlib", "vec.qk"))
 	if err != nil {
@@ -204,7 +204,7 @@ fn main(IOStream io) {
 // the resolver walks up from the importing file for a stdlib/ directory (or uses QK_STDLIB), so a
 // program in examples/ or a nested testdata directory can simply write import "vec".
 func TestStdlibImportSearchPath(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	dir := t.TempDir()
 	nested := filepath.Join(dir, "a", "b")
 	if err := os.MkdirAll(nested, 0o755); err != nil {

@@ -49,7 +49,7 @@ func TestFloatDivZeroErrors(t *testing.T) {
 func TestListComparisonRejected(t *testing.T) {
 	// The assertion below is about the English wording, so pin the language: the package localizer
 	// otherwise follows the system locale, and a Chinese one renders the catalog's Chinese instead.
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	_, err := runSrc(t, "fn main(IOStream io) {\n"+
 		"    List<int> l = [1, 2];\n"+
 		"    io.println(l == l);\n"+

@@ -87,7 +87,7 @@ fn main(IOStream io) { int x = 0; touch(x); io.println(x); }`,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			withLocalizer(t, i18n.New(nil, i18n.EN))
+			withLocalizer(t, i18n.New(i18n.EN))
 			got, err := runSrc(t, tc.src)
 			if tc.wantErr != "" {
 				if err == nil {
@@ -143,7 +143,7 @@ func TestRefPermissionMatrix(t *testing.T) {
 // TestCopydIsOnlyAModifier pins that copyd is a modifier: the language has no Copyd<T> type and no
 // T[Copyd] form, while the modifier keeps its deep-copy-on-pass semantics.
 func TestCopydIsOnlyAModifier(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	cases := []struct {
 		name    string
 		src     string
@@ -206,7 +206,7 @@ fn main(IOStream io) { int x = 5; io.println(take(x)); io.println(x); }`,
 // get(int) T can be iterated, which is what lets the standard-library Vec work in a loop while the
 // core knows nothing about it.
 func TestForInProtocol(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	cases := []struct {
 		name    string
 		src     string
@@ -261,7 +261,7 @@ fn main(IOStream io) { Squares s = .{3}; for (String v : s) { io.println(v); } }
 // __literal__() (an empty container) plus __element__(Self, T) is built from a literal, and the core
 // knows only those two protocol names — not the container.
 func TestLiteralProtocol(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.EN))
+	withLocalizer(t, i18n.New(i18n.EN))
 	cases := []struct {
 		name    string
 		src     string

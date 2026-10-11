@@ -13,11 +13,6 @@ func SetLocalizer(L i18n.Localizer) i18n.Localizer {
 	return prev
 }
 
-// msg renders a message template through this package's localizer.
-func msg(template string, args ...any) string { return cgenLocalizer.T(template, args...) }
-
-// msgID renders a generated message by ID. The lowering layer's messages are migrating domain by domain:
-// a migrated one names an ID and reads the value out of the generated blob, an unmigrated one still
-// passes its text. Both paths exist side by side until step 5, which deletes msg and the text-keyed
-// catalog with it.
+// msgID renders a generated message by ID: one index into the blob, in the localizer's language. It is
+// the only way the lowering layer renders a message — the text-keyed msg it replaced went at step 5.
 func msgID(id i18n.Msg, args ...any) string { return cgenLocalizer.Msg(id, args...) }

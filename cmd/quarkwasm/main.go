@@ -47,7 +47,7 @@ func main() {
 		if !ok {
 			return false
 		}
-		lang.SetLocalizer(i18n.New(i18n.Std(), l))
+		lang.SetLocalizer(i18n.New(l))
 		return true
 	}))
 	js.Global().Set("quarkCheck", js.FuncOf(check))

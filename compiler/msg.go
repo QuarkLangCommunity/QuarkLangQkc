@@ -13,9 +13,6 @@ func SetLocalizer(L i18n.Localizer) i18n.Localizer {
 	return prev
 }
 
-// msg renders a message template through the compiler's localizer.
-func msg(template string, args ...any) string { return compilerLocalizer.T(template, args...) }
-
 // msgID renders a message of this repository by its stable ID. It is what a migrated call site uses
 // instead of msg: the ID survives a rephrasing, and the same text in two contexts stays two messages.
 // msg and msgID both disappear at step 5, when the text-keyed catalog does.

@@ -295,14 +295,9 @@ func lowerProgram(prog *lang.Program, file, src string) (*lowered, error) {
 	return l.out, nil
 }
 
-// errf builds a diagnostic from a template, and errfID from a generated ID. The two exist side by side
-// while the compiler domain is migrating and both go at step 5; the rendering is the only difference, so
-// they share diag rather than one going through a "%s" template — a pass-through like that is a wired
-// template with no catalog entry, which is the gate TestTemplatesRegistered exists to catch.
-func (l *lowerer) errf(pos lang.Pos, format string, args ...interface{}) error {
-	return l.diag(pos, msg(format, args...))
-}
-
+// errfID builds a lowering diagnostic from a generated message ID. It is the only way this layer
+// reports one: the text-keyed errf it replaced went at step 5, with the catalog that made a wording
+// into a key. diag does the shared work so the two never drifted in line/column/note handling.
 func (l *lowerer) errfID(pos lang.Pos, id i18n.Msg, args ...interface{}) error {
 	return l.diag(pos, msgID(id, args...))
 }
@@ -324,14 +319,10 @@ func (l *lowerer) diag(pos lang.Pos, rendered string) error {
 	return d
 }
 
-// errAt builds a diagnostic at a fixed hint position (when no AST position is available, e.g. a missing main).
-// errAtID is errAt's ID-rendering counterpart.
+// errAtID builds a diagnostic at a fixed hint position (when no AST position is available, e.g. a
+// missing main). It is errfID with that position, and it is the only form left.
 func (l *lowerer) errAtID(id i18n.Msg, args ...interface{}) error {
 	return l.errfID(lang.Pos{Line: 1, Col: 1}, id, args...)
-}
-
-func (l *lowerer) errAt(format string, args ...interface{}) error {
-	return l.errf(lang.Pos{Line: 1, Col: 1}, format, args...)
 }
 
 // ---------- Top-level collection ----------

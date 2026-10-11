@@ -232,7 +232,7 @@ fn main(IOStream io) {
 }
 
 func TestImplConformanceError(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
+	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	src := `
 type interface {
     fn call(void prefix, void rec) void;
@@ -385,7 +385,7 @@ fn main(IOStream io) {
 // ============ strict checks ============
 
 func TestTypeCheckErrors(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
+	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	cases := []struct {
 		name string
 		src  string
@@ -668,7 +668,7 @@ pub type struct {
 
 // Parameter-list and call delimiters () [] {} are interchangeable; the parameter count is unlimited but the call must match
 func TestMacroDelimitersAndArity(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
+	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	out, err := runSrc(t, `#macro add [a, b] {
     #return a + b
 }

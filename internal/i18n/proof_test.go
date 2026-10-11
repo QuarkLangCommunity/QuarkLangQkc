@@ -229,43 +229,29 @@ func TestProofTextKeyedCatalogLosesTheTranslationOnRephrase(t *testing.T) {
 	const oldZH = "ParseError: #macro 需要名字，第 %d 行"
 	const oldEN = "ParseError: #macro needs a name, line %d"
 	const newEN = "ParseError: a macro declaration needs a name, line %d"
-	legacy := &Catalog{
-		domains: map[string]map[string]string{"macro": {oldZH: oldEN}},
-		byKey:   map[string]map[Lang]string{oldZH: {ZH: oldZH, EN: oldEN}},
-		keys:    []string{oldZH},
+
+	// The old design in one line: the text is the key, so the pair is only reachable while the call
+	// site spells the message exactly as the table does.
+	legacy := map[string]string{oldZH: oldEN}
+	lookup := func(template string) (string, bool) { v, ok := legacy[template]; return v, ok }
+
+	if got, ok := lookup(oldZH); !ok || got != oldEN {
+		t.Fatalf("the text-keyed table rendered %q (found %v)", got, ok)
 	}
-	_ = oldEN
-	if got := New(legacy, EN).T(oldZH, 1); got != "ParseError: #macro needs a name, line 1" {
-		t.Fatalf("the text-keyed catalog rendered %q", got)
-	}
-	Misses() // clear
 	// The call site's English is corrected. Under the text-keyed design the key no longer matches
-	// anything, so the reader gets the source text back.
-	if got := New(legacy, EN).T(newEN, 1); got != "ParseError: a macro declaration needs a name, line 1" {
-		t.Fatalf("the rephrased text rendered %q, want the source text itself", got)
+	// anything, so the translation is unreachable and the reader gets the new source text.
+	if got, ok := lookup(newEN); ok {
+		t.Fatalf("the rephrased text still resolved to %q", got)
 	}
-	// And this is the sharp end. Under ZH the reader who asked for Chinese gets the English source, and
-	// only there does the counter fire: sourceLang reads the rephrased text as English, T compares that
-	// with the requested language, and the mismatch is what a "miss" means (i18n.go:206,220-237). Under
-	// EN — the same reader, the same deleted translation, the same leak — the comparison matches and
-	// nothing is recorded at all.
-	if got := New(legacy, ZH).T(newEN, 1); got != "ParseError: a macro declaration needs a name, line 1" {
-		t.Fatalf("under ZH the rephrased text rendered %q, want the leaked English source", got)
-	}
-	if n := MissTotal(); n != 1 {
-		t.Fatalf("under ZH the counter recorded %d misses, want 1", n)
-	}
-	Misses()
-	L := New(legacy, EN)
-	if got := L.T(newEN, 1); got != "ParseError: a macro declaration needs a name, line 1" {
-		t.Fatalf("under EN the rephrased text rendered %q", got)
-	}
-	if n := MissTotal(); n != 0 {
-		t.Fatalf("under EN the counter recorded %d misses: the miss counter is symmetric, so this proof needs rewriting", n)
-	}
-	Misses()
-	// The ID-keyed design holds the same message and is untouched by the rephrase: P1 measures this
-	// on the real table.
+	// This test used to run that measurement through the real Catalog.T and the miss counter, including
+	// the asymmetry that made the defect survive review: under EN nothing was recorded, because the
+	// heuristic that decides "is this a miss" reads the rephrased text as English and matches the
+	// requested language. Step 5 deleted both the machinery and the counter, so the measurement cannot
+	// be repeated against shipping code — what is left is the property, and the record of it is in
+	// docs/i18n-design.md §6.1 and in this file's history.
+	//
+	// The ID-keyed design holds the same message and is untouched by the rephrase: P1 measures that on
+	// the real table, one test above.
 	if msgText(MsgParserMacroNeedsName, langBlock("zh")) == "" {
 		t.Fatal("the generated catalog lost the message the rephrase was supposed to endanger")
 	}
@@ -401,8 +387,8 @@ func TestProofRuntimeReadsTheBlob(t *testing.T) {
 	// The language selects the block: for a message that is genuinely translated the two renderings
 	// differ, which is what makes this a check rather than a tautology.
 	const translated = MsgParserNestingTooDeep
-	en := New(stdCatalog, EN).Msg(translated, 7)
-	zh := New(stdCatalog, ZH).Msg(translated, 7)
+	en := New(EN).Msg(translated, 7)
+	zh := New(ZH).Msg(translated, 7)
 	if en == zh {
 		t.Fatalf("both languages rendered %q, so the language is not selecting a block", en)
 	}
@@ -414,29 +400,11 @@ func TestProofRuntimeReadsTheBlob(t *testing.T) {
 	}
 }
 
-// TestProofNoTextKeyedEntriesRemain is what TestProofMigratedMessagesAreNoLongerMapEntries becomes once
-// the last domain migrates, and it is the stronger of the two.
-//
-// The old proof walked every generated message and asserted its text was not a key in any table_*.go.
-// That is now true for a simpler reason — there are no keys at all — and the proof's own guard said so
-// and failed: "the text-keyed catalog is empty, so this proof is vacuous". A proof that cannot fail is
-// not a gate, so it is replaced by the fact it was protecting: the catalog is empty, and a row coming
-// back is a regression, not a step backwards in a count.
-//
-// Step 5 deletes this test with the machinery it measures (Load, Catalog, the table_*.go files).
-func TestProofNoTextKeyedEntriesRemain(t *testing.T) {
-	entries := 0
-	for _, domain := range stdCatalog.Domains() {
-		for template := range stdCatalog.Domain(domain) {
-			entries++
-			t.Errorf("%s: the text-keyed catalog has an entry again: %q", domain, truncate(template))
-		}
-	}
-	if entries != 0 {
-		t.Fatalf("the text-keyed catalog holds %d entries: the migration moved every message to an ID, and a text key means a call site can still render text the catalog owns", entries)
-	}
-	t.Logf("text-keyed catalog entries: %d (all eight domains are IDs now)", entries)
-}
+// TestProofNoTextKeyedEntriesRemain is deleted by step 5, and this is the reason recorded where it
+// stood. It asserted that the text-keyed catalog had no entries — the state the migration reached — and
+// step 5 then deleted the catalog itself, so the claim became a statement about a type that no longer
+// exists. The contract that replaces it is TestDecouplingRatchet: a text-keyed entry point coming back
+// is a build failure rather than a count, which is the design's whole point (D-3).
 
 // TestModuleIDsAndCatalogIDsAgree pins the mapping the type conversion in internal/lang relies on: the
 // generated Msg numbering follows the pinned module's table order, so qkparser.ID(n) and i18n.Msg(n)
@@ -519,8 +487,8 @@ func TestProofUntranslatedImportsAreCounted(t *testing.T) {
 // pinned syntax layer renders the value this catalog holds, in both languages, through the localizer
 // internal/lang installs. It fails if the module's IDs stop lining up with the generated ones.
 func TestParserModuleMessagesReachTheRealInterpreter(t *testing.T) {
-	en := New(stdCatalog, EN).Msg(MsgParserMacroNeedsName, 1)
-	zh := New(stdCatalog, ZH).Msg(MsgParserMacroNeedsName, 1)
+	en := New(EN).Msg(MsgParserMacroNeedsName, 1)
+	zh := New(ZH).Msg(MsgParserMacroNeedsName, 1)
 	if en == zh {
 		t.Fatalf("both languages rendered %q", en)
 	}

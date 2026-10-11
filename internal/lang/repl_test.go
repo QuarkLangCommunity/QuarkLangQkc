@@ -57,8 +57,7 @@ func TestREPLAssignmentPersists(t *testing.T) {
 }
 
 func TestREPLFunctionDefinitionAndCall(t *testing.T) {
-	withLocalizer(t, i18n.New(nil, i18n.ZH)) // asserts the Chinese wording
-	i18n.Misses()
+	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording
 	s, _ := newTestREPL(t, "")
 	out, err := s.Eval("fn double(int n) int {\n    return n * 2;\n}")
 	if err != nil {

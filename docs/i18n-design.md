@@ -903,6 +903,45 @@ The declared exceptions, all proved by name in `proof/byte_identical.sh`:
 | 29 messages render their shipped Chinese instead of English | ZH | `check_zh_fix.py`, 22 corpus cases, the leak and the substitution |
 | `badAlloc: new %s has an invalid allocation size` | EN | `check_en_fix.py`: the baseline's EN run carried the Chinese, the ZH run is unchanged |
 
+### 7.7 Step 5: the shim is gone
+
+Step 4 ended with the text-keyed catalog empty: all eight domains were IDs, no call site handed a template
+to a boundary, and `wired templates: 0`. Step 5 deletes the machinery that made the old design possible.
+
+| Deleted | What replaced it |
+|---|---|
+| `Localizer.T`, `i18n.T` | `Localizer.Msg` (an ID and a language), unchanged at every call site |
+| `Catalog`, `Load`, `Std`, `domainTables`, `New(cat, lang)` | `New(lang)`; the tables under `source/` are the source of truth and `i18ngen` reads them |
+| `Has`, `Untranslated`, `Lookup`, `Keys`, `Domains`, `Domain`, `needsTranslation`, `sourceLang` | nothing: an ID either has a value in every language (generation refuses otherwise) or the build fails |
+| `miss.go` (`Misses`, `MissTotal`, `countMiss`) | nothing: there is no fallback to count |
+| the eight `table_*.go` files | `source/*.tsv` |
+| the per-package `msg(template, …)` helpers (`internal/lang`, `cgen`, the compiler) | `msgID(id, …)` |
+| the text-taking `errf`, `warn`, `errAt` | `errfID`, `warnID`, `errAtID` — the names the pinned module already uses for its only path |
+| `TestTemplatesRegistered` (R-1), `TestEnglishSourceRatchet` (R-2) | the generator's refusal (§3.4) and the direction column |
+| `TestNoSilentFallback`, `TestProofNoTextKeyedEntriesRemain` | R-3's exact contract: no text-keyed entry point exists |
+| `TestTRendersTheCatalogForTheRequestedLanguage` | `TestProofRuntimeReadsTheBlob` and `TestEveryGeneratedMessageRendersItsAuthoredText` |
+| `TestProofFieldMessagesRenderBothLanguages` | `TestEveryGeneratedMessageRendersItsAuthoredText`, over every table |
+
+`TestCatalogIntegrity`, `TestVerbSetsMatch` and `TestVerbSequenceMatches` are kept and re-pointed at the
+authored tables, as §4 promised — and re-pointing two of them found defects the old versions could not
+see. `TestVerbSequenceMatches` read the text-keyed catalog, and over the **635 authored rows** it finds
+**11** whose Chinese reorders the placeholders:
+
+```
+compiler.using_q_on_s_not_supported          en [%q %s]      zh [%s %q]
+compiler.using_q_on_s_s_not_supported_{shifts,pointers,nullable,string,bitwise,raw,widths}
+compiler.using_q_on_s_s_not                en [%q %s %s]   zh [%s %s %q]
+compiler.signature_instance_q_type_s_not   en [%q %s]      zh [%s %q]
+typecheck.interface_s_missing_method_q_s   en [%s %q %s]   zh [%s %s %q]
+```
+
+They are real: `using %q on %s is not supported` renders its type where the operator belongs under
+`QK_LANG=zh`. Nothing saw them because the rows left the text-keyed catalog one domain at a time and the
+check was reading the other store — §7.2's lesson, one more time. They are **frozen, not fixed**: moving a
+verb inside a Chinese sentence rewrites the sentence, which is authoring a translation, and this
+migration does not invent Chinese. The same rule that leaves 64 field rows with an English `zh` column
+applies, the limit is the measured 11, and the fix has to come from a speaker.
+
 ---
 
 ## 8. Evidence index
