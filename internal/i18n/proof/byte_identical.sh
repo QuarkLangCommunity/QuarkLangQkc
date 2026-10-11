@@ -340,6 +340,181 @@ for f in "$lint_corpus"/*.qk; do
 done
 fail=$((fail + lint_fail))
 
+# ---- the cli domain: the four tools' own messages ----------------------------------------------------
+#
+# These are the messages the tools print for a bad invocation, an unknown command and an unimplemented
+# LSP method. The domain migrated through a localizer each cmd/ package now owns, and two of its 26 rows
+# were reached through a *variable* — `replyErr(id, code, format, …)` and `i18n.T(helpText)` — which is
+# the third way a message hides from a literal scan and the reason the call sites had to be rewritten
+# rather than the rows moved.
+#
+# Two of this domain's messages never reached an i18n boundary at all and are the declared EN fixes:
+# qklsp's JSON error was built with fmt.Errorf on its own literal, and `:help` printed a Chinese raw
+# literal. In both, the baseline rendered Chinese to an English reader; check_en_leak.py proves the fix
+# by name, and the ZH run is asserted byte-identical like every other case.
+cli_corpus="$work/cli"
+rm -rf "$cli_corpus"
+mkdir -p "$cli_corpus"
+printf 'fn main(IOStream io) void {\n    io.println(1);\n}\n' > "$cli_corpus/ok.qk"
+printf 'fn hidden() int {\n    return 1;\n}\n' > "$cli_corpus/hidden.qk"
+
+# one leak table per case, because check_en_leak.py measures the baseline against the table it is given
+leaks_repl_help="$work/cli_repl_help_leaks.tsv"
+cat > "$leaks_repl_help" <<'TSV'
+命令：
+  :help            显示本帮助
+  :quit / :exit    退出
+  :load <file.qk>  加载文件：登记其中的函数/类型/实现（不自动执行 main；可随后调用 main(io)）
+说明：
+  - 表达式直接回显其值；语句以 ; 结尾（省略时自动补）
+  - 块未闭合会自动续行；变量/函数/类型在后续输入中持续可见
+  - log 的记录、io.println 的输出会即时显示	
+TSV
+leaks_lsp_json="$work/cli_lsp_json_leaks.tsv"
+# the leaked text as it RENDERS, not as it is written in the source: the message is a %w verb, so the
+# baseline prints "qklsp: JSON 解析失败: invalid character …" and the table has to name that prefix.
+printf 'qklsp: JSON 解析失败:\tqklsp: JSON parse failed:\n' > "$leaks_lsp_json"
+
+build_tool() { ( cd "$1" && go build -o "$2" "./cmd/$3" ) || { echo "$3 build failed: $1" >&2; exit 1; }; }
+for tool in qkcheck qkdoc qkrepl; do
+  build_tool "$base_tree" "$work/bin/baseline-$tool" "$tool"
+  build_tool "$root" "$work/bin/prototype-$tool" "$tool"
+done
+
+# run_argv <binary> <lang> <args...> -> output with the exit code appended, at a fixed working directory
+run_argv() {
+  local bin="$1" lang="$2"; shift 2
+  ( cd "$work/cli" && LANG=C.UTF-8 QK_LANG="$lang" "$bin" "$@" 2>&1 ); echo "rc=$?"
+}
+
+cli_fail=0
+cli_case() { # cli_case <name> <tool> <args...>
+  local name="$1" tool="$2"; shift 2
+  local b p
+  b="$(run_argv "$work/bin/baseline-$tool" zh "$@")"
+  p="$(run_argv "$work/bin/prototype-$tool" zh "$@")"
+  total=$((total + 1))
+  if [ "$b" != "$p" ]; then
+    cli_fail=$((cli_fail + 1))
+    printf 'zh  %-30s DIFFERS\n' "cli/$name"
+    diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | head -10
+  else
+    printf '%-3s %-30s identical (%d bytes)\n' "zh" "cli/$name" "$(printf '%s' "$b" | wc -c)"
+  fi
+  b="$(run_argv "$work/bin/baseline-$tool" en "$@")"
+  p="$(run_argv "$work/bin/prototype-$tool" en "$@")"
+  total=$((total + 1))
+  printf '%s' "$b" > "$work/baseline.out"
+  printf '%s' "$p" > "$work/prototype.out"
+  if [ "$b" = "$p" ]; then
+    printf '%-3s %-30s identical (%d bytes)\n' "en" "cli/$name" "$(printf '%s' "$b" | wc -c)"
+  elif python3 "$here/check_en_leak.py" "cli/$name" "$work/baseline.out" "$work/prototype.out" "$leaks_repl_help"; then
+    fixed=$((fixed + 1))
+    printf '%-3s %-30s fixed (a hardcoded Chinese literal, then the translation)\n' "en" "cli/$name"
+  else
+    cli_fail=$((cli_fail + 1))
+    printf '%-3s %-30s DIFFERS\n' "en" "cli/$name"
+  fi
+}
+
+cli_case "check_usage"   qkcheck
+cli_case "check_bad_flag" qkcheck -nope
+cli_case "check_no_files" qkcheck -L .
+cli_case "check_ok"      qkcheck ok.qk
+cli_case "doc_usage"     qkdoc
+cli_case "doc_bad_flag"  qkdoc -nope
+cli_case "doc_report"    qkdoc -o out.md ok.qk
+cli_case "repl_usage"    qkrepl
+cli_case "repl_bad_flag" qkrepl -nope
+
+# The REPL's own commands come from stdin, not from -e: `-e` is evaluated as an expression, so `:help`
+# there is a parse error and the message under test never renders. The first harness version used -e and
+# silently measured "both binaries reject :help identically", which is true and proves nothing.
+run_stdin() { # run_stdin <binary> <lang> <input> <args...>
+  local bin="$1" lang="$2" input="$3"; shift 3
+  ( cd "$work/cli" && printf '%s' "$input" | LANG=C.UTF-8 QK_LANG="$lang" "$bin" "$@" 2>&1 ); echo "rc=$?"
+}
+cli_stdin_case() { # cli_stdin_case <name> <input> <args...>
+  local name="$1" input="$2"; shift 2
+  local b p
+  b="$(run_stdin "$work/bin/baseline-qkrepl" zh "$input" "$@")"
+  p="$(run_stdin "$work/bin/prototype-qkrepl" zh "$input" "$@")"
+  total=$((total + 1))
+  if [ "$b" != "$p" ]; then
+    cli_fail=$((cli_fail + 1))
+    printf 'zh  %-30s DIFFERS\n' "cli/$name"
+    diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | head -10
+  else
+    printf '%-3s %-30s identical (%d bytes)\n' "zh" "cli/$name" "$(printf '%s' "$b" | wc -c)"
+  fi
+  b="$(run_stdin "$work/bin/baseline-qkrepl" en "$input" "$@")"
+  p="$(run_stdin "$work/bin/prototype-qkrepl" en "$input" "$@")"
+  total=$((total + 1))
+  printf '%s' "$b" > "$work/baseline.out"
+  printf '%s' "$p" > "$work/prototype.out"
+  if [ "$b" = "$p" ]; then
+    printf '%-3s %-30s identical (%d bytes)\n' "en" "cli/$name" "$(printf '%s' "$b" | wc -c)"
+  elif python3 "$here/check_en_leak.py" "cli/$name" "$work/baseline.out" "$work/prototype.out" "$leaks_repl_help"; then
+    fixed=$((fixed + 1))
+    printf '%-3s %-30s fixed (a hardcoded Chinese literal, then the translation)\n' "en" "cli/$name"
+  else
+    cli_fail=$((cli_fail + 1))
+    printf '%-3s %-30s DIFFERS\n' "en" "cli/$name"
+  fi
+}
+
+cli_stdin_case "repl_help"    ':help
+:quit
+'
+cli_stdin_case "repl_bad_cmd" ':nope
+:quit
+'
+cli_stdin_case "repl_load"    ':load nope.qk
+:quit
+'
+
+# qklsp speaks JSON-RPC on stdio, so its framing errors are reachable with a pipe. A Content-Length that
+# is not a number and a body that is not JSON are the two paths; the second is the declared EN fix,
+# because the baseline built it with fmt.Errorf on its own Chinese literal.
+run_lsp() { # run_lsp <binary> <lang> <frame>
+  local bin="$1" lang="$2" frame="$3"
+  ( printf '%b' "$frame" | LANG=C.UTF-8 QK_LANG="$lang" timeout 10 "$bin" 2>&1 ); echo "rc=$?"
+}
+lsp_case() { # lsp_case <name> <frame>
+  local name="$1" frame="$2"
+  local b p
+  b="$(run_lsp "$work/bin/baseline-qklsp" zh "$frame")"
+  p="$(run_lsp "$work/bin/prototype-qklsp" zh "$frame")"
+  total=$((total + 1))
+  if [ "$b" != "$p" ]; then
+    cli_fail=$((cli_fail + 1))
+    printf 'zh  %-30s DIFFERS\n' "cli/$name"
+    diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | head -10
+  else
+    printf '%-3s %-30s identical (%d bytes)\n' "zh" "cli/$name" "$(printf '%s' "$b" | wc -c)"
+  fi
+  b="$(run_lsp "$work/bin/baseline-qklsp" en "$frame")"
+  p="$(run_lsp "$work/bin/prototype-qklsp" en "$frame")"
+  total=$((total + 1))
+  printf '%s' "$b" > "$work/baseline.out"
+  printf '%s' "$p" > "$work/prototype.out"
+  if [ "$b" = "$p" ]; then
+    printf '%-3s %-30s identical (%d bytes)\n' "en" "cli/$name" "$(printf '%s' "$b" | wc -c)"
+  elif python3 "$here/check_en_leak.py" "cli/$name" "$work/baseline.out" "$work/prototype.out" "$leaks_lsp_json"; then
+    fixed=$((fixed + 1))
+    printf '%-3s %-30s fixed (a hardcoded Chinese literal, then the translation)\n' "en" "cli/$name"
+  else
+    cli_fail=$((cli_fail + 1))
+    printf '%-3s %-30s DIFFERS\n' "en" "cli/$name"
+  fi
+}
+
+build_tool "$base_tree" "$work/bin/baseline-qklsp" qklsp
+build_tool "$root" "$work/bin/prototype-qklsp" qklsp
+lsp_case "lsp_bad_length" 'Content-Length: xyz\r\n\r\n'
+lsp_case "lsp_bad_json"   'Content-Length: 5\r\n\r\nnotjs'
+fail=$((fail + cli_fail))
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $total runs differ from $baseline_rev" >&2
   exit 1
