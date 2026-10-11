@@ -586,10 +586,10 @@ func CMsgMacro(id string) string {
 	return "QK_MSG_" + strings.ToUpper(strings.ReplaceAll(id, ".", "_"))
 }
 
-// cString renders a C string literal. Kept to printable ASCII escapes plus the exact UTF-8 bytes —
+// CString renders a C string literal. Kept to printable ASCII escapes plus the exact UTF-8 bytes —
 // like the Go blob, the bytes are the message, so the two catalogues render byte-identically under
 // every locale and on every platform, newline convention included.
-func cString(s string) string {
+func CString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
 	for i := 0; i < len(s); i++ {
@@ -663,7 +663,7 @@ func GenerateC(s *Sources) ([]byte, error) {
 		fmt.Fprintf(&b, "/* %s. One NUL-terminated message after another, in the order of %s. */\n", l.Code, CRuntimeList)
 		fmt.Fprintf(&b, "static const char qk_msgs_%s[] =\n", l.Code)
 		for _, m := range rows {
-			fmt.Fprintf(&b, "    %s \"\\0\" /* %s */\n", cString(m.Values[li]), m.ID)
+			fmt.Fprintf(&b, "    %s \"\\0\" /* %s */\n", CString(m.Values[li]), m.ID)
 		}
 		fmt.Fprintf(&b, "    ;\n")
 		fmt.Fprintf(&b, "/* Start offset of each message in qk_msgs_%s, in %s order. */\n", l.Code, CRuntimeList)
@@ -686,7 +686,7 @@ func GenerateC(s *Sources) ([]byte, error) {
 	fmt.Fprintf(&b, "/* The message ids the lookup accepts, in the same order; a call site passes one as a string. */\n")
 	fmt.Fprintf(&b, "static const char* const qk_msg_ids[] = {\n")
 	for _, m := range rows {
-		fmt.Fprintf(&b, "    %s, /* %s */\n", cString(m.ID), m.ID)
+		fmt.Fprintf(&b, "    %s, /* %s */\n", CString(m.ID), m.ID)
 	}
 	fmt.Fprintf(&b, "   0\n};\n\n")
 

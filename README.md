@@ -590,10 +590,18 @@ Written down on purpose — a young language is better judged by what it admits 
 - **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
 - **Test coverage is 65.0%** (root module, 75.3% for the compiler module — `scripts/coverage.sh`); the linter's statistical gates cover its generated corpus, not all code.
 - **Repository text is English-only**: comments, documentation and configuration carry no Chinese. The *runtime* is a
-  separate matter and deliberately still speaks Chinese under the default locale — see the next bullet.
-- **Compiled-path runtime text is Chinese-only for now.** `QK_LANG=en` switches the interpreter's diagnostics, but the
-  C runtime embedded into compiled binaries still prints the Chinese error text (e.g. `越界`), so the dual-path
-  byte-equality gate is currently asserted in the default Chinese mode.
+  separate matter: messages are authored in `internal/i18n/source/*.tsv` and rendered in the reader's language.
+- **The compiled path renders in the reader's language too.** `QK_LANG=en` switches the interpreter's diagnostics and
+  the text the C runtime embedded into compiled binaries prints; a program compiled by `qkc` and run under
+  `QK_LANG=zh` prints exactly what it printed before the runtime's strings moved into the catalog, and
+  `internal/i18n/proof/compiled_runtime.sh` is what measures both directions. This bullet used to read "compiled-path
+  runtime text is Chinese-only for now", citing `越界`: the runtime's `substring`/`charAt` errors, its two parse errors
+  and the test `ql_any_bad` path were hardcoded in `compiler/qthreads.c.txt`, and the two the interpreter also
+  produced — `越界` and `不是合法` — rendered Chinese to an English reader because no gate could see a string that
+  never reached a catalog. The one message that is still English in both languages is
+  `ql_any_bad`'s interface-unboxing type error: the interpreter raises its own at type-check time instead, so that
+  path has no Chinese rendering to preserve and inventing one would change shipped output; it is listed in
+  `docs/i18n-design.md` §7.8.
 
 ## License
 
