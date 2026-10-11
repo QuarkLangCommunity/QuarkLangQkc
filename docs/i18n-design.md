@@ -686,9 +686,10 @@ all identical (interpreter: origin/main == this tree), en and zh  [18 runs]
 
 **Unverified / open — marked, not hidden:**
 
-* ⚠ **Step 2's real-world ordering** has been exercised as two local checkouts plus a `go.work`, not as
-  two merged PRs. The module's branch is pushed; this repository's pin is bumped to a pseudo-version of
-  that branch's commit, which is a pre-merge pin; the pre-merge bullet below says how it lands.
+* ✔ **Step 2's real-world ordering** was done for real: the module merged first
+  (`QuarkLangQkparser#3`) and this repository's pin followed, with the generated catalog unchanged by
+  the bump. It was driven from one machine rather than by two teams, so the *social* ordering (who
+  lands first, and who waits) is still untested.
 * ⚠ **The `qkparser` interface break has no deprecation window.** Every consumer that calls
   `Localizer.T` stops compiling. Deliberate, but it is a compatibility promise this design changes, and
   the release plan for the module is not mine to set.
@@ -700,10 +701,10 @@ all identical (interpreter: origin/main == this tree), en and zh  [18 runs]
 * ⚠ **`go.work` is not committed** (it is in `.gitignore` by design, for the sibling-checkout workflow).
   The prototype's local run used one to point the generator at the module branch; CI and a fresh clone
   resolve the pin from `go.mod` with no workspace file, which is the configuration that must be green.
-* ⚠ **The pinned revision is pre-merge.** `go.mod` pins a pseudo-version of the module branch's commit,
-  so this branch is green against a revision that is not on `main` yet. The merge order is therefore
-  load bearing (module first, then this repository's pin), and a post-merge repin is part of landing
-  this, not a follow-up.
+* ✔ **The pinned revision is merged.** `go.mod` pins `v0.0.0-20261011032322-3dc0e291e59d`, the merge
+  commit of `QuarkLangQkparser#3` on the module's `main` — verified by resolving it through the Go
+  toolchain after the merge, with the generated catalog unchanged by the repin. The order was load
+  bearing (module first, then this repository's pin) and was done that way.
 * ⚠ **CI wall-clock cost** of the generation check is unmeasured. It shells out to `go list -m`, which is
   cheap with a warm module cache and needs the module downloaded with a cold one — and the module is
   already a dependency, so a cold cache pays for it once either way.
