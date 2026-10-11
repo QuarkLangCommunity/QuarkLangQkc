@@ -128,7 +128,7 @@ jobs:
       - name: Corrections preserve behaviour (a -fix run must not change what a program does)
         run: |
           go build -o /tmp/qkc-fix-check ./cmd/qkcheck
-          go build -o /tmp/qkc-fix-compiler ./compiler
+          (cd compiler && go build -o /tmp/qkc-fix-compiler .)
           bash scripts/fix-preserves-behaviour.sh /tmp/qkc-fix-check /tmp/quark /tmp/qkc-fix-compiler \
             examples compiler/testdata internal/lang/testdata
       - name: "Editors: tree-sitter grammar (optional; runs when the CLI is installed)"
