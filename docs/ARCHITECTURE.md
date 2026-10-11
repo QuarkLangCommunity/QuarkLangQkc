@@ -1,7 +1,5 @@
 # QuarkLang — Interface Inventory and Composition Map
 
-English | [中文](ARCHITECTURE.zh-CN.md)
-
 Analysed from the code at `67ce88c` (the tip of `main` when this document was written).
 Every claim carries a `file:line` reference. A claim that could not be verified from source
 or by running a gate is marked **UNVERIFIED** — there are no inferred-but-unchecked statements.
@@ -982,7 +980,8 @@ prints `all identical (interpreter == compiler)`.
 
 **What was deleted.** `#when`'s branch in the shared expander, its two refusal messages, the
 `(when/return/error)` wording, and every user: `examples/macro.qk:2`, the macro tests, the stress
-generator, `SYNTAX.md` / `SYNTAX.zh-CN.md`, both READMEs, and three i18n entries. A `#` spelling that is
+generator, `SYNTAX.md` and both READMEs (each with a `*.zh-CN.md` twin at the time; those twins have
+since been deleted), and three i18n entries. A `#` spelling that is
 neither a macro command nor a line-level directive is now refused by name
 (`#when is not a QuarkLang preprocessor directive`, catalogued at `internal/i18n/table_macro.go`), and
 `compiler/testdata/when_rejected.qk.rejected` plus `compiler/macros_test.go` pin it: both engines print

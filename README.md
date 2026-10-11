@@ -1,7 +1,5 @@
 # QuarkLang (qkc)
 
-**English** · [简体中文](README.zh-CN.md)
-
 [![CI](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/ci.yml)
 [![Release](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/release.yml/badge.svg)](https://github.com/QuarkLangCommunity/QuarkLangQkc/actions/workflows/release.yml)
 [![Download](https://img.shields.io/github/v/release/QuarkLangCommunity/QuarkLangQkc?label=download&sort=semver)](https://github.com/QuarkLangCommunity/QuarkLangQkc/releases/latest)
@@ -85,7 +83,7 @@ Optional `rustc`/`gcc` are only needed for the cross-language benchmark suite.
 
 </details>
 
-## Language / 语言
+## Language
 
 Tool messages and generated documentation are **bilingual (Chinese / English)**:
 
@@ -117,28 +115,27 @@ The most honest introduction is code that runs. This is `examples/tour.qk` — i
 ```qk
 program main;
 
-/* Language tour / 语言巡礼
+/* Language tour
  * Type-first syntax: struct/impl, generics, try/catch, List — runnable as-is.
- * 类型在前：struct/impl、泛型、try/catch、List —— 可直接运行。
- * Identical output on both backends / 解释器与编译器两条路径输出一致。 */
+ * Identical output on both backends. */
 
-type struct { int x; int y; } Point;            // struct / 结构体
+type struct { int x; int y; } Point;            // struct
 
 impl {
-    fn new(int x, int y) Point {                // static method / 静态方法（无 self）
-        Point p = .{x: x, y: y};                // struct literal / 结构体字面量（字段名: 值）
+    fn new(int x, int y) Point {                // static method (no self)
+        Point p = .{x: x, y: y};                // struct literal (field name: value)
         return p;
     }
-    fn sum(Point self) int {                    // instance method / 实例方法（首参 self）
+    fn sum(Point self) int {                    // instance method (first param is self)
         return self.x + self.y;
     }
-} Point;                                         // name after the block / 实现名写在块后
+} Point;                                         // name after the block
 
-fn<T> twice(T v) T { return v; }                // generics, type-erased / 泛型（类型擦除）
+fn<T> twice(T v) T { return v; }                // generics, type-erased
 
 fn main(IOStream io) {
-    Point p = Point::new(3, 4);                 // static call with :: / 静态调用 ::
-    io.println("point sum =", p.sum());         // instance call with . / 实例调用 .
+    Point p = Point::new(3, 4);                 // static call with ::
+    io.println("point sum =", p.sum());         // instance call with .
 
     List<int> l = [1, 2, 3];
     int total = 0;
@@ -147,9 +144,9 @@ fn main(IOStream io) {
 
     try {
         io.println(1 / 0);
-    } catch (void e) {                          // catchable error / 可捕获的错误
+    } catch (void e) {                          // catchable error
         // Using `e` inside catch is not supported on the compiler path yet.
-        // 编译器路径暂不支持在 catch 体内读取 e；两条路径都只做"已捕获"提示。
+        // Both backends only print a "caught" notice.
         io.println("caught: division by zero");
     }
     io.println("twice =", twice(21));
@@ -484,7 +481,7 @@ Key optimizations (all profile-driven):
 
 ## Language features (v2 syntax)
 
-> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md) (English) — Chinese: [`SYNTAX.zh-CN.md`](SYNTAX.zh-CN.md).
+> The canonical syntax reference is [`SYNTAX.md`](SYNTAX.md).
 
 <details>
 <summary>Full feature list</summary>
@@ -592,7 +589,8 @@ Written down on purpose — a young language is better judged by what it admits 
   import resolution are still in progress.
 - **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
 - **Test coverage is 65.0%** (root module, 75.3% for the compiler module — `scripts/coverage.sh`); the linter's statistical gates cover its generated corpus, not all code.
-- **Source comments** are mid-translation to English (README, docs, `SYNTAX.md` and tool output are already English).
+- **Repository text is English-only**: comments, documentation and configuration carry no Chinese. The *runtime* is a
+  separate matter and deliberately still speaks Chinese under the default locale — see the next bullet.
 - **Compiled-path runtime text is Chinese-only for now.** `QK_LANG=en` switches the interpreter's diagnostics, but the
   C runtime embedded into compiled binaries still prints the Chinese error text (e.g. `越界`), so the dual-path
   byte-equality gate is currently asserted in the default Chinese mode.

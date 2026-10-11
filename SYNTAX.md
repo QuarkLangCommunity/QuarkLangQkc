@@ -1,7 +1,5 @@
 # QuarkLang Syntax Reference (kept in sync with the implementation · canonical syntax)
 
-**English** · [简体中文](SYNTAX.zh-CN.md)
-
 > **The one canonical form: type-first.** The old "name-first" spelling has been removed; there is no
 > backwards compatibility.
 > **There is no `let`/`var` or `const` keyword declaration**: `const`/`copyd` are **modifiers** and must be

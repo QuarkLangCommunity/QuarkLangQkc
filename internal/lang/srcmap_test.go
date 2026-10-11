@@ -10,7 +10,7 @@ import (
 func TestSrcMapImports(t *testing.T) {
 	dir := t.TempDir()
 	libSrc := `program library;
-// 库注释
+// library comment
 pub fn double(int n) int {
     return n * 2;
 }

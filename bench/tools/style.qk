@@ -1,29 +1,29 @@
-/* QuarkLang 通用样式库：style —— QSS 值解析 + 级联求值 + 盒模型 + 动画（纯 qk、零依赖、零 FFI）
+/* QuarkLang general style library: style - QSS value parsing + cascade evaluation + box model + animation (pure qk, zero dependencies, zero FFI)
  *
- * 定位：样式/动画是与 GUI 后端无关的通用能力，本库不依赖任何渲染实现、不引用任何 native 符号、
- *       不读写文件、不使用模块级全局；全部状态放在实例（HashTable / Theme / Animator）内。
+ * Scope: styling/animation is a generic capability independent of any GUI backend. The library depends on no
+ *        rendering implementation, references no native symbol, touches no file and uses no module-level global; every bit of state lives in instances (HashTable / Theme / Animator).
  *
- * 组成：
- *   space qss    —— 纯计算：长度 1..4 值、颜色（#rgb/#rrggbb/#aarrggbb/rgb()/rgba()/具名）、渐变、
- *                   transform、缓动（含 cubic-bezier 二分）、transition/animation 简写拆解、
- *                   关键帧与选择器块 JSON 文本解析、插值
- *   space style  —— 级联求值（默认层 < 全局层 < 祖先层 < 自身 < 选择器块 < 状态后缀 < 动画覆盖）、
- *                   盒模型 contentRect/borderRect、状态位、选择器特异性、主题层写入
- *   type Theme   —— 实例化主题对象（全局层；由调用方持有并 apply 到节点，替代旧的进程级 JSON 文件方案）
- *   type Animator—— 关键帧 + transition 补间（状态全部在实例内）
+ * Composition:
+ *   space qss    - pure computation: length 1..4 values, colours (#rgb/#rrggbb/#aarrggbb/rgb()/rgba()/named), gradients,
+ *                   transform, easing (including cubic-bezier bisection), transition/animation shorthand expansion,
+ *                   keyframe and selector-block JSON text parsing, interpolation
+ *   space style  - cascade evaluation (default < global < ancestor < own < selector block < state suffix < animation override),
+ *                   box model contentRect/borderRect, state bits, selector specificity, theme-layer writes
+ *   type Theme   - instantiated theme object (the global layer; the caller holds it and applies it to nodes, replacing the old process-level JSON file scheme)
+ *   type Animator- keyframes + transition tweening (all state inside the instance)
  *
- * 节点契约：interface StyleNode（getStyle/setStyle/getX/getY/getW/getH）。
- * 结构化满足即可传入：任何实现这 6 个方法的 struct 都能直接用于 space style。
- * 注意：QuarkLang 的接口→接口赋值按名字严格判定，若调用方持有的是另一个接口类型（如 cleg 的 StyleNode），
- *       经 interface{} 中转即可（见 README「节点桥接」）。
+ * Node contract: interface StyleNode (getStyle/setStyle/getX/getY/getW/getH).
+ * Structural satisfaction is enough: any struct implementing those 6 methods can be passed to space style directly.
+ * Note: QuarkLang decides interface-to-interface assignment strictly by name, so when the caller holds another
+ *       interface type (cleg's StyleNode, say), route the value through interface{} (see the README section on node bridging).
  *
- * 规范：STYLE-SPEC.md（本库与 cleg 共用同一份契约）。
+ * Spec: STYLE-SPEC.md (this library and cleg share the same contract).
  */
 program library;
 
-// ---------- 值类型（渐变 / 变换 / 矩形） ----------
+// ---------- value types (gradient / transform / rect) ----------
 type struct {
-    int kind;      // 0=无 1=linear 2=radial
+    int kind;      // 0=none 1=linear 2=radial
     int angle;
     int c1;
     int p1;
@@ -54,7 +54,7 @@ type struct {
     int h;
 } Rect;
 
-// ---------- 节点契约（结构化满足；无 FFI、无渲染职责） ----------
+// ---------- node contract (structural satisfaction; no FFI, no rendering duty) ----------
 type interface {
     fn getStyle(Self self) HashTable<String, String>;
     fn setStyle(Self self, String jsonText) void;
@@ -64,10 +64,10 @@ type interface {
     fn getH(Self self) int;
 } StyleNode;
 
-// ---------- Theme：实例化主题对象（全局层；由调用方持有，替代旧的进程级 JSON 文件方案） ----------
+// ---------- Theme: instantiated theme object (the global layer, held by the caller; replaces the old process-level JSON file scheme) ----------
 type struct {
-    HashTable<String, String> vars;   // 全局键 → 值
-    int rev;                          // 版本号：apply 时用于幂等刷新
+    HashTable<String, String> vars;   // global key -> value
+    int rev;                          // revision: what makes apply idempotent
 } Theme;
 
 space {
@@ -92,10 +92,10 @@ space {
         return fb;
     }
 
-    // ---------- v2：数值 / 长度（1..4 值简写：上右下左） ----------
+    // ---------- v2: numbers / lengths (1..4-value shorthand: top right bottom left) ----------
     fn isDigit(String c) bool { return "0123456789".indexOf(c) >= 0; }
     fn digitVal(String c) int { int v = "0123456789".indexOf(c); if (v < 0) { return 0; } return v; }
-    // 手写十进制浮点解析（避免 String.toFloat 的静态类型缺陷，纯 qk 无 FFI）
+    // hand-written decimal float parsing (avoids String.toFloat's static typing defect; pure qk, no FFI)
     fn fnum(String s, float fb) float {
         String t = s.trim();
         if (t == "") { return fb; }
@@ -183,7 +183,7 @@ space {
         while (j < raw2.size()) { String t2 = raw2[j].trim(); if (t2 != "") { out.append(t2); } j = j + 1; }
         return out;
     }
-    // 时间：200ms / 0.3s / 200 → 毫秒
+    // time: 200ms / 0.3s / 200 -> milliseconds
     fn time(String v) int {
         String s = v.trim().toLower();
         if (s == "") { return 0; }
@@ -191,13 +191,13 @@ space {
         if (s.endsWith("s")) { return qss::fint(qss::fnum(s.substring(0, s.size() - 1), 0.0) * 1000.0); }
         return qss::fint(qss::fnum(s, 0.0));
     }
-    // 字号：px / pt（96dpi 折算）
+    // font size: px / pt (converted at 96dpi)
     fn fontSize(String v) int {
         String s = v.trim().toLower();
         if (s.endsWith("pt")) { return qss::fint(qss::fnum(s.substring(0, s.size() - 2), 9.0) * 4.0 / 3.0 + 0.5); }
         return qss::len(s, 9);
     }
-    // 行高：长度 → px；无单位倍数（<5 或含小数点）→ size × 倍数
+    // line height: a length -> px; a unitless multiplier (<5, or containing a decimal point) -> size x multiplier
     fn lineHeightPx(String v, int size) int {
         String s = v.trim().toLower();
         if (s == "" || s == "normal") { return qss::fint(size * 1.4 + 0.5); }
@@ -207,14 +207,14 @@ space {
         return qss::len(s, qss::fint(size * 1.4 + 0.5));
     }
 
-    // ---------- v2：颜色 ----------
+    // ---------- v2: colours ----------
     fn clamp255(int v) int {
         int x = v;
         if (x < 0) { x = 0; }
         if (x > 255) { x = 255; }
         return x;
     }
-    // int32 环绕下等价于 (a<<24)|(r<<16)|(g<<8)|b；qk 无位运算符，用乘加实现
+    // under int32 wraparound this equals (a<<24)|(r<<16)|(g<<8)|b; qk has no bitwise operators, so it is done with multiply-add
     fn mkColor(int r, int g, int b, int a) int {
         return qss::clamp255(a) * 16777216 + qss::clamp255(r) * 65536 + qss::clamp255(g) * 256 + qss::clamp255(b);
     }
@@ -367,13 +367,13 @@ space {
         int a = qss::fint(qss::cA(c1) + (qss::cA(c2) - qss::cA(c1)) * f + 0.5);
         return qss::mkColor(r, g, b, a);
     }
-    // 与背景按 alpha 混合（旧 native 无 alpha 通道时的近似）
+    // alpha-blends against the background (the approximation used while the old native path had no alpha channel)
     fn overColor(int fg, int bg, int alpha) int {
         if (alpha >= 255) { return fg; }
         if (alpha <= 0) { return bg; }
         return qss::mixColor(bg, fg, alpha * 100.0 / 255.0);
     }
-    // 简单色名映射（供 named 未覆盖时探测）
+    // small colour-name map (probed when `named` does not cover the name)
     fn looksNamed(String v) bool {
         String s = v.trim().toLower();
         int i = 0;
@@ -384,7 +384,7 @@ space {
         }
         return s != "";
     }
-    // ---------- v2：渐变 ----------
+    // ---------- v2: gradients ----------
     fn gradAngle(String v) int {
         String s = v.trim().toLower();
         if (s == "") { return 180; }
@@ -425,7 +425,7 @@ space {
         return g;
     }
     fn hasGradient(StyleGradient g) bool { return g.kind != 0; }
-    // §9.1：dir 0/1/2/3 = 左→右/上→下/右→左/下→上；其它值按角度
+    // §9.1: dir 0/1/2/3 = left->right/top->bottom/right->left/bottom->top; any other value is an angle
     fn gradDir(int angle) int {
         if (angle == 0) { return 0; }
         if (angle == 90) { return 1; }
@@ -434,7 +434,7 @@ space {
         return angle;
     }
 
-    // ---------- v2：transform ----------
+    // ---------- v2: transform ----------
     fn parenArg(String s, int startIdx) String {
         int i = startIdx;
         String out = "";
@@ -505,7 +505,7 @@ space {
         return out;
     }
 
-    // ---------- v2：缓动 ----------
+    // ---------- v2: easing ----------
     fn bez(float a, float b, float u) float {
         float mu = 1.0 - u;
         return 3.0 * mu * mu * u * a + 3.0 * mu * u * u * b + u * u * u;
@@ -558,7 +558,7 @@ space {
         return p;
     }
 
-    // ---------- v2：简写拆解 ----------
+    // ---------- v2: shorthand expansion ----------
     fn splitTop(String v) List<String> {
         List<String> out = List::new();
         String cur = "";
@@ -646,7 +646,7 @@ space {
         return name + "|" + dur.toString() + "|" + timing + "|" + delay.toString() + "|" + count + "|" + dir + "|" + fill;
     }
 
-    // ---------- v2：JSON 文本小工具（选择器块 / 关键帧；规避嵌套 HashTable 静态类型限制） ----------
+    // ---------- v2: JSON text helpers (selector blocks / keyframes; works around the static typing limit on nested HashTables) ----------
     fn matchBrace(String s, int open) int {
         int depth = 0;
         int i = open;
@@ -767,7 +767,7 @@ space {
         return false;
     }
 
-    // ---------- v2：可插值属性（长度 / 颜色 / 数值 / transform） ----------
+    // ---------- v2: interpolatable properties (length / colour / number / transform) ----------
     fn unitSuffix(String v) String {
         String s = v.trim().toLower();
         if (s.endsWith("px")) { return "px"; }
@@ -805,7 +805,7 @@ space {
         if (qss::isFloatProp(key) || a.indexOf(".") >= 0 || b.indexOf(".") >= 0) { return qss::fmtFloat(v) + unit; }
         return qss::roundHalf(v).toString() + unit;
     }
-    // 定点格式化（4 位小数），避免缓动浮点噪声进入 style 字符串
+    // fixed-point formatting (4 decimals) so easing float noise never reaches the style string
     fn fmtFloat(float v) String {
         float r = v * 10000.0;
         int ri = qss::roundHalf(r);
@@ -857,7 +857,7 @@ space {
 
 space {
 
-    // ===== 状态位（style 表内 "__state:<name>"；无模块级全局） =====
+    // ===== state bits (the "__state:<name>" key inside the style table; no module-level global) =====
     fn setState(StyleNode node, String name, bool on) void {
         if (on) { node.getStyle()["__state:" + name] = "1"; }
         else { node.getStyle().remove("__state:" + name); }
@@ -899,7 +899,7 @@ space {
         }
         return out;
     }
-    // 节点状态串（排序去重；enabled/disabled 由 enabled 键派生）
+    // node state string (sorted, de-duplicated; enabled/disabled is derived from the `enabled` key)
     fn stateOf(StyleNode node) String {
         HashTable<String, String> style = node.getStyle();
         List<String> names = List::new();
@@ -926,7 +926,7 @@ space {
         return style::joinList(style::sortList(names), ":");
     }
 
-    // ===== 键归一化（多状态后缀排序） / 旧键别名 =====
+    // ===== key normalisation (ordering of multi-state suffixes) / legacy key aliases =====
     fn aliasOf(String key) String {
         if (key == "background-color") { return "bg"; }
         if (key == "font-size") { return "size"; }
@@ -942,7 +942,7 @@ space {
         if (sts.size() < 2) { return k; }
         return base + ":" + style::joinList(style::sortList(sts), ":");
     }
-    // 状态后缀组合：多状态最具体 → 最宽泛（顺序无关，双状态补反向）
+    // state-suffix combinations: most specific -> broadest (order-independent; a two-state pair also adds the reverse)
     fn stateKey(HashTable<String, String> style, String key, String state) String {
         if (state == "") { return ""; }
         List<String> states = style::sortList(state.split(":"));
@@ -972,7 +972,7 @@ space {
         return m % 2 == 1;
     }
 
-    // ===== 选择器块（CSS2 特异性：ID 100 > 类型/伪态 10/1 > 通用 0；后出现优先） =====
+    // ===== selector blocks (CSS2 specificity: ID 100 > type/pseudo-class 10/1 > universal 0; later wins) =====
     fn isSelectorKey(String k) bool {
         String s = k.trim();
         if (s == "") { return false; }
@@ -1082,7 +1082,7 @@ space {
             i = i + 1;
         }
     }
-    // setStyle 升级：顶层选择器键（* / Type / Type#id / Type:hover / Type::chunk）按 CSS2 特异性合并
+    // setStyle upgrade: top-level selector keys (* / Type / Type#id / Type:hover / Type::chunk) merge by CSS2 specificity
     fn setStyle(StyleNode node, String jsonText) void {
         String t = jsonText.trim();
         if (t == "") { return; }
@@ -1101,8 +1101,8 @@ space {
             i = i + 1;
         }
     }
-    // ===== 全局 / 祖先层（qk 无模块级全局：全局层由调用方持有的 Theme 写入 "__g~"） =====
-    // 低级入口：直接写入节点全局层（逐键写入；选择器块不在此展开）
+    // ===== global / ancestor layers (qk has no module-level global: the global layer is written under "__g~" by the caller-held Theme) =====
+    // low-level entry: write straight into a node's global layer (key by key; selector blocks are not expanded here)
     fn globalTo(StyleNode node, String jsonText) void {
         String t = jsonText.trim();
         if (t == "") { return; }
@@ -1142,7 +1142,7 @@ space {
         if (pb != "") { cs["__a~backdrop"] = pb; }
     }
 
-    // ===== §0 级联求值 =====
+    // ===== §0 cascade evaluation =====
     fn legacyAlias(HashTable<String, String> style, String key, String state) String {
         String a = style::aliasOf(key);
         if (a == "") { return ""; }
@@ -1214,7 +1214,7 @@ space {
         if (v == "") { return fb; }
         return qss::fnum(qss::stripUnit(v), fb);
     }
-    // 子件（::chunk/::groove/::handle/::indicator/::section）求值
+    // sub-control (::chunk/::groove/::handle/::indicator/::section) evaluation
     fn getSub(StyleNode node, String key, String sub, String state) String {
         HashTable<String, String> style = node.getStyle();
         String full = key + "::" + sub;
@@ -1243,7 +1243,7 @@ space {
         return qss::clamp255(qss::fint(f + 0.5));
     }
 
-    // ===== §1 盒模型 =====
+    // ===== §1 box model =====
     fn boxSizingContent(StyleNode node, String st) bool {
         return style::getD(node, "box-sizing", st, "border") == "content";
     }
@@ -1286,7 +1286,7 @@ space {
         return r;
     }
 
-    // ===== §5 可见性 / overflow / transform（§9.1：绝对设置、无 rotate；成对 begin/end） =====
+    // ===== §5 visibility / overflow / transform (§9.1: set absolutely, no rotate; paired begin/end) =====
     fn visible(StyleNode node) bool {
         String st = style::stateOf(node);
         String v = style::getD(node, "visible", st, "true");
@@ -1298,7 +1298,7 @@ space {
         String c = style::getD(node, "clip", st, "");
         return c == "hidden" || c == "true";
     }
-    // §4 font 简写：bold italic 12px "Family, Fallback" → font-weight/font-style/font-size/font-family
+    // §4 font shorthand: bold italic 12px "Family, Fallback" -> font-weight/font-style/font-size/font-family
     fn applyFontShorthand(StyleNode node, String v) void {
         String s = v.trim();
         List<String> ts = qss::tokens(s);
@@ -1331,8 +1331,8 @@ space {
         if (family != "") { node.getStyle()["font-family"] = family; }
     }
 
-    // ===== §2 背景 / §3 边框阴影 =====
-    // 边框样式：border-style 优先，其次四边 border-*-style（§9 单值 style → 取第一条非空）
+    // ===== §2 background / §3 border and shadow =====
+    // border style: border-style first, then the four per-side border-*-style keys (§9 single-value style -> the first non-empty one)
     fn borderStyle(StyleNode node, String st) int {
         String s = style::getD(node, "border-style", st, "");
         if (s == "") { s = style::getD(node, "border-top-style", st, ""); }
@@ -1343,7 +1343,7 @@ space {
         if (s == "dotted") { return 2; }
         return 0;
     }
-    // 圆角：border-radius / "a,b" 取第一值；否则退到四角键（§9 单值 radius）
+    // corner radius: border-radius, or the first value of "a,b"; otherwise fall back to the four corner keys (§9 single-value radius)
     fn radiusOf(StyleNode node, String st) int {
         String r = style::getD(node, "border-radius", st, "");
         if (r != "") { return qss::len(qss::splitAny(r)[0], 0); }
@@ -1367,7 +1367,7 @@ space {
         if (s == "solid" || s == "dashed" || s == "dotted") { return true; }
         return false;
     }
-    // 便捷求值入口：先套用主题（rev 未变时内部直接返回）再走 §0 级联
+    // convenience evaluation entry: apply the theme first (a no-op internally while rev is unchanged), then run the §0 cascade
     fn getThemed(Theme t, StyleNode node, String key, String state) String {
         t.apply(node);
         return style::get(node, key, state);
@@ -1375,7 +1375,7 @@ space {
 } style;
 
 
-// ---------- Theme 实现：set/get/apply（状态在实例内，无文件、无模块级全局） ----------
+// ---------- Theme implementation: set/get/apply (state inside the instance; no file, no module-level global) ----------
 impl {
     fn new() Theme {
         Theme t;
@@ -1383,7 +1383,7 @@ impl {
         t.rev = 1;
         return t;
     }
-    // 一次性便利入口：JSON 文本 → 主题（不依赖文件）
+    // one-shot convenience entry: JSON text -> theme (no file involved)
     fn fromJson(String jsonText) Theme {
         Theme t = Theme::new();
         t.setJson(jsonText);
@@ -1416,7 +1416,7 @@ impl {
         return "";
     }
     fn has(Theme self, String key) bool { return self.vars.contains(key); }
-    // 旧键别名（bg/size/font）读取
+    // legacy key-alias (bg/size/font) reads
     fn aliased(Theme self, String key) String {
         String a = style::aliasOf(key);
         if (a != "" && self.vars.contains(a)) { return self.vars.get(a); }
@@ -1427,7 +1427,7 @@ impl {
     fn size(Theme self) int { return self.vars.size(); }
     fn keys(Theme self) List<String> { return self.vars.keys(); }
     fn revision(Theme self) int { return self.rev; }
-    // §0 全局层：写入节点 "__g~" 层；rev 未变则跳过（幂等，可每帧调用）
+    // §0 global layer: writes the node's "__g~" layer; skipped while rev is unchanged (idempotent, safe to call every frame)
     fn apply(Theme self, StyleNode node) void {
         HashTable<String, String> st = node.getStyle();
         if (st.contains("__grev") && st.get("__grev") == self.rev.toString()) { return; }
@@ -1437,7 +1437,7 @@ impl {
         while (i < ks.size()) { st["__g~" + ks[i]] = self.vars.get(ks[i]); i = i + 1; }
         st["__grev"] = self.rev.toString();
     }
-    // 桥接入口：调用方持有的是接口类型值（如 StyleNode）时经 interface{} 传入
+    // bridging entry: pass through interface{} when the caller holds an interface-typed value (StyleNode, say)
     fn applyAny(Theme self, interface{} anyNode) void {
         StyleNode node = anyNode;
         self.apply(node);
@@ -1448,7 +1448,7 @@ impl {
     }
 } Theme;
 
-// ---------- Animator：关键帧动画 + transition 补间（§7；全部状态放实例内，无模块级全局） ----------
+// ---------- Animator: keyframe animation + transition tweening (§7; all state inside the instance, no module-level global) ----------
 type struct {
     HashTable<String, String> defs;
     HashTable<String, String> st;
@@ -1463,7 +1463,7 @@ impl {
         a.seq = 0;
         return a;
     }
-    // 注册关键帧：{"0":{"opacity":"1","transform":"scale(1)"},"0.5":{...},"1":{...}}
+    // register keyframes: {"0":{"opacity":"1","transform":"scale(1)"},"0.5":{...},"1":{...}}
     fn define(Animator self, String name, String json) void { self.defs[name] = json; }
     fn hasDef(Animator self, String name) bool { return self.defs.contains(name); }
     fn idOf(Animator self, StyleNode node) String {
@@ -1515,7 +1515,7 @@ impl {
             i = i + 1;
         }
     }
-    // 每帧推进：nodes 上按 style 的 animation-* / transition-* 求值并写动画覆盖层
+    // per-frame advance: evaluate each node's animation-* / transition-* from its style and write the animation override layer
     fn tick(Animator self, List<StyleNode> nodes, int dtMs) void {
         int i = 0;
         while (i < nodes.size()) { self.tickNode(nodes[i], dtMs); i = i + 1; }
@@ -1563,9 +1563,9 @@ impl {
         self.st[anKey] = covered;
         self.applyTransitions(node, id, dtMs, covered, st);
     }
-    // 进度：-1 = 尚未开始，2 = 已结束，其余 0..1（§7 direction / iteration-count）
+    // progress: -1 = not started, 2 = finished, otherwise 0..1 (§7 direction / iteration-count)
     fn progress(Animator self, int el, int dur, int delay, String count, String dir) float {
-        // 注意：int 表达式赋给 float 变量在运行时仍是 int（除法会截断），必须先提升为 float
+        // caution: an int expression assigned to a float variable stays an int at run time (division truncates), so widen to float first
         float active = 0.0 + el - delay;
         if (active < 0.0) { return -1.0; }
         float iters = active / dur;
@@ -1667,12 +1667,12 @@ impl {
         }
         return out;
     }
-    // 属性变化时补间（transition）：tick 内比对基准值，变化则从当前值插值到新值
+    // tween on property change (transition): tick compares against the baseline and, on a change, interpolates from the current value to the new one
     fn applyTransitions(Animator self, StyleNode node, String id, int dtMs, String animCovered, String st) void {
         HashTable<String, String> style = node.getStyle();
         String trKey = "tr:" + id;
         List<String> parts = self.transitionsOf(node, st);
-        // 第一遍：检测目标变化（此时上一帧覆盖值仍在 style 中，用作补间起点）
+        // first pass: detect target changes (the previous frame's override is still in style here, so it serves as the tween's start point)
         int i = 0;
         while (i < parts.size()) {
             List<String> f = parts[i].split("|");
@@ -1686,7 +1686,7 @@ impl {
                     } else {
                         String to = self.st.get(tk + ":to");
                         if (!qss::sameValue(prop, to, base)) {
-                            // 起点：无在飞补间时 = 上一目标值；有在飞时 = 当前插值（覆盖层）
+                            // start: the previous target while no tween is in flight; the current interpolation (override layer) while one is
                             String curVal = to;
                             if (style.contains("__anim~" + prop)) { curVal = style::get(node, prop, st); }
                             self.st[tk + ":from"] = curVal;
@@ -1701,9 +1701,9 @@ impl {
             }
             i = i + 1;
         }
-        // 清理上一帧 transition 覆盖（不动动画覆盖）
+        // clear the previous frame's transition overrides (animation overrides stay)
         self.clearOverrides(node, trKey, animCovered);
-        // 第二遍：推进并写覆盖层
+        // second pass: advance and write the override layer
         String covered = "";
         i = 0;
         while (i < parts.size()) {
