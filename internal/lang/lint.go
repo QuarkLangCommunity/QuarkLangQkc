@@ -54,9 +54,10 @@ type Diag struct {
 // pendingWrite is an assignment whose value has not been read yet (the state QK113 reports on): which
 // statement wrote it, and whether that statement was a declaration initializer.
 type pendingWrite struct {
-	Pos  Pos
-	RHS  Expr
-	Decl bool
+	Pos   Pos // the assignment operator, which is where QK113 reports
+	Start Pos // the leftmost token of the statement, which is where a correction rewrites
+	RHS   Expr
+	Decl  bool
 }
 
 func (d Diag) String() string {
@@ -71,11 +72,45 @@ type LintOptions struct {
 	File string
 	// LibDirs are extra import search directories (same as qkcheck -L; empty = the same directory only).
 	LibDirs []string
+	// OrigSrc is the source as the author wrote it, when it differs from the parsed source (the parser
+	// preprocesses directives). A correction is computed against this text, because this is what a
+	// caller rewrites and what its line endings and shape belong to. Empty means "the parsed source".
+	OrigSrc string
 }
 
-// Lint statically checks a parsed program and returns diagnostics sorted by position.
+// Lint statically checks a parsed program and returns diagnostics sorted by position. A diagnostic
+// that has a mechanical correction carries it; see LintReport for the plan and the corrected source.
 func Lint(prog *Program, opts LintOptions) []Diag {
-	l := &linter{
+	return LintReport(prog, opts).Diags
+}
+
+// LintReport is Lint plus what its corrections would do: the plan (per-line rewrites, and why any
+// correction was withheld) and the corrected source. A caller that rewrites a file wants both, and a
+// caller that only reports can ignore them.
+func LintReport(prog *Program, opts LintOptions) LintResult {
+	l := newLinter(opts)
+	l.check(prog)
+	// Attach the mechanical corrections last: that is where the gates that need the whole file live
+	// (the liveness of a read, and a second correction on the same line), and where the diagnostics
+	// take their final position order.
+	src := opts.OrigSrc
+	if src == "" {
+		src = prog.Src
+	}
+	l.diags, l.plan = attachFixes(l.diags, l.cands, splitSource(src), l.reads)
+	return LintResult{Diags: l.diags, Plan: l.plan, Fixed: l.plan.Apply(src)}
+}
+
+// LintResult is one lint run: its diagnostics, its correction plan, and the source the plan produces.
+type LintResult struct {
+	Diags []Diag
+	Plan  *FixPlan
+	Fixed string // the source with every applicable correction applied (unchanged when there is none)
+}
+
+// newLinter builds the linter with the empty state a run starts from.
+func newLinter(opts LintOptions) *linter {
+	return &linter{
 		opts:      opts,
 		funcs:     map[string][]*FuncDecl{},
 		spaces:    map[string]map[string]*FuncDecl{},
@@ -85,6 +120,10 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 		refVars:   map[string]bool{},
 		reads:     map[string]int{},
 	}
+}
+
+// check runs every check over one program and fills l.diags, in the order the checks find them.
+func (l *linter) check(prog *Program) {
 	for _, f := range prog.Funcs {
 		l.funcs[f.Name] = append(l.funcs[f.Name], f)
 	}
@@ -132,37 +171,29 @@ func Lint(prog *Program, opts LintOptions) []Diag {
 	l.collectUses(prog)
 	l.checkImports(prog)
 	l.checkUnusedFuncs(prog)
-
-	// Attach the mechanical corrections last: that is where the gates that need the whole file live
-	// (the liveness of a read, and a second correction on the same line), and where the diagnostics
-	// take their final position order.
-	return LintFixes(prog.Src, l.diags, l.cands, l.reads)
-}
-
-// LintFixes attaches the mechanical corrections its candidates provide to diags, returns the
-// diagnostics in position order together with the plan of what applying them would rewrite.
-//
-// It is exported because a caller that already has the source (the qkcheck CLI, which needs to write
-// the result) can decide and apply in one step, and because a test can ask what a program's corrected
-// form would be without writing a file.
-func LintFixes(src string, diags []Diag, cands []fixCandidate, reads map[string]int) []Diag {
-	out, _ := LintFixPlan(src, diags, cands, reads)
-	return out
-}
-
-// LintFixPlan is LintFixes plus the plan: the per-line rewrites, and why any correction was withheld.
-func LintFixPlan(src string, diags []Diag, cands []fixCandidate, reads map[string]int) ([]Diag, *FixPlan) {
-	sorted, plan := attachFixes(diags, cands, splitSource(src), reads)
-	return sorted, plan
 }
 
 // LintSource is a convenience entry point: parse the source and lint it (a parse failure returns the error plus whatever diagnostics were found).
 func LintSource(src string, opts LintOptions) ([]Diag, error) {
-	prog, err := ParseSource(src)
+	res, err := LintSourceReport(src, opts)
 	if err != nil {
 		return nil, err
 	}
-	return Lint(prog, opts), nil
+	return res.Diags, nil
+}
+
+// LintSourceReport is LintSource plus the correction plan and the corrected source. OrigSrc is filled
+// in from src, so a correction is computed against the text the caller holds even when the parser
+// preprocessed it.
+func LintSourceReport(src string, opts LintOptions) (LintResult, error) {
+	if opts.OrigSrc == "" {
+		opts.OrigSrc = src
+	}
+	prog, err := ParseSource(src)
+	if err != nil {
+		return LintResult{}, err
+	}
+	return LintReport(prog, opts), nil
 }
 
 // ---------- Scope model (aligned with typecheck) ----------
@@ -203,6 +234,7 @@ type linter struct {
 	refVars   map[string]bool          // reference-type variables (T& / pointer T: `p = v` writes through, it is not a rebinding)
 	reads     map[string]int           // reads per variable name (the liveness gate of a QK114 rewrite)
 	cands     []fixCandidate           // corrections found during the walk, decided once the file is known
+	plan      *FixPlan                 // the corrections attached by the run that is in progress
 }
 
 // warnID records a diagnostic whose message is a generated ID, rendered in the requested language. It is
@@ -458,13 +490,13 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 			// QK113: if the initial value is overwritten by a later assignment with no read in between → dead store.
 			// Decl marks it: the correction of a dead store deletes the earlier write, and deleting a
 			// declaration initializer would delete the declaration itself, so that case is report-only.
-			l.pending[t.Name] = &pendingWrite{Pos: t.Pos, RHS: t.Init, Decl: true}
+			l.pending[t.Name] = &pendingWrite{Pos: t.Pos, Start: Pos{Line: t.Pos.Line, Col: t.Pos.Col}, RHS: t.Init, Decl: true}
 		}
 		return false, false
 	case *AssignStmt:
 		// QK108: self assignment x = x (including the structurally equivalent p.x / l[i] forms)
 		if sameExpr(t.Target, t.X) {
-			l.cands = append(l.cands, selfAssignFix(t.Pos, t.Pos.Col))
+			l.cands = append(l.cands, selfAssignFix(t.Pos, exprStart(t.Target)))
 			l.warnID(t.Pos, CodeSelfAssign, i18n.MsgLintSelfAssignment, exprText(t.Target))
 		}
 		// Evaluate the right-hand side and the target subexpressions first: a read in `x = x + 1` clears the "assigned but unread" record,
@@ -480,7 +512,7 @@ func (l *linter) stmt(s Stmt) (term bool, allRet bool) {
 			}
 			l.write(tg.Name)
 			if l.loopDepth == 0 && !l.refVars[tg.Name] {
-				l.pending[tg.Name] = &pendingWrite{Pos: t.Pos, RHS: t.X}
+				l.pending[tg.Name] = &pendingWrite{Pos: t.Pos, Start: exprStart(t.Target), RHS: t.X}
 			} else {
 				delete(l.pending, tg.Name)
 			}

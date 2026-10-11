@@ -32,8 +32,9 @@ type Fix struct {
 	Original string `json:"original,omitempty"` // the line as it is now, for the before/after report
 }
 
-// replacement is the text the line becomes, or "" when the fix deletes the line.
-func (f *Fix) replacement() string {
+// Replacement is the line as it becomes, or "" when the fix deletes the line. It is what a report
+// shows as the corrected form, and what applying the fix writes.
+func (f *Fix) Replacement() string {
 	if f.Delete {
 		return ""
 	}
@@ -140,9 +141,14 @@ func (s srcLines) join() string {
 
 // ---------- line-shape gates ----------
 
-// stmtOnOwnLine reports whether the line holds exactly one statement: leading whitespace, then the
-// text from col, an optional ';', then only whitespace and an optional trailing comment. This is the
-// gate that makes a whole-line rewrite safe: the statement shares its line with nothing else.
+// stmtOnOwnLine reports whether nothing but a semicolon and a comment may follow the statement that
+// starts at col: leading whitespace, then the statement, then at most `;` and a trailing comment. This
+// is the gate that makes a whole-line rewrite safe - the statement shares its line with nothing else.
+//
+// The text between col and the semicolon is the statement, which this gate cannot check (the front end
+// carries no end position); what it does check is that everything after the statement's terminator is
+// whitespace or a comment, and that nothing precedes col but indentation. Callers pair it with their
+// own knowledge of the statement's text, so a mismatch costs the fix rather than the file.
 func stmtOnOwnLine(line string, col int) bool {
 	from := col - 1
 	if from < 0 || from > len(line) {
@@ -151,15 +157,66 @@ func stmtOnOwnLine(line string, col int) bool {
 	if strings.TrimSpace(line[:from]) != "" {
 		return false
 	}
-	rest := strings.TrimLeft(line[from:], " \t")
-	rest = strings.TrimRight(rest, " \t") // trailing whitespace is not part of a statement
-	if strings.HasSuffix(rest, ";") {
-		rest = strings.TrimRight(rest[:len(rest)-1], " \t")
-	}
-	return rest == "" || strings.HasSuffix(rest, ";") || isComment(rest)
+	return onlyCommentAfterStmt(strings.TrimRight(line[from:], " \t"))
 }
 
-// importAloneOnLine reports whether the line holds exactly one import of path and nothing else.
+// onlyCommentAfterStmt reports whether the tail of a line, from the statement to its end, is a
+// statement plus an optional `;` and an optional trailing comment - and nothing else.
+func onlyCommentAfterStmt(s string) bool {
+	if s == "" {
+		return true
+	}
+	if c := commentStart(s); c >= 0 {
+		if c == 0 {
+			return true // the line holds a comment and nothing before it
+		}
+		s = strings.TrimRight(s[:c], " \t")
+		s = strings.TrimSuffix(s, ";")
+		return strings.TrimSpace(s) != "" && !strings.HasSuffix(s, ";")
+	}
+	s = strings.TrimSuffix(strings.TrimRight(s, " \t"), ";")
+	return !strings.ContainsAny(s, ";{}")
+}
+
+// commentStart is the offset where a comment begins in s, or -1. A `//`, `#` or `/*` inside a string
+// literal is not a comment, which matters because a statement's text is passed through here.
+func commentStart(s string) int {
+	inStr, raw, esc := false, false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case esc:
+			esc = false
+		case c == '\\':
+			esc = true
+		case raw:
+			if c == '`' {
+				raw = false
+			}
+		case inStr:
+			if c == '"' {
+				inStr = false
+			}
+		case c == '`':
+			raw = true
+		case c == '"':
+			inStr = true
+		case c == '/' && i+1 < len(s) && (s[i+1] == '/' || s[i+1] == '*'):
+			return i
+		case c == '#':
+			return i
+		}
+	}
+	return -1
+}
+
+func isComment(s string) bool {
+	return strings.HasPrefix(s, "//") || strings.HasPrefix(s, "/*") || strings.HasPrefix(s, "#")
+}
+
+// importAloneOnLine reports whether the line holds exactly this one import and nothing else: the
+// keyword, the path, a `;` and at most a trailing comment. An import that shares its line with another
+// import or with code is not corrected - removing it would remove the rest of the line too.
 func importAloneOnLine(line string, path string) bool {
 	rest := strings.TrimSpace(line)
 	if !strings.HasPrefix(rest, "import") {
@@ -172,7 +229,7 @@ func importAloneOnLine(line string, path string) bool {
 	rest = strings.TrimLeft(rest, " \t")
 	quoted, ok := cutImportPath(rest)
 	if !ok || unquoteKq(quoted) != path {
-		return false
+		return false // a different path on this line: not this diagnostic's import
 	}
 	rest = strings.TrimLeft(rest[len(quoted):], " \t")
 	if !strings.HasPrefix(rest, ";") {
@@ -207,6 +264,7 @@ func cutImportPath(s string) (string, bool) {
 	return s, s != ""
 }
 
+// isIdentByte reports whether c can appear in a bare import path.
 func isIdentByte(c byte) bool {
 	return c == '_' || c == '.' || c == '/' || c == '-' ||
 		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
@@ -236,8 +294,20 @@ func unquoteKq(s string) string {
 	return b.String()
 }
 
-func isComment(s string) bool {
-	return strings.HasPrefix(s, "//") || strings.HasPrefix(s, "/*") || strings.HasPrefix(s, "#")
+// exprStart is the position of the leftmost token of an expression: the head of a member or index
+// chain rather than its operator. posOf is the position a diagnostic wants (qkparser records an index
+// expression at its "[" and an assignment at its "="), while a whole-line rewrite has to start where
+// the statement starts.
+func exprStart(e Expr) Pos {
+	switch t := e.(type) {
+	case nil:
+		return Pos{}
+	case *MemberExpr:
+		return exprStart(t.X)
+	case *IndexExpr:
+		return exprStart(t.X)
+	}
+	return posOf(e)
 }
 
 // ---------- purity: may this expression be dropped? ----------
@@ -345,6 +415,10 @@ func attachFixes(diags []Diag, cands []fixCandidate, sf srcLines, reads map[stri
 				"rewriting it would drop the last read of %s and leave a new QK101 finding behind", c.need)})
 			continue
 		}
+		if c.build == nil {
+			plan.Skip = append(plan.Skip, SkipReason{Code: c.code, Line: c.line, Reason: c.reason})
+			continue // decisively not applicable (a declaration dead store, an impure right-hand side)
+		}
 		f, ok := c.build(sf)
 		if !ok {
 			plan.Skip = append(plan.Skip, SkipReason{Code: c.code, Line: c.line, Reason: c.reason})
@@ -390,14 +464,14 @@ func (p *FixPlan) merge() {
 	for _, af := range p.Fixes {
 		if n := len(p.Lines); n > 0 {
 			if prev := p.Lines[n-1]; prev.Line == af.Fix.Line {
-				if prev.Old != af.Fix.Original || prev.New != af.Fix.replacement() {
+				if prev.Old != af.Fix.Original || prev.New != af.Fix.Replacement() {
 					p.Skip = append(p.Skip, SkipReason{Code: af.Code, Line: af.Fix.Line, Reason: fmt.Sprintf(
 						"another fix rewrites the same line instead (%q becomes %q)", prev.Old, prev.New)})
 				}
 				continue // two diagnostics, one correction
 			}
 		}
-		p.Lines = append(p.Lines, LineChange{Line: af.Fix.Line, Old: af.Fix.Original, New: af.Fix.replacement()})
+		p.Lines = append(p.Lines, LineChange{Line: af.Fix.Line, Old: af.Fix.Original, New: af.Fix.Replacement()})
 	}
 }
 
@@ -420,17 +494,17 @@ func fixPriority(code string) int {
 // selfAssignFix corrects QK108 by deleting the statement: `x = x;` has no effect.
 // A self-assignment shares its diagnostic position with a QK113 dead store exactly when it is the
 // statement that carried the pending write, and both delete the same line, so the two agree.
-func selfAssignFix(pos Pos, col int) fixCandidate {
+func selfAssignFix(at, start Pos) fixCandidate {
 	return fixCandidate{
-		at:   pos,
-		pos:  pos,
+		at:   at,    // the diagnostic reports the assignment operator
+		pos:  start, // the rewrite starts where the statement starts
 		code: CodeSelfAssign,
-		line: pos.Line,
+		line: start.Line,
 		why:  "a self-assignment has no effect",
 		reason: "the statement shares its line with other code, so deleting the line would remove " +
 			"something else (the linter only rewrites a whole line)",
 		build: func(sf srcLines) (Fix, bool) {
-			return deleteLineIf(sf, pos.Line, col, stmtOnOwnLine)
+			return deleteLineIf(sf, start.Line, start.Col, stmtOnOwnLine)
 		},
 	}
 }
@@ -441,9 +515,9 @@ func selfAssignFix(pos Pos, col int) fixCandidate {
 func deadStoreFix(d Diag, prev *pendingWrite) fixCandidate {
 	c := fixCandidate{
 		at:   d.Pos,
-		pos:  prev.Pos,
+		pos:  prev.Start,
 		code: CodeDeadStore,
-		line: prev.Pos.Line,
+		line: prev.Start.Line,
 		why:  "the value it computes is overwritten before any read",
 	}
 	if prev.Decl {
@@ -456,7 +530,7 @@ func deadStoreFix(d Diag, prev *pendingWrite) fixCandidate {
 	}
 	c.reason = "the assignment shares its line with other code, so deleting the line would remove something else"
 	c.build = func(sf srcLines) (Fix, bool) {
-		return deleteLineIf(sf, prev.Pos.Line, prev.Pos.Col, stmtOnOwnLine)
+		return deleteLineIf(sf, prev.Start.Line, prev.Start.Col, stmtOnOwnLine)
 	}
 	return c
 }
@@ -491,10 +565,10 @@ func selfCompareFix(d Diag, op string, operand Expr) fixCandidate {
 	var reads int
 	root := rootIdent(operand, &reads)
 	c := fixCandidate{
-		at:   d.Pos,          // the diagnostic reports the operator ...
-		pos:  posOf(operand), // ... while the rewrite starts at the operand
+		at:   d.Pos,              // the diagnostic reports the operator ...
+		pos:  exprStart(operand), // ... while the rewrite starts at the operand
 		code: CodeSelfCompare,
-		line: posOf(operand).Line,
+		line: exprStart(operand).Line,
 		why:  "a value compared with itself is a constant",
 	}
 	if !pureExpr(operand) {
@@ -507,19 +581,45 @@ func selfCompareFix(d Diag, op string, operand Expr) fixCandidate {
 		return c
 	}
 	c.reason = "the comparison shares its line with other code, so replacing the line would remove something else"
-	start := posOf(operand)
+	start := exprStart(operand)
 	c.build = func(sf srcLines) (Fix, bool) {
-		l := lineTextAt(sf, start.Line)
-		if !stmtOnOwnLine(l, start.Col) {
+		line := lineTextAt(sf, start.Line)
+		if !stmtOnOwnLine(line, start.Col) {
+			return Fix{}, false
+		}
+		// Replace the comparison only, and keep the terminator and any trailing comment: the fix
+		// changes what the expression evaluates to, not the shape of the statement around it.
+		from, to := start.Col-1, stmtEnd(line, start.Col-1)
+		if to < from {
 			return Fix{}, false
 		}
 		text := "false"
 		if op == "==" {
 			text = "true"
 		}
-		return Fix{Line: start.Line, From: start.Col - 1, To: len(l), Text: text}, true
+		return Fix{Line: start.Line, From: from, To: to, Text: text}, true
 	}
 	return c
+}
+
+// stmtEnd is the offset where the statement starting at from ends (exclusive): at its `;` or at the
+// comment that follows it, with the whitespace before either trimmed. Everything from there on belongs
+// to the line rather than to the statement, so a rewrite must leave it alone.
+func stmtEnd(line string, from int) int {
+	if from < 0 || from > len(line) {
+		return -1
+	}
+	end := len(line)
+	if c := commentStart(line[from:]); c >= 0 {
+		end = from + c
+	}
+	if semi := strings.IndexByte(line[from:end], ';'); semi >= 0 {
+		end = from + semi
+	}
+	for end > from && (line[end-1] == ' ' || line[end-1] == '\t') {
+		end--
+	}
+	return end
 }
 
 // deleteLineIf builds a whole-line deletion for a statement that passes the shape gate. The span
