@@ -153,41 +153,6 @@ func MsgKeys() []string {
 	}
 }
 
-// MsgOwners reports, per id, whether the text is owned by the pinned parser module ("import")
-// or by this repository ("local").
-func MsgOwners() map[string]string {
-	return map[string]string{
-		"parser.macro_unbalanced_delimiters": "import",
-		"parser.macro_arg_count_mismatch":    "import",
-		"parser.macro_expand_failed":         "import",
-		"parser.pp_sharp_needs_command":      "import",
-		"parser.pp_unknown_directive":        "import",
-		"parser.pp_requires_parens":          "import",
-		"parser.pp_error_needs_message":      "import",
-		"parser.pp_error_directive":          "import",
-		"parser.pp_insert_not_macro_param":   "import",
-		"parser.pp_execute_needs_name":       "import",
-		"parser.pp_unknown_command":          "import",
-		"parser.pp_insert_needs_ast":         "import",
-		"parser.macro_needs_name":            "import",
-		"parser.macro_missing_param_list":    "import",
-		"parser.macro_param_list_delimiters": "import",
-		"parser.macro_params_must_be_names":  "import",
-		"parser.macro_missing_body":          "import",
-		"parser.macro_body_delimiters":       "import",
-		"parser.pp_include_too_deep":         "import",
-		"parser.pp_elif_without_if":          "import",
-		"parser.pp_branch_without_if":        "import",
-		"parser.pp_include_failed":           "import",
-		"parser.pp_unclosed_if":              "import",
-		"parser.pp_unrecognized_condition":   "import",
-		"parser.nesting_too_deep":            "import",
-	}
-}
-
-// msgSourceBlock is the blob block of the source language, which is always the first.
-const msgSourceBlock = 0
-
 // langBlock maps a language code to its blob block; an unknown language renders the source.
 func langBlock(code string) int {
 	for i, l := range msgLangs {

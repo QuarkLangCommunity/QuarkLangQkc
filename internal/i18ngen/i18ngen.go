@@ -433,17 +433,6 @@ func Generate(s *Sources) ([]byte, error) {
 	}
 	fmt.Fprintf(&b, "\t}\n}\n\n")
 
-	fmt.Fprintf(&b, "// MsgOwners reports, per id, whether the text is owned by the pinned parser module (\"import\")\n")
-	fmt.Fprintf(&b, "// or by this repository (\"local\").\n")
-	fmt.Fprintf(&b, "func MsgOwners() map[string]string {\n\treturn map[string]string{\n")
-	for _, m := range s.Table.Messages {
-		fmt.Fprintf(&b, "\t\t%q: %q,\n", m.ID, m.Owner)
-	}
-	fmt.Fprintf(&b, "\t}\n}\n\n")
-
-	fmt.Fprintf(&b, "// msgSourceBlock is the blob block of the source language, which is always the first.\n")
-	fmt.Fprintf(&b, "const msgSourceBlock = 0\n\n")
-
 	fmt.Fprintf(&b, "// langBlock maps a language code to its blob block; an unknown language renders the source.\n")
 	fmt.Fprintf(&b, "func langBlock(code string) int {\n\tfor i, l := range msgLangs {\n\t\tif l == code {\n\t\t\treturn i\n\t\t}\n\t}\n\treturn 0\n}\n")
 
@@ -502,10 +491,6 @@ func Run(opts Options) []string {
 
 // ---- in-memory access, so a proof can mutate an authored table without touching disk ----
 
-// AuthoredSources loads the real authored tables plus the pinned module's, for tests that need to
-// perturb them. It is exported because the proofs live in another package.
-func AuthoredSources(opts Options) (*Sources, error) { return Load(opts) }
-
 // Clone deep-copies a Sources so a proof can mutate one copy without affecting the next.
 func (s *Sources) Clone() *Sources {
 	out := &Sources{ModuleRaw: append([]byte(nil), s.ModuleRaw...)}
@@ -538,7 +523,8 @@ func (s *Sources) langIndex(code string) int {
 	return -1
 }
 
-// Value returns a message's value in one language, or "" when either is unknown.
+// Value returns a message's value in one language, or "" when either is unknown. The proofs use it
+// to state their premise (what the authored English is) before they perturb it.
 func (s *Sources) Value(id, lang string) string {
 	mi, li := s.index(id), s.langIndex(lang)
 	if mi < 0 || li < 0 || li >= len(s.Table.Messages[mi].Values) {
@@ -581,16 +567,6 @@ func (s *Sources) DropValue(id, lang string) bool {
 	m := &s.Table.Messages[mi]
 	m.Values = append(append([]string(nil), m.Values[:li]...), m.Values[li+1:]...)
 	return true
-}
-
-// Render returns the value a generated catalog would render for a dotted id and a language, read out
-// of the value list the way the offset table reads the blob.
-func (s *Sources) Render(id, lang string) string {
-	mi, li := s.index(id), s.langIndex(lang)
-	if mi < 0 || li < 0 || li >= len(s.Table.Messages[mi].Values) {
-		return ""
-	}
-	return s.Table.Messages[mi].Values[li]
 }
 
 // RunWith is Run for an in-memory table: it checks completeness and the module's IDs, then writes (or

@@ -227,10 +227,6 @@ func (L Localizer) Msg(id Msg, args ...any) string {
 	return fmt.Sprintf(text, args...)
 }
 
-// MsgSourceText returns a generated message's source-language text, which is what a caller with no
-// localizer should fall back to.
-func MsgSourceText(id Msg) string { return msgText(id, msgSourceBlock) }
-
 // needsTranslation reports whether a template contains Han characters, i.e. whether rendering it
 // under English without a catalog entry would leak Chinese to the user.
 func needsTranslation(s string) bool {
