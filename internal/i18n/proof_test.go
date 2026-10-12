@@ -174,7 +174,7 @@ func TestProofBacklogDocumentIsStaleWhenTheTablesMove(t *testing.T) {
 
 	// And the staleness check itself must fail for a document that is not what the tables say.
 	dir := t.TempDir()
-	stale := filepath.Join(dir, "i18n-backlog.md")
+	stale := filepath.Join(dir, i18ngen.BacklogFileName)
 	if err := os.WriteFile(stale, before, 0o644); err != nil {
 		t.Fatal(err)
 	}

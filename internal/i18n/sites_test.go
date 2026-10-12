@@ -64,13 +64,12 @@ func TestAuthoredTablesCarryNoMachinePath(t *testing.T) {
 
 // TestGeneratedArtefactsCarryNoMachinePath refuses a machine path in the committed artefacts, which the
 // drift gate compares byte for byte against a fresh generation and would otherwise pass along unchanged.
+// The review document is not in the list: it is generated outside the repository, so there is no
+// committed copy of it to carry anything, and cmd/qki18n refuses to write one inside the checkout.
 func TestGeneratedArtefactsCarryNoMachinePath(t *testing.T) {
 	artefacts := []string{
 		"msg_gen.go",
 		filepath.Join("..", "..", "compiler", "internal", "rtcat", "msg_c.h"),
-		// The review document is generated into the tree only while it is tracked; when a change takes it
-		// out of the repository there is no committed copy for this gate to read.
-		filepath.Join("..", "..", "docs", "i18n-backlog.md"),
 	}
 	for _, file := range artefacts {
 		raw, err := os.ReadFile(file)

@@ -92,6 +92,12 @@ var proseExt = map[string]bool{".md": true, ".txt": true, ".tsv": true, ".sh": t
 // allowlistPath is the tracked file naming the occurrences that are not removed yet.
 const allowlistPath = "internal/privacy/allowlist.tsv"
 
+// privacyFixtureDir holds this ratchet's own proof cases, which have to contain the shapes the rules
+// detect: a fixture that spelled none of them could not show that a rule matches anything. It is
+// skipped like a linter's own test data rather than allowlisted, because an allowlist entry is a
+// permission with a count, and a permission to name a machine is not what this directory is.
+const privacyFixtureDir = "internal/privacy/testdata/"
+
 // allowKey identifies one permission: a rule applied to one path.
 type allowKey struct {
 	rule string
@@ -260,6 +266,9 @@ func trackedFiles(t *testing.T, root string) []string {
 // hitsInFile returns the name of each rule that matches one file, once per occurrence, or nothing
 // when the file is not text or is not there.
 func hitsInFile(root, path string) []string {
+	if strings.HasPrefix(path, privacyFixtureDir) {
+		return nil
+	}
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 	if err != nil {
 		return nil

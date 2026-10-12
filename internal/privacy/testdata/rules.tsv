@@ -23,3 +23,14 @@ abs-cache	ignores	https://example.com/foo/.cache/bar
 machine-name	catches	the report was produced on enoch by the stress runner
 machine-name	ignores	thanks to [@Enoch-199811](https://github.com/Enoch-199811), the maintainer
 machine-name	ignores	run under CI, where the runner host name is not the developer's
+
+# The two home-directory rules have to be disjoint: one occurrence belongs to exactly one rule, or a
+# count in the allowlist would not say what it is counting. A Windows path must not be counted by the
+# POSIX rule as well, in either spelling, and a file URI or a UNC path must open neither.
+home-dir	ignores	C:\Users\alice\a.qk
+home-dir	ignores	/C:/Users/alice/a.qk
+home-dir	ignores	file:///home/alice/a.qk
+home-dir	ignores	//home/alice/a.qk
+windows-home-dir	ignores	the bare name myUsers/alice/a.qk is not a home directory
+windows-home-dir	ignores	file:///home/alice/a.qk
+
