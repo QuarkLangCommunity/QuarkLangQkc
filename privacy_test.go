@@ -39,6 +39,9 @@ type personalRule struct {
 	// placeholder is true when a documented example may use a conventional account name, which the
 	// rule then skips.
 	placeholder bool
+	// placeholderGroups is true when a rule can capture a field that is not a name, such as the drive
+	// letter of a Windows path, and every captured group therefore has to be checked.
+	placeholderGroups bool
 }
 
 // personalRules are the classes this repository is held to. They are patterns rather than a list of
@@ -46,14 +49,16 @@ type personalRule struct {
 // they are disjoint: one occurrence belongs to exactly one rule, so a count in the allowlist says
 // what it is counting.
 var personalRules = []personalRule{
-	// The home directory of a Windows path, which is written with a drive letter and either separator,
-	// or — as this tree writes it — with a leading slash before the drive letter. This rule is first
-	// because it owns `/Users/`, so that a Windows path and a macOS one are counted by one rule and the
-	// POSIX rule below never sees either of them twice.
-	{name: "windows-home-dir", pattern: regexp.MustCompile(`(?i)(?:[A-Za-z]:|/)[\\/]Users[\\/]([A-Za-z0-9._-]+)[\\/]`), placeholder: true},
-	// An account name in a home directory. The boundary keeps a drive-letter path out of it, so that
-	// `C:/Users/account/...` is counted once, by the rule above.
-	{name: "home-dir", pattern: regexp.MustCompile(`(?:^|[^A-Za-z0-9:])/home/([A-Za-z0-9._-]+)/`), placeholder: true},
+	// A home directory under a `Users` directory, which is how macOS and Windows spell it: `C:\Users\`,
+	// `C:/Users/` and `/C:/Users/`. RE2 has no lookahead, so the alternatives are written out — a URL
+	// and a bare `myUsers/` cannot open this rule, because at a slash the next character must not be a
+	// slash or a dot. A Windows spelling captures the drive letter first, which the placeholder check
+	// is given as well as the account, so `C:/Users/user/` stays quiet.
+	{name: "windows-home-dir", pattern: regexp.MustCompile(`(?i)([A-Za-z]:|[^A-Za-z0-9:/]|^)[\\/]Users[\\/]([A-Za-z0-9._-]+)[\\/]`), placeholder: true, placeholderGroups: true},
+	// An account name in a POSIX home directory. The boundary excludes a colon and a slash, so
+	// `C:/home/account/` and a `//home/account/` UNC path are not counted here as well as by the rule
+	// above, and one occurrence belongs to exactly one rule.
+	{name: "home-dir", pattern: regexp.MustCompile(`(?:^|[^A-Za-z0-9:/])/home/([A-Za-z0-9._-]+)/`), placeholder: true},
 	// An absolute path into a machine-local cache that is not already inside a counted home directory:
 	// the cache directory is chosen by the build tool of the machine that ran it, so the path names
 	// that machine's layout. A path under a home directory is left to the rules above, so that one
@@ -126,63 +131,75 @@ func TestNoPersonalDataInTrackedFiles(t *testing.T) {
 	}
 }
 
-// TestPersonalDataRulesMatch is the proof that the ratchet is not vacuous: every rule has to match a
-// line of the class it is written to catch, and to leave a documented placeholder, a public handle and
-// a `$HOME`-relative default alone, so a pattern that was mistyped fails here instead of reporting
-// zero occurrences forever.
+// TestPersonalDataRulesMatch is the proof that the ratchet is not vacuous: every rule has to match the
+// lines it is written to catch, and to leave a documented placeholder, a public handle and a
+// `$HOME`-relative default alone, so a pattern that was mistyped fails here instead of reporting zero
+// occurrences forever. The cases live in testdata/rules.tsv, because a case has to spell out the shape
+// it detects and a source file in this tree may not.
 func TestPersonalDataRulesMatch(t *testing.T) {
-	catches := map[string][]string{
-		"home-dir":         {"site: /home/alice/projects/quark/internal/lang/eval.go:12"},
-		"windows-home-dir": {`{"C:\Users\alice\a.qk", "/C:/Users/alice/a.qk"}, worktree: /Users/alice/src/quark/eval.go:12`},
-		"abs-cache":        {"cache: /mnt/disk/.cache/qk-proof/baseline/bin/qkc"},
-		"machine-name":     {"the report was produced on enoch by the stress runner"},
-	}
-	misses := map[string][]string{
-		"home-dir": {
-			"the example path is /home/user/a.qk and the prose writes /home/account/a.qk",
-			"a relative site column: internal/lang/eval.go:12",
-		},
-		"windows-home-dir": {`the example uses C:\Users\user\a.qk, and the prose writes /Users/account/a.qk`},
-		"abs-cache": {
-			`work="${QK_PROOF_WORK:-$HOME/.cache/qk-i18n/proof}"`,
-			"the example directory is /home/user/.cache/qk-proof",
-			"https://example.com/foo/.cache/bar",
-		},
-		"machine-name": {
-			"thanks to [@Enoch-199811](https://github.com/Enoch-199811), the maintainer",
-			"run under CI, where the runner's host name is not the developer's",
-		},
-	}
+	cases := readRuleCases(t)
 	byName := map[string]personalRule{}
 	for _, r := range personalRules {
 		byName[r.name] = r
 	}
-	if len(byName) != len(catches) {
-		t.Fatalf("personalRules defines %d rule(s) and the proof covers %d, so a rule could be added without a proof", len(byName), len(catches))
-	}
-	for name, lines := range catches {
-		r, ok := byName[name]
+	proved := map[string]bool{}
+	for _, c := range cases {
+		r, ok := byName[c.rule]
 		if !ok {
-			t.Errorf("the proof covers rule %q, which personalRules does not define", name)
+			t.Errorf("the proof covers rule %q, which personalRules does not define", c.rule)
 			continue
 		}
-		for _, line := range lines {
-			if !hitsOnLine(r, line) {
-				t.Errorf("rule %s does not match %q, so it reports no occurrences for data it is written to catch", name, line)
+		proved[c.rule] = true
+		switch c.want {
+		case "catches":
+			if !hitsOnLine(r, c.text) {
+				t.Errorf("rule %s does not match %q, so it reports no occurrences for data it is written to catch", c.rule, c.text)
 			}
+		case "ignores":
+			if hitsOnLine(r, c.text) {
+				t.Errorf("rule %s matches %q, which is not personal data — a rule that fires on a public handle, a documented placeholder or a `$HOME` default is noise, and noise is how a check like this gets switched off", c.rule, c.text)
+			}
+		default:
+			t.Errorf("testdata/rules.tsv: %q is neither catches nor ignores", c.want)
 		}
 	}
-	for name, lines := range misses {
-		r, ok := byName[name]
-		if !ok {
+	for name := range byName {
+		if !proved[name] {
+			t.Errorf("rule %s has no case in testdata/rules.tsv, so nothing proves it does anything", name)
+		}
+	}
+}
+
+// ruleCase is one line of testdata/rules.tsv: a rule, whether it must match, and the text to try.
+type ruleCase struct {
+	rule string
+	want string
+	text string
+}
+
+// readRuleCases parses the proof cases, which are tab-separated: rule, expectation, text.
+func readRuleCases(t *testing.T) []ruleCase {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("internal", "privacy", "testdata", "rules.tsv"))
+	if err != nil {
+		t.Fatalf("reading the rule proof cases: %v", err)
+	}
+	var out []ruleCase
+	for i, line := range strings.Split(string(raw), "\n") {
+		if text := strings.TrimSpace(line); text == "" || strings.HasPrefix(text, "#") {
 			continue
 		}
-		for _, line := range lines {
-			if hitsOnLine(r, line) {
-				t.Errorf("rule %s matches %q, which is not personal data — a rule that fires on a public handle, a documented placeholder or a `$HOME` default is noise, and noise gets the whole check switched off", name, line)
-			}
+		parts := strings.SplitN(strings.TrimRight(line, "\r"), "\t", 3)
+		if len(parts) != 3 {
+			t.Errorf("testdata/rules.tsv:%d: want rule, expectation and text separated by tabs, got %d field(s)", i+1, len(parts))
+			continue
 		}
+		out = append(out, ruleCase{rule: parts[0], want: parts[1], text: parts[2]})
 	}
+	if len(out) == 0 {
+		t.Fatal("the proof cases are empty, so nothing proves the rules match anything")
+	}
+	return out
 }
 
 // TestPersonalDataAllowlistIsWellFormed keeps the ratchet's own input honest: an entry naming a path
@@ -283,13 +300,23 @@ func ruleHits(r personalRule, line string) []string {
 // skipMatch is the agreement between the rules: a documented placeholder account is not a machine,
 // and a cache path under a home directory belongs to the home-directory rule alone.
 func skipMatch(r personalRule, m []string) bool {
-	if r.placeholder && len(m) > 1 && placeholderAccount[strings.ToLower(accountOf(m))] {
-		return true
+	if r.placeholder {
+		if r.placeholderGroups {
+			// Every group is a name-like field, and one of them being an account is enough: the drive
+			// letter of a Windows path is one of them and is not a name.
+			for _, g := range m[1:] {
+				if placeholderAccount[strings.ToLower(g)] {
+					return true
+				}
+			}
+		} else if len(m) > 1 && placeholderAccount[strings.ToLower(accountOf(m))] {
+			return true
+		}
 	}
 	return r.name == "abs-cache" && underHome(accountOf(m))
 }
 
-// underHome reports whether a matched path is already inside a home directory.
+// underHome reports whether a matched path already names a home directory.
 func underHome(path string) bool {
 	return strings.HasPrefix(path, "/home/") || strings.HasPrefix(path, "/Users/") || homeDrivePath.MatchString(path)
 }
@@ -347,9 +374,6 @@ func readAllowlistEntries(t *testing.T, root string) []allowEntry {
 			allowKey: allowKey{rule: strings.TrimSpace(fields[0]), path: filepath.ToSlash(strings.TrimSpace(fields[1]))},
 			count:    count,
 		})
-	}
-	if len(out) == 0 {
-		t.Errorf("%s lists no entries; when the sweep is complete, delete the file and this test with it rather than leaving an empty permission list", allowlistPath)
 	}
 	return out
 }

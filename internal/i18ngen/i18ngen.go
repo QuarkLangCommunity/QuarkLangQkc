@@ -774,17 +774,32 @@ func Run(opts Options) []string {
 	return runDoc(opts, src)
 }
 
-// runDoc writes (or checks) the review document, when one is asked for. It is separate from the catalog
-// so a caller that only wants the catalog — every test but the document's own — is unaffected.
+// runDoc renders the review document, writes it when a caller asked for a path, and checks it when a
+// caller handed one in. It refuses a path inside the checkout: the document carries the Chinese values
+// as data, so it is written outside the repository and never committed. The gate is not weakened by
+// that, because the document is compared against a second rendering of the same tables rather than
+// against a stored copy, and that rendering is what makes the comparison able to go red: a file that is
+// not what the tables say fails here, and so does a renderer whose two answers in one run disagree,
+// which is the failure a document built from a map or from the filesystem order would have.
 func runDoc(opts Options, src *Sources) []string {
 	if opts.DocFile == "" || opts.DocFile == opts.OutFile {
 		return nil
+	}
+	if InRepository(opts.Root, opts.DocFile) {
+		return []string{fmt.Sprintf("%s is inside the repository: the review document is generated outside the checkout, because it carries the Chinese values as data", opts.DocFile)}
 	}
 	doc, err := Backlog(opts, src)
 	if err != nil {
 		return []string{fmt.Sprintf("%s: %v", opts.DocFile, err)}
 	}
-	return writeOrCheck(opts, opts.DocFile, doc, "go generate ./internal/i18n")
+	fresh, err := Backlog(opts, src)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: %v", opts.DocFile, err)}
+	}
+	if !bytes.Equal(doc, fresh) {
+		return []string{fmt.Sprintf("%s: rendering the document twice in one run produced different bytes, so what it lists is not a measurement of the tables", opts.DocFile)}
+	}
+	return writeOrCheck(opts, opts.DocFile, doc, "go run ./cmd/qki18n -doc "+BacklogRequest)
 }
 
 // writeOrCheck writes one generated artefact, or compares it with what is committed. Both artefacts go

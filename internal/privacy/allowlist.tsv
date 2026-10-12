@@ -1,17 +1,15 @@
 # Personal-data occurrences the sweep has not removed yet: rule, path, allowed count, tab-separated.
 #
-# This file only shrinks. An entry is deleted when its rule drops to zero for that path, and the
-# ratchet fails when a path carries more occurrences than it allows here. A count is what the ratchet
-# measured on the revision that added it, never a round number.
+# This file only shrinks, and it is empty because the sweep is done: no tracked file names an account,
+# a home directory or a machine-local cache any more. It is kept rather than deleted so the ratchet has
+# a written permission list to fail against — an occurrence that arrives with a generated artefact goes
+# here only as a deliberate, reviewed exception, never because a check was relaxed.
 #
-# The entries below are one defect seen from several sides: an authored site column in the i18n tables
-# held an absolute path from the machine that authored it, and the generator then copied that path into
-# the review document and into three prose files. They are removed by the change that makes the authored
-# site columns relative to the repository, which is why this list is expected to reach zero rather than
-# to stay: a public repository must not name anybody's machine or directory layout.
-home-dir	internal/i18n/source/fields.tsv	93
-home-dir	docs/i18n-backlog.md	64
-home-dir	docs/primitives.md	2
-home-dir	stress/REPORT.md	1
-home-dir	cmd/qklsp/document_test.go	4
-windows-home-dir	cmd/qklsp/document_test.go	2
+# The entries it held were one defect seen from several sides: an authored site column in the i18n
+# tables held an absolute path from the machine that authored it, and the generator copied that path
+# into a review document and into three prose files. They were removed by citing sites relative to the
+# repository root, and by taking the generated review document out of the tree, because it carries the
+# Chinese values as data.
+#
+# An entry whose occurrences reach zero is an error, not a stale line: leaving it behind would make
+# this file the last place in the tree that names a machine.
