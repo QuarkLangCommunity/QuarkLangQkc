@@ -1024,6 +1024,15 @@ catalog row the interpreter renders writes `%q` and hands it the value. Both pro
 byte a String can hold — `qk_quote` and `strconv.Quote` disagree on invalid UTF-8, which is out of scope
 the same way §5 leaves plural forms out.
 
+The baseline is a **pinned** revision — the first parent of the merge that landed this change, which is
+the revision `origin/main` named when the harness was written. Naming a branch was the defect: once the
+change merged, the default named the change itself, so the gate built both sides from one revision, claim
+1 had nothing to leak, and the six message cases failed with a message about the corpus rather than about
+the invocation. A revision compared with itself measures nothing, so the harness now refuses that
+comparison before it builds anything and exits 2 rather than 1, naming the revision to pass instead; and a
+baseline that leaked in no case at all is named as such next to the failure count, so a wrong baseline (a
+different revision, not the checkout) is diagnosed in one line instead of read off six case failures.
+
 ---
 
 ## 8. Evidence index
