@@ -1,0 +1,15 @@
+# Personal-data occurrences the sweep has not removed yet: rule, path, allowed count, tab-separated.
+#
+# This file only shrinks, and it is empty because the sweep is done: no tracked file names an account,
+# a home directory or a machine-local cache any more. It is kept rather than deleted so the ratchet has
+# a written permission list to fail against — an occurrence that arrives with a generated artefact goes
+# here only as a deliberate, reviewed exception, never because a check was relaxed.
+#
+# The entries it held were one defect seen from several sides: an authored site column in the i18n
+# tables held an absolute path from the machine that authored it, and the generator copied that path
+# into a review document and into three prose files. They were removed by citing sites relative to the
+# repository root, and by taking the generated review document out of the tree, because it carries the
+# Chinese values as data.
+#
+# An entry whose occurrences reach zero is an error, not a stale line: leaving it behind would make
+# this file the last place in the tree that names a machine.

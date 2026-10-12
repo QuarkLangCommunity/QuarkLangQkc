@@ -79,29 +79,60 @@ func TestGeneratedCatalogIsCurrent(t *testing.T) {
 
 // docOptions describes the generated review document and the checkout it measures. It is separate from
 // generatedOptions because a caller that only wants the catalog must not need the document, and because
-// the document's scan is anchored at the repository root rather than at this package.
+// the document's scan is anchored at the repository root rather than at this package. The path is a
+// temporary directory rather than one inside the checkout: the document is not committed, and the
+// generator refuses to write it into the tree it describes.
 func docOptions(t *testing.T, check bool) i18ngen.Options {
 	t.Helper()
 	opts := generatedOptions(t, check)
 	opts.Root = repoRoot(t)
-	opts.DocFile = filepath.Join(opts.Root, filepath.FromSlash(i18ngen.BacklogDocPath))
+	opts.DocFile = filepath.Join(t.TempDir(), i18ngen.BacklogFileName)
 	return opts
 }
 
-// TestBacklogDocumentIsCurrent is the same standing gate for docs/i18n-backlog.md that
-// TestGeneratedCatalogIsCurrent is for msg_gen.go: the committed document must be exactly what the
-// generator writes today, so it cannot be hand-maintained. Editing the document to record a translation
-// that was never authored, or filling a row in without re-running the generator, fails here.
-func TestBacklogDocumentIsCurrent(t *testing.T) {
-	opts := docOptions(t, true)
-	problems := i18ngen.Run(opts)
-	if len(problems) > 0 {
-		t.Fatalf("the committed backlog document is not current:\n  %s", strings.Join(problems, "\n  "))
+// TestBacklogDocumentRenders is the standing gate for the review document. It is a different gate from
+// TestGeneratedCatalogIsCurrent, because the document is a different kind of artefact: it is not
+// committed, so there is nothing stored to be stale. What is left to check is the thing a reviewer
+// depends on — that the tables can be rendered into a document at all, that the document is what the
+// tables say, and that two renderings of the same tables agree, which is what makes the comparison in
+// runDoc able to go red rather than a formality.
+func TestBacklogDocumentRenders(t *testing.T) {
+	opts := docOptions(t, false)
+	src := loadAuthored(t)
+	first, err := i18ngen.Backlog(opts, src)
+	if err != nil {
+		t.Fatalf("rendering the review document: %v", err)
 	}
-	if b, err := os.ReadFile(opts.DocFile); err != nil {
-		t.Fatalf("reading %s: %v", opts.DocFile, err)
-	} else if !bytes.Contains(b, []byte(i18ngen.BacklogTitle)) {
-		t.Fatalf("%s does not contain its own title %q, so the check compared something else", opts.DocFile, i18ngen.BacklogTitle)
+	second, err := i18ngen.Backlog(opts, src)
+	if err != nil {
+		t.Fatalf("rendering the review document a second time: %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatalf("two renderings of the same tables differ, so the document is not a measurement of them")
+	}
+	if !bytes.Contains(first, []byte(i18ngen.BacklogTitle)) {
+		t.Fatalf("the rendered document does not carry its title %q, so the generator produced something else", i18ngen.BacklogTitle)
+	}
+	// Every section the summary table counts has to be present, and each has to render as the tables
+	// say: a section that silently disappeared would leave the counts above it describing nothing.
+	for _, section := range []string{i18ngen.BacklogSectionReordered, i18ngen.BacklogSectionImports, i18ngen.BacklogSectionFields} {
+		if !bytes.Contains(first, []byte(section)) {
+			t.Errorf("the rendered document has no %q section", section)
+		}
+	}
+	if !bytes.Contains(first, []byte("## How to fill this in")) {
+		t.Errorf("the rendered document has no instructions for the translator reading it")
+	}
+	// And the gate refuses the one place the document must not be written: inside the checkout it
+	// describes, where it would publish the Chinese values as data.
+	inside := docOptions(t, false)
+	inside.DocFile = filepath.Join(inside.Root, "docs", i18ngen.BacklogFileName)
+	problems := i18ngen.RunWith(inside, src)
+	if len(problems) == 0 {
+		t.Fatalf("the generator accepted a document path inside the repository; it must be generated outside the checkout")
+	}
+	if !strings.Contains(strings.Join(problems, "\n"), "inside the repository") {
+		t.Errorf("the generator refused the path for another reason: %v", problems)
 	}
 }
 
@@ -143,7 +174,7 @@ func TestProofBacklogDocumentIsStaleWhenTheTablesMove(t *testing.T) {
 
 	// And the staleness check itself must fail for a document that is not what the tables say.
 	dir := t.TempDir()
-	stale := filepath.Join(dir, "i18n-backlog.md")
+	stale := filepath.Join(dir, i18ngen.BacklogFileName)
 	if err := os.WriteFile(stale, before, 0o644); err != nil {
 		t.Fatal(err)
 	}
