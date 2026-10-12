@@ -31,7 +31,9 @@
 # last section fails when a listed message no longer reaches a case.
 #
 # Usage: internal/i18n/proof/compiled_runtime.sh [baseline-revision]
-#   baseline-revision defaults to origin/main. Needs clang, because qkc links the runtime with it.
+#   baseline-revision defaults to the pre-change revision pinned below. The harness refuses to run when it
+#   resolves to this checkout: a revision compared with itself measures nothing. Needs clang, because qkc
+#   links the runtime with it.
 #
 # A failure here means a compiled program's text disagrees with the interpreter's, which is the defect
 # this harness exists to catch.
@@ -40,7 +42,34 @@ set -u
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
-baseline_rev="${1:-origin/main}"
+
+# The revision the three claims are measured against: main as it stood when the runtime's text moved into
+# the catalog — the first parent of the merge that landed PR #101, which is the revision `origin/main`
+# named when this harness was written. It is pinned rather than named by a branch because `origin/main`
+# named that revision only until the change merged, and named the change itself afterwards: the default
+# then compared a revision with itself, which is how this gate came to report six failures whose text
+# blamed the corpus. A baseline that moves is a gate that turns green into vacuous and red into
+# unexplained.
+baseline_default="a3c4cd4"
+baseline_rev="${1:-$baseline_default}"
+
+# Refuse that comparison here, before spending a build on it. Claim 1 asks whether the baseline leaked Han
+# runes, and a tree cannot leak differently from itself, so no case below could be measured and every
+# message case would fail for a reason that names the corpus rather than the invocation. The exit code is
+# 2, not 1: nothing was measured, so this is a gate that cannot run rather than a gate that went red.
+head_commit="$(git -C "$root" rev-parse 'HEAD^{commit}')"
+if ! base_commit="$(git -C "$root" rev-parse --verify --quiet "$baseline_rev^{commit}")"; then
+  echo "cannot run: the baseline revision '$baseline_rev' does not resolve to a commit in $root" >&2
+  exit 2
+fi
+if [ "$base_commit" = "$head_commit" ] ||
+   [ "$(git -C "$root" rev-parse 'HEAD^{tree}')" = "$(git -C "$root" rev-parse "$base_commit^{tree}")" ]; then
+  echo "refusing to run: the baseline revision $baseline_rev is this checkout ($head_commit)," >&2
+  echo "so claim 1 (the baseline leaked Han runes) cannot hold, and a revision compared with itself measures" >&2
+  echo "nothing. Pass the pre-change revision instead, e.g. $baseline_default." >&2
+  exit 2
+fi
+
 work="${QK_CRT_PROOF_WORK:-$HOME/.cache/qk-i18n/crt-proof}"
 mkdir -p "$work/bin"
 
@@ -114,6 +143,8 @@ run_interp() { ( cd "$corpus" && LANG=C.UTF-8 QK_LANG="$1" "$2" "$3" 2>&1 ); ech
 fail=0
 total=0
 fixed=0
+cases=0
+baseline_leaked=0
 
 # The declared control-character exceptions to claim 3: case name, the rendering the baseline produced,
 # and the rendering this tree produces — each including the `rc=` line the harness appends, because the
@@ -128,6 +159,7 @@ TSV
 
 for f in "$corpus"/*.qk; do
   name="$(basename "$f")"
+  cases=$((cases + 1))
 
   # ---- 3. QK_LANG=zh is byte-identical to the revision this replaces ----
   b_zh="$(run_compiled "$work/bin/baseline-qkc" zh "$name")"
@@ -150,6 +182,11 @@ for f in "$corpus"/*.qk; do
   b_en="$(run_compiled "$work/bin/baseline-qkc" en "$name")"
   p_en="$(run_compiled "$work/bin/prototype-qkc" en "$name")"
   i_en="$(run_interp en "$work/bin/prototype-quark" "$name")"
+  # Claim 1, counted as well as checked: whether the baseline leaked at all is what tells a wrong baseline
+  # apart from a corpus that stopped failing, and the report below says which one this run was.
+  if printf '%s' "$b_en" | grep -qP '[\x{4e00}-\x{9fff}]'; then
+    baseline_leaked=$((baseline_leaked + 1))
+  fi
   total=$((total + 2))
   printf '%s' "$b_en" > "$work/baseline.en"
   printf '%s' "$p_en" > "$work/prototype.en"
@@ -219,6 +256,15 @@ else
 fi
 
 if [ "$fail" -ne 0 ]; then
+  # One cause deserves naming rather than leaving it to be read off six case failures: a baseline that
+  # leaked in no case is not a pre-change revision, so claim 1 was never measured and the run says nothing
+  # about the product either way. It stays a failure — a gate that called this clean would be a gate that
+  # cannot run — but it is not a red gate, and the note says so.
+  if [ "$baseline_leaked" -eq 0 ]; then
+    echo "note: the baseline ($baseline_rev) leaked a Han rune in 0 of $cases cases, so claim 1 was never" >&2
+    echo "measured: that baseline is not a pre-change revision, and the case failures above all report this" >&2
+    echo "one cause. Pass the pre-change revision (default $baseline_default) to measure the fix." >&2
+  fi
   echo "FAILED: $fail of $total compiled-path checks" >&2
   exit 1
 fi
