@@ -64,9 +64,9 @@ if ! base_commit="$(git -C "$root" rev-parse --verify --quiet "$baseline_rev^{co
 fi
 if [ "$base_commit" = "$head_commit" ] ||
    [ "$(git -C "$root" rev-parse 'HEAD^{tree}')" = "$(git -C "$root" rev-parse "$base_commit^{tree}")" ]; then
-  echo "refusing to run: the baseline revision $baseline_rev is this checkout ($head_commit)," >&2
-  echo "so claim 1 (the baseline leaked Han runes) cannot hold, and a revision compared with itself measures" >&2
-  echo "nothing. Pass the pre-change revision instead, e.g. $baseline_default." >&2
+  echo "refusing to run: the baseline revision $baseline_rev (commit $base_commit) carries this checkout's" >&2
+  echo "content (commit $head_commit), so claim 1 (the baseline leaked Han runes) cannot hold, and a revision" >&2
+  echo "compared with itself measures nothing. Pass the pre-change revision instead, e.g. $baseline_default." >&2
   exit 2
 fi
 
