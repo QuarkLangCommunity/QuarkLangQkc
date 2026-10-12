@@ -98,6 +98,39 @@ func gitRevision() string {
 	return strings.TrimSpace(string(out))
 }
 
+// machineCommandDirs are the directories a `go run` binary is executed from on this machine: the Go build
+// cache, whose path carries the hash of a build rather than a fact about the run, and the temporary
+// directory.
+func machineCommandDirs() []string {
+	dirs := []string{os.TempDir()}
+	if cache := os.Getenv("GOCACHE"); cache != "" {
+		dirs = append(dirs, cache)
+	} else if out, err := exec.Command("go", "env", "GOCACHE").Output(); err == nil && strings.TrimSpace(string(out)) != "" {
+		dirs = append(dirs, strings.TrimSpace(string(out)))
+	}
+	return dirs
+}
+
+// portableCommand renders the invocation for the report: a binary executed out of the Go build cache or
+// the temporary directory is named by the command that produced it, because a report is committed and the
+// cache path belongs to one machine.
+func portableCommand(argv []string, machineDirs []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	dir := filepath.Dir(argv[0])
+	for _, machineDir := range machineDirs {
+		if machineDir == "" {
+			continue
+		}
+		rel, err := filepath.Rel(machineDir, dir)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return strings.Join(append([]string{"go", "run", "./cmd/qkstress"}, argv[1:]...), " ")
+		}
+	}
+	return strings.Join(argv, " ")
+}
+
 // firstValueOf returns the value on the first matching line of a /proc style key/value file, where the
 // separator is a colon, a tab or both.
 func firstValueOf(path, key string) string {

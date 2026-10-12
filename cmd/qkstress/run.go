@@ -392,7 +392,7 @@ func assembleReport(opt options, results []caseResult, known []knownEntry, known
 	}
 	sort.Strings(stale)
 	return runReport{
-		Command:   strings.Join(os.Args, " "),
+		Command:   portableCommand(os.Args, machineCommandDirs()),
 		Commit:    gitRevision(),
 		Date:      time.Now().Format(time.RFC3339),
 		TimeoutMS: opt.timeout.Milliseconds(),

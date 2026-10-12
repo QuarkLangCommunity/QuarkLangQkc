@@ -66,9 +66,13 @@ func corpusFiles(t *testing.T) []string {
 		}
 		if fi.IsDir() {
 			switch fi.Name() {
-			case ".git", "dist", "dist-ci", "node_modules", "lintbench", "bench":
+			case ".git", "dist", "dist-ci", "node_modules", "lintbench", "bench", "stress-out":
 				// lintbench is the hand-labelled benchmark (covered by the lintstat/lintbench tests);
-				// bench/tools is the performance fixture (contains copies of third-party libraries)
+				// bench/tools is the performance fixture (contains copies of third-party libraries);
+				// stress-out is the generated extreme-input corpus (cmd/qkstress gen), written by the stress
+				// gate into an untracked tree: it holds adversarial sources by construction, and descending
+				// into it made this walker depend on whether the stress gate had run first in the same
+				// checkout (a generated multi-megabyte case overflows the parser's stack).
 				return filepath.SkipDir
 			}
 			return nil
@@ -184,4 +188,28 @@ func skipNestedRepo(path string, info os.FileInfo, root string) bool {
 	}
 	_, err := os.Stat(filepath.Join(path, ".git"))
 	return err == nil
+}
+
+// TestCorpusWalkSkipsGeneratedTrees pins the walker's skip list against the tree the stress gate writes:
+// a program planted in stress-out/ must not be reached, because otherwise the corpus this test measures
+// would depend on whether the stress gate ran first in the same checkout.
+func TestCorpusWalkSkipsGeneratedTrees(t *testing.T) {
+	root := filepath.Join("..", "..")
+	probeDir := filepath.Join(root, "stress-out", "corpus-walk-probe")
+	probe := filepath.Join(probeDir, "probe.kq")
+	if err := os.MkdirAll(probeDir, 0o755); err != nil {
+		t.Fatalf("cannot plant the probe: %v", err)
+	}
+	t.Cleanup(func() {
+		os.RemoveAll(probeDir)
+		os.Remove(filepath.Join(root, "stress-out")) // only succeeds while the generated tree stayed empty
+	})
+	if err := os.WriteFile(probe, []byte("program library;\n\nfn main() int { return 0; }\n"), 0o644); err != nil {
+		t.Fatalf("cannot write the probe: %v", err)
+	}
+	for _, f := range corpusFiles(t) {
+		if filepath.ToSlash(f) == filepath.ToSlash(probe) {
+			t.Fatalf("the walk reached a program under stress-out/: %s", f)
+		}
+	}
 }

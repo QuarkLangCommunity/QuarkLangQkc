@@ -455,6 +455,12 @@ func errCol(err error) int {
 	return 0
 }
 
+// expandSkipDirs are directory names a directory argument is not descended into: version-control metadata
+// and the untracked build/gate output trees, whose contents are generated rather than authored (stress-out
+// holds the adversarial corpus `cmd/qkstress gen` writes, so linting it says nothing about a corpus the
+// user means to review). The argument itself is always walked, so naming one of these directly still works.
+var expandSkipDirs = map[string]bool{".git": true, "node_modules": true, "dist": true, "dist-ci": true, "stress-out": true}
+
 // expandArgs expands directory arguments into the .qk files they contain (sorted by path); other arguments pass through unchanged.
 func expandArgs(args []string) ([]string, error) {
 	var out []string
@@ -469,7 +475,13 @@ func expandArgs(args []string) ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if !fi.IsDir() && (strings.HasSuffix(p, ".qk") || strings.HasSuffix(p, ".kq")) {
+			if fi.IsDir() {
+				if p != a && expandSkipDirs[fi.Name()] {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(p, ".qk") || strings.HasSuffix(p, ".kq") {
 				found = append(found, p)
 			}
 			return nil
