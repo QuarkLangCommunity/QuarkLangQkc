@@ -35,6 +35,12 @@ bin="$work/qki18n"
 rm -rf "$work"
 mkdir -p "$work"
 
+# The refusal proofs deliberately seed a path inside the checkout, and a run with the guards removed
+# does write it: clean up on every exit, including a failing one, so a red harness cannot leave a
+# document holding the Chinese values lying in docs/ for somebody to add.
+inside="$root/docs/i18n-backlog.md"
+trap 'rm -f "$inside"' EXIT
+
 fail=0
 total=0
 
@@ -86,7 +92,6 @@ outside="$written"
 # (`-doc <in-tree path>`) is refused by cmd/qki18n before the generator is called, and comparing
 # (`-check -doc <in-tree path>`) is refused inside runDoc, before it reads the file it was handed. A
 # proof that only drove the first would pass with the second deleted.
-inside="$root/docs/i18n-backlog.md"
 rm -f "$inside"
 
 # refuse_in_tree <label> <extra args...>
