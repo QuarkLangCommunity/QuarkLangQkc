@@ -387,7 +387,7 @@ can check the rule against. "Current" quotes the standard's or the implementatio
 |---|---|---|---|
 | D-1 | `bit` (width 1) | **P-1** at `N=1`; not a separate kind | `typecheck.go:113-115` (`rawBitsNameWidth` returns 1), §3.1 `:57` (`bits<1>` *is* `bit`) |
 | D-2 | `bits<N>` | **P-1** with the width as a parameter | `typecheck.go:91` `rawBitsOf(n)` |
-| D-3 | `bool` | **P-2**: view `(N=1, two's-complement-nothing / two values)` | `typecheck.go:123-124` `viewWidth(tBool)==1`; §3.2 `:75` |
+| D-3 | `bool` | **P-2**: view `(N=1, two values: 0 = false, 1 = true, nothing else)` | `typecheck.go:123-124` `viewWidth(tBool)==1`; §3.2 `:75` |
 | D-4 | `uchar` | **P-2**: view `(N=8, unsigned)` | `typecheck.go:125-126`; §3.2 `:77` |
 | D-5 | `int` | **P-2** + **default rule**: `int` *is* `int32` = `bits<32>` | `typecheck.go:127-128` `viewWidth(tInt)==32` with the comment "int is int32 in this implementation"; §3.2 `:89` "`int` means `int32`" |
 | D-6 | `int32/64/128/256`, `float32/64`, `char` | **P-2** rows: the name is a *function* of interpretation and width — §3.2's own sentence "A view's name states its own width" (`:82-83`) — so the table is data, not cases | §3.2's table `:73-80`; the rows are not yet in code (§11.1) |
@@ -404,7 +404,7 @@ can check the rule against. "Current" quotes the standard's or the implementatio
 | D-17 | `==` value comparison | **P-2/P-6** + **one dispatch rule**: an operator on a struct resolves to the method whose name the operator's canonical spelling generates | `typecheck.go:597-625` (operator→name), `:639-650` (the interface mirror) |
 | D-18 | the **13** operation methods | **D-17**: 13 names generated from the operator table by one naming rule | `typecheck.go:597-617` |
 | D-19 | `[a,b,c]`, `for x : c`, `*h` | **D-17** applied to protocols: resolved by method name (`__literal__`, `__element__`, `size`/`get`) | `typecheck.go:3175,3199,3203`; §6 `:190-194` |
-| D-20 | `bit`/`bits<N>` admission rules | **P-1** + one rule: raw bits admit exactly the operations that need no arithmetic — i.e. the width-preserving, bit-local ones (`& \| ^ ~ << >>`, `== !=`, `b[i]`, `===`) | The refusal *is* one message per family (`typecheck.go` "raw bits admit only & \| ^ ~ << >> == != and b[i]"), so the four rows of §3.3 `:102-107` are one rule with four spellings |
+| D-20 | `bit`/`bits<N>` admission rules | **P-1** + one rule: raw bits admit exactly the operations that need no arithmetic — i.e. the width-preserving, bit-local ones (`& \| ^ ~ << >>`, `== !=`, `b[i]`, `===`) | The refusal *is* one id per family, each raised at one site: `typecheck.go:1931` (`MsgTypecheckTypeerrorRawBitsAdmitOnlyB`), so the four rows of §3.3 `:102-107` are one rule with four spellings |
 | D-21 | shift keeps the left operand's width | **P-1**: the result width is the left operand's | §3.3 `:109`; `compiler/internal/cgen/cgen.go:4383-4385` `emitBitsShift` |
 | D-22 | `b[i]` read/write | **P-1** + **P-3**: an address at bit offset `i` | §3.3 `:105`; constant-index refusal `typecheck.go:175-181` |
 | D-23 | the 12 statements | **P-6** + control: binding (`DeclStmt`), assignment (`AssignStmt`), application as statement (`ExprStmt`), and the branch/loop forms | `qkparser/ast.go:222-232` |
@@ -900,3 +900,16 @@ under both locales, and it disappears the moment `stress-out/` is removed (`inte
 `ok` in 10.1 s / 11.7 s). CI never sees it because the two gates run on separate runners. This is not
 caused by this document (a markdown file is not linted as a program); it is recorded here because the
 gate order above is the order a reader will run, and the failure looks like a regression.
+
+**A second observation from the same gate run: a committed artefact carries machine-specific absolute
+paths.** The generated-artefact gate is green, and it is green *while* the artefact contains another
+worktree's paths: `internal/i18n/source/fields.tsv` holds **93** occurrences of `/home/jack` in its
+source-site column (e.g. row 95 cites `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3563`
+where its sibling row in `typecheck.tsv:57` cites the same kind of site relatively, as
+`internal/lang/typecheck.go:1926`), and the tracked, gate-checked `docs/i18n-backlog.md` carries **64** of
+them. The gate compares the committed artefact against a fresh generation, so it cannot see this: both
+sides are equally absolute. It is recorded here because it is the same shape as §1.3 — a gate that
+verifies *consistency* rather than *correctness* — and because §7.2's boundary question is exactly about
+what the catalogue and the tools are allowed to put into a committed file. It is not caused by this
+document and is not fixed here (a fix touches an authored catalogue table and a generated document, which
+is a different change).
