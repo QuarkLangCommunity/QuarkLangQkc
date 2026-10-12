@@ -715,7 +715,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: duplicate declaration of %q`
 - **Current Chinese (`zh` column):** `CompileError: duplicate declaration of %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:139`, `internal/lang/typecheck.go:509` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:509`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:509`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -726,7 +726,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: duplicate interface %q`
 - **Current Chinese (`zh` column):** `CompileError: duplicate interface %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:723`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:723`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:723`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -737,7 +737,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: duplicate library %q`
 - **Current Chinese (`zh` column):** `CompileError: duplicate library %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:732`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:732`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:732`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -748,7 +748,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: duplicate method %q on %s`
 - **Current Chinese (`zh` column):** `CompileError: duplicate method %q on %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:761`, `internal/lang/typecheck.go:766` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:761`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:761`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%q %s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -759,7 +759,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: duplicate struct %q`
 - **Current Chinese (`zh` column):** `CompileError: duplicate struct %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:710`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:710`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:710`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -770,7 +770,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: duplicate type alias %q`
 - **Current Chinese (`zh` column):** `CompileError: duplicate type alias %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:690`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:690`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:690`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -781,7 +781,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: empty type annotation`
 - **Current Chinese (`zh` column):** `CompileError: empty type annotation` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:877`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:877`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:877`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -792,7 +792,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: impl %s for %s: method %q takes %d params, interface requires %d`
 - **Current Chinese (`zh` column):** `CompileError: impl %s for %s: method %q takes %d params, interface requires %d` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:812`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:812`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:812`)
 - **What is missing:** a Chinese value that uses the source's 5 placeholder(s) `%s %s %q %d %d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -803,7 +803,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: impl %s for %s: missing method %q`
 - **Current Chinese (`zh` column):** `CompileError: impl %s for %s: missing method %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:807`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:807`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:807`)
 - **What is missing:** a Chinese value that uses the source's 3 placeholder(s) `%s %s %q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -814,7 +814,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: interface %s is not generic, but %d type argument(s) were given`
 - **Current Chinese (`zh` column):** `CompileError: interface %s is not generic, but %d type argument(s) were given` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:1040`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:1040`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:1040`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%s %d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -825,7 +825,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: main must take 1-3 params in order (io, env, args), got %d`
 - **Current Chinese (`zh` column):** `CompileError: main must take 1-3 params in order (io, env, args), got %d` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:818`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:818`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:818`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -836,7 +836,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: parameter %q of %s is missing a type annotation`
 - **Current Chinese (`zh` column):** `CompileError: parameter %q of %s is missing a type annotation` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:1149`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:1144`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:1144`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%q %s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -847,7 +847,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: %s`
 - **Current Chinese (`zh` column):** `CompileError: %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:990`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:990`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:990`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -858,7 +858,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: %s takes %d type argument(s), got %d`
 - **Current Chinese (`zh` column):** `CompileError: %s takes %d type argument(s), got %d` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:1018`, `internal/lang/typecheck.go:1037` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:1018`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:1018`)
 - **What is missing:** a Chinese value that uses the source's 3 placeholder(s) `%s %d %d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -869,7 +869,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)`
 - **Current Chinese (`zh` column):** `CompileError: struct %s has %d type parameter(s) — impl must introduce the same parameters (impl<T> {...} %s)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:740`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:740`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:740`)
 - **What is missing:** a Chinese value that uses the source's 3 placeholder(s) `%s %d %s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -880,7 +880,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: struct %s has no type parameters, but impl declares %d`
 - **Current Chinese (`zh` column):** `CompileError: struct %s has no type parameters, but impl declares %d` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:743`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:743`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:743`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%s %d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -891,7 +891,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: unknown interface %q`
 - **Current Chinese (`zh` column):** `CompileError: unknown interface %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:779`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:779`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:779`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -902,7 +902,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `CompileError: unknown type %q`
 - **Current Chinese (`zh` column):** `CompileError: unknown type %q` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:1056`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:1056`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:1056`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%q` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -913,7 +913,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `DivisionByZeroError: float division by zero`
 - **Current Chinese (`zh` column):** `DivisionByZeroError: float division by zero` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3640`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3640`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3640`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -924,7 +924,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `DivisionByZeroError: integer division by zero`
 - **Current Chinese (`zh` column):** `DivisionByZeroError: integer division by zero` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1267`, `internal/lang/eval.go:3613`, `internal/lang/vm.go:781` (3 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/vm.go:781`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/vm.go:781`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -935,7 +935,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `DivisionByZeroError: modulo by zero`
 - **Current Chinese (`zh` column):** `DivisionByZeroError: modulo by zero` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1272`, `internal/lang/eval.go:3618`, `internal/lang/vm.go:786` (3 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/vm.go:786`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/vm.go:786`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -946,7 +946,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `IndexOutOfBoundsError: index %d out of range [0,%d)`
 - **Current Chinese (`zh` column):** `IndexOutOfBoundsError: index %d out of range [0,%d)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/value.go:472`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/value.go:470`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/value.go:470`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%d %d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -957,7 +957,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `IndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)`
 - **Current Chinese (`zh` column):** `IndexOutOfRangeError: bit index %d is out of range for bits<%d> (0..%d)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3527`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3527`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3527`)
 - **What is missing:** a Chinese value that uses the source's 3 placeholder(s) `%d %d %d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -968,7 +968,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `internal: unknown arithmetic operator %s`
 - **Current Chinese (`zh` column):** `internal: unknown arithmetic operator %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3646`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3646`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3646`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -979,7 +979,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `IOError: cannot create %q: %v`
 - **Current Chinese (`zh` column):** `IOError: cannot create %q: %v` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2782`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2782`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2782`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%q %v` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -990,7 +990,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `IOError: cannot open %q: %v`
 - **Current Chinese (`zh` column):** `IOError: cannot open %q: %v` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2767`, `internal/lang/eval.go:2970` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2767`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2767`)
 - **What is missing:** a Chinese value that uses the source's 2 placeholder(s) `%q %v` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1001,7 +1001,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `IOError: %s`
 - **Current Chinese (`zh` column):** `IOError: %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1436`, `internal/lang/eval.go:2184`, `internal/lang/eval.go:2195`, `internal/lang/eval.go:2474`, `internal/lang/eval.go:2487`, `internal/lang/eval.go:2514`, `internal/lang/eval.go:2522`, `internal/lang/eval.go:2566` (8 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1436`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1436`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1012,7 +1012,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `IOError: %v`
 - **Current Chinese (`zh` column):** `IOError: %v` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3192`, `internal/lang/eval.go:3201` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3192`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3192`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%v` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1023,7 +1023,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `JSONError: %s`
 - **Current Chinese (`zh` column):** `JSONError: %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1440`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1440`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1440`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1034,7 +1034,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `JSONError: %v`
 - **Current Chinese (`zh` column):** `JSONError: %v` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3166`, `internal/lang/eval.go:3170`, `internal/lang/eval.go:3180` (3 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3166`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3166`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%v` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1045,7 +1045,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `NullPointerError: assignment through null pointer`
 - **Current Chinese (`zh` column):** `NullPointerError: assignment through null pointer` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1000`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1000`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1000`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1056,7 +1056,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `NullPointerError: dereference of null pointer`
 - **Current Chinese (`zh` column):** `NullPointerError: dereference of null pointer` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1382`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1382`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1382`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1067,7 +1067,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `PanicError: %s`
 - **Current Chinese (`zh` column):** `PanicError: %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2941`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2941`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2941`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1078,7 +1078,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `RuntimeError: execCtx for %s already executed`
 - **Current Chinese (`zh` column):** `RuntimeError: execCtx for %s already executed` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:632`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:632`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:632`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1089,7 +1089,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `RuntimeError: thread busy — merge only when idle (taskm.done)`
 - **Current Chinese (`zh` column):** `RuntimeError: thread busy — merge only when idle (taskm.done)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3369`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3369`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3369`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1100,7 +1100,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `RuntimeError: unknown task pid %d`
 - **Current Chinese (`zh` column):** `RuntimeError: unknown task pid %d` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2081`, `internal/lang/eval.go:2125`, `internal/lang/eval.go:3403` (3 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2081`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2081`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%d` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1111,7 +1111,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `RuntimeError: unresolved call target`
 - **Current Chinese (`zh` column):** `RuntimeError: unresolved call target` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/vm.go:711`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/vm.go:711`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/vm.go:711`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1122,7 +1122,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: b[i] needs a writable raw-bits target`
 - **Current Chinese (`zh` column):** `TypeError: b[i] needs a writable raw-bits target` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1029`, `internal/lang/eval.go:1043`, `internal/lang/eval.go:1046` (3 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1029`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1029`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1133,7 +1133,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: a bit index requires raw bits and an int index`
 - **Current Chinese (`zh` column):** `TypeError: a bit index requires raw bits and an int index` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1036`, `internal/lang/eval.go:1355` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1036`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1036`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1144,7 +1144,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: Copyd is a modifier, not a type: write 'copyd <type> <name>' (e.g. copyd List<int> a)`
 - **Current Chinese (`zh` column):** `TypeError: Copyd is a modifier, not a type: write 'copyd <type> <name>' (e.g. copyd List<int> a)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/typecheck.go:860`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/typecheck.go:860`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/typecheck.go:860`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1155,7 +1155,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: file::new(name String)`
 - **Current Chinese (`zh` column):** `TypeError: file::new(name String)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2672`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2672`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2672`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1166,7 +1166,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: ifstream requires a path string, got %s`
 - **Current Chinese (`zh` column):** `TypeError: ifstream requires a path string, got %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2762`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2762`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2762`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1177,7 +1177,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: index must be int`
 - **Current Chinese (`zh` column):** `TypeError: index must be int` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1367`, `internal/lang/eval.go:1900` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1367`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1367`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1188,7 +1188,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: indexing requires a List, got %s`
 - **Current Chinese (`zh` column):** `TypeError: indexing requires a List, got %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1363`, `internal/lang/eval.go:1897` (2 sites)
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1363`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1363`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1199,7 +1199,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: iofstream requires a path string, got %s`
 - **Current Chinese (`zh` column):** `TypeError: iofstream requires a path string, got %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2965`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2965`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2965`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1210,7 +1210,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: ofstream requires a path string, got %s`
 - **Current Chinese (`zh` column):** `TypeError: ofstream requires a path string, got %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2778`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2778`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2778`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1221,7 +1221,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: '%' requires int operands`
 - **Current Chinese (`zh` column):** `TypeError: '%' requires int operands` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3644`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3644`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3644`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1232,7 +1232,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkexec(cmd String[, retries int])`
 - **Current Chinese (`zh` column):** `TypeError: qkexec(cmd String[, retries int])` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2991`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2991`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2991`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1243,7 +1243,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkexecv(prog String, args List<String>[, retries])`
 - **Current Chinese (`zh` column):** `TypeError: qkexecv(prog String, args List<String>[, retries])` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3024`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3024`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3024`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1254,7 +1254,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkfile_read(path String)`
 - **Current Chinese (`zh` column):** `TypeError: qkfile_read(path String)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3188`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3188`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3188`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1265,7 +1265,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkfile_write(path String, content String)`
 - **Current Chinese (`zh` column):** `TypeError: qkfile_write(path String, content String)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3198`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3198`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3198`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1276,7 +1276,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkhttp_get(url String[, retries int])`
 - **Current Chinese (`zh` column):** `TypeError: qkhttp_get(url String[, retries int])` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3084`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3084`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3084`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1287,7 +1287,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkhttp_post(url, body, contentType[, retries])`
 - **Current Chinese (`zh` column):** `TypeError: qkhttp_post(url, body, contentType[, retries])` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3124`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3124`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3124`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1298,7 +1298,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qkjson_loads(s String)`
 - **Current Chinese (`zh` column):** `TypeError: qkjson_loads(s String)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3176`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3176`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3176`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1309,7 +1309,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: qksignal_emit(node, name String [, args...])`
 - **Current Chinese (`zh` column):** `TypeError: qksignal_emit(node, name String [, args...])` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3213`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3213`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3213`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1320,7 +1320,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: raw bits admit only the bitwise family and equality`
 - **Current Chinese (`zh` column):** `TypeError: raw bits admit only the bitwise family and equality` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3563`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3563`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3563`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1331,7 +1331,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: %s.%s is a static method; call it via %s::%s(...)`
 - **Current Chinese (`zh` column):** `TypeError: %s.%s is a static method; call it via %s::%s(...)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2541`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2541`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2541`)
 - **What is missing:** a Chinese value that uses the source's 4 placeholder(s) `%s %s %s %s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1342,7 +1342,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: setBlock(n) requires a positive int block size`
 - **Current Chinese (`zh` column):** `TypeError: setBlock(n) requires a positive int block size` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2410`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2410`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2410`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1353,7 +1353,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: @styleConfigure(file String)`
 - **Current Chinese (`zh` column):** `TypeError: @styleConfigure(file String)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:1410`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:1410`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:1410`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1364,7 +1364,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: taskm.channel(n) requires 0 < n <= 1048576`
 - **Current Chinese (`zh` column):** `TypeError: taskm.channel(n) requires 0 < n <= 1048576` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2135`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2135`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2135`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1375,7 +1375,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: taskm.merge first arg must be a pid (int)`
 - **Current Chinese (`zh` column):** `TypeError: taskm.merge first arg must be a pid (int)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2076`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2076`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2076`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1386,7 +1386,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: taskm requires a Task or pid, got %s`
 - **Current Chinese (`zh` column):** `TypeError: taskm requires a Task or pid, got %s` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:3407`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3407`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:3407`)
 - **What is missing:** a Chinese value that uses the source's 1 placeholder(s) `%s` in this order
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1397,7 +1397,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: unsupported integer operation`
 - **Current Chinese (`zh` column):** `TypeError: unsupported integer operation` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/vm.go:802`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/vm.go:802`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/vm.go:802`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 
@@ -1408,7 +1408,7 @@ found, not as a translation that exists.
 - **English source (`en` column):** `TypeError: write(s String)`
 - **Current Chinese (`zh` column):** `TypeError: write(s String)` — **repeats the English; this is not a translation**
 - **Where it renders:** `internal/lang/eval.go:2192`
-- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:2192`)
+- **Trigger:** no Chinese translation exists; the zh column repeats the source (backlog) (site recorded in the table: `internal/lang/eval.go:2192`)
 - **What is missing:** a Chinese value; the message has no placeholders, so any accurate translation fills the row
 - **Chinese rendering found elsewhere:** **none found** — no Chinese rendering of this message in this repository or in the pinned syntax layer
 

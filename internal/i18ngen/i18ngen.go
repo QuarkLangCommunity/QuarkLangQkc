@@ -148,6 +148,9 @@ func ParseMessages(name string, raw []byte, langs []Language) ([]Message, error)
 		if fields[1] != "local" && fields[1] != "import" {
 			return fmt.Errorf("%s:%d: owner %q is neither local nor import", name, line, fields[1])
 		}
+		if err := checkSiteContext(name, line, fields[2]); err != nil {
+			return err
+		}
 		if !idRe.MatchString(fields[0]) {
 			return fmt.Errorf("%s:%d: id %q is not <domain>.<snake_case>", name, line, fields[0])
 		}
@@ -198,6 +201,27 @@ func ParseModuleTable(name string, raw []byte) ([]Message, error) {
 }
 
 var idRe = regexp.MustCompile(`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
+
+// absPathRe matches the shapes an absolute site reference takes: a POSIX path, a Windows drive path, a
+// UNC path or a file URI.
+var absPathRe = regexp.MustCompile(`^(/|[A-Za-z]:[\\/]|\\\\|file://)`)
+
+// siteRefRe matches a ctx column that cites a single source site as a file name with a line number.
+var siteRefRe = regexp.MustCompile(`^\S+\.(go|c|h|ts|js|py|sh|md):\d+$`)
+
+// checkSiteContext refuses a ctx column that cites its site by an absolute path or from outside the
+// repository: the column names where in this checkout the message is raised, so a machine's own path is
+// a leak of the machine the table was authored on, and it is committed and gate-checked like any other
+// cell. The site is written relative to the repository root, as typecheck.tsv already did.
+func checkSiteContext(name string, line int, ctx string) error {
+	if absPathRe.MatchString(ctx) {
+		return fmt.Errorf("%s:%d: ctx %q is an absolute path; cite the site relative to the repository root", name, line, ctx)
+	}
+	if siteRefRe.MatchString(ctx) && strings.Contains(filepath.ToSlash(ctx), "../") {
+		return fmt.Errorf("%s:%d: ctx %q leaves the repository; cite the site relative to the repository root", name, line, ctx)
+	}
+	return nil
+}
 
 // parseRows walks the data lines of a table, handing each row's columns to fn. The last column is the
 // message text and absorbs any tab inside it, so a template may contain a tab without shifting the
