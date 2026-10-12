@@ -17,10 +17,10 @@ func oneRow(ctx string) []byte {
 // an absolute path must not parse, so the machine the table was authored on cannot be committed back in.
 func TestParseMessagesRefusesAbsoluteSite(t *testing.T) {
 	for _, ctx := range []string{
-		"/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3563",
-		`C:\Users\jack\QuarkLang\internal\lang\eval.go:3563`,
+		"/srv/checkout/QuarkLang/internal/lang/eval.go:3563",
+		`C:\work\QuarkLang\internal\lang\eval.go:3563`,
 		`\\build-server\share\QuarkLang\internal\lang\eval.go:3563`,
-		"file:///home/jack/QuarkLang/internal/lang/eval.go:3563",
+		"file:///srv/checkout/QuarkLang/internal/lang/eval.go:3563",
 		"../other-checkout/internal/lang/eval.go:3563",
 	} {
 		_, err := ParseMessages("fields.tsv", oneRow(ctx), testLangs)

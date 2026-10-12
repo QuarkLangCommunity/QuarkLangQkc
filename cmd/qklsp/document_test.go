@@ -8,8 +8,8 @@ import (
 
 func TestPathToURISlash(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"/home/jack/a.qk", "/home/jack/a.qk"},
-		{"C:/Users/jack/a.qk", "/C:/Users/jack/a.qk"}, // Windows: prepend the leading slash -> file:///C:/...
+		{"/home/user/a.qk", "/home/user/a.qk"},
+		{"C:/Users/user/a.qk", "/C:/Users/user/a.qk"}, // Windows: prepend the leading slash -> file:///C:/...
 		{"D:/x.qk", "/D:/x.qk"},
 	}
 	for _, c := range cases {
@@ -21,7 +21,7 @@ func TestPathToURISlash(t *testing.T) {
 
 func TestPathFromURISlash(t *testing.T) {
 	// Non-Windows platforms: the leading slash is kept (/C:/x is just an ordinary path on POSIX)
-	if got := pathFromURISlash("/home/jack/a.qk"); got != "/home/jack/a.qk" {
+	if got := pathFromURISlash("/home/user/a.qk"); got != "/home/user/a.qk" {
 		t.Errorf("POSIX 路径不应被改写，got %q", got)
 	}
 	// The Windows-only branch is reviewed separately (it does not trigger on non-Windows platforms; the logic is covered by uriSlashPath)

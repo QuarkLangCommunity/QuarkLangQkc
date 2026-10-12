@@ -377,3 +377,22 @@ func TestSkipSelectsABoundedSubset(t *testing.T) {
 		t.Error("an invalid -skip pattern must be refused")
 	}
 }
+
+// TestPortableCommandDropsTheBuildCachePath is the leak the committed report carried: a `go run`
+// invocation names the build cache's copy of the binary, and that path belongs to one machine.
+func TestPortableCommandDropsTheBuildCachePath(t *testing.T) {
+	cache := t.TempDir()
+	argv := []string{filepath.Join(cache, "1e", "1e91e32a9eb0-d", "qkstress"), "run", "-cases", "stress-out/cases"}
+	if got, want := portableCommand(argv, []string{cache}), "go run ./cmd/qkstress run -cases stress-out/cases"; got != want {
+		t.Fatalf("portableCommand = %q, want %q", got, want)
+	}
+}
+
+// TestPortableCommandKeepsAPathOutsideTheCache keeps the recorded command honest when the binary was built
+// into the tree: a reader can then run the line as it stands.
+func TestPortableCommandKeepsAPathOutsideTheCache(t *testing.T) {
+	argv := []string{filepath.Join("stress-out", "bin", "qkstress"), "run"}
+	if got, want := portableCommand(argv, []string{t.TempDir()}), strings.Join(argv, " "); got != want {
+		t.Fatalf("portableCommand = %q, want %q", got, want)
+	}
+}

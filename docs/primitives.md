@@ -901,15 +901,16 @@ under both locales, and it disappears the moment `stress-out/` is removed (`inte
 caused by this document (a markdown file is not linted as a program); it is recorded here because the
 gate order above is the order a reader will run, and the failure looks like a regression.
 
-**A second observation from the same gate run: a committed artefact carries machine-specific absolute
-paths.** The generated-artefact gate is green, and it is green *while* the artefact contains another
-worktree's paths: `internal/i18n/source/fields.tsv` holds **93** occurrences of `/home/jack` in its
-source-site column (e.g. row 95 cites `/home/jack/.cache/qk-i18n-s5/QuarkLang/internal/lang/eval.go:3563`
-where its sibling row in `typecheck.tsv:57` cites the same kind of site relatively, as
-`internal/lang/typecheck.go:1926`), and the tracked, gate-checked `docs/i18n-backlog.md` carries **64** of
-them. The gate compares the committed artefact against a fresh generation, so it cannot see this: both
-sides are equally absolute. It is recorded here because it is the same shape as §1.3 — a gate that
-verifies *consistency* rather than *correctness* — and because §7.2's boundary question is exactly about
-what the catalogue and the tools are allowed to put into a committed file. It is not caused by this
-document and is not fixed here (a fix touches an authored catalogue table and a generated document, which
-is a different change).
+**A second observation from the same gate run: a committed artefact carried machine-specific absolute
+paths.** The generated-artefact gate is green, and it was green *while* the artefact contained another
+worktree's paths: `internal/i18n/source/fields.tsv` held **93** occurrences of one machine's home
+directory in its source-site column (e.g. row 95 cited an absolute path ending
+`/internal/lang/eval.go:3563`, where its sibling row in `typecheck.tsv:57` cites the same kind of site
+relatively, as `internal/lang/typecheck.go:1926`), and the tracked, gate-checked `docs/i18n-backlog.md`
+carried **64** of them. The gate compares the committed artefact against a fresh generation, so it could
+not see this: both sides were equally absolute. It is recorded here because it is the same shape as §1.3 —
+a gate that verifies *consistency* rather than *correctness* — and because §7.2's boundary question is
+exactly about what the catalogue and the tools are allowed to put into a committed file. **Fixed since:**
+every authored site is written relative to the repository root, the generator refuses an absolute site
+while reading a table (`checkSiteContext` in `internal/i18ngen`), and `internal/i18n/sites_test.go` keeps a
+machine path out of the authored tables and the committed artefacts.

@@ -158,7 +158,7 @@ $ go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@latest
 $ echo $?
 0
 $ ls -l "$(go env GOPATH)/bin"
--rwxr-xr-x 1 jack jack 8739928 compiler
+-rwxr-xr-x 1 user user 8739928 compiler
 $ compiler --help | head -1
 usage: qkc [options] <file.qk>
 $ compiler -run rec.kq

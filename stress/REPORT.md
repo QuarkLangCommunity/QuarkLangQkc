@@ -15,7 +15,7 @@ go run ./cmd/qkstress run -cases stress-out/cases
 The run that produced this report was invoked as:
 
 ```sh
-/home/jack/.cache/go-build/1e/1e91e32a9eb0c6b3bcad30d6fb91adc0be93553052db12e10516f291b7e4754b-d/qkstress run -cases stress-out/cases -interp stress-out/bin/quark -compiler stress-out/bin/qkc -work stress-out -timeout 90s -known stress/known-failures.txt -notes stress/NOTES.md -report stress/REPORT.md -json stress-out/results.json
+go run ./cmd/qkstress run -cases stress-out/cases -interp stress-out/bin/quark -compiler stress-out/bin/qkc -work stress-out -timeout 90s -known stress/known-failures.txt -notes stress/NOTES.md -report stress/REPORT.md -json stress-out/results.json
 ```
 
 Every phase is bounded twice: wall clock and peak resident set size of the whole process
