@@ -361,6 +361,33 @@ requirement, and the reason `go build ./...` never needs the generator to run). 
 timestamps, no map iteration, author order only; verified by generating twice and comparing
 (§6, P2).
 
+#### The review document is generated, not committed
+
+`-doc <path>` renders the untranslated backlog as a review document for a translator: one row per
+untranslated message, with the tables' Chinese values quoted as data. It is the one artefact this
+generator produces that is **not** committed, and the reason is what it is made of. The catalog and the
+C header are read by the program at run time, so they have to be in the tree; the review document is
+read by a person who asked for it, and a tracked copy would put translation data into the repository by
+the thousand.
+
+| Invocation | What happens |
+|---|---|
+| `-doc cache` | written to the per-user cache directory, outside any checkout; the path is printed |
+| `-doc <path>` | written to that path |
+| `-doc` into the checkout | **refused**, by `cmd/qki18n` before the generator is called and again by `runDoc` before it writes |
+| `-check -doc <path>` | compared with a fresh rendering; `out of date` when it differs |
+| (no `-doc`) | no document is written, which is what `go generate` uses |
+
+Nothing reads the document, so committing it bought the tree nothing and cost it the values themselves.
+The gate that kept it honest did not go with it: `TestBacklogDocumentRenders` renders the document in
+memory and requires its sections, and `runDoc` compares a handed-in copy against a **second rendering**
+rather than against a stored one. That is what makes the comparison able to go red — there is no stored
+copy to be stale, so what remains to fail is a document that is not what the tables say, which
+`TestProofBacklogDocumentIsStaleWhenTheTablesMove` proves, and a renderer whose two answers in one run
+disagree, which is the failure a document built from a map or from the filesystem order would have.
+`internal/i18n/proof/generated_document.sh` drives the whole contract end to end, and goes red when
+either refusal is removed.
+
 ### 3.7 The authored source file
 
 ```
@@ -440,7 +467,9 @@ git switch feat/i18n-generated-catalog
 go generate ./internal/i18n           # regenerates the committed catalog (a no-op when current)
 go test ./internal/i18n/ -count=1 -v  # the proofs below, plus the pre-existing coverage and ratchets
 internal/i18n/proof/byte_identical.sh # P3, end to end against origin/main
+internal/i18n/proof/generated_document.sh # the review document's contract: written outside the checkout
 go test ./... -count=1                # the whole tree
+go run ./cmd/qki18n -doc cache        # the review document, written outside the checkout; prints the path
 ```
 
 | Property | Test / command | Where |
@@ -452,6 +481,7 @@ go test ./... -count=1                # the whole tree
 | P3 byte-identical output, `en` and `zh` | `internal/i18n/proof/byte_identical.sh` | `internal/i18n/proof/` |
 | P4 the runtime reads the blob | `TestProofRuntimeReadsTheBlob`, `TestProofMigratedMessagesAreNoLongerMapEntries` | `internal/i18n/proof_test.go` |
 | determinism | `TestGeneratedCatalogIsDeterministic` | same |
+| the review document renders, and is written outside the checkout | `TestBacklogDocumentRenders`, `internal/i18n/proof/generated_document.sh` | `internal/i18n/proof_test.go`, `internal/i18n/proof/` |
 
 ### 6.1 P1 — rephrasing an English message does not lose its translation ✔
 
@@ -1047,6 +1077,7 @@ the same way §5 leaves plural forms out.
 | P3 | `internal/i18n/proof/byte_identical.sh` | `all identical (interpreter: origin/main == this tree), en and zh  [18 runs]` |
 | P4 | `go test ./internal/i18n/ -run 'TestProofRuntime|TestProofMigrated' -v` | `the 25 generated messages are absent from the 542 text-keyed entries` |
 | determinism | `go test ./internal/i18n/ -run TestGeneratedCatalogIsDeterministic -v` | pass (6 generations, identical bytes) |
+| the review document's contract | `internal/i18n/proof/generated_document.sh` | `generated document clean (written outside the checkout, refused inside it; the staleness check still goes red; the committed artefacts are unchanged)  [6 checks]` |
 
 Rows below re-measured after step 3 (the numbers above them are the prototype's, kept for comparison):
 
