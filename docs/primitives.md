@@ -83,9 +83,9 @@ refused by both — they were renamed in standard 0.7, `spec/STANDARD.md:345`):
 ### 1.2 Type views — 28 `tKind`s against 13 standard rows
 
 The standard gives one table of views (`spec/STANDARD.md:73-80`): `bool`, `char`, `uchar`,
-`int32`/`int64`/`int128`/`int256`, `float32`/`float64`, `&T`/`*T`. Read as cases that is **11 rows**;
-adding the two degenerate interpretations registered by the type system itself (`void`, `any`, `:89-90`)
-makes **13**. The implementation's own enumeration is larger — a 28-entry `tKind` enum:
+`int32`/`int64`/`int128`/`int256`, `float32`/`float64`, `&T`/`*T`. Read as *names* rather than rows that
+is **11** (`1+1+1+4+2+2`) in 6 rows; adding the two degenerate interpretations registered by the type
+system itself (`void`, `any`, `:89-90`) makes **13**. The implementation's own enumeration is larger — a 28-entry `tKind` enum:
 
 `internal/lang/typecheck.go:16-45` — `tInt tFloat tString tBool tNil tAny tList tHashTable tFuncBuffer
 tIOStream tInputStream tOutputStream tChannel tTask tMemorize tMemory tFunc tStruct tTaskm tPtr tCopyd
@@ -97,7 +97,7 @@ Three further enumerations of the *same* fact exist in the same file ✔:
 |---|---|
 | `internal/lang/typecheck.go:121-131` | `viewWidth`: `bool`→1, `uchar`→8, `int`→32; **3** cases, everything else 0 |
 | `internal/lang/typecheck.go:183-190` | `kindName`: a name→kind map for error text |
-| `internal/lang/typecheck.go:355-400` | `parseTypeStr`: the name→`Type` decision, **~19** `case` arms |
+| `internal/lang/typecheck.go:355-401` | `parseTypeStr`: the name→`Type` decision — ≥13 `case` arms from `:363`, one per accepted spelling (`int/long/char`, `float/double`, `bool`, `uchar`, `bit`, `bits<N>`, `String`, `void`, `FuncBuffer`, `IOStream`, the three input-stream spellings, the three output-stream spellings) |
 | `internal/lang/typecheck.go:134,137` | `isIntView` = `tInt|tUchar`; `isSignedView` = `tInt` |
 
 Measured ✔ — which standard rows actually exist: `uchar` and `bits<N>` are implemented in both engines;
@@ -229,7 +229,7 @@ Measured ✔ (`probe`), with both engines agreeing on every line:
 | `#if` + `#endif`, `#ifdef`, `#ifndef`, `#else` | probe | work — the guarded branch is the one that survives |
 | `#define NAME`, `#undef NAME` | probe | work — the name is defined / no longer defined |
 | `#define NAME 0` (a value after the name) | probe | **silently ignored**: the name stays undefined and nothing is reported — the guard `reDefineNm.MatchString(nm)` at `preproc.go:164` rejects `"X 0"` with no `else` |
-| `#elif` | read | the same selection code as `#else` (`preproc.go:129-141`) |
+| `#elif` | read | the same selection code as `#else`: `preproc.go:129-140` (`#elif`) and `:143-160` (`#else`/`#endif`) |
 | `#include "f.qk"` | read | `preproc.go:193-221`, include depth cap 16 at `:101` |
 | `#error <msg>` | read | `preproc.go:185-187` |
 | `#ifn` | probe | **not implemented** — `#ifn` matches neither the `if|elif` regex (`preproc.go:335`) nor the dispatch switch (`:143-192`), so it opens no group and the following `#endif` is refused: `#endif without a matching #if` |
@@ -888,3 +888,15 @@ The three `REJECT_DIFF` cases are *wording-only* disagreements between the two e
 for "no main function found". They are non-fatal by the suite's own rule and predate this change; they are
 noted here because they are the same class of fact as §1.2b — the two engines agree on behaviour and
 differ on words.
+
+**One gate-order interaction, measured while running these gates.** The stress gate writes its corpus
+into `stress-out/cases/` (30 programs, 10 MB, gitignored — `ci.yml`'s stress job materialises it with
+`go run ./cmd/qkstress gen -out stress-out/cases`). The test gate's corpus walker starts at the repository
+root and skips only `.git`, `dist`, `dist-ci`, `node_modules`, `lintbench` and `bench`
+(`internal/lang/lintcorpus_test.go:56-70`, `corpusFiles`); `stress-out` is **not** in that list. So running
+the stress gate *before* the test gate in one checkout makes the test gate lint the extreme corpus and die
+with `fatal error: stack overflow` (`runtime: goroutine stack exceeds 1000000000-byte limit`) — measured,
+under both locales, and it disappears the moment `stress-out/` is removed (`internal/lang` then reports
+`ok` in 10.1 s / 11.7 s). CI never sees it because the two gates run on separate runners. This is not
+caused by this document (a markdown file is not linted as a program); it is recorded here because the
+gate order above is the order a reader will run, and the failure looks like a regression.
