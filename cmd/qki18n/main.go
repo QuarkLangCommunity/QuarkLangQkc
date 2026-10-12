@@ -57,7 +57,7 @@ func pinnedModuleDir() (string, error) {
 }
 
 func main() {
-	check := flag.Bool("check", false, "fail when the committed catalog (or document) is out of date instead of writing it")
+	check := flag.Bool("check", false, "fail when the committed catalog is out of date instead of writing it; with -doc, compare that document against a fresh rendering")
 	source := flag.String("source", filepath.Join("internal", "i18n", "source"), "authored message tables")
 	out := flag.String("out", filepath.Join("internal", "i18n", "msg_gen.go"), "generated catalog")
 	doc := flag.String("doc", "", "write the backlog review document to this path, outside the repository; `cache` means the per-user default (empty: no document)")
