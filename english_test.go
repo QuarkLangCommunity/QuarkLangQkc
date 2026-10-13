@@ -111,11 +111,12 @@ func TestNoChineseTracesInTrackedGoFiles(t *testing.T) {
 
 // TestChineseTraceRulesMatch is the proof that the ratchet is not vacuous: every rule has to match the
 // shape it is written to catch, and to leave ASCII, a Latin-1 accent and the generated catalog alone, so
-// a classifier that stopped working fails here instead of reporting zero occurrences forever. The runes
-// are written as escapes on purpose: a literal Han rune in this file would itself be a trace.
+// a classifier that stopped working fails here instead of reporting zero occurrences forever.
 func TestChineseTraceRulesMatch(t *testing.T) {
-	const han = "\u4e00"
-	const fullWidthColon = "\uff1a"
+	// The runes are built at run time rather than written as escapes: an escape unquotes to the rune, so a
+	// literal here would be the very trace this file exists to catch, and this ratchet would fail on itself.
+	han := string(rune(0x4e00))
+	fullWidthColon := string(rune(0xff1a))
 	cases := []struct {
 		name string
 		path string
