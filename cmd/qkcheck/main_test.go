@@ -36,10 +36,10 @@ func TestCLICleanExitZero(t *testing.T) {
 	p := writeFile(t, t.TempDir(), "clean.qk", cleanSrc)
 	out, _, code := runCapture(t, p)
 	if code != 0 {
-		t.Fatalf("干净文件应退出 0，got %d（输出 %q）", code, out)
+		t.Fatalf("a clean file should exit 0, got %d (output %q)", code, out)
 	}
 	if strings.TrimSpace(out) != "" {
-		t.Errorf("干净文件不应有输出，got %q", out)
+		t.Errorf("a clean file should produce no output, got %q", out)
 	}
 }
 
@@ -52,10 +52,10 @@ func TestCLIFindingsExitOne(t *testing.T) {
 	p := writeFile(t, t.TempDir(), "unused.qk", src)
 	out, _, code := runCapture(t, p)
 	if code != 1 {
-		t.Fatalf("有诊断应退出 1，got %d", code)
+		t.Fatalf("a file with diagnostics should exit 1, got %d", code)
 	}
 	if !strings.Contains(out, "QK101") {
-		t.Errorf("输出应包含 QK101：%q", out)
+		t.Errorf("the output should contain QK101: %q", out)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestCLIExit0Flag(t *testing.T) {
 	p := writeFile(t, t.TempDir(), "unused.qk", "fn main(IOStream io) {\n    int unused = 1;\n    io.println(\"ok\");\n}\n")
 	_, _, code := runCapture(t, "-exit0", p)
 	if code != 0 {
-		t.Fatalf("-exit0 应退出 0，got %d", code)
+		t.Fatalf("-exit0 should exit 0, got %d", code)
 	}
 }
 
@@ -72,13 +72,13 @@ func TestCLIJSONOutput(t *testing.T) {
 	out, _, _ := runCapture(t, "-json", p)
 	var got []finding
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
-		t.Fatalf("JSON 解析失败: %v\n%s", err, out)
+		t.Fatalf("JSON parsing failed: %v\n%s", err, out)
 	}
 	if len(got) != 1 || got[0].Code != "QK101" || got[0].Line != 2 {
-		t.Fatalf("JSON 内容不符: %+v", got)
+		t.Fatalf("unexpected JSON content: %+v", got)
 	}
 	if got[0].File != p {
-		t.Errorf("JSON file 应为 %s，got %s", p, got[0].File)
+		t.Errorf("the JSON file field should be %s, got %s", p, got[0].File)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestCLIJSONCleanIsEmptyArray(t *testing.T) {
 	p := writeFile(t, t.TempDir(), "clean.qk", cleanSrc)
 	out, _, _ := runCapture(t, "-json", p)
 	if strings.TrimSpace(out) != "[]" {
-		t.Errorf("干净文件 JSON 应为 []，got %q", out)
+		t.Errorf("a clean file should produce the JSON value [], got %q", out)
 	}
 }
 
@@ -94,10 +94,10 @@ func TestCLIParseErrorReported(t *testing.T) {
 	p := writeFile(t, t.TempDir(), "bad.qk", "fn main(IOStream io) {\n    int x = ;\n}\n")
 	out, _, code := runCapture(t, p)
 	if code != 1 {
-		t.Fatalf("语法错误应退出 1，got %d", code)
+		t.Fatalf("a syntax error should exit 1, got %d", code)
 	}
 	if !strings.Contains(out, "ParseError") || !strings.Contains(out, ":2:") {
-		t.Errorf("应报 ParseError 且带行列：%q", out)
+		t.Errorf("a ParseError with a line and a column was expected: %q", out)
 	}
 }
 
@@ -105,28 +105,28 @@ func TestCLITypeErrorReported(t *testing.T) {
 	p := writeFile(t, t.TempDir(), "type.qk", "fn main(IOStream io) {\n    int x = \"s\";\n    io.println(x);\n}\n")
 	out, _, code := runCapture(t, p)
 	if code != 1 {
-		t.Fatalf("类型错误应退出 1，got %d", code)
+		t.Fatalf("a type error should exit 1, got %d", code)
 	}
 	if !strings.Contains(out, "error:") || !strings.Contains(out, "cannot assign") {
-		t.Errorf("应报类型错误：%q", out)
+		t.Errorf("a type error was expected: %q", out)
 	}
 }
 
 func TestCLIUsageErrors(t *testing.T) {
 	if _, _, code := runCapture(t); code != 2 {
-		t.Errorf("无参数应退出 2，got %d", code)
+		t.Errorf("no arguments should exit 2, got %d", code)
 	}
 	if _, _, code := runCapture(t, "-nope", "x.qk"); code != 2 {
-		t.Errorf("未知参数应退出 2，got %d", code)
+		t.Errorf("an unknown argument should exit 2, got %d", code)
 	}
 	if _, _, code := runCapture(t, "-L"); code != 2 {
-		t.Errorf("-L 缺参数应退出 2，got %d", code)
+		t.Errorf("-L with a missing argument should exit 2, got %d", code)
 	}
 	if out, _, code := runCapture(t, "--version"); code != 0 || !strings.Contains(out, "qkcheck") {
-		t.Errorf("--version 应退出 0 且打印版本，got %d %q", code, out)
+		t.Errorf("--version should exit 0 and print the version, got %d %q", code, out)
 	}
 	if out, _, code := runCapture(t, "-h"); code != 0 || !strings.Contains(out, "usage: qkcheck") {
-		t.Errorf("-h 应打印用法，got %d %q", code, out)
+		t.Errorf("-h should print usage, got %d %q", code, out)
 	}
 }
 
@@ -147,15 +147,15 @@ func TestCLIImportPath(t *testing.T) {
 
 	out, _, code := runCapture(t, app)
 	if code != 1 || !strings.Contains(out, "ImportError") {
-		t.Fatalf("无 -L 时应报 ImportError 且退出 1，got code=%d out=%q", code, out)
+		t.Fatalf("without -L an ImportError and exit 1 were expected, got code=%d out=%q", code, out)
 	}
 	if !strings.Contains(out, "main.qk:2:1") {
-		t.Errorf("ImportError 应定位到 import 语句（第 2 行），got %q", out)
+		t.Errorf("ImportError should point at the import statement (line 2), got %q", out)
 	}
 
 	out, _, code = runCapture(t, "-L", libDir, app)
 	if code != 0 {
-		t.Fatalf("带 -L 应检查通过，got code=%d out=%q", code, out)
+		t.Fatalf("with -L the check should pass, got code=%d out=%q", code, out)
 	}
 }
 
@@ -197,23 +197,23 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(files) < 10 {
-		t.Fatalf("语料过少（%d 个文件），测试无效", len(files))
+		t.Fatalf("too few corpus files (%d): the test proves nothing", len(files))
 	}
 	sort.Strings(files)
 
 	out, errOut, code := runCapture(t, append([]string{"-json"}, files...)...)
 	if code != 1 && code != 0 {
-		t.Fatalf("语料检查异常退出 %d：%s", code, errOut)
+		t.Fatalf("the corpus check exited abnormally with %d: %s", code, errOut)
 	}
 	var got []finding
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
-		t.Fatalf("JSON 解析失败: %v", err)
+		t.Fatalf("JSON parsing failed: %v", err)
 	}
 
 	// 1) no errors allowed
 	for _, f := range got {
 		if f.Sev == "error" {
-			t.Errorf("语料出现错误级诊断（不应存在）：%s", f)
+			t.Errorf("the corpus produced an error-level diagnostic (there should be none): %s", f)
 		}
 	}
 
@@ -246,12 +246,12 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 	}
 	for k := range gotWarnings {
 		if !wantWarnings[k] {
-			t.Errorf("出现未复核的警告（可能为新误报）：%s", k)
+			t.Errorf("an unreviewed warning appeared (possibly a new false positive): %s", k)
 		}
 	}
 	for k := range wantWarnings {
 		if !gotWarnings[k] {
-			t.Errorf("快照中的警告消失（检查能力回归？）：%s", k)
+			t.Errorf("a warning in the snapshot disappeared (a regression in the check?): %s", k)
 		}
 	}
 }

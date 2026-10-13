@@ -29,27 +29,27 @@ entry:
 func TestNormalizeExportedABI(t *testing.T) {
 	exports := collectExports(sampleLibIR)
 	if len(exports) != 2 {
-		t.Fatalf("应识别 2 个顶层函数，得到 %d", len(exports))
+		t.Fatalf("2 top-level functions should be recognized, got %d", len(exports))
 	}
 	out, sigs := normalizeExportedABI(sampleLibIR, []QKExport{{Name: "vfc_room_cap"}})
 	// Exported function: parameters must be **values**
 	if !strings.Contains(out, "define i32 @vfc_room_cap(i32 %p0_val)") {
-		t.Fatalf("导出函数参数未转值：\n%s", firstLines(out, 6))
+		t.Fatalf("an exported function's parameters were not converted:\n%s", firstLines(out, 6))
 	}
 	// The entry must have alloca + store, so the body's existing %p0 usage still works
 	if !strings.Contains(out, "%p0 = alloca i32") || !strings.Contains(out, "store i32 %p0_val, i32* %p0") {
-		t.Fatalf("缺少入口桥接（alloca/store）：\n%s", firstLines(out, 10))
+		t.Fatalf("missing the entry bridge (alloca/store):\n%s", firstLines(out, 10))
 	}
 	// Body not broken
 	if !strings.Contains(out, "load i32, i32* %p0") {
-		t.Fatal("函数体被破坏")
+		t.Fatal("the function body was mangled")
 	}
 	// Non-exported functions stay as-is (internal convention unchanged)
 	if !strings.Contains(out, "define i32 @internal_helper(i32* noundef %x)") {
-		t.Fatal("非导出函数不应被改写")
+		t.Fatal("a non-exported function should not be rewritten")
 	}
 	if sigs["vfc_room_cap"] != "(i32)" {
-		t.Fatalf("规范化签名应为 (i32)，得到 %q", sigs["vfc_room_cap"])
+		t.Fatalf("the canonical signature should be (i32), got %q", sigs["vfc_room_cap"])
 	}
 }
 
@@ -69,21 +69,21 @@ func TestQKLibRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Name != "vfc-ext" || got.Version != "0.1.0" || got.Payload != "ir" {
-		t.Fatalf("清单往返异常：%+v", got)
+		t.Fatalf("wrong manifest round trip: %+v", got)
 	}
 	if len(got.Exports) != 1 || got.Exports[0].QLSig == "" {
-		t.Fatalf("导出签名丢失：%+v", got.Exports)
+		t.Fatalf("the export signatures were lost: %+v", got.Exports)
 	}
 	if len(got.Targets) != 2 || len(vs) != 2 {
-		t.Fatalf("变体数量异常：%v / %d", got.Targets, len(vs))
+		t.Fatalf("wrong variant count: %v / %d", got.Targets, len(vs))
 	}
 	name, ir, exact := pickVariant(vs, "windows-x86_64")
 	if !exact || name != "windows-x86_64" || !strings.Contains(ir, "99") {
-		t.Fatalf("变体选择异常：%s exact=%v", name, exact)
+		t.Fatalf("wrong variant selection: %s exact=%v", name, exact)
 	}
 	name2, _, exact2 := pickVariant(vs, "windows-arm64")
 	if exact2 || name2 == "" {
-		t.Fatalf("回退逻辑异常：%s exact=%v", name2, exact2)
+		t.Fatalf("wrong fallback: %s exact=%v", name2, exact2)
 	}
 	// Tamper with a variant → sha256 check must fail
 	raw, _ := readFileBytes(path)
@@ -93,7 +93,7 @@ func TestQKLibRoundTrip(t *testing.T) {
 		t.Fatal(werr)
 	}
 	if _, _, rerr := readQKLib(badPath); rerr == nil {
-		t.Fatal("变体被篡改应校验失败")
+		t.Fatal("a tampered variant should fail verification")
 	}
 }
 
@@ -101,10 +101,10 @@ func TestDeclBlockFor(t *testing.T) {
 	name, blk := DeclBlockFor(QKLibManifest{Name: "vfc-ext", Exports: []QKExport{
 		{Name: "vfc_room_cap", QLSig: "fn vfc_room_cap(int base) int"}}})
 	if name != "vfc-ext" && name != "vfc_ext" {
-		t.Fatalf("库名清洗异常：%q", name)
+		t.Fatalf("wrong library name sanitizing: %q", name)
 	}
 	if !strings.Contains(blk, "library ") || !strings.Contains(blk, "fn vfc_room_cap(int base) int;") {
-		t.Fatalf("声明块生成异常：\n%s", blk)
+		t.Fatalf("wrong declaration block:\n%s", blk)
 	}
 }
 

@@ -42,7 +42,7 @@ func TestP99Latency(t *testing.T) {
 	}
 	g50, g99, g999 := pctsLat(gd)
 
-	t.Logf("QuarkLang解释器: P50=%v P99=%v P999=%v", q50, q99, q999)
+	t.Logf("QuarkLang interpreter: P50=%v P99=%v P999=%v", q50, q99, q999)
 	t.Logf("Go:              P50=%v P99=%v P999=%v", g50, g99, g999)
 }
 

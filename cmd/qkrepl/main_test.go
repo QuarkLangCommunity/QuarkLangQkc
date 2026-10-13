@@ -24,10 +24,10 @@ func TestQkreplEvalFlag(t *testing.T) {
 	t.Setenv("QK_LANG", "zh")         // this file asserts Chinese echo output
 	out, errOut, code := runCapture(t, "", "-e", "1 + 2 * 3")
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (%s)", code, errOut)
 	}
 	if strings.TrimSpace(out) != "7" {
-		t.Errorf("应回显 7，got %q", out)
+		t.Errorf("it should echo 7, got %q", out)
 	}
 }
 
@@ -36,10 +36,10 @@ func TestQkreplEvalFlagMultiple(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, _, code := runCapture(t, "", "-e", "int x = 5;", "-e", "x * 8")
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d", code)
+		t.Fatalf("it should exit 0, got %d", code)
 	}
 	if !strings.Contains(out, "40") {
-		t.Errorf("多段 -e 应共享环境，got %q", out)
+		t.Errorf("several -e segments should share one environment, got %q", out)
 	}
 }
 
@@ -48,10 +48,10 @@ func TestQkreplEvalFlagError(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	_, errOut, code := runCapture(t, "", "-e", "1 / 0")
 	if code != 1 {
-		t.Fatalf("出错应退出 1，got %d", code)
+		t.Fatalf("an error should exit 1, got %d", code)
 	}
 	if !strings.Contains(errOut, "error:") {
-		t.Errorf("stderr 应有错误信息，got %q", errOut)
+		t.Errorf("stderr should carry an error message, got %q", errOut)
 	}
 }
 
@@ -61,13 +61,13 @@ func TestQkreplBatchMode(t *testing.T) {
 	in := "int x = 21;\nx * 2\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (%s)", code, errOut)
 	}
 	if strings.Contains(out, "qk>") {
-		t.Errorf("批处理不应打印提示符，got %q", out)
+		t.Errorf("batch mode should not print a prompt, got %q", out)
 	}
 	if strings.TrimSpace(out) != "42" {
-		t.Errorf("应输出 42，got %q", out)
+		t.Errorf("it should print 42, got %q", out)
 	}
 }
 
@@ -77,13 +77,13 @@ func TestQkreplBatchMultiLineBlock(t *testing.T) {
 	in := "fn double(int n) int {\n    return n * 2;\n}\ndouble(21)\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (%s)", code, errOut)
 	}
 	if !strings.Contains(out, "已定义 fn double(int n) int") {
-		t.Errorf("应回显定义摘要，got %q", out)
+		t.Errorf("it should echo the definition summary, got %q", out)
 	}
 	if !strings.Contains(out, "42") {
-		t.Errorf("应输出 42，got %q", out)
+		t.Errorf("it should print 42, got %q", out)
 	}
 }
 
@@ -93,10 +93,10 @@ func TestQkreplBatchControlFlow(t *testing.T) {
 	in := "int i = 0;\nwhile (i < 3) {\n    i = i + 1;\n}\ni\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (%s)", code, errOut)
 	}
 	if strings.TrimSpace(out) != "3" {
-		t.Errorf("应输出 3，got %q", out)
+		t.Errorf("it should print 3, got %q", out)
 	}
 }
 
@@ -106,13 +106,13 @@ func TestQkreplBatchErrorContinues(t *testing.T) {
 	in := "int a = 1;\nnope + 1\na + 41\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 1 {
-		t.Fatalf("有错误应退出 1，got %d", code)
+		t.Fatalf("an error should exit 1, got %d", code)
 	}
 	if !strings.Contains(errOut, "error:") {
-		t.Errorf("stderr 应有错误，got %q", errOut)
+		t.Errorf("stderr should carry an error, got %q", errOut)
 	}
 	if !strings.Contains(out, "42") {
-		t.Errorf("出错后应继续求值，got %q", out)
+		t.Errorf("evaluation should continue after an error, got %q", out)
 	}
 }
 
@@ -121,10 +121,10 @@ func TestQkreplIoOutput(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, errOut, code := runCapture(t, `io.println("hello", 42)`+"\n")
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (%s)", code, errOut)
 	}
 	if !strings.Contains(out, "hello 42") {
-		t.Errorf("io.println 应写入 stdout，got %q", out)
+		t.Errorf("io.println should write to stdout, got %q", out)
 	}
 }
 
@@ -133,14 +133,14 @@ func TestQkreplHelpAndQuit(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, _, code := runCapture(t, ":help\n")
 	if code != 0 || !strings.Contains(out, ":load") {
-		t.Errorf(":help 应打印帮助，got code=%d %q", code, out)
+		t.Errorf(":help should print help, got code=%d %q", code, out)
 	}
 	out, _, code = runCapture(t, "int x = 1;\n:quit\nnope\n")
 	if code != 0 {
-		t.Errorf(":quit 后应正常退出，got %d", code)
+		t.Errorf("the session should exit cleanly after :quit, got %d", code)
 	}
 	if !strings.Contains(out, "qkrepl") == false && strings.Contains(out, "nope") {
-		t.Errorf(":quit 之后的行不应求值，got %q", out)
+		t.Errorf("lines after :quit should not be evaluated, got %q", out)
 	}
 }
 
@@ -149,10 +149,10 @@ func TestQkreplUnknownCommand(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	_, errOut, code := runCapture(t, ":nope\n")
 	if code != 1 {
-		t.Fatalf("未知命令应退出 1，got %d", code)
+		t.Fatalf("an unknown command should exit 1, got %d", code)
 	}
 	if !strings.Contains(errOut, "未知命令") {
-		t.Errorf("stderr 应说明未知命令，got %q", errOut)
+		t.Errorf("stderr should explain the unknown command, got %q", errOut)
 	}
 }
 
@@ -168,13 +168,13 @@ func TestQkreplLoad(t *testing.T) {
 	in := ":load " + p + "\ntriple(14)\n"
 	out, errOut, code := runCapture(t, in)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (%s)", code, errOut)
 	}
 	if !strings.Contains(out, "已定义 fn triple(int n) int") {
-		t.Errorf(":load 应登记定义，got %q", out)
+		t.Errorf(":load should register the definition, got %q", out)
 	}
 	if !strings.Contains(out, "42") {
-		t.Errorf("加载后应能调用，got %q", out)
+		t.Errorf("it should be callable after loading, got %q", out)
 	}
 }
 
@@ -183,7 +183,7 @@ func TestQkreplLoadMissingFile(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	_, errOut, code := runCapture(t, ":load /nonexistent/x.qk\n")
 	if code != 1 || !strings.Contains(errOut, "error:") {
-		t.Errorf("缺文件应报错退出 1，got code=%d %q", code, errOut)
+		t.Errorf("a missing file should fail and exit 1, got code=%d %q", code, errOut)
 	}
 }
 
@@ -191,16 +191,16 @@ func TestQkreplUsage(t *testing.T) {
 	defer lang_i18n.SetLocale(lang_i18n.Locale())
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	if _, _, code := runCapture(t, "", "-e"); code != 2 {
-		t.Errorf("-e 缺参数应退出 2")
+		t.Errorf("-e with a missing argument should exit 2")
 	}
 	if _, _, code := runCapture(t, "", "-bogus"); code != 2 {
-		t.Errorf("未知参数应退出 2")
+		t.Errorf("an unknown argument should exit 2")
 	}
 	if out, _, code := runCapture(t, "", "--version"); code != 0 || !strings.Contains(out, "qkrepl") {
-		t.Errorf("--version 输出不对: %d %q", code, out)
+		t.Errorf("wrong --version output: %d %q", code, out)
 	}
 	if out, _, code := runCapture(t, "", "-h"); code != 0 || !strings.Contains(out, "usage: qkrepl") {
-		t.Errorf("-h 输出不对: %d %q", code, out)
+		t.Errorf("wrong -h output: %d %q", code, out)
 	}
 }
 
@@ -209,10 +209,10 @@ func TestQkreplQuietFlag(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	out, _, code := runCapture(t, "1 + 1\n", "-q")
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d", code)
+		t.Fatalf("it should exit 0, got %d", code)
 	}
 	if strings.Contains(out, "qkrepl") {
-		t.Errorf("-q 不应打印横幅，got %q", out)
+		t.Errorf("-q should not print the banner, got %q", out)
 	}
 }
 

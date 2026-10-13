@@ -57,7 +57,7 @@ func runSession(t *testing.T, msgs ...map[string]interface{}) []rpcMessage {
 			break
 		}
 		if err != nil {
-			t.Fatalf("解析输出帧失败: %v", err)
+			t.Fatalf("parsing the output frame failed: %v", err)
 		}
 		got = append(got, m)
 	}
@@ -92,13 +92,13 @@ func resultOf(t *testing.T, msgs []rpcMessage, id int, v interface{}) bool {
 			Result json.RawMessage `json:"result"`
 		}
 		if err := json.Unmarshal(b, &raw); err != nil {
-			t.Fatalf("解码响应失败: %v", err)
+			t.Fatalf("decoding the response failed: %v", err)
 		}
 		if raw.Result == nil {
 			return false
 		}
 		if err := json.Unmarshal(raw.Result, v); err != nil {
-			t.Fatalf("解码 result 失败: %v", err)
+			t.Fatalf("decoding the result failed: %v", err)
 		}
 		return true
 	}
@@ -117,15 +117,15 @@ func TestLSPInitializeCapabilities(t *testing.T) {
 		ServerInfo   map[string]interface{} `json:"serverInfo"`
 	}
 	if !resultOf(t, msgs, 1, &res) {
-		t.Fatalf("未收到 initialize 响应: %+v", msgs)
+		t.Fatalf("no initialize response arrived: %+v", msgs)
 	}
 	for _, cap := range []string{"definitionProvider", "completionProvider", "hoverProvider", "documentSymbolProvider"} {
 		if res.Capabilities[cap] == nil {
-			t.Errorf("缺少能力 %s", cap)
+			t.Errorf("missing capability %s", cap)
 		}
 	}
 	if res.ServerInfo["name"] != "qklsp" {
-		t.Errorf("serverInfo 不对: %+v", res.ServerInfo)
+		t.Errorf("wrong serverInfo: %+v", res.ServerInfo)
 	}
 }
 
@@ -158,11 +158,11 @@ func TestLSPDiagnosticsOnOpen(t *testing.T) {
 		for _, d := range p.Diagnostics {
 			codes[d.Code] = true
 			if d.Message == "" {
-				t.Errorf("诊断缺少消息: %+v", d)
+				t.Errorf("the diagnostic carries no message: %+v", d)
 			}
 		}
 		if !codes["QK101"] {
-			t.Errorf("应有未使用变量诊断 QK101，got %+v", p.Diagnostics)
+			t.Errorf("an unused-variable diagnostic QK101 was expected, got %+v", p.Diagnostics)
 		}
 		var hasTypeErr bool
 		for _, d := range p.Diagnostics {
@@ -171,11 +171,11 @@ func TestLSPDiagnosticsOnOpen(t *testing.T) {
 			}
 		}
 		if !hasTypeErr {
-			t.Errorf("应有类型错误（severity=1），got %+v", p.Diagnostics)
+			t.Errorf("a type error (severity=1) was expected, got %+v", p.Diagnostics)
 		}
 	}
 	if !found {
-		t.Fatalf("未收到本文件的诊断通知: %+v", msgs)
+		t.Fatalf("no diagnostics notification for this file arrived: %+v", msgs)
 	}
 }
 
@@ -192,12 +192,12 @@ func TestLSPDiagnosticsClean(t *testing.T) {
 				t.Fatal(err)
 			}
 			if len(p.Diagnostics) != 0 {
-				t.Errorf("干净文件不应有诊断，got %+v", p.Diagnostics)
+				t.Errorf("a clean file should have no diagnostics, got %+v", p.Diagnostics)
 			}
 			return
 		}
 	}
-	t.Fatal("未收到诊断通知")
+	t.Fatal("no diagnostics notification arrived")
 }
 
 func TestLSPDidChangeUpdatesDiagnostics(t *testing.T) {
@@ -226,7 +226,7 @@ func TestLSPDidChangeUpdatesDiagnostics(t *testing.T) {
 		last = len(p.Diagnostics)
 	}
 	if last != 0 {
-		t.Errorf("修改后应清空诊断，最后一次收到 %d 条", last)
+		t.Errorf("the diagnostics should be cleared after the edit; the last notification carried %d", last)
 	}
 }
 
@@ -243,13 +243,13 @@ func TestLSPDefinitionAndHover(t *testing.T) {
 	)
 	var loc lspLocation
 	if !resultOf(t, msgs, 2, &loc) {
-		t.Fatalf("未收到 definition 响应: %+v", msgs)
+		t.Fatalf("no definition response arrived: %+v", msgs)
 	}
 	if loc.URI != uri {
-		t.Errorf("定义应在同一文件，got %s", loc.URI)
+		t.Errorf("the definition should be in the same file, got %s", loc.URI)
 	}
 	if loc.Range.Start.Line != 1 { // double is declared on line 2 (0-based = 1)
-		t.Errorf("定义应指向第 2 行，got %+v", loc.Range)
+		t.Errorf("the definition should point at line 2, got %+v", loc.Range)
 	}
 	var hov struct {
 		Contents struct {
@@ -258,13 +258,13 @@ func TestLSPDefinitionAndHover(t *testing.T) {
 		} `json:"contents"`
 	}
 	if !resultOf(t, msgs, 3, &hov) {
-		t.Fatal("未收到 hover 响应")
+		t.Fatal("no hover response arrived")
 	}
 	if !strings.Contains(hov.Contents.Value, "fn double(int n) int") {
-		t.Errorf("hover 应含签名，got %q", hov.Contents.Value)
+		t.Errorf("hover should carry the signature, got %q", hov.Contents.Value)
 	}
 	if !strings.Contains(hov.Contents.Value, "翻倍。") {
-		t.Errorf("hover 应含文档注释，got %q", hov.Contents.Value)
+		t.Errorf("hover should carry the doc comment, got %q", hov.Contents.Value)
 	}
 }
 
@@ -281,10 +281,10 @@ func TestLSPUTF16PositionWithCJK(t *testing.T) {
 	)
 	var loc lspLocation
 	if !resultOf(t, msgs, 2, &loc) {
-		t.Fatalf("未收到 definition 响应: %+v", msgs)
+		t.Fatalf("no definition response arrived: %+v", msgs)
 	}
 	if loc.Range.Start.Line != 0 {
-		t.Errorf("应跳到 helper 声明（第 1 行，0 基 0），got %+v", loc.Range)
+		t.Errorf("the jump should land on the helper declaration (line 1, 0-based 0), got %+v", loc.Range)
 	}
 }
 
@@ -305,18 +305,18 @@ func TestLSPCompletion(t *testing.T) {
 		} `json:"items"`
 	}
 	if !resultOf(t, msgs, 1, &res) {
-		t.Fatalf("未收到 completion 响应: %+v", msgs)
+		t.Fatalf("no completion response arrived: %+v", msgs)
 	}
 	labels := map[string]bool{}
 	for _, it := range res.Items {
 		labels[it.Label] = true
 		if it.Label == "double" && it.Detail == "" {
-			t.Errorf("函数候选应带签名 detail")
+			t.Errorf("function candidates should carry the signature as detail")
 		}
 	}
 	for _, want := range []string{"double", "Point", "local", "io", "fn", "while", "List"} {
 		if !labels[want] {
-			t.Errorf("补全缺少 %q（共 %d 项）", want, len(res.Items))
+			t.Errorf("the completion list is missing %q (%d items in total)", want, len(res.Items))
 		}
 	}
 }
@@ -336,7 +336,7 @@ func TestLSPDocumentSymbol(t *testing.T) {
 		Kind int    `json:"kind"`
 	}
 	if !resultOf(t, msgs, 1, &syms) {
-		t.Fatalf("未收到 documentSymbol 响应: %+v", msgs)
+		t.Fatalf("no documentSymbol response arrived: %+v", msgs)
 	}
 	names := map[string]bool{}
 	for _, s := range syms {
@@ -344,7 +344,7 @@ func TestLSPDocumentSymbol(t *testing.T) {
 	}
 	for _, want := range []string{"alpha", "Beta", "main"} {
 		if !names[want] {
-			t.Errorf("符号表缺少 %q：%+v", want, syms)
+			t.Errorf("the symbol table is missing %q: %+v", want, syms)
 		}
 	}
 }
@@ -357,12 +357,12 @@ func TestLSPUnimplementedMethod(t *testing.T) {
 	for _, m := range msgs {
 		if m.Error != nil {
 			if m.Error.Code != -32601 {
-				t.Errorf("错误码应为 -32601，got %d", m.Error.Code)
+				t.Errorf("the error code should be -32601, got %d", m.Error.Code)
 			}
 			return
 		}
 	}
-	t.Fatalf("应返回未实现错误: %+v", msgs)
+	t.Fatalf("an unimplemented error was expected: %+v", msgs)
 }
 
 func TestLSPUnknownDocument(t *testing.T) {
@@ -371,7 +371,7 @@ func TestLSPUnknownDocument(t *testing.T) {
 		notification("exit", nil),
 	)
 	if len(msgs) == 0 {
-		t.Fatal("应返回 null 结果而不是崩溃")
+		t.Fatal("it should return a null result instead of crashing")
 	}
 }
 
@@ -404,12 +404,12 @@ func TestLSPDiagnosticsMapImports(t *testing.T) {
 		if strings.HasSuffix(p.URI, "lib.qk") && len(p.Diagnostics) > 0 {
 			foundLibURI = true
 			if p.Diagnostics[0].Range.Start.Line != 2 { // line 3 of lib.qk
-				t.Errorf("跨文件诊断应定位到 lib.qk 第 3 行，got %+v", p.Diagnostics[0].Range)
+				t.Errorf("the cross-file diagnostic should point at lib.qk line 3, got %+v", p.Diagnostics[0].Range)
 			}
 		}
 	}
 	if !foundLibURI {
-		t.Error("import 文件中的错误应发布到该文件的 URI")
+		t.Error("an error in an imported file should be published under that file's URI")
 	}
 }
 

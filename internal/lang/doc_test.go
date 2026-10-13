@@ -66,13 +66,13 @@ func buildFixtureDoc(t *testing.T) (*Doc, []Comment) {
 func TestDocModelExtraction(t *testing.T) {
 	d, _ := buildFixtureDoc(t)
 	if d.Kind != "library" {
-		t.Errorf("Kind 应为 library，got %q", d.Kind)
+		t.Errorf("Kind should be library, got %q", d.Kind)
 	}
 	if len(d.Imports) != 1 || d.Imports[0] != "helper" {
-		t.Errorf("Imports 不对: %v", d.Imports)
+		t.Errorf("wrong Imports: %v", d.Imports)
 	}
 	if !strings.Contains(d.FileDoc, "QuarkLang math micro-library") || !strings.Contains(d.FileDoc, "Provides integer arithmetic") {
-		t.Errorf("文件头注释不对: %q", d.FileDoc)
+		t.Errorf("wrong file header comment: %q", d.FileDoc)
 	}
 
 	byName := map[string]*DocItem{}
@@ -84,47 +84,47 @@ func TestDocModelExtraction(t *testing.T) {
 	}
 	fn := byName["double"]
 	if fn == nil {
-		t.Fatal("未提取到 double")
+		t.Fatal("double was not extracted")
 	}
 	if fn.Signature != "fn double(int n) int" {
-		t.Errorf("签名不对: %q", fn.Signature)
+		t.Errorf("wrong signature: %q", fn.Signature)
 	}
 	if !strings.Contains(fn.Doc, "Doubles a double") || !strings.Contains(fn.Doc, "A second line of description") {
-		t.Errorf("函数文档不对: %q", fn.Doc)
+		t.Errorf("wrong function doc: %q", fn.Doc)
 	}
 	if !fn.Pub {
-		t.Error("double 应为 pub")
+		t.Error("double should be pub")
 	}
 	if h := byName["hidden"]; h == nil || h.Pub {
-		t.Error("hidden 应存在且非 pub")
+		t.Error("hidden should exist and not be pub")
 	}
 
 	pt := byName["Point"]
 	if pt == nil || pt.Kind != DocStruct {
-		t.Fatalf("Point 应为 struct，got %+v", pt)
+		t.Fatalf("Point should be a struct, got %+v", pt)
 	}
 	if !strings.Contains(pt.Doc, "A planar point") || !strings.Contains(pt.Doc, "Both fields are int") {
-		t.Errorf("结构体文档不对: %q", pt.Doc)
+		t.Errorf("wrong struct doc: %q", pt.Doc)
 	}
 	if len(pt.Fields) != 2 || pt.Fields[0].Name != "x" || pt.Fields[0].Type != "int" {
-		t.Fatalf("字段提取不对: %+v", pt.Fields)
+		t.Fatalf("wrong field extraction: %+v", pt.Fields)
 	}
 	if !strings.Contains(pt.Fields[0].Doc, "x coordinate") {
-		t.Errorf("字段注释应紧邻字段上方/行尾: %q", pt.Fields[0].Doc)
+		t.Errorf("a field comment should sit directly above the field or at its end of line: %q", pt.Fields[0].Doc)
 	}
 	if pt.Signature != "type struct Point;" {
-		t.Errorf("结构体签名不对: %q", pt.Signature)
+		t.Errorf("wrong struct signature: %q", pt.Signature)
 	}
 
 	iface := byName["Summable"]
 	if iface == nil || iface.Kind != DocInterface || len(iface.Fields) != 1 {
-		t.Fatalf("接口提取不对: %+v", iface)
+		t.Fatalf("wrong interface extraction: %+v", iface)
 	}
 	if !strings.Contains(iface.Fields[0].Signature, "fn sum(Self self) int;") {
-		t.Errorf("接口方法签名不对: %q", iface.Fields[0].Signature)
+		t.Errorf("wrong interface method signature: %q", iface.Fields[0].Signature)
 	}
 	if !strings.Contains(iface.Fields[0].Doc, "sums the two coordinates") {
-		t.Errorf("接口方法行尾注释应为文档: %q", iface.Fields[0].Doc)
+		t.Errorf("an interface method's trailing comment should be its doc: %q", iface.Fields[0].Doc)
 	}
 
 	var impl *DocItem
@@ -134,10 +134,10 @@ func TestDocModelExtraction(t *testing.T) {
 		}
 	}
 	if impl == nil || impl.Signature != "impl Point;" || len(impl.Fields) != 1 {
-		t.Fatalf("impl 提取不对: %+v", impl)
+		t.Fatalf("wrong impl extraction: %+v", impl)
 	}
 	if impl.Fields[0].Signature != "fn sum(Point self) int" {
-		t.Errorf("impl 方法签名不对: %q", impl.Fields[0].Signature)
+		t.Errorf("wrong impl method signature: %q", impl.Fields[0].Signature)
 	}
 
 	var space *DocItem
@@ -147,17 +147,17 @@ func TestDocModelExtraction(t *testing.T) {
 		}
 	}
 	if space == nil || space.Signature != "space math;" || space.Fields[0].Signature != "fn max(int a, int b) int" {
-		t.Fatalf("space 提取不对: %+v", space)
+		t.Fatalf("wrong space extraction: %+v", space)
 	}
 
 	if len(d.Libraries) != 1 || d.Libraries[0].Signature != "library gl;" {
-		t.Fatalf("library 提取不对: %+v", d.Libraries)
+		t.Fatalf("wrong library extraction: %+v", d.Libraries)
 	}
 	if got := d.Libraries[0].Fields[0].Signature; got != "fn ClearColor(float r, float g, float b, float a) void" {
-		t.Errorf("库符号签名不对: %q", got)
+		t.Errorf("wrong library symbol signature: %q", got)
 	}
 	if alias := byName["Number"]; alias == nil || alias.Kind != DocAlias {
-		t.Errorf("类型别名提取不对: %+v", alias)
+		t.Errorf("wrong type alias extraction: %+v", alias)
 	}
 }
 
@@ -166,30 +166,30 @@ func TestDocMarkdownPubFilter(t *testing.T) {
 	d, _ := buildFixtureDoc(t)
 	md := d.Markdown(DocOptions{Path: "mathlib.qk"})
 	if !strings.Contains(md, "# mathlib.qk") {
-		t.Errorf("缺少标题: %s", md)
+		t.Errorf("missing the title: %s", md)
 	}
 	if !strings.Contains(md, "fn double(int n) int") {
-		t.Error("缺少 pub 函数签名")
+		t.Error("missing the pub function signature")
 	}
 	if strings.Contains(md, "hidden") {
-		t.Error("默认应过滤掉非 pub 符号")
+		t.Error("non-pub symbols should be filtered by default")
 	}
 	if !strings.Contains(md, "| 类别 | 名称 | 签名 | 摘要 |") {
-		t.Error("缺少概览表")
+		t.Error("missing the overview table")
 	}
 	if !strings.Contains(md, "Doubles a double") {
-		t.Error("缺少文档正文")
+		t.Error("missing the document body")
 	}
 	if !strings.Contains(md, "| `x` | `int` | x coordinate |") {
-		t.Errorf("字段表不对:\n%s", md)
+		t.Errorf("wrong field table:\n%s", md)
 	}
 	if !strings.Contains(md, "space math;") || !strings.Contains(md, "library gl;") {
-		t.Error("缺少 space / library 章节内容")
+		t.Error("missing the space / library section content")
 	}
 
 	mdAll := d.Markdown(DocOptions{All: true})
 	if !strings.Contains(mdAll, "hidden") {
-		t.Error("-all 语义下应包含非 pub 符号")
+		t.Error("under -all the document should include non-pub symbols")
 	}
 }
 
@@ -202,7 +202,7 @@ func TestDocMarkdownNoPubRendersAll(t *testing.T) {
 	}
 	md := BuildDoc(prog, comments).Markdown(DocOptions{})
 	if !strings.Contains(md, "helper") || !strings.Contains(md, "main") {
-		t.Errorf("无 pub 文件应渲染全部符号:\n%s", md)
+		t.Errorf("a file with no pub symbols should render every symbol:\n%s", md)
 	}
 }
 
@@ -216,14 +216,14 @@ func TestDocHTML(t *testing.T) {
 	h := d.HTML(DocOptions{Path: "mathlib.qk"})
 	for _, want := range []string{"<!doctype html>", "<title>mathlib.qk</title>", "<table>", "<pre><code>fn double(int n) int</code></pre>", "<h2>函数</h2>"} {
 		if !strings.Contains(h, want) {
-			t.Errorf("HTML 缺少 %q", want)
+			t.Errorf("the HTML is missing %q", want)
 		}
 	}
 	if strings.Contains(h, "hidden") {
-		t.Error("HTML 默认应过滤非 pub 符号")
+		t.Error("the HTML should filter non-pub symbols by default")
 	}
 	if strings.Count(h, "<table>") != strings.Count(h, "</table>") {
-		t.Error("table 标签不配对")
+		t.Error("unbalanced table tags")
 	}
 }
 
@@ -232,20 +232,20 @@ func TestDocCommentCleaning(t *testing.T) {
 	got := cleanComment(c)
 	want := "first line\n  second line\n\nthird line\n"
 	if got != want {
-		t.Errorf("行注释清洗不对:\n got %q\nwant %q", got, want)
+		t.Errorf("wrong line comment sanitizing:\n got %q\nwant %q", got, want)
 	}
 	b := Comment{Text: "/* alpha\n * beta\n */", Block: true}
 	if got := cleanComment(b); !strings.Contains(got, "alpha") || !strings.Contains(got, "beta") {
-		t.Errorf("块注释清洗不对: %q", got)
+		t.Errorf("wrong block comment sanitizing: %q", got)
 	}
 }
 
 func TestDocSummary(t *testing.T) {
 	if got := Summary("\n\nfirst line\nsecond line\n"); got != "first line" {
-		t.Errorf("Summary 不对: %q", got)
+		t.Errorf("wrong Summary: %q", got)
 	}
 	if got := Summary(""); got != "" {
-		t.Errorf("空文档 Summary 应为空，got %q", got)
+		t.Errorf("an empty document's Summary should be empty, got %q", got)
 	}
 }
 
@@ -264,13 +264,13 @@ func TestDocTrailingCommentNotLeakedToNextDecl(t *testing.T) {
 		}
 	}
 	if st == nil || len(st.Fields) != 2 {
-		t.Fatalf("结构体提取不对: %+v", st)
+		t.Fatalf("wrong struct extraction: %+v", st)
 	}
 	if st.Fields[0].Doc != "0=none 1=linear" {
-		t.Errorf("kind 应取同行行尾注释，got %q", st.Fields[0].Doc)
+		t.Errorf("kind should take the trailing comment on the same line, got %q", st.Fields[0].Doc)
 	}
 	if st.Fields[1].Doc != "" {
-		t.Errorf("angle 无注释，不应继承上一行行尾注释，got %q", st.Fields[1].Doc)
+		t.Errorf("angle has no comment of its own and should not inherit the previous line's trailing comment, got %q", st.Fields[1].Doc)
 	}
 }
 
@@ -297,28 +297,28 @@ pub fn dbl(int n) int {
 		t.Fatal(err)
 	}
 	if len(macros) != 1 || macros[0].Name != "twice" {
-		t.Fatalf("宏定义提取不对: %+v", macros)
+		t.Fatalf("wrong macro definition extraction: %+v", macros)
 	}
 	d := BuildDocWithMacros(prog, comments, macros)
 	if len(d.Macros) != 1 {
-		t.Fatalf("文档模型应含 1 个宏，got %d", len(d.Macros))
+		t.Fatalf("the document model should carry 1 macro, got %d", len(d.Macros))
 	}
 	m := d.Macros[0]
 	if m.Signature != "#macro twice (a)" {
-		t.Errorf("宏签名不对: %q", m.Signature)
+		t.Errorf("wrong macro signature: %q", m.Signature)
 	}
 	if !strings.Contains(m.Doc, "Doubling macro") {
-		t.Errorf("宏文档注释不对: %q", m.Doc)
+		t.Errorf("wrong macro doc comment: %q", m.Doc)
 	}
 	md := d.Markdown(DocOptions{})
 	if !strings.Contains(md, "## 宏") || !strings.Contains(md, "#macro twice (a)") {
-		t.Errorf("Markdown 应含宏章节:\n%s", md)
+		t.Errorf("the Markdown should carry a macro section:\n%s", md)
 	}
 	if !strings.Contains(md, "| 宏 | `twice` |") {
-		t.Errorf("概览表应含宏条目:\n%s", md)
+		t.Errorf("the overview table should carry the macro entry:\n%s", md)
 	}
 	// Should work normally with no macros (nil safe)
 	if got := BuildDocWithMacros(prog, comments, nil); len(got.Macros) != 0 {
-		t.Error("macros 为 nil 时不应产生宏条目")
+		t.Error("a nil macros field should produce no macro entry")
 	}
 }

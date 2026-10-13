@@ -52,7 +52,7 @@ func TestQkdocMarkdownStdout(t *testing.T) {
 	p := writeLib(t, t.TempDir())
 	out, errOut, code := runCapture(t, p)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（stderr %s）", code, errOut)
+		t.Fatalf("it should exit 0, got %d (stderr %s)", code, errOut)
 	}
 	for _, want := range []string{
 		"# " + p,
@@ -63,11 +63,11 @@ func TestQkdocMarkdownStdout(t *testing.T) {
 		"| `x` | `int` | x coordinate |",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("Markdown 缺少 %q\n---\n%s", want, out)
+			t.Errorf("the Markdown is missing %q\n---\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "hidden") {
-		t.Error("默认应过滤非 pub 符号")
+		t.Error("non-pub symbols should be filtered by default")
 	}
 }
 
@@ -77,7 +77,7 @@ func TestQkdocAllFlag(t *testing.T) {
 	p := writeLib(t, t.TempDir())
 	out, _, _ := runCapture(t, "-all", p)
 	if !strings.Contains(out, "hidden") {
-		t.Errorf("-all 应包含非 pub 符号:\n%s", out)
+		t.Errorf("-all should include non-pub symbols:\n%s", out)
 	}
 }
 
@@ -87,15 +87,15 @@ func TestQkdocHTML(t *testing.T) {
 	p := writeLib(t, t.TempDir())
 	out, _, code := runCapture(t, "-html", p)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d", code)
+		t.Fatalf("it should exit 0, got %d", code)
 	}
 	for _, want := range []string{"<!doctype html>", "<title>" + p + "</title>", "<pre><code>fn double(int n) int</code></pre>", "<table>"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("HTML 缺少 %q", want)
+			t.Errorf("the HTML is missing %q", want)
 		}
 	}
 	if strings.Contains(out, "hidden") {
-		t.Error("HTML 默认应过滤非 pub 符号")
+		t.Error("the HTML should filter non-pub symbols by default")
 	}
 }
 
@@ -108,17 +108,17 @@ func TestQkdocOutputFile(t *testing.T) {
 	outFile := filepath.Join(dir, "API.md")
 	out, _, code := runCapture(t, "-o", outFile, p)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d（%s）", code, out)
+		t.Fatalf("it should exit 0, got %d (%s)", code, out)
 	}
 	if !strings.Contains(out, "已写入") {
-		t.Errorf("应报告写入: %q", out)
+		t.Errorf("it should report the write: %q", out)
 	}
 	data, err := os.ReadFile(outFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(data), "fn double(int n) int") {
-		t.Errorf("产物内容不对:\n%s", data)
+		t.Errorf("wrong artifact content:\n%s", data)
 	}
 }
 
@@ -133,13 +133,13 @@ func TestQkdocMultipleFiles(t *testing.T) {
 	}
 	out, _, code := runCapture(t, p1, p2)
 	if code != 0 {
-		t.Fatalf("应退出 0，got %d", code)
+		t.Fatalf("it should exit 0, got %d", code)
 	}
 	if !strings.Contains(out, "fn double(int n) int") || !strings.Contains(out, "fn other(int a) int") {
-		t.Errorf("多文件应合并输出:\n%s", out)
+		t.Errorf("several files should be merged into one document:\n%s", out)
 	}
 	if !strings.Contains(out, "\n---\n") {
-		t.Error("多文件之间应有分隔")
+		t.Error("several files should be separated")
 	}
 }
 
@@ -149,7 +149,7 @@ func TestQkdocTitle(t *testing.T) {
 	p := writeLib(t, t.TempDir())
 	out, _, _ := runCapture(t, "-title", "Math API", p)
 	if !strings.Contains(out, "# Math API") {
-		t.Errorf("自定义标题未生效:\n%s", out)
+		t.Errorf("the custom title had no effect:\n%s", out)
 	}
 }
 
@@ -162,13 +162,13 @@ func TestQkdocParseError(t *testing.T) {
 	}
 	out, errOut, code := runCapture(t, p)
 	if code != 1 {
-		t.Fatalf("解析失败应退出 1，got %d", code)
+		t.Fatalf("a parse failure should exit 1, got %d", code)
 	}
 	if !strings.Contains(errOut, "ParseError") {
-		t.Errorf("stderr 应含 ParseError: %q", errOut)
+		t.Errorf("stderr should contain ParseError: %q", errOut)
 	}
 	if out != "" {
-		t.Errorf("失败时不应输出文档: %q", out)
+		t.Errorf("a failure should produce no document: %q", out)
 	}
 }
 
@@ -176,19 +176,19 @@ func TestQkdocUsage(t *testing.T) {
 	defer lang_i18n.SetLocale(lang_i18n.Locale())
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	if _, _, code := runCapture(t); code != 2 {
-		t.Errorf("无参数应退出 2")
+		t.Errorf("no arguments should exit 2")
 	}
 	if _, _, code := runCapture(t, "-o"); code != 2 {
-		t.Errorf("-o 缺参数应退出 2")
+		t.Errorf("-o with a missing argument should exit 2")
 	}
 	if _, _, code := runCapture(t, "-bogus", "x.qk"); code != 2 {
-		t.Errorf("未知参数应退出 2")
+		t.Errorf("an unknown argument should exit 2")
 	}
 	if out, _, code := runCapture(t, "--version"); code != 0 || !strings.Contains(out, "qkdoc") {
-		t.Errorf("--version 输出不对: %d %q", code, out)
+		t.Errorf("wrong --version output: %d %q", code, out)
 	}
 	if out, _, code := runCapture(t, "-h"); code != 0 || !strings.Contains(out, "usage: qkdoc") {
-		t.Errorf("-h 输出不对: %d %q", code, out)
+		t.Errorf("wrong -h output: %d %q", code, out)
 	}
 }
 
@@ -198,19 +198,19 @@ func TestQkdocRealLibrarySmoke(t *testing.T) {
 	lang_i18n.SetLocale(lang_i18n.ZH) // this test asserts Chinese output
 	lib := filepath.Join("..", "..", "compiler", "testdata", "mathlib.qk")
 	if _, err := os.Stat(lib); err != nil {
-		t.Skipf("缺少真实库样本: %v", err)
+		t.Skipf("missing the real library sample: %v", err)
 	}
 	out, errOut, code := runCapture(t, lib)
 	if code != 0 {
-		t.Fatalf("真实库应生成成功，got %d（%s）", code, errOut)
+		t.Fatalf("a real library should generate successfully, got %d (%s)", code, errOut)
 	}
 	for _, want := range []string{"fn double(int n) int", "fn square(int n) int"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("真实库文档缺少 %q:\n%s", want, out)
+			t.Errorf("the real library's document is missing %q:\n%s", want, out)
 		}
 	}
 	h, _, code := runCapture(t, "-html", lib)
 	if code != 0 || !strings.Contains(h, "</html>") {
-		t.Errorf("HTML 生成异常: code=%d", code)
+		t.Errorf("HTML generation failed: code=%d", code)
 	}
 }

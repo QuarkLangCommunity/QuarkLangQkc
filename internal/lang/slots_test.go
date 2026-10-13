@@ -15,11 +15,11 @@ func runSlotSrc(t *testing.T, src string) string {
 	t.Helper()
 	prog, err := Compile(src)
 	if err != nil {
-		t.Fatalf("编译失败: %v\n%s", err, src)
+		t.Fatalf("compilation failed: %v\n%s", err, src)
 	}
 	var out bytes.Buffer
 	if err := Run(prog, "slot_test.qk", nil, strings.NewReader(""), &out); err != nil {
-		t.Fatalf("运行失败: %v\n%s", err, src)
+		t.Fatalf("running failed: %v\n%s", err, src)
 	}
 	return out.String()
 }
@@ -185,7 +185,7 @@ fn main(IOStream io) void {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := runSlotSrc(t, c.src); got != c.want {
-				t.Errorf("输出不符\n got %q\nwant %q\n源码:\n%s", got, c.want, c.src)
+				t.Errorf("wrong output\n got %q\nwant %q\nsource:\n%s", got, c.want, c.src)
 			}
 		})
 	}
@@ -216,7 +216,7 @@ func TestSlotAnnotationNameMatches(t *testing.T) {
 			if x.Slot > 0 {
 				i := int(x.Slot) - 1
 				if i >= len(names) || names[i] != x.Name {
-					t.Errorf("Ident %q 的槽位 %d 与实际名字 %v 不符", x.Name, i, names)
+					t.Errorf("identifier %q records slot %d, which does not match the actual name %v", x.Name, i, names)
 					*ok = false
 				}
 			}
@@ -240,6 +240,6 @@ func TestSlotAnnotationNameMatches(t *testing.T) {
 		}
 	}
 	if !ok {
-		t.Fatal("槽位标记与实际槽位不符（会静默读错变量）")
+		t.Fatal("the slot marker does not match the real slot (variables would be read from the wrong slot)")
 	}
 }
