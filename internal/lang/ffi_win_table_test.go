@@ -87,7 +87,7 @@ func TestWindowsFFITableDispatch(t *testing.T) {
 	cc, err := exec.LookPath("cc")
 	if err != nil {
 		if cc, err = exec.LookPath("gcc"); err != nil {
-			t.Skip("无 C 编译器（cc/gcc），跳过 Windows FFI 派发表验证")
+			t.Skip("no C compiler (cc/gcc), skipping the Windows FFI dispatch-table check")
 		}
 	}
 	raw, err := os.ReadFile("ffi_win.inc")
@@ -112,15 +112,15 @@ func TestWindowsFFITableDispatch(t *testing.T) {
 	}
 	out, err := exec.Command(cc, "-O1", "-w", "-o", bin, cf).CombinedOutput()
 	if err != nil {
-		t.Fatalf("编译派发表失败: %v\n%s", err, out)
+		t.Fatalf("compiling the dispatch table failed: %v\n%s", err, out)
 	}
 	run, err := exec.Command(bin).CombinedOutput()
 	got := strings.TrimSpace(string(run))
-	t.Logf("派发表用例输出：\n%s", got)
+	t.Logf("dispatch-table case output:\n%s", got)
 	if err != nil {
-		t.Fatalf("派发表用例失败: %v", err)
+		t.Fatalf("a dispatch-table case failed: %v", err)
 	}
 	if !strings.Contains(got, "全部通过") {
-		t.Fatalf("期望全部通过，实际：%s", got)
+		t.Fatalf("every case should pass, but the results are: %s", got)
 	}
 }

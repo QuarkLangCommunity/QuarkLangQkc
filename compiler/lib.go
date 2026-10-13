@@ -371,7 +371,7 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 		Variants map[string]string `json:"variants"`
 	}
 	if err := json.Unmarshal(b[4:], &body); err != nil {
-		return man, nil, fmt.Errorf("库制品解析失败：%w", err)
+		return man, nil, fmt.Errorf(msgID(i18n.MsgCompilerLibraryArtifactParseFailedW), err)
 	}
 	for t, ir := range body.Variants {
 		if want, ok := body.Manifest.SHA256[t]; ok {

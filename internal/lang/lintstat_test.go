@@ -522,35 +522,35 @@ func TestLintStatsP99(t *testing.T) {
 		return s
 	}
 
-	t.Logf("==== qkcheck 误报/漏报统计（%d 轮 × 4 用例/轮，seed=%d）====", rounds, seed)
-	t.Logf("每轮命中 TP：P50=%d P99=%d（期望用例总数 %d）",
+	t.Logf("==== qkcheck false-positive/false-negative statistics (%d rounds x 4 cases/round, seed=%d) ====", rounds, seed)
+	t.Logf("true positives per round: P50=%d P99=%d (expected case count %d)",
 		quantile(tpCounts, 0.50), quantile(tpCounts, 0.99), sum(tpCounts))
-	t.Logf("每轮误报 FP：P50=%d P90=%d P99=%d max=%d（合计 %d）",
+	t.Logf("false positives per round: P50=%d P90=%d P99=%d max=%d (total %d)",
 		quantile(fpCounts, 0.50), quantile(fpCounts, 0.90), quantile(fpCounts, 0.99), worstFP, sum(fpCounts))
-	t.Logf("每轮漏报 FN：P50=%d P90=%d P99=%d max=%d（合计 %d）",
+	t.Logf("false negatives per round: P50=%d P90=%d P99=%d max=%d (total %d)",
 		quantile(fnCounts, 0.50), quantile(fnCounts, 0.90), quantile(fnCounts, 0.99), worstFN, sum(fnCounts))
-	t.Logf("误报率：P50=%.1f%% P90=%.1f%% P99=%.1f%% max=%.1f%%",
+	t.Logf("false-positive rate: P50=%.1f%% P90=%.1f%% P99=%.1f%% max=%.1f%%",
 		quantileF(fpRates, 0.50), quantileF(fpRates, 0.90), quantileF(fpRates, 0.99), fpRates[len(fpRates)-1])
-	t.Logf("漏报率：P50=%.1f%% P90=%.1f%% P99=%.1f%% max=%.1f%%",
+	t.Logf("false-negative rate: P50=%.1f%% P90=%.1f%% P99=%.1f%% max=%.1f%%",
 		quantileF(fnRates, 0.50), quantileF(fnRates, 0.90), quantileF(fnRates, 0.99), fnRates[len(fnRates)-1])
 	for _, s := range samples {
-		t.Logf("样本：%s", s)
+		t.Logf("sample: %s", s)
 	}
 
 	if os.Getenv("LINT_NOFAIL") != "" {
 		return
 	}
 	if p99 := quantile(fpCounts, 0.99); p99 != 0 {
-		t.Errorf("误报 P99 = %d（>0）：尾部仍有误报", p99)
+		t.Errorf("false positives P99 = %d (>0): the tail still reports spurious warnings", p99)
 	}
 	if p99 := quantile(fnCounts, 0.99); p99 != 0 {
-		t.Errorf("漏报 P99 = %d（>0）：尾部仍有漏报", p99)
+		t.Errorf("false negatives P99 = %d (>0): the tail still misses cases", p99)
 	}
 	if worstFP != 0 {
-		t.Errorf("存在误报轮次（max=%d）", worstFP)
+		t.Errorf("some rounds had false positives (max=%d)", worstFP)
 	}
 	if worstFN != 0 {
-		t.Errorf("存在漏报轮次（max=%d）", worstFN)
+		t.Errorf("some rounds had false negatives (max=%d)", worstFN)
 	}
 }
 

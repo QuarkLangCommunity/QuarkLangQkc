@@ -41,7 +41,7 @@ func TestStringConcatCompile(t *testing.T) {
 	}
 	// Concatenation goes through the runtime ql_strcat (lli lacks that symbol; end-to-end is covered by qkc -run + qthreads.c)
 	if strings.Contains(ir, "memory(none)") {
-		t.Fatalf("函数带 IO/strcat 副作用，不应标 memory(none):\n%s", ir)
+		t.Fatalf("the function has IO/strcat side effects and should not be marked memory(none):\n%s", ir)
 	}
 }
 
@@ -581,7 +581,7 @@ func TestPhaseDFFIAndTaskm(t *testing.T) {
 		}
 	}
 	if strings.Contains(links, "-llibc") {
-		t.Fatalf("libc 不应映射为 -llibc:\n%s", links)
+		t.Fatalf("libc should not be mapped to -llibc:\n%s", links)
 	}
 	// long (i64) and pointer (i8* opaque handle, nullable, round-trippable)
 	lp := transpile(t, "library libc {\n"+

@@ -155,7 +155,8 @@ func TestVerbSetsMatch(t *testing.T) {
 // other store.
 //
 // They are frozen rather than fixed here. Reordering the verbs inside a Chinese sentence rewrites the
-// sentence (`不支持在 %s 上使用 %q` -> `不支持对 %s 使用 %q`), which is authoring a translation, and this
+// sentence (the phrasing "not supported on %s" becoming "not supported for %s"), which is authoring a
+// translation, and this
 // migration does not invent Chinese: the same rule that leaves 64 field rows with an English zh column
 // applies. The count may only shrink, and the fix has to come from a speaker.
 func TestVerbSequenceMatches(t *testing.T) {

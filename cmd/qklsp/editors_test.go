@@ -18,7 +18,7 @@ func editorsDir(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join("..", "..", "editors")
 	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("缺少 editors 目录: %v", err)
+		t.Skipf("missing the editors directory: %v", err)
 	}
 	return dir
 }
@@ -27,10 +27,10 @@ func readJSON(t *testing.T, path string, v interface{}) {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("读取 %s: %v", path, err)
+		t.Fatalf("reading %s: %v", path, err)
 	}
 	if err := json.Unmarshal(data, v); err != nil {
-		t.Fatalf("解析 %s: %v", path, err)
+		t.Fatalf("parsing %s: %v", path, err)
 	}
 }
 
@@ -60,15 +60,15 @@ func TestVSCodePackageManifest(t *testing.T) {
 	readJSON(t, filepath.Join(root, "package.json"), &pkg)
 
 	if pkg.Name != "quarklang" {
-		t.Errorf("扩展名应为 quarklang，got %q", pkg.Name)
+		t.Errorf("the extension should be quarklang, got %q", pkg.Name)
 	}
 	if pkg.Main == "" {
-		t.Error("缺少 main 入口")
+		t.Error("missing the main entry point")
 	} else if _, err := os.Stat(filepath.Join(root, pkg.Main)); err != nil {
-		t.Errorf("main 入口不存在: %v", err)
+		t.Errorf("the main entry point does not exist: %v", err)
 	}
 	if len(pkg.Contributes.Languages) != 1 || pkg.Contributes.Languages[0].ID != "quarklang" {
-		t.Fatalf("语言声明不对: %+v", pkg.Contributes.Languages)
+		t.Fatalf("wrong language declaration: %+v", pkg.Contributes.Languages)
 	}
 	lang := pkg.Contributes.Languages[0]
 	for _, ext := range []string{".qk", ".kq"} {
@@ -79,23 +79,23 @@ func TestVSCodePackageManifest(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("语言扩展名缺少 %s", ext)
+			t.Errorf("the language extensions are missing %s", ext)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(root, lang.Configuration)); err != nil {
-		t.Errorf("language-configuration 不存在: %v", err)
+		t.Errorf("language-configuration does not exist: %v", err)
 	}
 	if len(pkg.Contributes.Grammars) != 1 || pkg.Contributes.Grammars[0].ScopeName != "source.quarklang" {
-		t.Fatalf("语法声明不对: %+v", pkg.Contributes.Grammars)
+		t.Fatalf("wrong grammar declaration: %+v", pkg.Contributes.Grammars)
 	}
 	if _, err := os.Stat(filepath.Join(root, pkg.Contributes.Grammars[0].Path)); err != nil {
-		t.Errorf("tmLanguage 不存在: %v", err)
+		t.Errorf("tmLanguage does not exist: %v", err)
 	}
 	if len(pkg.Contributes.Snippets) != 1 {
-		t.Fatalf("片段声明不对: %+v", pkg.Contributes.Snippets)
+		t.Fatalf("wrong snippet declaration: %+v", pkg.Contributes.Snippets)
 	}
 	if _, err := os.Stat(filepath.Join(root, pkg.Contributes.Snippets[0].Path)); err != nil {
-		t.Errorf("片段文件不存在: %v", err)
+		t.Errorf("the snippet file does not exist: %v", err)
 	}
 }
 
@@ -106,10 +106,10 @@ func TestTextMateGrammarRegexes(t *testing.T) {
 	var g map[string]interface{}
 	readJSON(t, path, &g)
 	if g["scopeName"] != "source.quarklang" {
-		t.Errorf("scopeName 应为 source.quarklang，got %v", g["scopeName"])
+		t.Errorf("scopeName should be source.quarklang, got %v", g["scopeName"])
 	}
 	if langs, _ := g["fileTypes"].([]interface{}); len(langs) == 0 {
-		t.Error("缺少 fileTypes")
+		t.Error("missing fileTypes")
 	}
 	n := 0
 	var walk func(v interface{}, where string)
@@ -120,7 +120,7 @@ func TestTextMateGrammarRegexes(t *testing.T) {
 				if s, ok := x[key].(string); ok {
 					n++
 					if _, err := regexp.Compile(s); err != nil {
-						t.Errorf("%s 的 %s 正则不合法（%q）: %v", where, key, s, err)
+						t.Errorf("the %s regexp in %s is invalid (%q): %v", where, key, s, err)
 					}
 				}
 			}
@@ -135,7 +135,7 @@ func TestTextMateGrammarRegexes(t *testing.T) {
 	}
 	walk(g, "$")
 	if n < 10 {
-		t.Errorf("正则过少（%d），疑似语法文件不完整", n)
+		t.Errorf("too few regexps (%d): the grammar file looks incomplete", n)
 	}
 }
 
@@ -149,13 +149,13 @@ func TestLanguageConfiguration(t *testing.T) {
 	}
 	readJSON(t, filepath.Join(editorsDir(t), "vscode", "language-configuration.json"), &cfg)
 	if cfg.Comments.LineComment != "//" {
-		t.Errorf("行注释应为 //，got %q", cfg.Comments.LineComment)
+		t.Errorf("the line comment should be //, got %q", cfg.Comments.LineComment)
 	}
 	if len(cfg.Comments.BlockComment) != 2 || cfg.Comments.BlockComment[0] != "/*" {
-		t.Errorf("块注释不对: %v", cfg.Comments.BlockComment)
+		t.Errorf("wrong block comment: %v", cfg.Comments.BlockComment)
 	}
 	if len(cfg.Brackets) < 3 {
-		t.Errorf("括号对过少: %v", cfg.Brackets)
+		t.Errorf("too few bracket pairs: %v", cfg.Brackets)
 	}
 }
 
@@ -171,12 +171,12 @@ func TestVSCodeSnippets(t *testing.T) {
 			if s.Prefix == want {
 				found = true
 				if len(s.Body) == 0 {
-					t.Errorf("片段 %s 的 body 为空", want)
+					t.Errorf("snippet %s has an empty body", want)
 				}
 			}
 		}
 		if !found {
-			t.Errorf("缺少片段 %s", want)
+			t.Errorf("missing snippet %s", want)
 		}
 	}
 }
@@ -184,13 +184,13 @@ func TestVSCodeSnippets(t *testing.T) {
 func TestVSCodeJSSyntax(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("未安装 node，跳过 JS 语法检查")
+		t.Skip("node is not installed, skipping the JS syntax check")
 	}
 	root := filepath.Join(editorsDir(t), "vscode")
 	for _, f := range []string{"src/protocol.js", "src/extension.js", "test/protocol.test.js"} {
 		cmd := exec.Command(node, "--check", filepath.Join(root, f))
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Errorf("%s 语法检查失败: %v\n%s", f, err, out)
+			t.Errorf("%s failed the syntax check: %v\n%s", f, err, out)
 		}
 	}
 }
@@ -198,16 +198,16 @@ func TestVSCodeJSSyntax(t *testing.T) {
 func TestTreeSitterArtifacts(t *testing.T) {
 	root := filepath.Join(editorsDir(t), "tree-sitter-quarklang")
 	if _, err := os.Stat(root); err != nil {
-		t.Skipf("缺少 tree-sitter 语法目录: %v", err)
+		t.Skipf("missing the tree-sitter grammar directory: %v", err)
 	}
 	for _, f := range []string{"grammar.js", "tree-sitter.json", "queries/highlights.scm", "queries/locals.scm"} {
 		info, err := os.Stat(filepath.Join(root, f))
 		if err != nil {
-			t.Errorf("缺少 %s: %v", f, err)
+			t.Errorf("missing %s: %v", f, err)
 			continue
 		}
 		if info.Size() == 0 {
-			t.Errorf("%s 为空", f)
+			t.Errorf("%s is empty", f)
 		}
 	}
 	var cfg struct {
@@ -219,11 +219,11 @@ func TestTreeSitterArtifacts(t *testing.T) {
 	}
 	readJSON(t, filepath.Join(root, "tree-sitter.json"), &cfg)
 	if len(cfg.Grammars) != 1 {
-		t.Fatalf("tree-sitter.json 语法条目不对: %+v", cfg.Grammars)
+		t.Fatalf("wrong grammar entry in tree-sitter.json: %+v", cfg.Grammars)
 	}
 	g := cfg.Grammars[0]
 	if g.Name != "quarklang" || g.Scope != "source.quarklang" {
-		t.Errorf("tree-sitter 名称/scope 不对: %+v", g)
+		t.Errorf("wrong tree-sitter name/scope: %+v", g)
 	}
 	for _, ext := range []string{"qk", "kq"} {
 		found := false
@@ -233,20 +233,20 @@ func TestTreeSitterArtifacts(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("tree-sitter file-types 缺少 %s", ext)
+			t.Errorf("the tree-sitter file-types are missing %s", ext)
 		}
 	}
 	// at least one corpus test file and one case
 	corpus, err := filepath.Glob(filepath.Join(root, "test", "corpus", "*.txt"))
 	if err != nil || len(corpus) == 0 {
-		t.Fatalf("缺少 test/corpus/*.txt：%v", err)
+		t.Fatalf("missing test/corpus/*.txt: %v", err)
 	}
 	data, err := os.ReadFile(corpus[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(data), "===") || !strings.Contains(string(data), "---") {
-		t.Errorf("%s 不是合法的 tree-sitter 语料格式", corpus[0])
+		t.Errorf("%s is not valid tree-sitter corpus syntax", corpus[0])
 	}
 }
 

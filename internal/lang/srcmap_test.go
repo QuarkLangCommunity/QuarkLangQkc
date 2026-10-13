@@ -36,10 +36,10 @@ fn main(IOStream io) {
 		t.Fatalf("CompileWithImportsMapped: %v", err)
 	}
 	if sm == nil {
-		t.Fatal("SrcMap 为空")
+		t.Fatal("SrcMap is empty")
 	}
 	if len(prog.Funcs) == 0 {
-		t.Fatal("未解析到函数")
+		t.Fatal("no function was parsed")
 	}
 
 	var sawLib, sawMain bool
@@ -49,29 +49,29 @@ fn main(IOStream io) {
 		case "double":
 			sawLib = true
 			if file != libPath {
-				t.Errorf("double 应映射到 %s，got %q", libPath, file)
+				t.Errorf("double should map to %s, got %q", libPath, file)
 			}
 			if line != 3 { // lib.qk line 3: pub fn double(...)
-				t.Errorf("double 应映射到 mathlib.qk:3，got 第 %d 行", line)
+				t.Errorf("double should map to mathlib.qk:3, got line %d", line)
 			}
 		case "main":
 			sawMain = true
 			if file != mainPath {
-				t.Errorf("main 应映射到 %s，got %q", mainPath, file)
+				t.Errorf("main should map to %s, got %q", mainPath, file)
 			}
 			if line != 4 { // main.qk line 4: fn main(IOStream io) {
-				t.Errorf("main 应映射到 main.qk:4，got 第 %d 行", line)
+				t.Errorf("main should map to main.qk:4, got line %d", line)
 			}
 		}
 	}
 	if !sawLib || !sawMain {
-		t.Fatalf("未覆盖两个文件：sawLib=%v sawMain=%v", sawLib, sawMain)
+		t.Fatalf("not both files were covered: sawLib=%v sawMain=%v", sawLib, sawMain)
 	}
 
 	// out-of-range and invalid line numbers must safely return the zero value
 	for _, bad := range []int{0, -1, 100000} {
 		if file, line := sm.Map(bad); file != "" || line != 0 {
-			t.Errorf("Map(%d) 应为空，got (%q,%d)", bad, file, line)
+			t.Errorf("Map(%d) should be empty, got (%q,%d)", bad, file, line)
 		}
 	}
 }
@@ -96,9 +96,9 @@ fn main(IOStream io) {
 	}
 	_, _, err := CompileWithImportsMapped(mainSrc, filepath.Join(dir, "main.qk"))
 	if err == nil {
-		t.Fatal("期望解析错误")
+		t.Fatal("a parse error was expected")
 	}
 	if _, ok := err.(*ParseError); !ok && err.Error() == "" {
-		t.Fatalf("期望 *ParseError，got %T", err)
+		t.Fatalf("a *ParseError was expected, got %T", err)
 	}
 }

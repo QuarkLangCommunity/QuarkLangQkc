@@ -10,7 +10,7 @@ func lintSrc(t *testing.T, src string, opts LintOptions) []Diag {
 	t.Helper()
 	prog, err := ParseSource(src)
 	if err != nil {
-		t.Fatalf("ParseSource: %v\n源码:\n%s", err, src)
+		t.Fatalf("ParseSource: %v\nsource:\n%s", err, src)
 	}
 	return Lint(prog, opts)
 }
@@ -24,7 +24,7 @@ func wantCodes(t *testing.T, diags []Diag, want map[string]int) {
 	}
 	for code, n := range want {
 		if got[code] != n {
-			t.Errorf("诊断码 %s: got %d 条, want %d 条；实际诊断：", code, got[code], n)
+			t.Errorf("diagnostic code %s: got %d, want %d; the diagnostics are:", code, got[code], n)
 			for _, d := range diags {
 				t.Logf("  %s", d)
 			}
@@ -33,7 +33,7 @@ func wantCodes(t *testing.T, diags []Diag, want map[string]int) {
 	}
 	for code, n := range got {
 		if _, ok := want[code]; !ok {
-			t.Errorf("出现未预期的诊断码 %s（%d 条）：", code, n)
+			t.Errorf("an unexpected diagnostic code appeared, %s (%d of them):", code, n)
 			for _, d := range diags {
 				t.Logf("  %s", d)
 			}
@@ -72,10 +72,10 @@ func TestLintUnusedVarAssignOnly(t *testing.T) {
 		}
 	}
 	if !sawAssignOnly {
-		t.Errorf("应含「只被赋值」文案: %+v", d)
+		t.Errorf("the message should say the variable is only assigned: %+v", d)
 	}
 	if !sawDeadStore {
-		t.Errorf("应含死存储诊断: %+v", d)
+		t.Errorf("a dead-store diagnostic was expected: %+v", d)
 	}
 }
 
@@ -135,7 +135,7 @@ fn main(IOStream io) {
 	d := lintSrc(t, src, LintOptions{})
 	wantCodes(t, d, map[string]int{CodeUnreachable: 1})
 	if d[0].Pos.Line != 3 {
-		t.Errorf("不可达诊断应在第 3 行，got %d", d[0].Pos.Line)
+		t.Errorf("the unreachable-code diagnostic should be on line 3, got %d", d[0].Pos.Line)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestLintShadowForC(t *testing.T) {
 	d := lintSrc(t, src, LintOptions{})
 	wantCodes(t, d, map[string]int{CodeShadow: 1})
 	if !strings.Contains(d[0].Msg, "第 2 行") {
-		t.Errorf("遮蔽诊断应指认外层第 2 行，got %q", d[0].Msg)
+		t.Errorf("the shadowing diagnostic should name the outer declaration on line 2, got %q", d[0].Msg)
 	}
 }
 
@@ -239,7 +239,7 @@ fn main(IOStream io) {
 	d := lintSrc(t, src, LintOptions{})
 	wantCodes(t, d, map[string]int{CodeMissingRet: 1})
 	if !strings.Contains(d[0].Msg, "执行到函数末尾") {
-		t.Errorf("文案应指出执行到函数末尾，got %q", d[0].Msg)
+		t.Errorf("the message should say control reaches the end of the function, got %q", d[0].Msg)
 	}
 }
 
@@ -254,7 +254,7 @@ fn main(IOStream io) {
 	d := lintSrc(t, src, LintOptions{})
 	wantCodes(t, d, map[string]int{CodeMissingRet: 1})
 	if !strings.Contains(d[0].Msg, "log") {
-		t.Errorf("文案应指出 log 路径，got %q", d[0].Msg)
+		t.Errorf("the message should name the log path, got %q", d[0].Msg)
 	}
 }
 
@@ -297,7 +297,7 @@ fn main(IOStream io) {
 	d := lintSrc(t, src, LintOptions{})
 	wantCodes(t, d, map[string]int{CodeIfaceMissing: 1})
 	if !strings.Contains(d[0].Msg, "bar") {
-		t.Errorf("诊断应列出缺失方法 bar，got %q", d[0].Msg)
+		t.Errorf("the diagnostic should name the missing method bar, got %q", d[0].Msg)
 	}
 }
 
@@ -349,19 +349,20 @@ func TestLintCodesUnique(t *testing.T) {
 	for _, c := range []string{CodeUnusedVar, CodeUnusedParam, CodeUnreachable, CodeShadow,
 		CodeMissingRet, CodeIfaceMissing, CodeVoidAsValue} {
 		if seen[c] {
-			t.Fatalf("诊断码重复: %s", c)
+			t.Fatalf("duplicate diagnostic code: %s", c)
 		}
 		seen[c] = true
 		if !strings.HasPrefix(c, "QK") {
-			t.Errorf("诊断码格式应为 QKxxx: %s", c)
+			t.Errorf("a diagnostic code should have the form QKxxx: %s", c)
 		}
 	}
 }
 
 // TestLintKindLabelsAreMessages pins the linter's binding-kind labels in both languages.
 //
-// The labels used to be `msg("形参")` / `msg("循环变量")` / `msg("catch 变量")` / `msg("变量")` returned
-// from lintKindName, and two of the four had no catalog entry at all: they reached an i18n boundary and
+// The labels used to be Chinese literals passed through `msg(…)` and returned from lintKindName — the
+// parameter, loop-variable, catch-variable and plain-variable nouns — and two of the four had no catalog
+// entry at all: they reached an i18n boundary and
 // still rendered Chinese, which is the one shape the coverage ratchets cannot see (they read literals
 // passed to a boundary, and the literal here is a return value). Only the `param` and fallback kinds are
 // reachable from a corpus — the duplicate-declaration error fires before shadowing for `forvar` and

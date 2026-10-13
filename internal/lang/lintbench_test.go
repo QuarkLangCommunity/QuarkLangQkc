@@ -38,7 +38,7 @@ func loadBenchExpect(t *testing.T) (map[string][]benchWant, map[string]bool) {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "lintbench", "expect.txt"))
 	if err != nil {
-		t.Fatalf("读取期望清单: %v", err)
+		t.Fatalf("reading the expectation list: %v", err)
 	}
 	want := map[string][]benchWant{}
 	params := map[string]bool{}
@@ -49,7 +49,7 @@ func loadBenchExpect(t *testing.T) (map[string][]benchWant, map[string]bool) {
 		}
 		fields := strings.Fields(ln)
 		if len(fields) < 2 {
-			t.Fatalf("期望清单格式错误: %q", ln)
+			t.Fatalf("malformed expectation list: %q", ln)
 		}
 		path := fields[0]
 		rest := fields[1:]
@@ -61,7 +61,7 @@ func loadBenchExpect(t *testing.T) (map[string][]benchWant, map[string]bool) {
 			}
 		}
 		if len(rest) != 1 {
-			t.Fatalf("期望清单格式错误（应为 <路径> [params] <期望>）: %q", ln)
+			t.Fatalf("malformed expectation list (want <path> [params] <expectation>): %q", ln)
 		}
 		spec := rest[0]
 		if spec == "-" {
@@ -71,11 +71,11 @@ func loadBenchExpect(t *testing.T) (map[string][]benchWant, map[string]bool) {
 		for _, item := range strings.Split(spec, ",") {
 			code, lineStr, ok := strings.Cut(item, "@")
 			if !ok {
-				t.Fatalf("期望项格式错误（应为 CODE@行）: %q", item)
+				t.Fatalf("malformed expectation entry (want CODE@line): %q", item)
 			}
 			line, err := strconv.Atoi(lineStr)
 			if err != nil {
-				t.Fatalf("期望项行号错误 %q: %v", item, err)
+				t.Fatalf("wrong line number in expectation %q: %v", item, err)
 			}
 			want[path] = append(want[path], benchWant{code: code, line: line})
 		}
@@ -92,7 +92,7 @@ func runBenchCase(t *testing.T, path string, withParams bool) []Diag {
 	}
 	prog, err := ParseSource(string(src))
 	if err != nil {
-		t.Fatalf("%s 解析失败: %v", path, err)
+		t.Fatalf("parsing %s failed: %v", path, err)
 	}
 	dir := filepath.Dir(path)
 	return Lint(prog, LintOptions{
@@ -121,7 +121,7 @@ func TestLintBenchmark(t *testing.T) {
 	for _, rel := range paths {
 		full := filepath.Join("testdata", "lintbench", rel)
 		if _, err := os.Stat(full); err != nil {
-			t.Errorf("基准文件缺失: %s", rel)
+			t.Errorf("baseline file missing: %s", rel)
 			continue
 		}
 		diags := runBenchCase(t, full, params[rel])
@@ -156,7 +156,7 @@ func TestLintBenchmark(t *testing.T) {
 	}
 
 	// report
-	t.Log("==== qkcheck 基准测量（testdata/lintbench）====")
+	t.Log("==== qkcheck baseline measurement (testdata/lintbench) ====")
 	for _, r := range rows {
 		status := "✔"
 		switch {
@@ -185,9 +185,9 @@ func TestLintBenchmark(t *testing.T) {
 		return
 	}
 	if fp > 0 {
-		t.Errorf("存在误报 %d 条（误报率 %.1f%%）", fp, fpRate)
+		t.Errorf("%d false positive(s) (rate %.1f%%)", fp, fpRate)
 	}
 	if fn > 0 {
-		t.Errorf("存在漏报 %d 条（漏报率 %.1f%%）", fn, fnRate)
+		t.Errorf("%d false negative(s) (rate %.1f%%)", fn, fnRate)
 	}
 }
