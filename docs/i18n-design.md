@@ -548,8 +548,8 @@ and the byte-identical corpus is what would have caught the assumption.
 
 ### 6.4 P3 — rendered output is byte-identical to today's under `QK_LANG=en` and `QK_LANG=zh` ✔
 
-`internal/i18n/proof/byte_identical.sh` builds the pre-migration interpreter from a detached worktree at
-`origin/main`, builds this tree, and runs both over a corpus of one case per migrated message family —
+`internal/i18n/proof/byte_identical.sh` builds the pre-migration interpreter from a detached worktree at a
+pinned revision, builds this tree, and runs both over a corpus of one case per migrated message family —
 the deep-nesting refusal, four preprocessor failures, two macro failures, and a program that must still
 run — comparing `stdout + stderr + exit code` byte for byte:
 
@@ -567,6 +567,22 @@ en  pp_unknown_command.qk    identical (85 bytes)
 zh  … (the same nine)
 all identical (interpreter: origin/main == this tree), en and zh  [18 runs]
 ```
+
+The baseline is a **pinned** revision — the first parent of the merge that landed PR #101, the same revision
+the compiled-runtime harness pins. Naming a branch was the defect, and it was the defect §7.8 records for that
+sibling: once the change merged, `origin/main` named the change itself, so the gate built both sides from one
+revision and every case came out identical for a reason that had nothing to do with the corpus — the EN-fix
+table was never consulted. A revision compared with itself measures nothing, so the harness now resolves the
+baseline and this checkout's commit and tree and refuses that comparison before it builds anything, exiting 2
+rather than 1 and naming the revision to pass instead.
+
+The migration's own first revision (`7e8e366`) is not the pin, and the reason is a property of the corpus
+rather than of the tables: the corpus reaches text that non-i18n work moved after the migration — #99 taught
+`qkcheck`'s usage line two flags — and a run against `7e8e366` therefore reports five differences, four of them
+that usage drift, which no declared fix can hold, plus one real EN leak (`pp_branch_without_if`) that the EN-fix
+table never listed because the step that fixed it ran before the table existed. A pinned baseline has to be a
+revision the whole corpus still renders as this tree does; `7e8e366` is still passable explicitly, and the
+guard refuses only the one revision that cannot be measured at all.
 
 ### 6.5 P4 — the runtime reads the blob, not a map ✔
 

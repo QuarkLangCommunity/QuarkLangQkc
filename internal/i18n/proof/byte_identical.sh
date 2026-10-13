@@ -25,7 +25,8 @@
 # binary, not a list of exemptions. A case that is not in it may not differ under any language.
 #
 # Usage: internal/i18n/proof/byte_identical.sh [baseline-revision]
-#   baseline-revision defaults to origin/main.
+#   baseline-revision defaults to the pre-migration revision pinned below. The harness refuses to run when
+#   it resolves to this checkout: a revision compared with itself measures nothing.
 #
 # A failure here means the migration changed what a user reads, which is the one thing it must not do.
 
@@ -33,7 +34,45 @@ set -u
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
-baseline_rev="${1:-origin/main}"
+
+# The revision the two dialects of "identical" are measured against: main as it stood before the compiled
+# path's text moved into the catalog — the first parent of the merge that landed PR #101, which is the same
+# revision its sibling proof/compiled_runtime.sh pins. It is pinned rather than named by a branch because
+# `origin/main` named that revision only until the change merged, and named the change itself afterwards: the
+# default then compared a revision with itself, which is how this gate came to report `all identical` for a
+# surface it had never measured against anything else. A baseline that moves is a gate that turns green into
+# vacuous and red into unexplained.
+#
+# The migration's own first revision (7e8e366) cannot be the default even though it is the revision the two
+# fixed tables were authored against: the corpus reaches text that non-i18n work moved afterwards — #99 taught
+# qkcheck's usage line two flags — and this contract can declare a message the migration rewrote, not a feature
+# that walked on. A run against 7e8e366 therefore reports drift no table can hold, with one real EN leak among
+# it (`pp_branch_without_if`), so the pin has to be a revision the whole corpus still renders as this tree
+# does, and a green run against it is what measures that. Pass an earlier revision explicitly to exercise the
+# tables; the guard refuses only the one revision that cannot be measured at all.
+baseline_default="a3c4cd4"
+baseline_rev="${1:-$baseline_default}"
+
+# Refuse that comparison here, before spending a build on it. Every claim above is a claim about the old
+# design — the EN-fix table asks whether the baseline leaked Chinese to an English reader, and the ZH tables
+# ask whether it printed English to a Chinese one — and a tree cannot leak differently from itself, so no case
+# below could be measured and every run would come out identical for a reason that names the corpus rather
+# than the invocation. The exit code is 2, not 1: nothing was measured, so this is a gate that cannot run
+# rather than a gate that went red.
+head_commit="$(git -C "$root" rev-parse 'HEAD^{commit}')"
+if ! base_commit="$(git -C "$root" rev-parse --verify --quiet "$baseline_rev^{commit}")"; then
+  echo "cannot run: the baseline revision '$baseline_rev' does not resolve to a commit in $root" >&2
+  exit 2
+fi
+if [ "$base_commit" = "$head_commit" ] ||
+   [ "$(git -C "$root" rev-parse 'HEAD^{tree}')" = "$(git -C "$root" rev-parse "$base_commit^{tree}")" ]; then
+  echo "refusing to run: the baseline revision $baseline_rev (commit $base_commit) carries this checkout's" >&2
+  echo "content (commit $head_commit), so the EN-fix and ZH-fix tables (claims about the old design) cannot" >&2
+  echo "hold, and a revision compared with itself measures nothing. Pass a revision this tree does not carry," >&2
+  echo "e.g. $baseline_default." >&2
+  exit 2
+fi
+
 work="${QK_PROOF_WORK:-$HOME/.cache/qk-i18n/proof}"
 mkdir -p "$work/bin"
 
