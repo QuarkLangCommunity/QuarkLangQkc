@@ -96,7 +96,7 @@ jobs:
             -known stress/known-failures.txt
       - name: Upload the measured report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: stress-report-${{ matrix.os }}
           path: |
@@ -169,17 +169,17 @@ jobs:
           ls -la "$out"
       - name: Changelog generation smoke
         run: ./scripts/changelog.sh 0.0.0-ci | head -20
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quarklang-ci-linux-amd64
           path: ${{ runner.temp }}/quarklang-dist-ci/*
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quarklang-reports
           path: |
             ${{ runner.temp }}/coverage.md
             ${{ runner.temp }}/bench-report.md
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quark-wasm
           path: ${{ runner.temp }}/quark.wasm
