@@ -129,6 +129,7 @@ func linkDiag(libs []linkLib) string {
 	if len(libs) == 0 {
 		return ""
 	}
+	sep := msgID(i18n.MsgCompilerFfiLinkFailureSeparator)
 	var parts []string
 	for _, l := range libs {
 		var gs []string
@@ -137,7 +138,7 @@ func linkDiag(libs []linkLib) string {
 		}
 		parts = append(parts, fmt.Sprintf(msgID(i18n.MsgCompilerSTriedS), l.name, strings.Join(gs, " / ")))
 	}
-	return "library FFI 链接失败：" + strings.Join(parts, "；")
+	return fmt.Sprintf(msgID(i18n.MsgCompilerLibraryFfiLinkFailedS), strings.Join(parts, sep))
 }
 
 func srcHash(path string) (string, error) {
@@ -375,7 +376,7 @@ func main() {
 		}
 		note := ""
 		if obfuscate {
-			note = "（已混淆）"
+			note = msgID(i18n.MsgCompilerNoteObfuscated)
 		}
 		keys := make([]string, 0, len(variants))
 		for k := range variants {
@@ -403,7 +404,7 @@ func main() {
 		}
 		note := ""
 		if man.Obfuscated {
-			note = "，已混淆"
+			note = msgID(i18n.MsgCompilerNoteObfuscatedLinking)
 		}
 		fmt.Fprintf(os.Stderr, msgID(i18n.MsgCompilerQkcLinkingLibrarySVS), man.Name, man.Version, name, len(man.Exports), note)
 		libIRs = append(libIRs, lir)
@@ -537,7 +538,7 @@ func main() {
 				}
 			}
 		}
-		fmt.Fprintln(os.Stderr, "qkc: 已构建 "+outPath)
+		fmt.Fprintln(os.Stderr, msgID(i18n.MsgCompilerQkcBuiltS, outPath))
 		return
 	}
 	execPath := binPath

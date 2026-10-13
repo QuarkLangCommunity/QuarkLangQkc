@@ -46,9 +46,9 @@ func (d *Doc) title(opts DocOptions) string {
 }
 
 // kindLabel names what one symbol is. The labels used to be Chinese string literals returned from
-// this switch: they never reached an i18n boundary at all, so under QK_LANG=en the overview table said
-// 结构体 and no gate in the repository could see it — a hardcoded message is invisible to a scanner that
-// looks for literals passed to a localizer. They are message IDs now.
+// this switch: they never reached an i18n boundary at all, so under QK_LANG=en the overview table
+// labelled a struct in Chinese and no gate in the repository could see it — a hardcoded message is
+// invisible to a scanner that looks for literals passed to a localizer. They are message IDs now.
 func kindLabel(kind string) string {
 	switch kind {
 	case DocFunc:

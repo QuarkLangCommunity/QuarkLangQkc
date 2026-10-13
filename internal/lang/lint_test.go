@@ -360,8 +360,9 @@ func TestLintCodesUnique(t *testing.T) {
 
 // TestLintKindLabelsAreMessages pins the linter's binding-kind labels in both languages.
 //
-// The labels used to be `msg("形参")` / `msg("循环变量")` / `msg("catch 变量")` / `msg("变量")` returned
-// from lintKindName, and two of the four had no catalog entry at all: they reached an i18n boundary and
+// The labels used to be Chinese literals passed through `msg(…)` and returned from lintKindName — the
+// parameter, loop-variable, catch-variable and plain-variable nouns — and two of the four had no catalog
+// entry at all: they reached an i18n boundary and
 // still rendered Chinese, which is the one shape the coverage ratchets cannot see (they read literals
 // passed to a boundary, and the literal here is a return value). Only the `param` and fallback kinds are
 // reachable from a corpus — the duplicate-declaration error fires before shadowing for `forvar` and

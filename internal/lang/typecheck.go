@@ -1265,7 +1265,7 @@ func (c *checker) checkStmt(st Stmt, sc *cScope) error {
 			if !assignable(elem, dt) {
 				return c.errfID(s.Pos, i18n.MsgTypecheckTypeerrorForLoopVariableTypeS, dt, it.Elem)
 			}
-			if err := c.checkIfaceStrict(it.Elem, dt, s.Pos, "for 迭代变量"); err != nil {
+			if err := c.checkIfaceStrict(it.Elem, dt, s.Pos, msgID(i18n.MsgTypecheckKindForLoopVariable)); err != nil {
 				return err
 			}
 		}

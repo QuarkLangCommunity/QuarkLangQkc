@@ -314,7 +314,7 @@ func (l *lowerer) diag(pos lang.Pos, rendered string) error {
 		d.srcLn = l.lines[d.line-1]
 	}
 	if l.imported && d.line > l.mainLines {
-		d.note = "（import 合并后行号）"
+		d.note = msgID(i18n.MsgCompilerNoteLineNumbersAfterImportMerge)
 	}
 	return d
 }
@@ -840,7 +840,7 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 		if canon, _, ok := ptrRefBase(pt); ok {
 			pt = canon // pointer T → T&
 		}
-		if err := l.checkType(pt, p.Pos, "参数"); err != nil {
+		if err := l.checkType(pt, p.Pos, msgID(i18n.MsgCompilerKindParameter)); err != nil {
 			return nil, err
 		}
 		if err := fc.declare(p.Name, pt, p.Pos); err != nil {
@@ -2615,12 +2615,11 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 	if err != nil {
 		return nil, err
 	}
-	boxed := func(a lang.Expr, what string) (*expr, error) {
+	boxed := func(a lang.Expr) (*expr, error) {
 		at := fc.typeOf(a)
 		if !fc.assignable(at, "interface{}") {
 			return nil, l.errfID(exprPos(a, me.Pos), i18n.MsgCompilerHashtableSWithSArgumentNot, me.Name, at)
 		}
-		_ = what
 		return fc.exprAs(a, "interface{}")
 	}
 	switch me.Name {
@@ -2648,11 +2647,11 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		if t := fc.typeOf(c.Args[1]); !fc.assignable(t, valT) {
 			return nil, l.errfID(exprPos(c.Args[1], me.Pos), i18n.MsgCompilerHashtableSSPutValueMust, keyT, valT, valT, t)
 		}
-		k, err := boxed(c.Args[0], "键")
+		k, err := boxed(c.Args[0])
 		if err != nil {
 			return nil, err
 		}
-		v, err := boxed(c.Args[1], "值")
+		v, err := boxed(c.Args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -2664,7 +2663,7 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
 			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerHashtableSSGetKeyMust, keyT, valT, keyT, t)
 		}
-		k, err := boxed(c.Args[0], "键")
+		k, err := boxed(c.Args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -2680,7 +2679,7 @@ func (fc *funcCtx) tableCall(c *lang.CallExpr, me *lang.MemberExpr, rt string) (
 		if t := fc.typeOf(c.Args[0]); !fc.assignable(t, keyT) {
 			return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerHashtableSSSKeyMust, keyT, valT, me.Name, keyT, t)
 		}
-		k, err := boxed(c.Args[0], "键")
+		k, err := boxed(c.Args[0])
 		if err != nil {
 			return nil, err
 		}

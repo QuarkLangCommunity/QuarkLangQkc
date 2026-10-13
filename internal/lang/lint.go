@@ -319,7 +319,7 @@ func (l *linter) declare(name string, pos Pos, kind string, typeName ...string) 
 // lintKindName names the kind of a local binding for a shadowing diagnostic, as a message ID: the
 // caller renders it in the diagnostic's language instead of one being baked in here. It returned
 // `msg(…)` of a Chinese literal before, and two of those four literals had no catalog entry at all, so
-// an English reader got "形参"/"变量" inside an otherwise English sentence. No ratchet saw it: the
+// an English reader got a Chinese noun ("parameter", "variable") inside an otherwise English sentence. No ratchet saw it: the
 // coverage scanner reads literals passed *to* an i18n boundary, not what a helper returns through one.
 func lintKindName(kind string) i18n.Msg {
 	switch kind {
