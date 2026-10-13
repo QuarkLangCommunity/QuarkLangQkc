@@ -10,6 +10,11 @@
 # and silently changed which message the conversion meant. Every *.tsv other than tables.tsv and
 # languages.tsv must be listed here, or generation fails.
 #
+# The table listed last is the append point, and it is the one place a message may move to without
+# renumbering another message: a row that arrives there takes the next number, where the same row
+# inserted into its own domain's table shifts every id after it. typecheck_appended.tsv is that point,
+# and it holds the typecheck rows that could not be filed under typecheck.tsv.
+#
 # file
 parser.tsv
 docgen.tsv
@@ -21,3 +26,4 @@ runtime.tsv
 fields.tsv
 typecheck.tsv
 compiler.tsv
+typecheck_appended.tsv

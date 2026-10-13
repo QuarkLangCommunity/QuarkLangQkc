@@ -234,9 +234,8 @@ compiler.compiling_reference_move_not_supported_yet	local	compiler/internal/cgen
 compiler.compiling_permission_reference_s_s_not	local	compiler/internal/cgen/lower.go:1163	the compiler refuses a construct the interpreter accepts	"compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)"	"compiling a permission reference &%s %s is not supported yet (implemented in the interpreter only)"	"暂未支持编译权限引用 &%s %s（仅在解释器中实现）"
 # The rows added when the last Chinese literals at user-facing sites moved into the catalog. They are
 # appended rather than filed under their own domain because compiler.tsv is last in tables.tsv and a
-# message may not be renumbered: an insertion earlier in the load order shifts every id after it.
-# typecheck.kind_for_loop_variable is the one row whose domain is not this table's, and it is here for
-# that reason.
+# message may not be renumbered: an insertion earlier in the load order shifts every id after it. A row
+# whose domain is not this table's goes to typecheck_appended.tsv, the append point itself.
 compiler.library_artifact_parse_failed_w	local	compiler/lib.go:374	a diagnostic the lowering layer raises	"library artifact parse failed: %w"	"library artifact parse failed: %w"	"库制品解析失败：%w"
 compiler.library_ffi_link_failed_s	local	compiler/main.go:140	a diagnostic the lowering layer raises	"library FFI link failed: %s"	"library FFI link failed: %s"	"library FFI 链接失败：%s"
 compiler.ffi_link_failure_separator	local	compiler/main.go:140	the separator between the attempts in that diagnostic	"; "	"; "	"；"
@@ -245,4 +244,3 @@ compiler.note_obfuscated_linking	local	compiler/main.go:406	the marker appended 
 compiler.qkc_built_s	local	compiler/main.go:540	a message from the compile driver	"qkc: built %s"	"qkc: built %s"	"qkc: 已构建 %s"
 compiler.note_line_numbers_after_import_merge	local	compiler/internal/cgen/lower.go:317	the note on a diagnostic whose line numbers come from a merged import	"(line numbers after the import merge)"	"(line numbers after the import merge)"	"（import 合并后行号）"
 compiler.kind_parameter	local	compiler/internal/cgen/lower.go:843	the noun the lowering layer puts where a construct is refused	"parameter"	"parameter"	"参数"
-typecheck.kind_for_loop_variable	local	internal/lang/typecheck.go:1268	the noun the checker puts in front of an interface mismatch	"for-loop variable"	"for-loop variable"	"for 迭代变量"

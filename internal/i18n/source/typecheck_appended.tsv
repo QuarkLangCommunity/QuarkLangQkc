@@ -1,0 +1,17 @@
+# The typecheck rows that could not be filed where the rest of the domain lives.
+#
+# A message's number is its position in the concatenated tables, and those numbers index the blob, so a
+# row inserted into typecheck.tsv renumbers every id after it. This table is listed last in tables.tsv,
+# which is what makes the move safe: a row that arrives here takes the next number instead, and no row
+# before it moves. It is the only table a message may move into without touching another message's
+# number, and it is the reason a row may sit outside its domain's file at all.
+#
+# typecheck.kind_for_loop_variable is the first such row. It was authored into compiler.tsv, last at the
+# time, for that same reason rather than because the domain was wrong; it stands here now so the table
+# matches the id's domain, and it kept its number because it was the last row of the last table either
+# way.
+#
+# Columns, tab-separated: id, owner, ctx, note, src, then one value column per language (see
+# languages.tsv for the order). Every column is described at the head of typecheck.tsv.
+#
+typecheck.kind_for_loop_variable	local	internal/lang/typecheck.go:1268	the noun the checker puts in front of an interface mismatch	"for-loop variable"	"for-loop variable"	"for 迭代变量"
