@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8.2 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.3 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -25,10 +25,16 @@ it, and `compiler/testdata/compare.sh` must keep printing `all identical (interp
    library must refuse.
 4. **One semantic reference.** The tree-walking interpreter defines behaviour; the native compiler must
    match it bit for bit. A construct the compiler cannot lower is a **hard error**, never a silent
-   difference.
+   difference. The parity gate proves *interpreter == compiler*, not *code == this document*: a rule both
+   engines implement the other way round, or a feature both engines omit, leaves it green, so §11.3 lists
+   what it cannot see.
 5. **The core may shrink, never grow.** Legacy built-ins are migrated onto library types; the count of
    built-in containers is frozen by a test. Simplification counts as shrinkage: where there were six
    unrelated storage types, 0.7 has one storage family and a table of views.
+
+Diagnostics are not part of the language surface. A conforming program is one the *engines* accept; the
+linter's codes (`QK101`–`QK115`), the formatter, the language server and the doc renderer are tools around
+the language, and this document does not define them (`docs/primitives.md` §7.2).
 
 ## 2. Lexical and declarative form
 
@@ -89,7 +95,8 @@ Unicode code point) and is a different thing, not a wider `uchar`.
 `int` means `int32`, `float` means `float32` — the smallest is the default. `void` and `any` are the
 empty interface type, registered by the type system itself: `void` is *nothing*, `any` is *anything*.
 `String` is **standard library**, not standard — a library `String` is bits plus a length. There is no
-`null`, and no `pointer T` spelling: a pointer is `*T`, a reference is `&T`.
+`null`. A pointer is `*T` and a reference is `&T`; `pointer T` is the implementation's own spelling for the
+nullable raw block a `new T[n]` yields, which is compatibility surface (§9) and not a view of this table.
 
 `bit` and `bits<N>` are value types: assigning or passing one copies its bits. A `bits<N>` has alignment
 1 and no padding beyond the trailing zero bits; a view has the alignment of its whole width; multi-byte
@@ -252,9 +259,9 @@ The difference between the two, spelled out:
 | `struct`, `interface`, `impl`, generics, `type` aliases | smart pointers (permission references as a library layer — planned) |
 | `taskm`/threads/channels, `IOStream`, `panic` | every other collection |
 
-- **Legacy spellings** (`long`, `double`, and `char` used as a narrow integer) are implementation
-  compatibility, not standard; they are being migrated onto the views of §3.2 — a `char` used as a narrow
-  integer becomes `uchar`.
+- **Legacy spellings** (`long`, `double`, `pointer T`, and `char` used as a narrow integer) are
+  implementation compatibility, not standard; they are being migrated onto the views of §3.2 — a `char`
+  used as a narrow integer becomes `uchar`. §11.1 records what each one means in the implementation today.
 - **Legacy built-ins still present** (`List`, `HashTable`): scheduled for migration onto library types.
   Their presence is frozen by a test — the count may only go down. See §11.3.
 
@@ -295,6 +302,15 @@ differ, the code is wrong.
   compiler identical on every corpus case.
 - the bitwise family on int views, hex literals, `===` storage identity, permission references, `&lvalue`
   and the reference move `p++`.
+- the legacy spellings of §9 that §3.2 does not define, each folded onto the view this implementation
+  lowers: `char` is the int view (`internal/lang/typecheck.go` maps it to `tInt`), `double` is the 64-bit
+  float view this implementation spells `float` (see §11.2 on the width), `long` computes as the int view in
+  both engines (measured: `long x = 1000000000; x * 4` is `-294967296` in each), and `pointer T` is the
+  nullable handle `new T[n]` yields. Both engines accept them in a declaration, a parameter, a return type, a
+  struct field, a conversion (`char(66)`) and a `List` element (`List<char>` is `List<int>`, as the
+  interpreter's `char[]` is). `compiler/testdata/cases/z_legacy_views.kq` is the case that keeps the two
+  engines on one behaviour; before it, the interpreter accepted these spellings and the compiler refused them
+  with a hard error, which the parity gate could not see.
 
 ### 11.2 Limits of the current implementation
 
@@ -302,6 +318,12 @@ differ, the code is wrong.
 - a width takes a decimal literal only, not an arbitrary constant expression.
 - reinterpreting `float`/`double` is refused: this implementation's `float` is 64-bit while §3.2 says
   `float32`, so the widths cannot be trusted to agree yet.
+- a `List` element is `int` or `String` in the compiler, so `List<double>` is refused there
+  (`List<double> l = [1.5];` → `variable type "List<float>" is not supported (the compiler handles
+  List<int> and List<String>; element float)`) while the interpreter accepts it as a `float` list.
+  `List<char>` is *not* in this limit: it folds to `List<int>`. Closing the rest needs a `List<float>`
+  lowering in `compiler/internal/cgen` (element load/store through bit-casts, plus literal, `append`, index
+  and print paths), which no parity case exercises today.
 - layout: a `bits<N>` whose width is not 8, 16 or 32 occupies the next storage size in compiled structs
   and is aligned to that type rather than to 1 as §3.1 requires. Values are exact; only layout rounds up.
 - call depth is capped at 8192 (`lang.MaxCallDepth`). A call made from a frame that deep is refused with
@@ -327,6 +349,76 @@ differ, the code is wrong.
   the compiler, although the standard has no exceptions. They are scheduled for removal, after which
   `Option<T>` and `Result<T, E>` are the only way to carry failure.
 - **§9 core minus containers.** `List` and `HashTable` are still built in; their count is frozen by a test.
+- **§5 shift precedence.** §5 says: "Precedence, loosest first: `||`, `&&`, `== != < <= > >=`, `|`, `^`,
+  `&`, `<< >>`, `+ -`, `* / %`, then the unary operators." Read as written, `<<`/`>>` is *looser* than
+  `+`/`-` (C's grouping), so `1 + 2 << 3` is `(1 + 2) << 3` = 24. Both engines group it the other way
+  (Go's), measured under `LANG=C.UTF-8` and `LANG=zh_CN.UTF-8`:
+
+  | Expression | Both engines | §5's order |
+  |---|---|---|
+  | `1 + 2 << 3` | 17 — `1 + (2 << 3)` | 24 — `(1 + 2) << 3` |
+  | `1 << 2 + 3` | 7 — `(1 << 2) + 3` | 32 — `1 << (2 + 3)` |
+  | `10 - 2 >> 1` | 9 — `10 - (2 >> 1)` | 4 — `(10 - 2) >> 1` |
+  | `1 + (2 << 3)` | 17 | 17 — agrees |
+  | `(1 + 2) << 3` | 24 | 24 — agrees |
+
+  The cause is not in this repository: the syntax layer is the pinned module
+  `github.com/QuarkLangCommunity/QuarkLangQkparser`, and its parser calls `parseShift` from `parseAdd`
+  (`parseAdd → parseShift → parseMul`), i.e. additive looser than shift. The fix is the two-line exchange
+  of that pair (`parseAdd` takes `parseMul` and `parseShift` takes `parseAdd`, plus the comment above
+  them); nothing in this checkout has to change. It cannot be done here afterwards either: that parser
+  erases parentheses (its `TLParen` case returns the inner expression), so `1 + 2 << 3` and
+  `1 + (2 << 3)` reach both engines as **one and the same tree**, and no later pass could give them 24
+  and 17 — `internal/lang/precedence_test.go` pins that, and would fail if the syntax layer ever kept the
+  two apart. Measured with those two lines applied in a scratch copy of the pinned revision: `1 + 2 << 3`
+  is 24 and `8 >> 1 + 1` is 2 in both engines under both locales, and of the 23 corpus cases exactly one
+  changes — `z_precedence.kq`, the case that pins this level. Size: two lines in the syntax layer, one
+  reviewed change there. §7.6 of `docs/primitives.md` classes it as a semantic change (a program's meaning
+  changes), so it waits for the owner's ruling — see §11.4.
+- **§10 memory on the compiled path.** §10 states its own scope: "This section describes the contract of
+  the compiled artifact; the reference interpreter implements that policy as a layer over its host
+  runtime's allocator." Measured per engine and per primitive:
+
+  | §10 row | Interpreter (`internal/lang`) | Compiled artifact (`compiler/`) |
+  |---|---|---|
+  | `delete x;` | any variable: runs `__delete__()` for a struct, then returns a `List`'s block to the free pool (`eval.go` `DeleteStmt`) | **only `List<int>` variables**; any other operand is a hard error, `delete %q is not supported (the compiler handles delete on a List variable only)` |
+  | `memory.setBlock(n)` | implemented, `1 ≤ n ≤ 2^20` (`eval.go` `MemoryManager`, `typecheck.go` `setBlock`) | none: `calling method ? on setBlock is not supported by the compiler (available in the interpreter)` |
+  | `memory.compact()` | implemented (`MemoryManager.Compact`) | none: same hard error |
+  | `memory.Fragmentation()` | **not exposed**: the member does not exist, although `MemoryManager.Fragmentation()` does (`eval.go`) | not exposed: the shared type checker refuses it first, `TypeError: no method "Fragmentation" on memory` |
+  | (`memory.clear()`, not a row of §10) | implemented | none: same hard error as `setBlock` |
+
+  So the compiled artifact implements one of §10's four rows, in a narrowed form, and the interpreter
+  implements three of them (one of those — `clear` — is not in §10's table at all). Closing the rest on
+  the compiled path means writing the block policy into `compiler/qthreads.c.txt`, which is `malloc`/
+  `calloc`-based today (24 allocation sites, no pools, no block sizes, nothing to hook), and then lowering
+  four primitives plus `__delete__` dispatch into `compiler/internal/cgen`: a new allocator with a free
+  list and an occupancy rule, three runtime entry points, `memory.*` call lowering, and `delete` for every
+  variable kind. Size: large — one design review of its own, not a correction. Until then this table is the
+  honest statement of the divergence §10's scope sentence assumes away.
+
+### 11.4 What `docs/primitives.md` §7.6 asks for, and what this revision does not do
+
+§7.6 lists twelve changes, smallest first, and calls the first nine pure restatement. This revision adopts
+the ones that are corrections or one-line facts and records the rest with their size, because a rewrite of
+a normative section is not a correction and §12 puts it behind the owner's ruling:
+
+| §7.6 | Item | State |
+|---|---|---|
+| 1 | generate §11 outside the standard | **not done**: it needs a new generator plus a drift gate of the `cmd/qki18n -check` kind, and it would remove the section this revision has just made accurate. Size: one tool and its gate |
+| 2 | add the two missing corpus kinds | **done**: `z_legacy_views.kq` (one case per §3.2 view row the standard claims is core) and `z_precedence.kq` (one line per precedence level, against §5 rather than against the other engine) |
+| 3 | record the tool/lint boundary in one sentence | **done**: the paragraph closing §1 |
+| 4 | state what `compare.sh` proves | **done**: the last sentence of §1.4 |
+| 5 | `stdlib/vec.qk`'s `pointer T`, or §3.2 corrected | **done as the correction**: `pointer T` is measured to exist in both engines and is what `new T[n]` yields, which `stdlib/vec.qk` is built on, so §3.2's claim that the spelling does not exist was the factual error |
+| 6 | delete `#ifdef`/`#ifndef` in favour of `#if defined(…)`, and `#ifn` | **not done**: deleting a spelling is surface removal, and the spellings live in the syntax layer's preprocessor (a sibling repository). §8's Q-4 also records that `#ifn` is defined nowhere, so a ruling is needed before either list shrinks |
+| 7 | collapse `IndexOutOfBoundsError`/`IndexOutOfRangeError` to one id | **not done**: §7.6 itself notes it "changes a user-visible message". The two name different conditions (a `List` subscript and a bit subscript), both are in the message catalogues of both engines and in the compiled runtime's strings, so it is a surface change awaiting the ruling, not a restatement |
+| 8 | reduce §4's 28 reference types to a `(set, rank)` algebra | **not done**: §4 is normative and §8's Q-1/Q-2 record that `m`'s meaning for a reference and `a`'s definition are still open — a rewrite would answer questions this document says are unresolved |
+| 9 | reduce §10 to release + block granularity | **not done**: §10 is normative and §7.6's own Q-6 ("does release wipe?") is open; rewriting the table would also erase the row-by-row status §11.3 has just recorded |
+
+§7.6's items 10–12 are the semantic ones and await the owner's ruling: item 10 (`char`/`double`) was
+closed the way §7.6 offers — by lowering them in the compiler (§11.1) — and no program changes meaning;
+item 11 (shift precedence) is recorded in §11.3 and does change meaning, so it needs the ruling and belongs
+to the syntax layer; item 12 (`#expand`/`#run`/`macro x($a $b)`) is untouched, needs a definition of
+"node" (§8's Q-3, Q-5, and §11.3's macro item), and stays open.
 
 ## 12. Change policy and revision log
 
@@ -337,6 +429,7 @@ differ, the code is wrong.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.3 | 2026-10-15 | Status and corrections, no normative text changed: §11.3 records the two divergences it could not see before — §5's shift precedence (a two-line exchange in the pinned syntax layer, measured in both engines under both locales, with the reason it cannot be repaired in this repository: that parser erases parentheses) and §10's four primitives per engine and per path, with the size of closing the compiled path; §11.2 adds the one `List` element type the compiler still refuses (`List<double>`), and §11.1 the legacy spellings both engines now accept (`char`, `double`, `long`, `pointer T`, `List<char>`), which the compiler refused until this revision. §1.4 now says what `compare.sh` proves and §1 records that diagnostics are not language surface; §3.2's claim that `pointer T` does not exist is corrected (it is what `new T[n]` yields, which `stdlib/vec.qk` is built on); §9 lists `pointer T` among the compatibility spellings. §11.4 records which of `docs/primitives.md` §7.6's twelve items this revision adopts and why the others wait for the owner's ruling |
 | 0.8.2 | 2026-10-11 | §10 gains one scope sentence: the section describes the contract of the compiled artifact, and the reference interpreter implements that policy as a layer over its host runtime's allocator. The corresponding doc comment in `internal/lang/value.go` said memory "is backed by the host Go GC" and cited a `§14` that does not exist; it now describes what the reference interpreter does (its `MemoryManager` implements the block policy as a logical layer above the host allocator) and cites §10. Scope wording and a stale citation only; no normative content changed and no language surface added |
 | 0.8.1 | 2026-10-10 | §11.2 records the two depth limits a user can hit, with the numbers and what they see: call depth 8192 (`lang.MaxCallDepth`, `StackOverflowError: recursion depth exceeded 8192`, counted identically in the interpreter and in generated code) and expression nesting 65536 (`lang.MaxExprDepth`/`qkparser.MaxExprDepth`, refused by the parser as `nesting is deeper than …` and by the type checker as `expression nesting is deeper than …`). Status-section facts only; no normative content changed and no language surface added |
 | 0.8 | 2026-10-10 | **Memory and lifetime became part of the standard** (§10): no garbage collector, `delete` is a deterministic release that runs `__delete__()` and returns the storage to a free pool without wiping it, allocation reuses the least-occupied block so a tide of temporary data keeps a stable block set, `memory.setBlock`/`compact`/`Fragmentation` are the knobs and the inspection point, and a task's blocks become reclaimable when it ends. The section after it moved to §11 and the change policy to §12. Freeze restarts: review after 2026-11-10 |

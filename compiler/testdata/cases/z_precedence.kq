@@ -1,0 +1,27 @@
+// Precedence, loosest first (spec §5): ||, &&, == != < <= > >=, |, ^, &, << >>, + -, * / %, then the unary
+// operators. Every line pins one level against the standard's stated order rather than against the other
+// engine, because the parity gate alone cannot see a precedence disagreement — both engines can hold the
+// same wrong order (docs/primitives.md §1.3, §7.3).
+//
+// The shift level is the one place where the engines still disagree with §5: the standard puts `<< >>`
+// looser than `+ -`, so `1 + 2 << 3` reads `(1 + 2) << 3` = 24, while the pinned syntax layer groups it as
+// `1 + (2 << 3)` = 17. §11.3 records that divergence and the two-line fix in the syntax layer; the three
+// values marked §11.3 below are therefore the *current* ones, and correcting the syntax layer makes this
+// case fail until they are updated to 24, 32 and 4.
+fn main(IOStream io) {
+    io.println(true || false && false);   // && is looser than ||: true
+    io.println(1 | 2 == 3);               // the bitwise family is tighter than comparison: (1|2) == 3
+    io.println(1 | 2 ^ 3);                // ^ is tighter than |: 1 | (2^3) = 1
+    io.println(4 ^ 1 & 1);                // & is tighter than ^: 4 ^ (1&1) = 5
+    io.println(3 & 1 << 2);               // << is tighter than &: 3 & (1<<2) = 0
+    io.println(1 + 2 << 3);               // §11.3: 17 here; §5's grouping gives (1 + 2) << 3 = 24
+    io.println(1 << 2 + 3);               // §11.3: 7 here; §5's grouping gives 1 << (2 + 3) = 32
+    io.println(10 - 2 >> 1);              // §11.3: 9 here; §5's grouping gives (10 - 2) >> 1 = 4
+    io.println(1 + (2 << 3));             // explicit grouping: 17 under every reading
+    io.println((1 + 2) << 3);             // explicit grouping: 24 under every reading
+    io.println(1 + 2 * 3);                // * is tighter than +: 7
+    io.println(2 * 3 % 4);                // one level, left to right: 2
+    io.println(1 - 2 - 3);                // one level, left to right: -4
+    io.println(-1 + 2);                   // unary - binds tightest: 1
+    io.println(~0 + 1);                   // unary ~ binds tightest: 0
+}
