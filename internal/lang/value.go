@@ -795,22 +795,10 @@ type ThreadValue struct {
 }
 
 func (tv *ThreadValue) TypeName() string { return "thread" }
-func (tv *ThreadValue) String() string   { return "<thread " + itoa(tv.Pid) + ">" }
+func (tv *ThreadValue) String() string   { return "<thread " + strconv.Itoa(tv.Pid) + ">" }
 
 func (t *Task) TypeName() string { return "Task" }
-func (t *Task) String() string   { return "<Task " + itoa(t.Pid) + ">" }
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	digits := ""
-	for n > 0 {
-		digits = string(rune('0'+n%10)) + digits
-		n /= 10
-	}
-	return digits
-}
+func (t *Task) String() string   { return "<Task " + strconv.Itoa(t.Pid) + ">" }
 
 // StructValue is an instance of a user-defined struct.
 type StructValue struct {

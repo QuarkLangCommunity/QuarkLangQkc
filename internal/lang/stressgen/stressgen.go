@@ -53,20 +53,20 @@ func All() []Case {
 	}
 	return []Case{
 		// ── scale: sheer size ──
-		ctor("scale_ident_1m", CategoryScale, "one identifier of "+itoa(IdentifierChars)+" characters", identifierMillion()),
-		ctor("scale_decls_100k", CategoryScale, itoa(TopLevelDecls)+" top-level type declarations", topLevelDecls()),
-		ctor("scale_line_1mb", CategoryScale, "a single source line of at least "+itoa(LineBytes)+" bytes", oneMegabyteLine()),
-		ctor("scale_nested_blocks", CategoryScale, itoa(NestedBlocks)+" nested block levels", nestedBlocks()),
-		ctor("scale_nested_parens", CategoryScale, itoa(NestedParens)+" nested parentheses in one expression", nestedParens()),
-		ctor("scale_nested_generics", CategoryScale, itoa(GenericDepth)+" nested generic type arguments", nestedGenericArgs()),
-		ctor("scale_call_chain", CategoryScale, itoa(CallChainLen)+" chained instance calls", longCallChain()),
+		ctor("scale_ident_1m", CategoryScale, "one identifier of "+strconv.Itoa(IdentifierChars)+" characters", identifierMillion()),
+		ctor("scale_decls_100k", CategoryScale, strconv.Itoa(TopLevelDecls)+" top-level type declarations", topLevelDecls()),
+		ctor("scale_line_1mb", CategoryScale, "a single source line of at least "+strconv.Itoa(LineBytes)+" bytes", oneMegabyteLine()),
+		ctor("scale_nested_blocks", CategoryScale, strconv.Itoa(NestedBlocks)+" nested block levels", nestedBlocks()),
+		ctor("scale_nested_parens", CategoryScale, strconv.Itoa(NestedParens)+" nested parentheses in one expression", nestedParens()),
+		ctor("scale_nested_generics", CategoryScale, strconv.Itoa(GenericDepth)+" nested generic type arguments", nestedGenericArgs()),
+		ctor("scale_call_chain", CategoryScale, strconv.Itoa(CallChainLen)+" chained instance calls", longCallChain()),
 		// ── pathological: adversarial shapes ──
-		ctor("path_recursion_stack", CategoryPathological, "non-tail recursion "+itoa(RecursionDepth)+" levels deep: must fail cleanly, never crash the host", deepRecursion()),
-		ctor("path_recursion_tail", CategoryPathological, "tail recursion "+itoa(RecursionDepth)+" levels deep: bounded work, so it must finish", tailRecursion()),
+		ctor("path_recursion_stack", CategoryPathological, "non-tail recursion "+strconv.Itoa(RecursionDepth)+" levels deep: must fail cleanly, never crash the host", deepRecursion()),
+		ctor("path_recursion_tail", CategoryPathological, "tail recursion "+strconv.Itoa(RecursionDepth)+" levels deep: bounded work, so it must finish", tailRecursion()),
 		ctor("path_int_beyond_64", CategoryPathological, "an integer literal far beyond 64 bits", hugeIntLiteral()),
 		ctor("path_bits33", CategoryPathological, "a bits<33> declaration, one bit past the supported width", bits33()),
-		ctor("path_fn_10k_params", CategoryPathological, "a function with "+itoa(FuncParams)+" parameters", manyParams()),
-		ctor("path_struct_10k_fields", CategoryPathological, "a struct with "+itoa(StructFields)+" fields", manyFields()),
+		ctor("path_fn_10k_params", CategoryPathological, "a function with "+strconv.Itoa(FuncParams)+" parameters", manyParams()),
+		ctor("path_struct_10k_fields", CategoryPathological, "a struct with "+strconv.Itoa(StructFields)+" fields", manyFields()),
 		ctor("path_recursive_macro", CategoryPathological, "two macros that expand into each other", recursiveMacro()),
 		ctor("path_exp_macro", CategoryPathological, "a macro chain whose substitution would grow exponentially if it were re-scanned", exponentialMacro()),
 		// ── malformed: inputs no front end may accept ──
@@ -90,7 +90,7 @@ func All() []Case {
 		ctor("fix_dead_store", CategoryFixable, "a dead store overwritten before any read: QK113 deletes the earlier write", deadStoreCorpus()),
 		ctor("fix_self_assign_crlf", CategoryFixable, "the same defects in a CRLF checkout: the rewrite must keep every ending", crlfSelfAssignCorpus()),
 		// ── resource: the measured multi-megabyte case ──
-		ctor("res_few_mb", CategoryResource, "a valid multi-megabyte program ("+itoa(ResourceFuncs)+" functions)", fewMegabyteProgram()),
+		ctor("res_few_mb", CategoryResource, "a valid multi-megabyte program ("+strconv.Itoa(ResourceFuncs)+" functions)", fewMegabyteProgram()),
 	}
 }
 
@@ -106,9 +106,6 @@ func program(decls, body string) []byte {
 	b.WriteString("\n}\n")
 	return []byte(b.String())
 }
-
-// itoa is the small spelling of strconv.Itoa used to build the case descriptions.
-func itoa(n int) string { return strconv.Itoa(n) }
 
 // identifierMillion declares one variable whose name is IdentifierChars characters long.
 func identifierMillion() []byte {
@@ -175,14 +172,14 @@ func longCallChain() []byte {
 // stack the engine has and report it instead of taking the host down.
 func deepRecursion() []byte {
 	return program("fn down(int n) int {\n  if (n == 0) { return 0; }\n  return n + down(n - 1);\n}",
-		"  io.println(down("+itoa(RecursionDepth)+"));")
+		"  io.println(down("+strconv.Itoa(RecursionDepth)+"));")
 }
 
 // tailRecursion recurses RecursionDepth levels as a tail call, so the work is bounded and a back end
 // that reuses the frame finishes while a depth-limited interpreter reports its limit.
 func tailRecursion() []byte {
 	return program("fn up(int n, int acc) int {\n  if (n == 0) { return acc; }\n  return up(n - 1, acc + 1);\n}",
-		"  io.println(up("+itoa(RecursionDepth)+", 0));")
+		"  io.println(up("+strconv.Itoa(RecursionDepth)+", 0));")
 }
 
 // hugeIntLiteral assigns 2^128, which no 64-bit integer can hold.
@@ -206,16 +203,16 @@ func manyParams() []byte {
 			call.WriteString(", ")
 		}
 		fmt.Fprintf(&decl, "int p%d", i)
-		call.WriteString(itoa(i))
+		call.WriteString(strconv.Itoa(i))
 	}
-	decl.WriteString(") int {\n  return p" + itoa(FuncParams-1) + ";\n}")
+	decl.WriteString(") int {\n  return p" + strconv.Itoa(FuncParams-1) + ";\n}")
 	call.WriteString("));")
 	return program(decl.String(), call.String())
 }
 
 // manyFields declares a struct with StructFields fields and touches the last one.
 func manyFields() []byte {
-	last := itoa(StructFields - 1)
+	last := strconv.Itoa(StructFields - 1)
 	var b strings.Builder
 	b.WriteString("type struct {\n")
 	for i := 0; i < StructFields; i++ {

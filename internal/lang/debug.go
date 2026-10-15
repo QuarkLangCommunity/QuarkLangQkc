@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -105,7 +106,7 @@ func (in *interp) hitBreak(pos Pos, sc *scope) bool {
 	if d == nil {
 		return false
 	}
-	key := d.file + ":" + itoa(pos.Line)
+	key := d.file + ":" + strconv.Itoa(pos.Line)
 	if !(d.bps[key] || d.stepping) {
 		return false
 	}

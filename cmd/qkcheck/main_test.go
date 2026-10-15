@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -242,7 +243,7 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 		}
 		// The snapshot table uses /: on Windows filepath.Rel returns \, so normalize before comparing (consistent across systems)
 		rel = filepath.ToSlash(rel)
-		gotWarnings[rel+":"+itoa(f.Line)+":"+itoa(f.Col)+" "+f.Code] = true
+		gotWarnings[rel+":"+strconv.Itoa(f.Line)+":"+strconv.Itoa(f.Col)+" "+f.Code] = true
 	}
 	for k := range gotWarnings {
 		if !wantWarnings[k] {
@@ -254,25 +255,6 @@ func TestCLICorpusNoFalsePositives(t *testing.T) {
 			t.Errorf("a warning in the snapshot disappeared (a regression in the check?): %s", k)
 		}
 	}
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	if neg {
-		return "-" + string(b)
-	}
-	return string(b)
 }
 
 // skipNestedRepo reports whether a walked directory belongs to a different repository. The QuarkLang

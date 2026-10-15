@@ -69,9 +69,9 @@ func main() {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, msgID(i18n.MsgCliCheckUsage))
-	fmt.Fprintln(w, msgID(i18n.MsgCliQuarklangStaticAnalysisQk101Qk115Unused))
-	fmt.Fprintln(w, msgID(i18n.MsgCliInterfaceNearMissVoidMisuseSelf))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliCheckUsage))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliQuarklangStaticAnalysisQk101Qk115Unused))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliInterfaceNearMissVoidMisuseSelf))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -94,7 +94,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			checkMode = true
 		case "-L":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, msgID(i18n.MsgCliCheckLNeedsDirectory))
+				fmt.Fprintln(stderr, i18n.Render(i18n.MsgCliCheckLNeedsDirectory))
 				return 2
 			}
 			i++
@@ -114,7 +114,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 0
 		default:
 			if strings.HasPrefix(a, "-") && a != "-" {
-				fmt.Fprintf(stderr, msgID(i18n.MsgCliCheckUnknownArgument), a)
+				fmt.Fprintf(stderr, i18n.Render(i18n.MsgCliCheckUnknownArgument), a)
 				usage(stderr)
 				return 2
 			}
@@ -124,7 +124,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// -fix applies, -check only reports what -fix would do: asking for both is a usage error rather
 	// than a silent choice between them.
 	if fixMode && checkMode {
-		fmt.Fprint(stderr, msgID(i18n.MsgCliCheckFixFlagConflict))
+		fmt.Fprint(stderr, i18n.Render(i18n.MsgCliCheckFixFlagConflict))
 		return 2
 	}
 	if len(files) == 0 {
@@ -138,7 +138,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if len(files) == 0 {
-		fmt.Fprintln(stderr, msgID(i18n.MsgCliCheckNoFiles))
+		fmt.Fprintln(stderr, i18n.Render(i18n.MsgCliCheckNoFiles))
 		return 2
 	}
 
@@ -174,7 +174,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if checkMode && pending > 0 {
-		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixPending), pending)
+		fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixPending), pending)
 		return exitFixPending
 	}
 	if exit0 {
@@ -221,14 +221,14 @@ func report(all []finding, jsonOut, checkMode bool, stdout io.Writer) {
 		fmt.Fprintln(stdout, f.String())
 		switch {
 		case f.Fix != nil && f.Fix.Delete:
-			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixDelete), f.Fix.Why)
+			fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixDelete), f.Fix.Why)
 		case f.Fix != nil:
-			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixReplace), f.Fix.Replacement(), f.Fix.Why)
+			fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixReplace), f.Fix.Replacement(), f.Fix.Why)
 		case f.NoFix != "":
-			fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixSkipped), f.NoFix)
+			fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixSkipped), f.NoFix)
 		}
 		if checkMode && f.Fix != nil {
-			fmt.Fprint(stdout, msgID(i18n.MsgCliCheckFixFlagged))
+			fmt.Fprint(stdout, i18n.Render(i18n.MsgCliCheckFixFlagged))
 		}
 	}
 }
@@ -247,9 +247,9 @@ func printSummary(stdout io.Writer, all []finding, wrote bool) {
 			unfixed++
 		}
 	}
-	fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckSummary), len(all), errs, warns)
+	fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckSummary), len(all), errs, warns)
 	if wrote && unfixed > 0 {
-		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixRemaining), unfixed)
+		fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixRemaining), unfixed)
 	}
 }
 
@@ -332,7 +332,7 @@ func fixFile(path string, opts checkOptions, stdout, stderr io.Writer) ([]findin
 	if capped {
 		// A correction can expose another, so the loop runs until nothing applies; if it hits the bound
 		// with corrections still pending, the user has to know the file may not be settled yet.
-		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixCapped), maxPasses)
+		fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixCapped), maxPasses)
 	}
 	if lines > 0 {
 		// Write only when something changed, and keep the file's own permissions: -fix rewrites the
@@ -341,7 +341,7 @@ func fixFile(path string, opts checkOptions, stdout, stderr io.Writer) ([]findin
 			fmt.Fprintln(stderr, "qkcheck:", err)
 			return nil, 2
 		}
-		fmt.Fprintf(stdout, msgID(i18n.MsgCliCheckFixWrote), path, lines)
+		fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliCheckFixWrote), path, lines)
 	}
 	return final, 0
 }

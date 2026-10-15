@@ -3,6 +3,7 @@ package main
 // qkdoc generation pipeline benchmark: parsing + doc model + Markdown rendering.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ func docBigSource(n int) string {
 		b.WriteString("// 函数说明。\n")
 		b.WriteString("pub fn f")
 		b.WriteString(strings.Repeat("x", i%7))
-		b.WriteString(itoaBench(i))
+		b.WriteString(strconv.Itoa(i))
 		b.WriteString(`(int n, String s) int {
     int total = 0;
     while (n > 0) {
@@ -29,18 +30,6 @@ func docBigSource(n int) string {
 `)
 	}
 	return b.String()
-}
-
-func itoaBench(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var d []byte
-	for n > 0 {
-		d = append([]byte{byte('0' + n%10)}, d...)
-		n /= 10
-	}
-	return string(d)
 }
 
 func BenchmarkDocPipeline(b *testing.B) {

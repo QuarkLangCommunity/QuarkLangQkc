@@ -31,8 +31,8 @@ func main() {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, msgID(i18n.MsgCliDocUsage))
-	fmt.Fprintln(w, msgID(i18n.MsgCliDocHelpLine))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliDocUsage))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliDocHelpLine))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -44,14 +44,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		switch a {
 		case "-o":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, msgID(i18n.MsgCliDocONeedsFile))
+				fmt.Fprintln(stderr, i18n.Render(i18n.MsgCliDocONeedsFile))
 				return 2
 			}
 			i++
 			outFile = args[i]
 		case "-title":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, msgID(i18n.MsgCliDocTitleNeedsArgument))
+				fmt.Fprintln(stderr, i18n.Render(i18n.MsgCliDocTitleNeedsArgument))
 				return 2
 			}
 			i++
@@ -76,7 +76,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 0
 		default:
 			if strings.HasPrefix(a, "-") && a != "-" {
-				fmt.Fprintf(stderr, msgID(i18n.MsgCliDocUnknownArgument), a)
+				fmt.Fprintf(stderr, i18n.Render(i18n.MsgCliDocUnknownArgument), a)
 				usage(stderr)
 				return 2
 			}
@@ -136,6 +136,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "qkdoc:", err)
 		return 2
 	}
-	fmt.Fprintf(stdout, msgID(i18n.MsgCliDocWroteFile), outFile, len(out))
+	fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliDocWroteFile), outFile, len(out))
 	return 0
 }

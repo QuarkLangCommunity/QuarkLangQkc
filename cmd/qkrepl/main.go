@@ -39,8 +39,8 @@ func main() {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, msgID(i18n.MsgCliReplUsage))
-	fmt.Fprintln(w, msgID(i18n.MsgCliReplHelpLine))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliReplUsage))
+	fmt.Fprintln(w, i18n.Render(i18n.MsgCliReplHelpLine))
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -51,7 +51,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		switch a {
 		case "-e":
 			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, msgID(i18n.MsgCliReplENeedsCode))
+				fmt.Fprintln(stderr, i18n.Render(i18n.MsgCliReplENeedsCode))
 				return 2
 			}
 			i++
@@ -73,7 +73,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			usage(stdout)
 			return 0
 		default:
-			fmt.Fprintf(stderr, msgID(i18n.MsgCliReplUnknownArgument), a)
+			fmt.Fprintf(stderr, i18n.Render(i18n.MsgCliReplUnknownArgument), a)
 			usage(stderr)
 			return 2
 		}
@@ -104,7 +104,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	interactive := isTerminal(stdin)
 	if interactive && !quiet {
-		fmt.Fprintf(stdout, msgID(i18n.MsgCliReplBanner), version)
+		fmt.Fprintf(stdout, i18n.Render(i18n.MsgCliReplBanner), version)
 	}
 
 	reader := bufio.NewReader(stdin)
@@ -167,13 +167,13 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 	fields := strings.Fields(line)
 	switch fields[0] {
 	case ":help", ":h", ":?":
-		fmt.Fprintln(stdout, msgID(i18n.MsgCliReplHelpText))
+		fmt.Fprintln(stdout, i18n.Render(i18n.MsgCliReplHelpText))
 		return false, nil
 	case ":quit", ":q", ":exit":
 		return true, nil
 	case ":load":
 		if len(fields) < 2 {
-			return false, errors.New(msgID(i18n.MsgCliReplLoadNeedsFile))
+			return false, errors.New(i18n.Render(i18n.MsgCliReplLoadNeedsFile))
 		}
 		path := fields[1]
 		data, err := os.ReadFile(path)
@@ -187,7 +187,7 @@ func command(line string, sess *lang.REPLSession, stdout, stderr io.Writer) (boo
 		}
 		return false, nil
 	}
-	return false, errors.New(msgID(i18n.MsgCliReplUnknownCommand, fields[0]))
+	return false, errors.New(i18n.Render(i18n.MsgCliReplUnknownCommand, fields[0]))
 }
 
 // isTerminal reports whether the input comes from a terminal (no third-party dependencies: character device check).

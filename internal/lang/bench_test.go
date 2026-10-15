@@ -214,7 +214,7 @@ func BenchmarkStringProcessing1M(b *testing.B) {
 // subtree. The comparison that must stay linear is 20k against 60k: the times should roughly double.
 func BenchmarkVMCompileChain(b *testing.B) {
 	for _, n := range []int{20000, 60000} {
-		b.Run(itoaTest(n)+"_additions", func(b *testing.B) {
+		b.Run(strconv.Itoa(n)+"_additions", func(b *testing.B) {
 			src := chainSource(n)
 			for i := 0; i < b.N; i++ {
 				prog, err := Compile(src)

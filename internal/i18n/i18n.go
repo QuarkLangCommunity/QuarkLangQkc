@@ -120,6 +120,10 @@ func defaultLang() Lang {
 // language changes only through SetLocale (tests, --lang) or WithLang.
 func Default() Localizer { return New(defaultLang()) }
 
+// Render is the text of one message ID, through the localizer the process is set to. A tool with its
+// own injection point installs a Localizer and renders through that, instead of keeping a copy of this.
+func Render(id Msg, args ...any) string { return Default().Msg(id, args...) }
+
 // SetLocale overrides the process default language. Intended for tests and the tools'
 // --lang flag; elsewhere pass a Localizer around instead of mutating process state.
 func SetLocale(l Lang) {
