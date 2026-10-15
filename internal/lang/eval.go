@@ -686,26 +686,6 @@ func (in *interp) execBlock(b *Block, sc *scope, ctx *execCtx) error {
 }
 
 // qkstyleLookup: QSS key lookup with legacy-alias fallback (background-color←bg, font-size←size, font-family←font) — normalizes style-table entries.
-func qkstyleLookup(t *HashTable, key Value) (Value, bool) {
-	if v, ok := t.Get(key); ok {
-		return v, true
-	}
-	if key.IsStr() {
-		var alias string
-		switch key.Str() {
-		case "background-color":
-			alias = "bg"
-		case "font-size":
-			alias = "size"
-		case "font-family":
-			alias = "font"
-		}
-		if alias != "" {
-			return t.Get(StrV(alias))
-		}
-	}
-	return NilV(), false
-}
 
 // errLoopBreak sentinel: break leaves a loop (caught by while/for; bubbling to the top reports break outside loop).
 var errLoopBreak = errors.New("loop break")

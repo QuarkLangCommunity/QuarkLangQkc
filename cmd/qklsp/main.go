@@ -49,7 +49,7 @@ func parseArgs(args []string) ([]string, error) {
 		switch args[i] {
 		case "-L":
 			if i+1 >= len(args) {
-				return nil, errors.New(msgID(i18n.MsgCliLspLNeedsDirectory))
+				return nil, errors.New(i18n.Render(i18n.MsgCliLspLNeedsDirectory))
 			}
 			i++
 			libDirs = append(libDirs, args[i])
@@ -65,10 +65,10 @@ func parseArgs(args []string) ([]string, error) {
 			fmt.Println("qklsp", version)
 			os.Exit(0)
 		case "-h", "--help":
-			fmt.Println(msgID(i18n.MsgCliLspUsage))
+			fmt.Println(i18n.Render(i18n.MsgCliLspUsage))
 			os.Exit(0)
 		default:
-			return nil, errors.New(msgID(i18n.MsgCliLspUnknownArgument, args[i]))
+			return nil, errors.New(i18n.Render(i18n.MsgCliLspUnknownArgument, args[i]))
 		}
 	}
 	return libDirs, nil
@@ -194,7 +194,7 @@ func (s *server) docAt(msg rpcMessage) (*Document, lspPosition, error) {
 	}
 	d, ok := s.docs[p.TextDocument.URI]
 	if !ok {
-		return nil, p.Position, errors.New(msgID(i18n.MsgCliLspDocumentNotOpened, p.TextDocument.URI))
+		return nil, p.Position, errors.New(i18n.Render(i18n.MsgCliLspDocumentNotOpened, p.TextDocument.URI))
 	}
 	return d, p.Position, nil
 }

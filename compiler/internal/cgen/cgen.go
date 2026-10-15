@@ -1280,9 +1280,6 @@ func (e *emitter) emitFunc(fd *funcDef) string {
 // isListType reports whether a language type is List<...> (the current backend only lowers List<int>).
 func isListType(t string) bool { return strings.HasPrefix(t, "List<") }
 
-// isIfaceTypeE reports whether a type is an interface (the emitter-side interface name table).
-func (e *emitter) isIfaceTypeE(t string) bool { return e.ifaces[t] }
-
 // bindCopydParam binds a copyd parameter: deep-copy the caller cell's value into a local callee cell,
 // so writes inside the callee only affect the copy (interpreter: the declaration form binds the bare value, the type form binds a Copyd wrapper).
 func (e *emitter) bindCopydParam(p funcParam, src string) {
@@ -2054,13 +2051,6 @@ func (e *emitter) listSRange(obj string) (buf, head, size string) {
 }
 
 // listSSlot stores a List<String> object pointer into an alloca slot (variable reference semantics).
-func (e *emitter) listSSlot(objPtr string) string {
-	e.ensureListS()
-	slot := e.newReg()
-	e.emitInstr("%s = alloca %%ListS*, align 8", slot)
-	e.emitInstr("store %%ListS* %s, %%ListS** %s", objPtr, slot)
-	return slot
-}
 
 // listSlot stores a List object pointer into an alloca slot (variable reference semantics: the slot holds a pointer).
 func (e *emitter) listSlot(objPtr string) string {

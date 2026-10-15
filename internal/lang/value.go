@@ -59,14 +59,12 @@ type FileValue struct {
 }
 
 func (f *FileValue) IsFile() bool     { return true }
-func (f *FileValue) FilePath() string { return f.Path }
 func (f *FileValue) String() string   { return "<file " + f.Path + ">" }
 func (f *FileValue) TypeName() string { return "file" }
 
 // ---- scalar constructors (old names kept so call sites need no change) ----
 
-func IntV(n int64) Value   { return Value{tag: byte(vInt), i: n} }
-func IntV32(n int32) Value { return IntV(int64(n)) }
+func IntV(n int64) Value { return Value{tag: byte(vInt), i: n} }
 func FloatV(f float64) Value {
 	return Value{tag: byte(vFloat), i: int64(math.Float64bits(f))}
 }
@@ -104,7 +102,6 @@ func OutV(s *OutputStream) Value        { return Value{tag: byte(vOut), ptr: uns
 func MemorizeV(m *MemorizeBuffer) Value { return Value{tag: byte(vMemorize), ptr: unsafe.Pointer(m)} }
 func MemoryV(m *Memory) Value           { return Value{tag: byte(vMemory), ptr: unsafe.Pointer(m)} }
 func TaskmV(t *TaskManager) Value       { return Value{tag: byte(vTaskm), ptr: unsafe.Pointer(t)} }
-func TaskV(t *Task) Value               { return Value{tag: byte(vTask), ptr: unsafe.Pointer(t)} }
 func ThreadV(t *ThreadValue) Value      { return Value{tag: byte(vThread), ptr: unsafe.Pointer(t)} }
 func FuncV(f *FuncValue) Value          { return Value{tag: byte(vFunc), ptr: unsafe.Pointer(f)} }
 func CopydV(c *CopydValue) Value        { return Value{tag: byte(vCopyd), ptr: unsafe.Pointer(c)} }
@@ -419,13 +416,10 @@ func (l *List) String() string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// Head returns the head pointer position.
 func (l *List) Head() int { return l.head }
 
-// Tail returns the tail pointer position.
 func (l *List) Tail() int { return l.tail }
 
-// Size returns tail-head, the number of visible elements.
 func (l *List) Size() int { return l.tail - l.head }
 
 // Peek returns the element at the head without moving the pointer ('*list').
@@ -564,7 +558,6 @@ func (h *HashTable) Contains(k Value) bool {
 // Remove deletes the entry for k.
 func (h *HashTable) Remove(k Value) { delete(h.m, hashKey(k)) }
 
-// Size returns the number of entries.
 func (h *HashTable) Size() int { return len(h.m) }
 
 // Keys returns the key list (String keys are rebuilt; other types are rebuilt with a "typeName:value" prefix).
@@ -795,22 +788,10 @@ type ThreadValue struct {
 }
 
 func (tv *ThreadValue) TypeName() string { return "thread" }
-func (tv *ThreadValue) String() string   { return "<thread " + itoa(tv.Pid) + ">" }
+func (tv *ThreadValue) String() string   { return "<thread " + strconv.Itoa(tv.Pid) + ">" }
 
 func (t *Task) TypeName() string { return "Task" }
-func (t *Task) String() string   { return "<Task " + itoa(t.Pid) + ">" }
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	digits := ""
-	for n > 0 {
-		digits = string(rune('0'+n%10)) + digits
-		n /= 10
-	}
-	return digits
-}
+func (t *Task) String() string   { return "<Task " + strconv.Itoa(t.Pid) + ">" }
 
 // StructValue is an instance of a user-defined struct.
 type StructValue struct {

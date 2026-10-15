@@ -60,7 +60,7 @@ func (c *rpcConn) read() (rpcMessage, error) {
 			if strings.EqualFold(strings.TrimSpace(k), "Content-Length") {
 				n, cerr := strconv.Atoi(strings.TrimSpace(v))
 				if cerr != nil {
-					return msg, errors.New(msgID(i18n.MsgCliLspInvalidContentLength, v))
+					return msg, errors.New(i18n.Render(i18n.MsgCliLspInvalidContentLength, v))
 				}
 				length = n
 			}
@@ -70,14 +70,14 @@ func (c *rpcConn) read() (rpcMessage, error) {
 		}
 	}
 	if length < 0 {
-		return msg, errors.New(msgID(i18n.MsgCliLspMissingContentLength))
+		return msg, errors.New(i18n.Render(i18n.MsgCliLspMissingContentLength))
 	}
 	body := make([]byte, length)
 	if _, err := io.ReadFull(c.r, body); err != nil {
 		return msg, err
 	}
 	if err := json.Unmarshal(body, &msg); err != nil {
-		return msg, fmt.Errorf(msgID(i18n.MsgCliLspJsonParseFailedReply), err)
+		return msg, fmt.Errorf(i18n.Render(i18n.MsgCliLspJsonParseFailedReply), err)
 	}
 	return msg, nil
 }
@@ -107,7 +107,7 @@ func (c *rpcConn) replyErr(id *json.RawMessage, code int, msg i18n.Msg, args ...
 	if id == nil {
 		return nil
 	}
-	return c.write(rpcMessage{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msgID(msg, args...)}})
+	return c.write(rpcMessage{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: i18n.Render(msg, args...)}})
 }
 
 // notify sends a notification (no id).

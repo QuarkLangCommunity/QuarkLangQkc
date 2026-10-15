@@ -26,12 +26,10 @@
 # replaced its staleness check no longer detects a document that does not match the tables.
 
 set -u
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+proof_init QK_DOC_PROOF_WORK "$HOME/.cache/qk-i18n/doc-proof"
 
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="$(cd "$here/../../.." && pwd)"
-work="${QK_DOC_PROOF_WORK:-$HOME/.cache/qk-i18n/doc-proof}"
 bin="$work/qki18n"
-
 rm -rf "$work"
 mkdir -p "$work"
 
@@ -41,19 +39,7 @@ mkdir -p "$work"
 inside="$root/docs/i18n-backlog.md"
 trap 'rm -f "$inside"' EXIT
 
-fail=0
-total=0
 
-# report <ok|bad> <name> <detail>
-report() {
-  total=$((total + 1))
-  if [ "$1" = ok ]; then
-    printf 'ok   %-22s %s\n' "$2" "$3"
-  else
-    fail=$((fail + 1))
-    printf 'FAIL %-22s %s\n' "$2" "$3" >&2
-  fi
-}
 
 # The generator itself, built once: the proofs below are about its behaviour, and `go run` would fold
 # the build output into every reading.
@@ -67,21 +53,21 @@ out="$("$bin" -source "$root/internal/i18n/source" -out "$work/msg_gen.go" -root
 rc=$?
 written="$(printf '%s\n' "$out" | sed -n 's/^qki18n: wrote //p' | tail -1)"
 if [ "$rc" -ne 0 ]; then
-  report bad "default location" "the generator failed: $out"
+  proof_report bad "default location" "the generator failed: $out"
 elif [ -z "$written" ]; then
-  report bad "default location" "the tool did not print the path it wrote: $out"
+  proof_report bad "default location" "the tool did not print the path it wrote: $out"
 elif [ ! -f "$written" ]; then
-  report bad "default location" "the tool printed $written, which does not exist"
+  proof_report bad "default location" "the tool printed $written, which does not exist"
 elif [ ! -s "$written" ]; then
-  report bad "default location" "$written is empty"
+  proof_report bad "default location" "$written is empty"
 elif case "$written" in "$root"/*) true ;; *) false ;; esac; then
-  report bad "default location" "the document was written inside the checkout: $written"
+  proof_report bad "default location" "the document was written inside the checkout: $written"
 else
   # And it is a document, not an empty file with the right name.
   if grep -q '^# i18n translation backlog' "$written"; then
-    report ok "default location" "written outside the checkout, $(wc -c < "$written") bytes"
+    proof_report ok "default location" "written outside the checkout, $(wc -c < "$written") bytes"
   else
-    report bad "default location" "$written does not carry the document's title"
+    proof_report bad "default location" "$written does not carry the document's title"
   fi
 fi
 outside="$written"
@@ -139,7 +125,7 @@ if [ -n "$outside" ] && [ -f "$outside" ]; then
     printf 'ok   %-22s a document that is not what the tables say is rejected\n' "stale check"
   fi
 else
-  report bad "stale check" "no document to perturb, so this proof did not run"
+  proof_report bad "stale check" "no document to perturb, so this proof did not run"
 fi
 
 # ---- 4. the two committed artefacts are untouched by all of this ----
@@ -177,8 +163,5 @@ else
   printf 'ok   %-22s -check is clean and names only the committed artefacts\n' "generate then check"
 fi
 
-if [ "$fail" -ne 0 ]; then
-  echo "FAILED: $fail of $total generated-document checks" >&2
-  exit 1
-fi
-echo "generated document clean (written outside the checkout, refused inside it; the staleness check still goes red; the committed artefacts are unchanged)  [$total checks]"
+proof_finish "generated-document checks" \
+  "generated document clean (written outside the checkout, refused inside it; the staleness check still goes red; the committed artefacts are unchanged)"

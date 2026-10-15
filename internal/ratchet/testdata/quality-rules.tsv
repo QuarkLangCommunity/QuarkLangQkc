@@ -1,0 +1,15 @@
+# The shape rules' own proof, one case per line: rule, expectation, text.
+#
+# "catches" means the rule must match this text, or it would report zero occurrences for content it
+# is written to find. "ignores" means it must not: a rule that fires on a function at the limit rather
+# than over it, on a name that is called, or on a method reached through an interface is noise, and
+# noise is how a check like this gets switched off.
+#
+# A case is tried as Go source, and a `// path: <file> ` header names the file it is read as. A case
+# is one line, so a newline inside it is written `\n` and a tab `\t`.
+
+function-over-60	catches	// path: a.go package p\n\nfunc f() {\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n}\n
+function-over-60	ignores	// path: a.go package p\n\nfunc f() {\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n_ = 1\n}\n
+unused-export	catches	// path: a.go package p\n\nfunc NobodyCallsMe() {}\n
+unused-export	ignores	// path: a.go package p\n\nfunc EveryBodyCallsMe() {}\n
+unused-export	ignores	// path: a.go package p\n\ntype T struct{}\n\nfunc (t *T) NobodyCallsMe() {}\n

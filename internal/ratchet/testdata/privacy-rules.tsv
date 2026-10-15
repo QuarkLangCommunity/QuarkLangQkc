@@ -1,0 +1,36 @@
+# The rules' own proof, one case per line: rule, expectation, text.
+#
+# "catches" means the rule must match this text, or it would report zero occurrences for data it is
+# written to find. "ignores" means it must not, because the text is not personal data: a rule that
+# fires on a public handle, a documented placeholder account or a `$HOME`-relative default is noise,
+# and noise is how a check like this gets switched off.
+#
+# The cases live here rather than in privacy_test.go because they have to contain the shapes they
+# detect, and a tracked source file that spells out a home directory is exactly what the ratchet
+# forbids — the check did fail on its own test file before this moved.
+#
+# Text is the last field, so it may contain tabs only if they are part of the case.
+home-dir	catches	site: /home/alice/projects/quark/internal/lang/eval.go:12
+home-dir	ignores	the example path is /home/user/a.qk and the prose writes /home/account/a.qk
+home-dir	ignores	a relative site column: internal/lang/eval.go:12
+windows-home-dir	catches	{"C:\Users\alice\a.qk", "/C:/Users/alice/a.qk"}
+windows-home-dir	catches	worktree: /Users/alice/src/quark/eval.go:12
+windows-home-dir	ignores	the example uses C:\Users\user\a.qk, and the prose writes /Users/account/a.qk
+abs-cache	catches	cache: /mnt/disk/.cache/qk-proof/baseline/bin/qkc
+abs-cache	ignores	work="${QK_PROOF_WORK:-$HOME/.cache/qk-i18n/proof}"
+abs-cache	ignores	the example directory is /home/user/.cache/qk-proof
+abs-cache	ignores	https://example.com/foo/.cache/bar
+machine-name	catches	// path: a.md the report was produced on enoch by the stress runner
+machine-name	ignores	// path: a.md thanks to [@Enoch-199811](https://github.com/Enoch-199811), the maintainer
+machine-name	ignores	// path: a.md run under CI, where the runner host name is not the developer's
+
+# The two home-directory rules have to be disjoint: one occurrence belongs to exactly one rule, or a
+# count in the allowlist would not say what it is counting. A Windows path must not be counted by the
+# POSIX rule as well, in either spelling, and a file URI or a UNC path must open neither.
+home-dir	ignores	C:\Users\alice\a.qk
+home-dir	ignores	/C:/Users/alice/a.qk
+home-dir	ignores	file:///home/alice/a.qk
+home-dir	ignores	//home/alice/a.qk
+windows-home-dir	ignores	the bare name myUsers/alice/a.qk is not a home directory
+windows-home-dir	ignores	file:///home/alice/a.qk
+

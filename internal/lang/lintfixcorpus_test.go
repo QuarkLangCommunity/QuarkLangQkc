@@ -201,10 +201,6 @@ func crlfSource(src string) string {
 	return strings.ReplaceAll(src, "\n", "\r\n")
 }
 
-// sepsOf counts the CRLF separators of a source, so a rewrite that normalised a file's endings is
-// visible without comparing the whole text.
-func sepsOf(src string) int { return strings.Count(src, "\r\n") }
-
 // deletedLines counts the lines the plan removes, whose separators go with them.
 func deletedLines(res LintResult) int {
 	n := 0

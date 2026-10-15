@@ -39,9 +39,8 @@
 # this harness exists to catch.
 
 set -u
-
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="$(cd "$here/../../.." && pwd)"
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+proof_init QK_CRT_PROOF_WORK "$HOME/.cache/qk-i18n/crt-proof"
 
 # The revision the three claims are measured against: main as it stood when the runtime's text moved into
 # the catalog — the first parent of the merge that landed PR #101, which is the revision `origin/main`
@@ -51,27 +50,13 @@ root="$(cd "$here/../../.." && pwd)"
 # blamed the corpus. A baseline that moves is a gate that turns green into vacuous and red into
 # unexplained.
 baseline_default="a3c4cd4"
-baseline_rev="${1:-$baseline_default}"
 
 # Refuse that comparison here, before spending a build on it. Claim 1 asks whether the baseline leaked Han
 # runes, and a tree cannot leak differently from itself, so no case below could be measured and every
 # message case would fail for a reason that names the corpus rather than the invocation. The exit code is
 # 2, not 1: nothing was measured, so this is a gate that cannot run rather than a gate that went red.
-head_commit="$(git -C "$root" rev-parse 'HEAD^{commit}')"
-if ! base_commit="$(git -C "$root" rev-parse --verify --quiet "$baseline_rev^{commit}")"; then
-  echo "cannot run: the baseline revision '$baseline_rev' does not resolve to a commit in $root" >&2
-  exit 2
-fi
-if [ "$base_commit" = "$head_commit" ] ||
-   [ "$(git -C "$root" rev-parse 'HEAD^{tree}')" = "$(git -C "$root" rev-parse "$base_commit^{tree}")" ]; then
-  echo "refusing to run: the baseline revision $baseline_rev (commit $base_commit) carries this checkout's" >&2
-  echo "content (commit $head_commit), so claim 1 (the baseline leaked Han runes) cannot hold, and a revision" >&2
-  echo "compared with itself measures nothing. Pass the pre-change revision instead, e.g. $baseline_default." >&2
-  exit 2
-fi
-
-work="${QK_CRT_PROOF_WORK:-$HOME/.cache/qk-i18n/crt-proof}"
-mkdir -p "$work/bin"
+proof_baseline "$baseline_default" "${1:-}" \
+  "claim 1 (the baseline leaked Han runes) cannot hold"
 
 # The corpus: one program per message the embedded runtime renders, each failing in exactly one way.
 corpus="$work/corpus"
@@ -112,21 +97,15 @@ QK
 printf 'fn main(IOStream io) void {\n    String s = "a\\tb";\n    io.println(s.toInt());\n}\n' > "$corpus/esc.qk"
 printf 'fn main(IOStream io) void {\n    String s = "a\\\\b";\n    io.println(s.toInt());\n}\n' > "$corpus/back.qk"
 
-build_qkc() { ( cd "$1/compiler" && go build -o "$2" . ) || { echo "qkc build failed: $1" >&2; exit 1; }; }
-build_quark() { ( cd "$1" && go build -o "$2" . ) || { echo "quark build failed: $1" >&2; exit 1; }; }
-
 # The baseline: a detached worktree at the pre-change revision, so the comparison is against the code
 # as it was rather than against a description of it.
 base_tree="$work/baseline"
-if [ ! -d "$base_tree" ]; then
-  git -C "$root" worktree add -q --detach "$base_tree" "$baseline_rev" || exit 1
-fi
-git -C "$base_tree" checkout -q --detach "$baseline_rev" || exit 1
+proof_worktree "$base_tree"
 
-build_qkc "$base_tree" "$work/bin/baseline-qkc"
-build_qkc "$root" "$work/bin/prototype-qkc"
-build_quark "$base_tree" "$work/bin/baseline-quark"
-build_quark "$root" "$work/bin/prototype-quark"
+proof_build qkc "$base_tree" "$work/bin/baseline-qkc"
+proof_build qkc "$root" "$work/bin/prototype-qkc"
+proof_build quark "$base_tree" "$work/bin/baseline-quark"
+proof_build quark "$root" "$work/bin/prototype-quark"
 
 # run_compiled <binary> <lang> <file> -> the rendering with the exit code appended, as one line that
 # ends with the `rc=` field. Command substitution drops a trailing newline, so the declared renderings in
@@ -140,8 +119,6 @@ run_compiled() {
 # run_interp <lang> <binary> <file>
 run_interp() { ( cd "$corpus" && LANG=C.UTF-8 QK_LANG="$1" "$2" "$3" 2>&1 ); echo "rc=$?"; }
 
-fail=0
-total=0
 fixed=0
 cases=0
 baseline_leaked=0
@@ -305,8 +282,5 @@ else
     "--" "self-check" "$leaked" "$escaped"
 fi
 
-if [ "$fail" -ne 0 ]; then
-  echo "FAILED: $fail of $total compiled-path checks" >&2
-  exit 1
-fi
-echo "compiled path clean (qkc: $baseline_rev == this tree on the Chinese; no Han rune under en; the interpreter agrees; every listed message reached)  [$total checks]"
+proof_finish "compiled-path checks" \
+  "compiled path clean (qkc: $baseline_rev == this tree on the Chinese; no Han rune under en; the interpreter agrees; every listed message reached)"

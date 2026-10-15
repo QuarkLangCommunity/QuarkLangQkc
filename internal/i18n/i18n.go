@@ -74,10 +74,6 @@ type Localizer struct {
 func New(l Lang) Localizer { return Localizer{lang: l} }
 
 // WithLang returns a copy that renders in another language; the receiver is unchanged.
-func (L Localizer) WithLang(l Lang) Localizer {
-	L.lang = l
-	return L
-}
 
 // Lang reports the language this localizer renders in.
 func (L Localizer) Lang() Lang {
@@ -120,6 +116,10 @@ func defaultLang() Lang {
 // language changes only through SetLocale (tests, --lang) or WithLang.
 func Default() Localizer { return New(defaultLang()) }
 
+// Render is the text of one message ID, through the localizer the process is set to. A tool with its
+// own injection point installs a Localizer and renders through that, instead of keeping a copy of this.
+func Render(id Msg, args ...any) string { return Default().Msg(id, args...) }
+
 // SetLocale overrides the process default language. Intended for tests and the tools'
 // --lang flag; elsewhere pass a Localizer around instead of mutating process state.
 func SetLocale(l Lang) {
@@ -127,5 +127,4 @@ func SetLocale(l Lang) {
 	langValue.Store(l)
 }
 
-// Locale returns the process default language.
 func Locale() Lang { return defaultLang() }

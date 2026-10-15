@@ -188,14 +188,6 @@ func cleanExtra(b *srcBuilder, i int) {
 	}
 }
 
-// shuffle shuffles the declaration order (so a defect is no longer always in the same position).
-func shuffle[T any](rng *rand.Rand, xs []T) {
-	for i := len(xs) - 1; i > 0; i-- {
-		j := rng.Intn(i + 1)
-		xs[i], xs[j] = xs[j], xs[i]
-	}
-}
-
 // ---------- defect injectors ----------
 
 func caseClean(rng *rand.Rand, seq int) statCase {

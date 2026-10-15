@@ -801,31 +801,3 @@ func intBinOpVM(op vmOp, l, r Value, pos Pos, ctx *execCtx) (Value, error) {
 	}
 	return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorUnsupportedIntegerOperation), Pos: pos, Ctx: ctx}
 }
-
-func vmOpName(op vmOp) string {
-	switch op {
-	case opAddI:
-		return "+"
-	case opSubI:
-		return "-"
-	case opMulI:
-		return "*"
-	case opDivI:
-		return "/"
-	case opModI:
-		return "%"
-	case opLtI:
-		return "<"
-	case opLeI:
-		return "<="
-	case opGtI:
-		return ">"
-	case opGeI:
-		return ">="
-	case opEqI:
-		return "=="
-	case opNeI:
-		return "!="
-	}
-	return "operation"
-}

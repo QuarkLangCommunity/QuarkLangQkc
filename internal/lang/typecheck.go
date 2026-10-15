@@ -133,9 +133,6 @@ func viewWidth(t *Type) int {
 // isIntView reports whether a type is an integer view (int, long, char or uchar).
 func isIntView(t *Type) bool { return t != nil && (t.Kind == tInt || t.Kind == tUchar) }
 
-// isSignedView reports whether a view reads its bits as two's complement.
-func isSignedView(t *Type) bool { return t != nil && t.Kind == tInt }
-
 // storeWidth returns the width a value stored in this type is masked to: raw bits and the uchar view
 // always store exactly their width, everything else stores its own bits (0 = no masking).
 func storeWidth(t *Type) int {
@@ -620,12 +617,6 @@ func opMethodFor(op string) string {
 }
 
 // opUnaryMethodFor maps a unary operator → its protocol method name.
-func opUnaryMethodFor(op string) string {
-	if op == "-" {
-		return "__neg__"
-	}
-	return ""
-}
 
 // builtinOperationIfaces: the language's built-in Operation interface family (dynamic protocol; methods across impls do not overlap).
 func builtinOperationIfaces() map[string]*InterfaceDef {

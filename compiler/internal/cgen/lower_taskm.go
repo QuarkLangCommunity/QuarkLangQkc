@@ -12,6 +12,7 @@ package cgen
 // thread.talk is not lowered.
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
@@ -77,24 +78,10 @@ func (l *lowerer) addRunner(fn string, params []string) string {
 	if n, ok := l.runnerIdx[key]; ok {
 		return n
 	}
-	n := "runner_" + itoa(len(l.out.runners))
+	n := "runner_" + strconv.Itoa(len(l.out.runners))
 	l.runnerIdx[key] = n
 	l.out.runners = append(l.out.runners, runnerDef{fn: fn, params: params})
 	return n
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }
 
 // taskmCall lowers taskm.<method>(...).

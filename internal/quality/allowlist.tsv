@@ -1,0 +1,49 @@
+# What this repository may still carry of the two shapes quality_test.go measures: the functions of one
+# file that are longer than sixty lines, and the exported names nothing calls. Every number here may
+# only be lowered.
+#
+# Sixty rather than forty: the tree carries 185 functions over forty lines across 36k lines of Go, so a
+# forty-line budget would be a list of ninety numbers rather than a guard. Sixty is where length stops
+# being a style question, and it is the shape that reads as generated — a body that absorbed every
+# branch its author met instead of calling something.
+#
+# There is no unused-export entry because there are no unused exports: the rule reports a name the tree
+# never names twice, and memHeap's Less and Swap are methods, which a name index cannot see called and
+# which this rule therefore does not count. An entry added here is dead code to delete, not a budget.
+#
+# rule	path	count
+function-over-60	cmd/qkcheck/main.go	1
+function-over-60	cmd/qkcheck/main_test.go	1
+function-over-60	cmd/qkdoc/main.go	1
+function-over-60	cmd/qki18n/main.go	1
+function-over-60	cmd/qklsp/editors_test.go	1
+function-over-60	cmd/qklsp/main.go	2
+function-over-60	cmd/qkrepl/main.go	1
+function-over-60	cmd/qkstress/run.go	1
+function-over-60	compiler/internal/cgen/cgen.go	19
+function-over-60	compiler/internal/cgen/feature_test.go	5
+function-over-60	compiler/internal/cgen/lower.go	15
+function-over-60	compiler/lib.go	1
+function-over-60	compiler/main.go	1
+function-over-60	internal/i18n/msg_gen.go	1
+function-over-60	internal/i18ngen/i18ngen.go	2
+function-over-60	internal/lang/doc.go	1
+function-over-60	internal/lang/doc_test.go	1
+function-over-60	internal/lang/docrender.go	1
+function-over-60	internal/lang/eval.go	9
+function-over-60	internal/lang/ffi_call.go	1
+function-over-60	internal/lang/generic_iface_test.go	1
+function-over-60	internal/lang/index_semantics_test.go	1
+function-over-60	internal/lang/lib.go	1
+function-over-60	internal/lang/lint.go	3
+function-over-60	internal/lang/lintbench_test.go	1
+function-over-60	internal/lang/lintfix.go	1
+function-over-60	internal/lang/lintstat_test.go	2
+function-over-60	internal/lang/refmove_test.go	1
+function-over-60	internal/lang/refperm_test.go	2
+function-over-60	internal/lang/slots_test.go	1
+function-over-60	internal/lang/srcmap_test.go	1
+function-over-60	internal/lang/stdlib_vec_test.go	1
+function-over-60	internal/lang/stressgen/stressgen_test.go	1
+function-over-60	internal/lang/typecheck.go	10
+function-over-60	internal/lang/vm.go	3

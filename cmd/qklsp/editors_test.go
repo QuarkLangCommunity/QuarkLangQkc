@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -129,7 +130,7 @@ func TestTextMateGrammarRegexes(t *testing.T) {
 			}
 		case []interface{}:
 			for i, sub := range x {
-				walk(sub, where+"["+itoa(i)+"]")
+				walk(sub, where+"["+strconv.Itoa(i)+"]")
 			}
 		}
 	}
@@ -248,17 +249,4 @@ func TestTreeSitterArtifacts(t *testing.T) {
 	if !strings.Contains(string(data), "===") || !strings.Contains(string(data), "---") {
 		t.Errorf("%s is not valid tree-sitter corpus syntax", corpus[0])
 	}
-}
-
-// itoa avoids pulling in strconv (nothing else in this file needs it).
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
 }

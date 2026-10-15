@@ -17,6 +17,7 @@ import "C"
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"unsafe"
 )
@@ -75,7 +76,7 @@ func ffiCall(fn unsafe.Pointer, paramTypes []int, nums []float64, ptrs []unsafe.
 		(*C.int64_t)(unsafe.Pointer(&retI)), (*C.double)(unsafe.Pointer(&retF)),
 		unsafe.Pointer(&retPSlot[0]))
 	if rc != 0 {
-		return 0, 0, nil, errors.New("FFIError: ffi call failed rc=" + itoa(int(rc)))
+		return 0, 0, nil, errors.New("FFIError: ffi call failed rc=" + strconv.Itoa(int(rc)))
 	}
 	return retI, retF, unsafe.Pointer(retPSlot[0]), nil
 }

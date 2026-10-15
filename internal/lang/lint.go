@@ -184,13 +184,6 @@ func (l *linter) check(prog *Program) {
 }
 
 // LintSource is a convenience entry point: parse the source and lint it (a parse failure returns the error plus whatever diagnostics were found).
-func LintSource(src string, opts LintOptions) ([]Diag, error) {
-	res, err := LintSourceReport(src, opts)
-	if err != nil {
-		return nil, err
-	}
-	return res.Diags, nil
-}
 
 // LintSourceReport is LintSource plus the correction plan and the corrected source. OrigSrc is filled
 // in from src, so a correction is computed against the text the caller holds even when the parser

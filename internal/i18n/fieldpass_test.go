@@ -150,14 +150,6 @@ func TestProofNoMessageLiteralIsWrittenIntoAField(t *testing.T) {
 	t.Logf("message literals written into a struct field: %d (limit %d)", len(literals), allowed)
 }
 
-// TestProofFieldMessagesRenderBothLanguages moved to coverage_test.go as
-// TestEveryGeneratedMessageRendersItsAuthoredText, which walks every table rather than this one: the
-// field table is no longer special, and a per-table copy of the same proof is a second place for it to
-// drift.
-//
-// TestProofFieldMessagesAreReachableFromASite is the "never migrate a dead row" gate, mechanised: a
-// row whose constant no call site names is a row that can never render, and it would sit in the table
-// looking like work that was done.
 func TestProofFieldMessagesAreReachableFromASite(t *testing.T) {
 	used := identifiersUsed(t)
 	src, err := i18ngen.Load(i18ngen.Options{

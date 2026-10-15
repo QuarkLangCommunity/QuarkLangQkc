@@ -513,12 +513,6 @@ func TestProofRuntimeReadsTheBlob(t *testing.T) {
 	}
 }
 
-// TestProofNoTextKeyedEntriesRemain is deleted by step 5, and this is the reason recorded where it
-// stood. It asserted that the text-keyed catalog had no entries — the state the migration reached — and
-// step 5 then deleted the catalog itself, so the claim became a statement about a type that no longer
-// exists. The contract that replaces it is TestDecouplingRatchet: a text-keyed entry point coming back
-// is a build failure rather than a count, which is the design's whole point (D-3).
-
 // TestModuleIDsAndCatalogIDsAgree pins the mapping the type conversion in internal/lang relies on: the
 // generated Msg numbering follows the pinned module's table order, so qkparser.ID(n) and i18n.Msg(n)
 // name the same message.

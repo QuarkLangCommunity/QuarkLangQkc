@@ -8,6 +8,7 @@ package lang
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -29,20 +30,7 @@ func chainSource(n int) string {
 // downSource builds a non-tail recursion n levels deep; the recursive call sits on line 3.
 func downSource(n int) string {
 	return "fn down(int n) int {\n  if (n == 0) { return 0; }\n  return n + down(n - 1);\n}\n" +
-		"\nfn main(IOStream io) {\n  io.println(down(" + itoaTest(n) + "));\n}\n"
-}
-
-// itoaTest spells a small non-negative integer without importing strconv into this file.
-func itoaTest(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits []byte
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
+		"\nfn main(IOStream io) {\n  io.println(down(" + strconv.Itoa(n) + "));\n}\n"
 }
 
 // TestOverDeepExpressionIsRefusedWithPosition checks that the loudest finding of the stress suite is a
