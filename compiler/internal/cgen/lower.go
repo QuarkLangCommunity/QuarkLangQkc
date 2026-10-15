@@ -331,6 +331,7 @@ func (l *lowerer) collect() error {
 	if l.prog.Kind == "library" {
 		return l.errAtID(i18n.MsgCompilerCompilingProgramLibraryNotSupportedLibrary)
 	}
+	l.canonDecls()
 	for _, sd := range l.prog.Structs {
 		if sd.Name == "" {
 			continue // unnamed top-level declaration: the interpreter registers it as an unreferenceable dead type, the compiler just ignores it
@@ -531,6 +532,64 @@ func splitGeneric(t string) (string, []string) {
 	return base, args
 }
 
+// canonT folds the legacy spellings of §9 onto the views this implementation already lowers — `char` onto
+// the int view (the interpreter's type checker maps it to tInt), `double` onto the 64-bit float view this
+// implementation spells `float` (§11.2 records that width against §3.2) and the element of a generic
+// spelling with them, so `List<char>` is `List<int>` — the same move as `pointer T → T&`, because a spelling
+// the reference interpreter accepts must not become a hard error in the compiler.
+func canonT(t string) string {
+	if base, args := splitGeneric(t); args != nil {
+		out := make([]string, len(args))
+		for i, a := range args {
+			out[i] = canonT(a)
+		}
+		return base + "<" + strings.Join(out, ",") + ">"
+	}
+	switch strings.TrimSpace(t) {
+	case "char":
+		return "int"
+	case "double":
+		return "float"
+	}
+	return t
+}
+
+// canonFuncDecl folds a function's declared parameter and return types (canonT).
+func canonFuncDecl(f *lang.FuncDecl) {
+	for i := range f.Params {
+		f.Params[i].Type = canonT(f.Params[i].Type)
+	}
+	f.Ret = canonT(f.Ret)
+}
+
+// canonDecls folds the legacy type spellings of §9 into every declaration before anything reads them: a
+// signature is compared against other signatures — overload scoring, argument passing, interface
+// satisfaction — so the fold belongs at the declaration, once, instead of at each comparison.
+func (l *lowerer) canonDecls() {
+	for _, f := range l.prog.Funcs {
+		canonFuncDecl(f)
+	}
+	for _, id := range l.prog.Interfaces {
+		for i := range id.Methods {
+			m := &id.Methods[i]
+			for j := range m.Params {
+				m.Params[j].Type = canonT(m.Params[j].Type)
+			}
+			m.Ret = canonT(m.Ret)
+		}
+	}
+	for _, im := range l.prog.Impls {
+		for _, f := range im.Methods {
+			canonFuncDecl(f)
+		}
+	}
+	for _, sd := range l.prog.Structs {
+		for i := range sd.Members {
+			sd.Members[i].Type = canonT(sd.Members[i].Type)
+		}
+	}
+}
+
 // substType expands a type string with a type-parameter substitution table (T → int, Box<T> → Box<int>).
 func substType(t string, sub map[string]string) string {
 	if len(sub) == 0 {
@@ -667,8 +726,6 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		return nil // FFI 64-bit channel (i64); usable for language-level variables/parameters/returns
 	case "pointer":
 		return nil // FFI opaque handle (i8*, nullable)
-	case "char":
-		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedNot, what, t)
 	case "thread", "Task", "Channel", "channel":
 		return nil // taskm: thread = pid(i32), Channel = i8* handle
 	case "memorize":
@@ -751,10 +808,11 @@ type funcCtx struct {
 	subst map[string]string
 }
 
-// resolveT expands the type parameters of the current instance (T → int; Box<T> → Box<int>).
+// resolveT expands the type parameters of the current instance (T → int; Box<T> → Box<int>) and folds the
+// legacy spellings of §9 (canonT).
 func (fc *funcCtx) resolveT(t string) string {
 	if len(fc.subst) == 0 {
-		return t
+		return canonT(t)
 	}
 	return substType(t, fc.subst)
 }
@@ -1536,7 +1594,7 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		if e.Size != nil {
 			return nil, l.errfID(e.Pos, i18n.MsgCompilerNewSNNotSupportedYet, e.Typ)
 		}
-		pt := strings.TrimSpace(e.Typ)
+		pt := canonT(strings.TrimSpace(e.Typ))
 		if err := l.checkType(pt, e.Pos, "new"); err != nil {
 			return nil, err
 		}
@@ -1984,13 +2042,16 @@ func (fc *funcCtx) bitIndex(e *lang.IndexExpr, rt string) (*expr, error) {
 	return &expr{kind: kIndex, typ: "bit", bits: e.Bits, line: e.Pos.Line, idx: &indexExpr{recv: recv, i: idx}}, nil
 }
 
-// conversion lowers a conversion call T(x) — the type checker stamped the destination (spec §3.4).
+// conversion lowers a conversion call T(x) — the type checker stamped the destination (spec §3.4), keeping
+// the legacy spelling so a backend can tell it apart (internal/lang/typecheck.go); this backend folds it onto
+// the view it lowers (canonT), so `char(66)` is the int-view conversion the interpreter performs.
 func (fc *funcCtx) conversion(c *lang.CallExpr, arg lang.Expr) (*expr, error) {
 	x, err := fc.expr(arg)
 	if err != nil {
 		return nil, err
 	}
-	return &expr{kind: kConv, typ: c.ConvDst, s: c.ConvDst, l: x}, nil
+	dst := canonT(c.ConvDst)
+	return &expr{kind: kConv, typ: dst, s: dst, l: x}, nil
 }
 
 // bitAssign lowers b[i] = v: the raw value is read, its i-th bit replaced and stored back (spec §3.3).
@@ -3304,7 +3365,7 @@ func (fc *funcCtx) typeOf(x lang.Expr) string {
 func (fc *funcCtx) callType(e *lang.CallExpr) string {
 	l := fc.l
 	if e.ConvDst != "" && len(e.Args) == 1 {
-		return e.ConvDst // conversion call T(x): the type checker stamped the destination
+		return canonT(e.ConvDst) // conversion call T(x): the type checker stamped the destination
 	}
 	if me, ok := e.Fn.(*lang.MemberExpr); ok {
 		rt := fc.typeOf(me.X)

@@ -1,0 +1,36 @@
+// The legacy spellings `char` and `double` (spec §9: implementation compatibility, being migrated onto the
+// views of §3.2) must mean the same thing in both engines: `char` is this implementation's int view and
+// `double` is its 64-bit float view, which this implementation spells `float` (§11.2 records that width
+// against §3.2's `float32`/`float64`). Until this case existed the interpreter accepted both and the
+// compiler refused them with a hard error, so the parity gate could not see the difference
+// (docs/primitives.md §1.2b).
+type struct { char c; double d; } Pair;
+
+fn bumpc(char c) char { return c + 1; }
+fn halfd(double d) double { return d / 2.0; }
+
+fn main(IOStream io) {
+    char c = 65;
+    double d = 1.5;
+    io.println(c);                     // the int view of 65
+    io.println(d);                     // the 64-bit float view
+    io.println(c + 1);                 // arithmetic through the view
+    io.println(d * 2.0);
+    io.println(c < 70);                // ordering through the view
+    io.println(c == 65);
+    io.println(char(66));              // §3.4 conversion: the stamped destination folds onto the same view
+    io.println(bumpc(c));              // parameter and return type
+    io.println(halfd(d));
+    Pair p = .{c: 1, d: 2.5};          // struct field types
+    io.println(p.c);
+    io.println(p.d);
+    List<char> l = [1, 2];             // the element of a generic spelling folds too: List<char> is List<int>
+    io.println(l[0]);
+    io.println(l[1]);
+    char e = c;                        // assignment keeps the view
+    e = e + 1;
+    io.println(e);
+    double f = d;
+    f = f + 0.25;
+    io.println(f);
+}
