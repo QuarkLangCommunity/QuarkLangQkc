@@ -1,22 +1,10 @@
 package i18n
 
-// Engineering gates for the generated catalog, after step 5 of docs/i18n-design.md deleted the
-// text-keyed one. They are data-driven on purpose: an earlier version scanned sources with regular
-// expressions and missed trailing comments, CRLF checkouts and helper-passed format strings — this one
-// reads the authored tables (through internal/i18ngen, the same code the generator runs) and the file
-// the generator wrote, and it asserts the properties a translator depends on.
-//
-// Three gates that used to live here are deleted rather than weakened, because their subject is gone:
-//
-//   - TestTemplatesRegistered (R-1) counted templates handed to a boundary that had no catalog entry.
-//     There is no text-keyed boundary and no catalog; a message with no English or Chinese value cannot
-//     be generated at all (TestProofMissingLanguageFails walks every (message, language) pair and shows
-//     it), so the check moved from "count afterwards" to "refuse before a file exists".
-//   - TestEnglishSourceRatchet (R-2) counted Chinese-source templates at call sites. It reached 0 in the
-//     commit that migrated the last domain — the intermediate step the design asked for — and the
-//     property it measured (a message's direction) is now a column of the authored table.
-//   - TestNoSilentFallback counted misses in the fallback path. There is no fallback: an ID selects a
-//     block of the blob and both blocks are required to exist.
+// Engineering gates for the generated catalog. They read the authored tables through internal/i18ngen
+// — the same code the generator runs — and the file the generator wrote, rather than scanning sources
+// with regular expressions, which missed trailing comments, CRLF checkouts and helper-passed format
+// strings. Which gate replaced which, and why the deleted ones had no subject left, is recorded in
+// docs/i18n-design.md's gate table rather than here.
 
 import (
 	"go/parser"
@@ -197,12 +185,10 @@ var textKeyedEntryPoints = []string{
 	"needsTranslation(", "sourceLang(", "domainTables(", "msg(template",
 }
 
-// TestDecouplingRatchet is R-3, strengthened into an exact contract rather than a limit.
-//
-// It used to freeze the number of direct T() calls ("the shim must not grow"). The shim is gone, so the
-// claim is now the stronger one the design asked for: there are no text-keyed entry points at all, in
-// any package. It scans this module and the compiler module, which shares these packages through a
-// relative replace.
+// TestDecouplingRatchet is R-3 as an exact contract: there are no text-keyed entry points at all, in
+// any package, which is stronger than a count that may only shrink and is the claim the design asked
+// for. It scans this module and the compiler module, which shares these packages through a relative
+// replace.
 func TestDecouplingRatchet(t *testing.T) {
 	root := filepath.Join("..", "..")
 	found := map[string][]string{}

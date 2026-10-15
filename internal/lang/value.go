@@ -416,13 +416,10 @@ func (l *List) String() string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// Head returns the head pointer position.
 func (l *List) Head() int { return l.head }
 
-// Tail returns the tail pointer position.
 func (l *List) Tail() int { return l.tail }
 
-// Size returns tail-head, the number of visible elements.
 func (l *List) Size() int { return l.tail - l.head }
 
 // Peek returns the element at the head without moving the pointer ('*list').
@@ -561,7 +558,6 @@ func (h *HashTable) Contains(k Value) bool {
 // Remove deletes the entry for k.
 func (h *HashTable) Remove(k Value) { delete(h.m, hashKey(k)) }
 
-// Size returns the number of entries.
 func (h *HashTable) Size() int { return len(h.m) }
 
 // Keys returns the key list (String keys are rebuilt; other types are rebuilt with a "typeName:value" prefix).

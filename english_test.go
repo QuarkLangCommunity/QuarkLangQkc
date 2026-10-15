@@ -82,10 +82,8 @@ func readComment(f *ratchet.GoFile) []string {
 	return nil
 }
 
-// readTestProse returns the literals passed to a testing helper that carry a trace.
 func readTestProse(f *ratchet.GoFile) []string { return tracedLiterals(f, f.TestProse) }
 
-// readLiteral returns the literals that are not a testing helper's argument and carry a trace.
 func readLiteral(f *ratchet.GoFile) []string { return tracedLiterals(f, nil) }
 
 // tracedLiterals returns the file's unquoted string literals that carry a trace, either because they sit

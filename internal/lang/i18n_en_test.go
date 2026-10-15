@@ -95,12 +95,6 @@ func TestChineseLocalizerRendersTemplates(t *testing.T) {
 	}
 }
 
-// TestEnglishRenderingHasNoMisses is deleted, not weakened: it asserted that rendering under English
-// counted no fallback to Chinese, and the counter it read existed to tolerate exactly the defect this
-// migration removed. With IDs there is no fallback to count — a message with no English value fails
-// generation (TestProofMissingLanguageFails) rather than falling back at run time — so the test has no
-// subject. Step 5 of docs/i18n-design.md deletes Misses/miss.go with it.
-
 // withLocalizer swaps the package localizer for the duration of one test and restores it after.
 func withLocalizer(t *testing.T, L i18n.Localizer) {
 	t.Helper()

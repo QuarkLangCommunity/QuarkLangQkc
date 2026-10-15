@@ -341,17 +341,13 @@ func ParseCRuntimeList(name string, raw []byte) ([]string, error) {
 
 // readTableOrder reads tables.tsv: the message tables in load order, one file name per line.
 //
-// The order used to be the alphabetical order of source/*.tsv, which was wrong in a way nothing would
-// have caught until it mattered: a message's number is its position in the concatenated tables, and
-// internal/lang answers a qkparser.ID by converting it straight to a Msg. The module's IDs are
-// positions in the module's own table, so the tables this repository imports must come first, in the
-// module's order. A table named docgen.tsv sorts before parser.tsv, so adding one domain under the old
-// rule renumbered all 63 syntax-layer messages and the conversion silently started meaning different
-// messages on the two sides of the seam.
-//
-// It is a list rather than a rule because a rule that has to be inferred from file names is exactly how
-// this broke. Every *.tsv that is neither languages.tsv nor tables.tsv must appear here, so a table
-// cannot be added and silently ignored.
+// The order is data rather than a rule because a message's number is its position in the concatenated
+// tables, and internal/lang answers a qkparser.ID by converting it straight to a Msg. The module's IDs
+// are positions in the module's own table, so the tables this repository imports must come first, in
+// the module's order: a table that sorted before parser.tsv would renumber every syntax-layer message
+// and the conversion would silently mean different messages on the two sides of the seam. Every *.tsv
+// that is neither languages.tsv nor tables.tsv must therefore appear here, so a table cannot be added
+// and silently ignored.
 func readTableOrder(dir string) ([]string, error) {
 	raw, err := os.ReadFile(filepath.Join(dir, "tables.tsv"))
 	if err != nil {

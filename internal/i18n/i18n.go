@@ -127,5 +127,4 @@ func SetLocale(l Lang) {
 	langValue.Store(l)
 }
 
-// Locale returns the process default language.
 func Locale() Lang { return defaultLang() }
