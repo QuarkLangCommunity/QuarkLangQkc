@@ -715,8 +715,8 @@ de-facto standard for style and correctness.
 
 ### 7.3 The test corpus — **pure restatement**, and it is load-bearing
 
-`compiler/testdata/cases/*.kq` (**21**) and `cases_run/*.kq` (**17**) = **38** parity cases, plus
-`examples/*.qk` (**8**).
+`compiler/testdata/cases/*.kq` (**21**, **23** after the two cases §7.6 item 2 added) and
+`cases_run/*.kq` (**17**) = **40** parity cases today, plus `examples/*.qk` (**8**).
 
 | What would leave | What it costs |
 |---|---|
@@ -772,6 +772,14 @@ to the review date.
 
 Items 1–9 are pure restatement: no program changes meaning. Items 10–12 change meaning or add surface,
 and §12 puts them behind the review date.
+
+Disposition, 2026-10-15: items 10–12 **await the owner's ruling** and are left as they are here. Item 10 was
+closed without a ruling because §7.6 itself offers the choice and one branch changes nothing a program
+computes: the compiler now lowers `char`/`double` onto the views the interpreter already used (§11.1 of the
+standard). Item 11 is a real semantic change — the two-line syntax-layer fix is validated but not applied,
+and the standard records the divergence in §11.3 with the reason it cannot be repaired in this repository.
+Item 12 has no definition to implement against (§8's Q-3, Q-5). The standard's §11.4 lists which of items
+1–9 this revision adopted and which of them are not restatements after all.
 
 ---
 
