@@ -209,6 +209,11 @@ func ProveRules(t *testing.T, spec Spec, apply func(Rule, *File) bool) {
 		path := proofPath(c.Text)
 		file := NewFile(path, []byte(proofText(c.Text)))
 		if !r.Reads(path) {
+			// A rule that does not read the file makes no hit, which is the exemption an `ignores` case
+			// is there to prove. A `catches` case it does not read proves nothing at all.
+			if c.Want == "catches" {
+				t.Errorf("rule %s does not read %s, so the case for %q proves nothing", c.Rule, path, c.Text)
+			}
 			continue
 		}
 		switch c.Want {
