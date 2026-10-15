@@ -42,9 +42,6 @@ func (f *Fix) Replacement() string {
 	return f.Original[:f.From] + f.Text + f.Original[f.To:]
 }
 
-// HasFix reports whether the diagnostic carries a mechanical correction.
-func (d Diag) HasFix() bool { return d.Fix != nil }
-
 // FixPlan is what applying corrections to one file's diagnostics would do.
 type FixPlan struct {
 	Fixes []AppliedFix // one per diagnostic that carries a correction, in line order

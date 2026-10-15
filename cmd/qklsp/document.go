@@ -114,21 +114,6 @@ func uriSlashPath(p string) string {
 // ---------- Position conversion (LSP 0-based / UTF-16 columns <-> language 1-based / byte columns) ----------
 
 // byteColToUTF16 converts an in-line byte column (1-based) to a UTF-16 code unit offset (0-based).
-func byteColToUTF16(line string, byteCol int) int {
-	if byteCol <= 1 {
-		return 0
-	}
-	idx := byteCol - 1
-	if idx > len(line) {
-		idx = len(line)
-	}
-	prefix := line[:idx]
-	n := 0
-	for _, r := range prefix {
-		n += len(utf16.Encode([]rune{r}))
-	}
-	return n
-}
 
 // utf16ToByteCol converts a UTF-16 code unit offset (0-based) to an in-line byte column (1-based).
 func utf16ToByteCol(line string, char int) int {

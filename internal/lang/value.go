@@ -59,14 +59,12 @@ type FileValue struct {
 }
 
 func (f *FileValue) IsFile() bool     { return true }
-func (f *FileValue) FilePath() string { return f.Path }
 func (f *FileValue) String() string   { return "<file " + f.Path + ">" }
 func (f *FileValue) TypeName() string { return "file" }
 
 // ---- scalar constructors (old names kept so call sites need no change) ----
 
-func IntV(n int64) Value   { return Value{tag: byte(vInt), i: n} }
-func IntV32(n int32) Value { return IntV(int64(n)) }
+func IntV(n int64) Value { return Value{tag: byte(vInt), i: n} }
 func FloatV(f float64) Value {
 	return Value{tag: byte(vFloat), i: int64(math.Float64bits(f))}
 }
@@ -104,7 +102,6 @@ func OutV(s *OutputStream) Value        { return Value{tag: byte(vOut), ptr: uns
 func MemorizeV(m *MemorizeBuffer) Value { return Value{tag: byte(vMemorize), ptr: unsafe.Pointer(m)} }
 func MemoryV(m *Memory) Value           { return Value{tag: byte(vMemory), ptr: unsafe.Pointer(m)} }
 func TaskmV(t *TaskManager) Value       { return Value{tag: byte(vTaskm), ptr: unsafe.Pointer(t)} }
-func TaskV(t *Task) Value               { return Value{tag: byte(vTask), ptr: unsafe.Pointer(t)} }
 func ThreadV(t *ThreadValue) Value      { return Value{tag: byte(vThread), ptr: unsafe.Pointer(t)} }
 func FuncV(f *FuncValue) Value          { return Value{tag: byte(vFunc), ptr: unsafe.Pointer(f)} }
 func CopydV(c *CopydValue) Value        { return Value{tag: byte(vCopyd), ptr: unsafe.Pointer(c)} }

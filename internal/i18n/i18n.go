@@ -74,10 +74,6 @@ type Localizer struct {
 func New(l Lang) Localizer { return Localizer{lang: l} }
 
 // WithLang returns a copy that renders in another language; the receiver is unchanged.
-func (L Localizer) WithLang(l Lang) Localizer {
-	L.lang = l
-	return L
-}
 
 // Lang reports the language this localizer renders in.
 func (L Localizer) Lang() Lang {

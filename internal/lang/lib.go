@@ -144,10 +144,6 @@ func LoadImportIn(dirs []string, path string) (string, string, error) {
 }
 
 // stripProgramDecl removes program library;/program main; declaration lines from imported source (the library form is decided by the main program).
-func stripProgramDecl(src string) string {
-	out, _ := stripProgramDeclMapped(src)
-	return out
-}
 
 // stripProgramDeclMapped is stripProgramDecl plus the **original line number** (1-based) each stripped line maps to.
 func stripProgramDeclMapped(src string) (string, []int) {
@@ -283,9 +279,6 @@ func CompileTokensWithImports(toks []Token, src, filename string) (*Program, err
 
 // CompileTokensWithImportsMapped is CompileTokensWithImports plus the source position mapping table, which
 // a caller that reports a runtime error's line in the file the author wrote needs (the compiler does).
-func CompileTokensWithImportsMapped(toks []Token, src, filename string) (*Program, *SrcMap, error) {
-	return compileWithImportPaths(src, filename, nil, toks)
-}
 
 // compileWithImportPaths is the single import-merge implementation: it walks the main file and every file
 // it imports (that file's directory first, then extraPaths, then the standard library), appends each file's

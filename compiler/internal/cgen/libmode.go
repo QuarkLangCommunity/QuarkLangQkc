@@ -10,9 +10,6 @@ var libMode bool
 // SetLibMode toggles lib mode (set by qkc --emit-lib)
 func SetLibMode(v bool) { libMode = v }
 
-// InLibMode reports whether lib mode is currently on
-func InLibMode() bool { return libMode }
-
 // forceHelpers: when linking against a library the host program **must provide every runtime helper**.
 // Reason: once a shared library is linked, LTO can no longer drop unused runtime code (such as ql_any_str_int),
 // and their references to ql_int_to_str/ql_float_to_str must be satisfied by host-program definitions.

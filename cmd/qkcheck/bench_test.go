@@ -45,15 +45,6 @@ func bigSource(n int) string {
 	return b.String()
 }
 
-func writeBig(tb testing.TB, n int) string {
-	tb.Helper()
-	p := filepath.Join(tb.TempDir(), "big.qk")
-	if err := os.WriteFile(p, []byte(bigSource(n)), 0o644); err != nil {
-		tb.Fatal(err)
-	}
-	return p
-}
-
 func BenchmarkLintOnly(b *testing.B) {
 	src := bigSource(120)
 	prog, err := lang.ParseSource(src)
