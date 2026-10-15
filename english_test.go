@@ -127,7 +127,7 @@ func TestNoChineseTracesInTrackedGoFiles(t *testing.T) { ratchet.Verify(t, trace
 // shape it is written to catch, and to leave ASCII, a Latin accent and the generated catalog alone, so a
 // classifier that stopped working fails here instead of reporting zero occurrences forever.
 func TestChineseTraceRulesMatch(t *testing.T) {
-	ratchet.ProveRules(t, traceSpec, func(r ratchet.Rule, f *ratchet.File) bool { return len(r.Scan(f)) > 0 })
+	ratchet.ProveRules(t, traceSpec)
 }
 
 // TestChineseTraceAllowlistIsWellFormed keeps the ratchet's own input honest: an entry naming a path

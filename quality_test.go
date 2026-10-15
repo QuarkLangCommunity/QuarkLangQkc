@@ -144,5 +144,5 @@ func TestQualityRulesMatch(t *testing.T) {
 		Proofs: "internal/ratchet/testdata/quality-rules.tsv",
 		Rules:  qualityRules(map[string]int{"NobodyCallsMe": 1, "EveryBodyCallsMe": 2}),
 	}
-	ratchet.ProveRules(t, proof, func(r ratchet.Rule, f *ratchet.File) bool { return len(r.Scan(f)) > 0 })
+	ratchet.ProveRules(t, proof)
 }

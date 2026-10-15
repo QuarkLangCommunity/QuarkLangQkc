@@ -180,7 +180,7 @@ func TestNoPersonalDataInTrackedFiles(t *testing.T) { ratchet.Verify(t, privacyS
 // `$HOME`-relative default alone, so a pattern that was mistyped fails here instead of reporting zero
 // occurrences forever.
 func TestPersonalDataRulesMatch(t *testing.T) {
-	ratchet.ProveRules(t, privacySpec, func(r ratchet.Rule, f *ratchet.File) bool { return len(r.Scan(f)) > 0 })
+	ratchet.ProveRules(t, privacySpec)
 }
 
 // TestPersonalDataAllowlistIsWellFormed keeps the ratchet's own input honest: an entry naming a path

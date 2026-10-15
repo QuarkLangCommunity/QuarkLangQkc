@@ -188,7 +188,7 @@ type ProofCase struct {
 // ProveRules fails the test unless every rule matches the shape it is written to catch and leaves the
 // texts it must leave alone, and unless every rule has a case. A rule that matches nothing would report
 // zero occurrences forever, which is how a gate turns green for a tree it never read.
-func ProveRules(t *testing.T, spec Spec, apply func(Rule, *File) bool) {
+func ProveRules(t *testing.T, spec Spec) {
 	t.Helper()
 	byName := map[string]Rule{}
 	for _, r := range spec.Rules {
@@ -216,13 +216,16 @@ func ProveRules(t *testing.T, spec Spec, apply func(Rule, *File) bool) {
 			}
 			continue
 		}
+		// A rule "matches" a case when its scan reports something, which is the only reading of a hit
+		// that means anything here: a rule that reports nothing for the shape it forbids is not a rule.
+		matched := len(r.Scan(file)) > 0
 		switch c.Want {
 		case "catches":
-			if !apply(r, file) {
+			if !matched {
 				t.Errorf("rule %s does not match %q, so it reports no occurrences for content it is written to catch", c.Rule, c.Text)
 			}
 		case "ignores":
-			if apply(r, file) {
+			if matched {
 				t.Errorf("rule %s matches %q, which is not what it forbids — a rule that fires on an agreement is noise, and noise is how a check like this gets switched off", c.Rule, c.Text)
 			}
 		default:
