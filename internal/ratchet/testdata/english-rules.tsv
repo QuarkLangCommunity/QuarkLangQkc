@@ -1,0 +1,25 @@
+# The Chinese-trace rules' own proof, one case per line: rule, expectation, text.
+#
+# "catches" means the rule must match this text, or it would report zero occurrences for content it is
+# written to find. "ignores" means it must not, because the text is not a trace: a rule that fires on
+# ASCII, on a Latin accent or on the message table's own data is noise, and noise is how a check like
+# this gets switched off.
+#
+# A case is tried as Go source, and a `// path: <file> ` header names the file it is read as. The rules
+# read comments and literals, so they have to be shown a file they read, and the path carries the one
+# deliberate exemption: the generated catalog is where this repository's Chinese text is data rather
+# than a trace.
+#
+# A case is one line, so a newline inside it is written `\n`. The text is the last field, so it may
+# contain tabs only if they are part of the case.
+
+han-comment	catches	// path: a.go package p\n\n// 一 trailing\nfunc f() {}\n
+han-comment	ignores	// path: a.go package p\n\n// plain english\nvar msg = "ok"\n
+han-test-prose	catches	// path: a_test.go package p\n\nimport "testing"\n\nfunc TestX(t *testing.T) {\n\tt.Errorf(\t"一")\n}\n
+han-test-prose	ignores	// path: a_test.go package p\n\nimport "testing"\n\nfunc TestX(t *testing.T) {\n\tt.Errorf(\t"plain english")\n}\n
+han-literal	catches	// path: a_test.go package p\n\nvar src = "io.println(\"一\")"\n
+han-literal	catches	// path: a.go package p\n\nvar msg = "一"\n
+han-literal	ignores	// path: internal/i18n/msg_gen.go package i18n\n\nvar blob = "一"\n
+han-literal	ignores	// path: a.go package p\n\nvar msg = "ok"\n
+han-comment	ignores	// path: a.go package p\n\n// cafe\u0301 latin\nvar msg = "caf\u00e9"\n
+han-literal	ignores	// path: a.go package p\n\n// cafe\u0301 latin\nvar msg = "caf\u00e9"\n

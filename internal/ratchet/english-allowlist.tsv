@@ -1,0 +1,43 @@
+# The Chinese occurrences this repository still carries in Go source, as a permission per rule and path.
+#
+# The boundary this ratchet enforces is data versus prose, and the rules name the two sides:
+#
+#   han-comment       Han or full-width punctuation inside a comment. Prose, in a repository whose prose is
+#                     English; no occurrence is allowed and no entry may be added.
+#   han-test-prose    the same runes inside a string literal passed to a testing helper, i.e. the message a
+#                     failing run prints. Prose too, and likewise no occurrence is allowed.
+#   han-literal       the same runes in any other string literal. This is where the data lives: a test
+#                     fixture is a program, a path or an expected rendering, and the language's own text
+#                     belongs in it. Each count below is a permission for one file, and the list can only
+#                     shrink: a count that reaches zero must be deleted, because an entry that guards
+#                     nothing is the last place in the tree that still says what the ratchet was for.
+#
+# Two things are not permissions and are carved out by the ratchet itself rather than allowed here: the
+# generated catalog (internal/i18n/msg_gen.go, whose text is the message table's own data) and the
+# generated C header (compiler/internal/rtcat/msg_c.h, which is not Go source at all). The language columns
+# of internal/i18n/source/*.tsv are the other half of the data boundary and are not Go source either.
+#
+# rule	path	count
+han-literal	cmd/qkdoc/bench_test.go	2
+han-literal	cmd/qkdoc/main_test.go	1
+han-literal	cmd/qklsp/bench_test.go	1
+han-literal	cmd/qklsp/main_test.go	4
+han-literal	cmd/qkrepl/main_test.go	3
+han-literal	compiler/internal/cgen/consistency_test.go	5
+han-literal	compiler/internal/cgen/feature_test.go	14
+han-literal	compiler/macros_test.go	1
+han-literal	internal/i18n/proof_test.go	3
+han-literal	internal/lang/doc_test.go	4
+han-literal	internal/lang/eval_test.go	13
+han-literal	internal/lang/ffi_win_table_test.go	2
+han-literal	internal/lang/i18n_en_test.go	1
+han-literal	internal/lang/lint_test.go	7
+han-literal	internal/lang/lintbench_test.go	5
+han-literal	internal/lang/lintcorpus_test.go	2
+han-literal	internal/lang/lintstat_test.go	4
+han-literal	internal/lang/op_test.go	1
+han-literal	internal/lang/repl_test.go	1
+han-literal	internal/lang/slots_test.go	12
+# The generator's own detector: a character class over the Han blocks, written as escapes because the
+# runes are a pattern rather than text. It is read as a literal once unquoted, so it is counted here.
+han-literal	internal/i18ngen/backlog.go	1
