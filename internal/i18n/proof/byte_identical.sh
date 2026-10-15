@@ -31,9 +31,8 @@
 # A failure here means the migration changed what a user reads, which is the one thing it must not do.
 
 set -u
-
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="$(cd "$here/../../.." && pwd)"
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+proof_init QK_PROOF_WORK "$HOME/.cache/qk-i18n/proof"
 
 # The revision the two dialects of "identical" are measured against: main as it stood before the compiled
 # path's text moved into the catalog — the first parent of the merge that landed PR #101, which is the same
@@ -51,7 +50,6 @@ root="$(cd "$here/../../.." && pwd)"
 # does, and a green run against it is what measures that. Pass an earlier revision explicitly to exercise the
 # tables; the guard refuses only the one revision that cannot be measured at all.
 baseline_default="a3c4cd4"
-baseline_rev="${1:-$baseline_default}"
 
 # Refuse that comparison here, before spending a build on it. Every claim above is a claim about the old
 # design — the EN-fix table asks whether the baseline leaked Chinese to an English reader, and the ZH tables
@@ -59,22 +57,8 @@ baseline_rev="${1:-$baseline_default}"
 # below could be measured and every run would come out identical for a reason that names the corpus rather
 # than the invocation. The exit code is 2, not 1: nothing was measured, so this is a gate that cannot run
 # rather than a gate that went red.
-head_commit="$(git -C "$root" rev-parse 'HEAD^{commit}')"
-if ! base_commit="$(git -C "$root" rev-parse --verify --quiet "$baseline_rev^{commit}")"; then
-  echo "cannot run: the baseline revision '$baseline_rev' does not resolve to a commit in $root" >&2
-  exit 2
-fi
-if [ "$base_commit" = "$head_commit" ] ||
-   [ "$(git -C "$root" rev-parse 'HEAD^{tree}')" = "$(git -C "$root" rev-parse "$base_commit^{tree}")" ]; then
-  echo "refusing to run: the baseline revision $baseline_rev (commit $base_commit) carries this checkout's" >&2
-  echo "content (commit $head_commit), so the EN-fix and ZH-fix tables (claims about the old design) cannot" >&2
-  echo "hold, and a revision compared with itself measures nothing. Pass a revision this tree does not carry," >&2
-  echo "e.g. $baseline_default." >&2
-  exit 2
-fi
-
-work="${QK_PROOF_WORK:-$HOME/.cache/qk-i18n/proof}"
-mkdir -p "$work/bin"
+proof_baseline "$baseline_default" "${1:-}" \
+  "the EN-fix and ZH-fix tables (claims about the old design) cannot hold"
 
 # The corpus: one case per migrated message family. deep_nesting.qk exercises the syntax layer's own
 # refusal; the macro and preprocessor cases exercise the msg() surface migrated in steps 1-2; the errf
@@ -147,27 +131,17 @@ errf_library_body.qk	library 体内只能有 fn 符号签名	a library body may 
 badalloc.qk	badAlloc: new %s 申请大小非法	badAlloc: new %s has an invalid allocation size
 TSV
 
-build() { # build <revision-or-worktree> <output>
-  local src="$1" out="$2"
-  ( cd "$src" && go build -o "$out" . ) || { echo "build failed: $src" >&2; exit 1; }
-}
-
 # The baseline: a detached worktree at the pre-migration revision, so the comparison is against the
 # code as it was, not against a description of it.
 base_tree="$work/baseline"
-if [ ! -d "$base_tree" ]; then
-  git -C "$root" worktree add -q --detach "$base_tree" "$baseline_rev" || exit 1
-fi
-git -C "$base_tree" checkout -q --detach "$baseline_rev" || exit 1
+proof_worktree "$base_tree"
 
-build "$base_tree" "$work/bin/baseline-quark"
-build "$root" "$work/bin/prototype-quark"
+proof_build quark "$base_tree" "$work/bin/baseline-quark"
+proof_build quark "$root" "$work/bin/prototype-quark"
 
 # run <binary> <lang> [file] -> the rendering, with the exit code appended
 run() { LANG=C.UTF-8 QK_LANG="$2" "$1" ${3:+"$3"} 2>&1; echo "rc=$?"; }
 
-fail=0
-total=0
 fixed=0
 for lang in en zh; do
   for f in "$corpus"/*.qk; do
@@ -413,9 +387,8 @@ fail=$((fail + doc_fail))
 # where the text lives, never which text is chosen, so the Chinese rendering stays exactly what it was;
 # inventing a translation to make the two columns look parallel is the retyping the migration forbids.
 # The asymmetry is reported in the commit message and §7.4, not papered over.
-build_qkc() { ( cd "$1/compiler" && go build -o "$2" . ) || { echo "qkc build failed: $1" >&2; exit 1; }; }
-build_qkc "$base_tree" "$work/bin/baseline-qkc"
-build_qkc "$root" "$work/bin/prototype-qkc"
+proof_build qkc "$base_tree" "$work/bin/baseline-qkc"
+proof_build qkc "$root" "$work/bin/prototype-qkc"
 
 shared_fail=0
 for lang in en zh; do
@@ -489,9 +462,9 @@ fn main(IOStream io) void {
 }
 QK
 
-build_qkcheck() { ( cd "$1" && go build -o "$2" ./cmd/qkcheck ) || { echo "qkcheck build failed: $1" >&2; exit 1; }; }
-build_qkcheck "$base_tree" "$work/bin/baseline-qkcheck"
-build_qkcheck "$root" "$work/bin/prototype-qkcheck"
+proof_build_tool() { ( cd "$1" && go build -o "$2" ./cmd/"$3" ) || { echo "$3 build failed: $1" >&2; exit 1; }; }
+proof_build_tool "$base_tree" "$work/bin/baseline-qkcheck" qkcheck
+proof_build_tool "$root" "$work/bin/prototype-qkcheck" qkcheck
 
 lint_fail=0
 for f in "$lint_corpus"/*.qk; do
