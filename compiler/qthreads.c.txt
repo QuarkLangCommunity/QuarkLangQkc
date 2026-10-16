@@ -716,6 +716,32 @@ char* ql_list_str_str(char** buf, int head, int tail) {
     return r;
 }
 
+/* List<float>: same layout as %ListF { i64* buf, i32 head, i32 tail }, and each slot carries an element's
+ * bit-cast double (the code generator stores it with `bitcast double to i64`), so the element is recovered
+ * here with memcpy. Each element renders through ql_float_to_str, which is the one float spelling this
+ * runtime has: a list and a bare float cannot disagree, and the interpreter's List.String() prints both the
+ * same way. ql_float_to_str is defined by the generated module, which is why the caller also asks for it. */
+char* ql_list_float_str(const long long* buf, int head, int tail) {
+    size_t cap = 16, o = 0;
+    char* r = (char*)malloc(cap);
+    r[o++] = '[';
+    for (int i = head; i < tail; i++) {
+        double d;
+        memcpy(&d, &buf[i], sizeof d);
+        char* e = ql_float_to_str(d);
+        size_t n = strlen(e);
+        if (i > head) {
+            if (o + 2 > cap) { cap *= 2; r = (char*)realloc(r, cap); }
+            r[o++] = ','; r[o++] = ' ';
+        }
+        if (o + n + 2 > cap) { while (o + n + 2 > cap) cap *= 2; r = (char*)realloc(r, cap); }
+        memcpy(r + o, e, n); o += n;
+    }
+    if (o + 2 > cap) { cap += 2; r = (char*)realloc(r, cap); }
+    r[o++] = ']'; r[o] = 0;
+    return r;
+}
+
 /* ================= HashTable<K,V> runtime =================
  * key = the interpreter-style structured string TypeName + ":" + String() (produced by ql_table_key);
  * value = the boxed interface{} value (data + RTTI descriptor), deep-copied via RTTI copy on Put. */

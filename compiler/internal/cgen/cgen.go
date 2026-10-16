@@ -19,6 +19,7 @@ package cgen
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -94,6 +95,7 @@ const (
 	kTable    // HashTable method call (put/get/contains/remove/size/keys)
 	kNewRef   // new T: allocate a single-element cell and return a T& pointer
 	kListS    // List<String> literal: a heap %ListS whose buffer holds i8* elements
+	kListF    // List<float> literal: a heap %ListF whose buffer holds i64 slots, each an element's bit-cast
 	kConv     // conversion call T(x) (spec §3.4): s names the destination type
 )
 
@@ -561,6 +563,7 @@ type emitter struct {
 	rttiFns        map[string]bool // struct printing helpers already emitted (on demand)
 	hasList        bool
 	hasListS       bool
+	hasListF       bool
 	hasEmpty       bool
 	hasIface       bool
 	hasRT          bool
@@ -821,6 +824,19 @@ func (e *emitter) ensureListS() {
 	e.types.WriteString("%ListS = type { i8**, i32, i32 }\n") // buf, head, tail
 }
 
+// ensureListF makes sure the LLVM definition of List<float> is emitted. The buffer holds one i64 slot per
+// element and the element is carried in it as a bit-cast double, which is how every other float path in this
+// backend moves a float through a slot that is not typed double (the taskm.merge argument slots, the runner
+// prologue); a double* buffer would need the bit-cast nowhere but would force a fourth list layout for no
+// gain.
+func (e *emitter) ensureListF() {
+	if e.hasListF {
+		return
+	}
+	e.hasListF = true
+	e.types.WriteString("%ListF = type { i64*, i32, i32 }\n") // buf, head, tail
+}
+
 // irElem returns the element type of an aggregate type (the GEP source type): %Point* → %Point; scalars as-is.
 func (e *emitter) irElem(t string) string {
 	p := e.ir(t)
@@ -887,6 +903,10 @@ func (e *emitter) ir(t string) string {
 	if t == "List<String>" {
 		e.ensureListS()
 		return "%ListS*"
+	}
+	if t == "List<float>" {
+		e.ensureListF()
+		return "%ListF*"
 	}
 	if _, ok := e.structs[t]; ok {
 		e.ensureStruct(t)
@@ -1065,7 +1085,10 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare void @ql_memo_put(i8*, i32, i32*, i32)\n")
 	// List builtin method runtime (int elements; visible range head..tail)
 	e.decls.WriteString("declare void @ql_list_int_sort(i32*, i32, i32)\n")
-	e.decls.WriteString("declare i8* @ql_list_int_str(i32*, i32, i32)\n\n")
+	e.decls.WriteString("declare i8* @ql_list_int_str(i32*, i32, i32)\n")
+	// List<float> elements travel as i64 slots holding a bit-cast double, so the runtime helper takes the
+	// same slot type and renders each element through ql_float_to_str — one float spelling in both engines.
+	e.decls.WriteString("declare i8* @ql_list_float_str(i64*, i32, i32)\n\n")
 
 	// library FFI: external symbol declarations + link-library marker (main.go parses ; qkc-link:)
 	seenExt := map[string]bool{}
@@ -1944,6 +1967,17 @@ func (e *emitter) emitDecl(st *declStmt) {
 		}
 		e.emitInstr("store %%ListS* %s, %%ListS** %s", v, slot)
 		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
+	case "List<float>":
+		// The lowerer gives every List<float> declaration an initializer — a literal, a passthrough of
+		// another float list, or the empty literal it synthesizes when the source declares none, because the
+		// interpreter's zero value for a List is an empty list and a null handle would fault on the first
+		// size/get/print (the read paths dereference the handle).
+		e.ensureListF()
+		slot := e.newReg()
+		e.emitInstr("%s = alloca %%ListF*, align 8", slot)
+		v, _ := e.compileExpr(st.init)
+		e.emitInstr("store %%ListF* %s, %%ListF** %s", v, slot)
+		e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
 	case "List<int>":
 		e.ensureList()
 		if st.init != nil && st.init.kind != kList {
@@ -2050,6 +2084,90 @@ func (e *emitter) listSRange(obj string) (buf, head, size string) {
 	return p, h, sz
 }
 
+// listFObj loads the %ListF* handle a List<float> variable holds (parameters and passthrough slots already
+// carry the pointer).
+func (e *emitter) listFObj(name string) string {
+	e.ensureListF()
+	info, ok := e.vars[name]
+	if !ok {
+		return "null"
+	}
+	if info.param || info.direct {
+		return info.reg
+	}
+	r := e.newReg()
+	e.emitInstr("%s = load %%ListF*, %%ListF** %s", r, info.reg)
+	return r
+}
+
+// listFRange returns the visible range and the slot buffer of a List<float>, whose elements are i64 slots
+// each holding a bit-cast double.
+func (e *emitter) listFRange(obj string) (buf, head, size string) {
+	e.ensureListF()
+	hf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 1", hf, obj)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 2", tf, obj)
+	h := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", h, hf)
+	t := e.newReg()
+	e.emitInstr("%s = load i32, i32* %s", t, tf)
+	sz := e.newReg()
+	e.emitInstr("%s = sub i32 %s, %s", sz, t, h)
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 0", bf, obj)
+	p := e.newReg()
+	e.emitInstr("%s = load i64*, i64** %s", p, bf)
+	return p, h, sz
+}
+
+// listFElemAddr returns the address of the element at the already-bounds-checked visible index of a
+// List<float>.
+func (e *emitter) listFElemAddr(slots, idx string) string {
+	i64 := e.toI64(idx)
+	g := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i64, i64* %s, i64 %s", g, slots, i64)
+	return g
+}
+
+// listFLoad reads one List<float> element as a double (the slot carries a bit-cast double).
+func (e *emitter) listFLoad(slots, idx string) string {
+	g := e.listFElemAddr(slots, idx)
+	bits := e.newReg()
+	e.emitInstr("%s = load i64, i64* %s", bits, g)
+	v := e.newReg()
+	e.emitInstr("%s = bitcast i64 %s to double", v, bits)
+	return v
+}
+
+// listFStore writes one List<float> element, taking a double and carrying it in the slot as a bit-cast i64.
+func (e *emitter) listFStore(slots, idx, val string) {
+	g := e.listFElemAddr(slots, idx)
+	e.emitInstr("store i64 %s, i64* %s", e.listFBits(val), g)
+}
+
+// listFBits returns the i64 slot image of a double value: a constant is converted here, because an LLVM
+// bit-cast constant expression wants an integer constant (a spelling such as 1e+10 is rejected), and a value
+// that already lives in a register is bit-cast at run time.
+func (e *emitter) listFBits(val string) string {
+	if f, err := strconv.ParseFloat(val, 64); err == nil {
+		return strconv.FormatInt(int64(math.Float64bits(f)), 10)
+	}
+	bits := e.newReg()
+	e.emitInstr("%s = bitcast double %s to i64", bits, val)
+	return bits
+}
+
+// listFStr renders the visible range of a List<float> with the runtime printer. The runtime calls
+// ql_float_to_str, which the generated module defines on demand, so asking for the renderer asks for the
+// float spelling too — otherwise a program that only prints a list would reference an undefined symbol.
+func (e *emitter) listFStr(slots, head, tail string) string {
+	e.needFloatToStr = true
+	r := e.newReg()
+	e.emitInstr("%s = call i8* @ql_list_float_str(i64* %s, i32 %s, i32 %s)", r, slots, head, tail)
+	return r
+}
+
 // listSSlot stores a List<String> object pointer into an alloca slot (variable reference semantics).
 
 // listSlot stores a List object pointer into an alloca slot (variable reference semantics: the slot holds a pointer).
@@ -2113,8 +2231,20 @@ func (e *emitter) emitAssign(st *assignStmt) {
 }
 
 func (e *emitter) emitIndexAssign(st *indexAssignStmt) {
-	// l[i] = v (the receiver may be any List<int>/List<String> expression)
+	// l[i] = v (the receiver may be any List<int>/List<String>/List<float> expression)
 	lo, lt := e.compileExpr(st.recv)
+	if lt == "List<float>" {
+		p, head, size := e.listFRange(lo)
+		i, it := e.compileExpr(st.idx)
+		i = e.coerce(i, it, "int")
+		e.emitBoundsCheck(i, size, st.idx.line)
+		idx := e.newReg()
+		e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+		v, vt := e.compileExpr(st.x)
+		v = e.coerce(v, vt, "float")
+		e.listFStore(p, idx, v)
+		return
+	}
 	if lt == "List<String>" {
 		p, head, size := e.listSRange(lo)
 		i, it := e.compileExpr(st.idx)
@@ -2421,6 +2551,45 @@ func (e *emitter) emitForIn(st *forInStmt) {
 		_ = bf
 		return
 	}
+	if st.typ == "float" {
+		// List<float>: elements are bit-cast doubles in i64 slots, and the sliding head cursor semantics are
+		// the ones List<int> uses.
+		lo := e.listFObj(st.list)
+		p, _, _ := e.listFRange(lo)
+		hf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 1", hf, lo)
+		tf := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 2", tf, lo)
+		e.emitInstr("br label %%%s", condB)
+		e.setBlock(condB)
+		h := e.newReg()
+		e.emitInstr("%s = load i32, i32* %s", h, hf)
+		t := e.newReg()
+		e.emitInstr("%s = load i32, i32* %s", t, tf)
+		c := e.newReg()
+		e.emitInstr("%s = icmp slt i32 %s, %s", c, h, t)
+		e.emitInstr("br i1 %s, label %%%s, label %%%s", c, bodyB, endB)
+		saved := e.funcReturned
+		e.breaks = append(e.breaks, endB)
+		e.setBlock(bodyB)
+		h2 := e.newReg()
+		e.emitInstr("%s = load i32, i32* %s", h2, hf)
+		ev := e.listFLoad(p, h2)
+		e.emitInstr("store double %s, double* %s", ev, slot)
+		nx := e.newReg()
+		e.emitInstr("%s = add i32 %s, 1", nx, h2)
+		e.emitInstr("store i32 %s, i32* %s", nx, hf)
+		e.emitBlock(st.body)
+		bodyRet := e.funcReturned || e.term
+		e.funcReturned = saved
+		if !bodyRet {
+			e.emitInstr("br label %%%s", condB)
+		}
+		e.funcReturned = saved
+		e.breaks = e.breaks[:len(e.breaks)-1]
+		e.setBlock(endB)
+		return
+	}
 	lo := e.listObj(st.list)
 	e.emitInstr("br label %%%s", condB)
 	e.setBlock(condB)
@@ -2513,6 +2682,13 @@ func (e *emitter) emitPrint(args []*expr, newline bool) {
 			r := e.newReg()
 			e.emitInstr("%s = call i8* @ql_list_str_str(i8** %s, i32 %s, i32 %s)", r, p, head, tail)
 			vals[len(vals)-1].val = r
+			vals[len(vals)-1].typ = "String"
+			fmts = append(fmts, "%s")
+		case "List<float>":
+			p, head, size := e.listFRange(v)
+			tail := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+			vals[len(vals)-1].val = e.listFStr(p, head, tail)
 			vals[len(vals)-1].typ = "String"
 			fmts = append(fmts, "%s")
 		case "interface{}":
@@ -3016,6 +3192,8 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		return e.compileListLit(x)
 	case kListS:
 		return e.compileListSLit(x)
+	case kListF:
+		return e.compileListFLit(x)
 	case kConv:
 		return e.compileConv(x)
 	}
@@ -3104,6 +3282,15 @@ func (e *emitter) compileIndex(x *expr) (string, string) {
 		return e.compileBitIndex(x)
 	}
 	lo, lt := e.compileExpr(x.idx.recv)
+	if lt == "List<float>" {
+		p, head, size := e.listFRange(lo)
+		i, it := e.compileExpr(x.idx.i)
+		i = e.coerce(i, it, "int")
+		e.emitBoundsCheck(i, size, x.line)
+		idx := e.newReg()
+		e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+		return e.listFLoad(p, idx), "float"
+	}
 	if lt == "List<String>" {
 		p, head, size := e.listSRange(lo)
 		i, it := e.compileExpr(x.idx.i)
@@ -3254,6 +3441,35 @@ func (e *emitter) compileListSLit(x *expr) (string, string) {
 	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 2", tf, lo)
 	e.emitInstr("store i32 %d, i32* %s", n, tf)
 	return lo, "List<String>"
+}
+
+// compileListFLit builds a List<float> literal: a heap %ListF whose i64 buffer holds one bit-cast double per
+// element. The buffer is calloc-ed rather than malloc-ed so a slot past the literal's tail is a zero
+// bit-pattern — the double 0.0 — and never garbage, which keeps the two engines identical on any read the
+// bounds check cannot see.
+func (e *emitter) compileListFLit(x *expr) (string, string) {
+	e.ensureListF()
+	n := len(x.lst.items)
+	obj := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	lo := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %%ListF*", lo, obj)
+	buf := e.newReg()
+	e.emitInstr("%s = call i8* @calloc(i64 %d, i64 8)", buf, max(1, n))
+	p := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to i64*", p, buf)
+	for i, it := range x.lst.items {
+		v, vt := e.compileExpr(it)
+		v = e.coerce(v, vt, "float")
+		e.listFStore(p, strconv.Itoa(i), v)
+	}
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 0", bf, lo)
+	e.emitInstr("store i64* %s, i64** %s", p, bf)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 2", tf, lo)
+	e.emitInstr("store i32 %d, i32* %s", n, tf)
+	return lo, "List<float>"
 }
 
 // compileCall compiles ordinary function calls and builtins (sum/clock).
@@ -3782,6 +3998,62 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			v, vt := e.compileExpr(m.args[0])
 			v = e.coerce(v, vt, "String")
 			e.emitInstr("store i8* %s, i8** %s", v, g2)
+			t2 := e.newReg()
+			e.emitInstr("%s = add i32 %s, 1", t2, t1)
+			e.emitInstr("store i32 %s, i32* %s", t2, tf)
+			return "0", "void"
+		}
+	}
+	// List<float> builtin methods: the element travels as a bit-cast double in an i64 slot, exactly as in the
+	// literal, the subscript and the print path.
+	if rtyp == "List<float>" {
+		switch m.name {
+		case "size":
+			_, _, size := e.listFRange(recv)
+			return size, "int"
+		case "get":
+			p, head, size := e.listFRange(recv)
+			i, it := e.compileExpr(m.args[0])
+			i = e.coerce(i, it, "int")
+			e.emitBoundsCheck(i, size, x.line)
+			idx := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", idx, head, i)
+			return e.listFLoad(p, idx), "float"
+		case "toString":
+			p, head, size := e.listFRange(recv)
+			tail := e.newReg()
+			e.emitInstr("%s = add i32 %s, %s", tail, head, size)
+			return e.listFStr(p, head, tail), "String"
+		case "append":
+			// geometric growth with 8-byte elements (mirrors the List<int>/List<String> paths)
+			tf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 2", tf, recv)
+			t1 := e.newReg()
+			e.emitInstr("%s = load i32, i32* %s", t1, tf)
+			n1 := e.newReg()
+			e.emitInstr("%s = shl i32 %s, 1", n1, t1)
+			n1b := e.newReg()
+			e.emitInstr("%s = icmp slt i32 %s, 1", n1b, n1)
+			n1c := e.newReg()
+			e.emitInstr("%s = select i1 %s, i32 1, i32 %s", n1c, n1b, n1)
+			n64 := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
+			sz := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 8", sz, n64)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 0", bf, recv)
+			lp := e.newReg()
+			e.emitInstr("%s = load i64*, i64** %s", lp, bf)
+			bc := e.newReg()
+			e.emitInstr("%s = bitcast i64* %s to i8*", bc, lp)
+			rc := e.newReg()
+			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			np := e.newReg()
+			e.emitInstr("%s = bitcast i8* %s to i64*", np, rc)
+			e.emitInstr("store i64* %s, i64** %s", np, bf)
+			v, vt := e.compileExpr(m.args[0])
+			v = e.coerce(v, vt, "float")
+			e.listFStore(np, t1, v)
 			t2 := e.newReg()
 			e.emitInstr("%s = add i32 %s, 1", t2, t1)
 			e.emitInstr("store i32 %s, i32* %s", t2, tf)
@@ -4677,6 +4949,11 @@ func analyzeExpr(e *expr, m *fnMeta) {
 			analyzeExpr(it, m)
 		}
 	case kListS:
+		m.impure = true
+		for _, it := range e.lst.items {
+			analyzeExpr(it, m)
+		}
+	case kListF:
 		m.impure = true
 		for _, it := range e.lst.items {
 			analyzeExpr(it, m)

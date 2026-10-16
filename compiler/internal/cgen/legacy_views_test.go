@@ -34,16 +34,35 @@ fn main(IOStream io) {
 	}
 }
 
-// TestListDoubleIsRefusedWhileTheInterpreterAcceptsIt pins the one engine difference the legacy spellings
-// keep — `List<char>` folds to `List<int>` and is lowered, while `List<double>` would need a `List<float>`
-// this backend does not have (§11.2) — by the folded type name, which no locale translates, so the
-// divergence fails loudly here instead of staying invisible in the parity gate.
-func TestListDoubleIsRefusedWhileTheInterpreterAcceptsIt(t *testing.T) {
-	err := lowerErr(t, "fn main(IOStream io) {\n"+
-		"    List<double> l = [1.5];\n"+
-		"    io.println(l[0]);\n"+
-		"}\n")
-	if !strings.Contains(err.Error(), "List<float>") {
-		t.Fatalf("the refusal changed: %v", err)
+// TestListDoubleIsLoweredLikeListInt pins the lowering §11.2 used to record as missing: `List<double>` folds
+// onto `List<float>`, whose elements live in i64 slots each carrying the element as a bit-cast double — the
+// same bit-cast the other float paths use — so the legacy spelling reaches the values the interpreter
+// produces. The refusal that stood here was the one engine difference the parity gate could not see; it is
+// closed, and this test fails loudly if the lowering goes away or the slots stop carrying the element's bits.
+func TestListDoubleIsLoweredLikeListInt(t *testing.T) {
+	ir := transpile(t, `fn main(IOStream io) {
+    List<double> l = [1.5, -2.25, 0.5];
+    io.println(l[0]);
+    l[1] = 4.5;
+    io.println(l[1]);
+    l.append(0.125);
+    io.println(l.size());
+    io.println(l.get(2));
+    List<float> m = [1.0];
+    m.append(2.5);
+    io.println(m[1]);
+    float total = 0.0;
+    for (double x : l) { total = total + x; }
+    io.println(total);
+}
+`)
+	if !strings.Contains(ir, "%ListF = type { i64*, i32, i32 }") {
+		t.Fatalf("the float list no longer lowers onto an i64 slot buffer:\n%s", ir)
+	}
+	if !strings.Contains(ir, "bitcast double") || !strings.Contains(ir, "bitcast i64") {
+		t.Fatalf("an element no longer travels as a bit-cast double:\n%s", ir)
+	}
+	if got, want := lliRun(t, withTestRuntime(ir)), "1.5\n4.5\n4\n0.5\n2.5\n6.625\n"; got != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }

@@ -1,0 +1,28 @@
+// List<double> — the element type §11.2 used to record as the one the compiler refused. `double` is the
+// 64-bit float view this implementation spells `float`, so this case pins the surface the lowering grew, one
+// line per path: the literal, the element load and store, append, size/get, for-in iteration and arithmetic
+// on elements. Every value is chosen to survive the bit-cast exactly, because a bit-cast carries bits and
+// never rounds, and the same program is written in both spellings §9's compatibility list allows.
+//
+// This case avoids printing a list as a whole, so it needs no runtime symbol beyond libc and runs under
+// lli in `go test` on every platform; cases_run/z_list_double_print.kq covers the printing paths end to end.
+fn main(IOStream io) {
+    List<double> l = [1.5, -2.25, 0.5];
+    io.println(l[0]);                 // element load
+    io.println(l.size());             // size
+    l[1] = 4.5;                       // element store
+    io.println(l[1]);
+    l.append(0.125);                  // append grows the slot buffer
+    io.println(l.size());
+    io.println(l.get(2));             // get is the same load as []
+    List<float> m = [1.0];            // the spelling this implementation lowered first
+    m.append(2.5);
+    io.println(m[1]);
+    l[0] = l[3] / 4.0;                // arithmetic on elements, stored back through the same store
+    io.println(l[0]);
+    float total = 0.0;
+    for (double x : l) {              // for-in reads the same slots, advancing the head cursor like List<int>
+        total = total + x;
+    }
+    io.println(total);
+}

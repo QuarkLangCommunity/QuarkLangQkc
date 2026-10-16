@@ -1,0 +1,18 @@
+// Printing a List<double>: io.println and toString go through the runtime's float-list renderer, which formats
+// every element with the same float spelling a bare float gets, so a list and its elements cannot disagree.
+//
+// This case lives in cases_run/ because that renderer is part of the linked C runtime (qthreads.c.txt), which
+// the cases/ directory cannot use: those run under lli in `go test`, where only libc and ql_strcat exist.
+fn main(IOStream io) {
+    List<double> l = [1.5, -2.25, 0.0];
+    io.println(l);
+    io.println(l.toString());
+    l.append(10000000000.0);           // a value whose spelling is not fixed-point at this magnitude
+    io.println(l);
+    List<float> m = [];
+    io.println(m);                    // the empty list
+    m.append(2.5);
+    io.println(m);
+    l[1] = 1.0 / 3.0;                 // a value only the runtime's spelling decides
+    io.println(l);
+}

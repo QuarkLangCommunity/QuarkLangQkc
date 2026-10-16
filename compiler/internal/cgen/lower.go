@@ -713,6 +713,9 @@ func (l *lowerer) checkType(t string, pos lang.Pos, what string) error {
 		if elem == "String" {
 			return nil // List<String>: read-only subset (keys() results / size/get/toString/for-in/indexing)
 		}
+		if elem == "float" {
+			return nil // List<float>: literal, index read/write, append, size/get/toString, for-in and print
+		}
 		return l.errfID(pos, i18n.MsgCompilerSTypeQNotSupportedCompiler, what, t, elem)
 	}
 	if l.isStructType(t) {
@@ -947,6 +950,12 @@ func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
 	}
 	if t == "List<String>" {
 		return l.errfID(pos, i18n.MsgCompilerCopydListStringParametersNotSupported)
+	}
+	if t == "List<float>" {
+		// The deep-copy helper copies 4-byte elements of a %List, so a float list would be copied at the
+		// wrong stride — a silent miscompile. It is refused exactly as List<String> is, until the helper
+		// learns the element stride.
+		return l.errfID(pos, i18n.MsgCompilerCopydListFloatParametersNotSupported)
 	}
 	sd, sub := l.structSubst(t)
 	if sd == nil {
@@ -1186,7 +1195,7 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 		return nil, l.errfID(st.Pos, i18n.MsgCompilerForIterationOverSNotSupported, lt)
 	}
 	elem := args[0]
-	if elem != "int" && elem != "String" {
+	if elem != "int" && elem != "String" && elem != "float" {
 		return nil, l.errfID(st.Pos, i18n.MsgCompilerIteratingListSNotSupportedCompiler, elem)
 	}
 	id, ok := st.Iter.(*lang.Ident)
@@ -1194,7 +1203,7 @@ func (fc *funcCtx) forIn(st *lang.ForStmt) (stmt, error) {
 		return nil, l.errfID(st.Pos, i18n.MsgCompilerForIterationOverNonVariableList)
 	}
 	vt, _ := fc.lookup(id.Name)
-	if vt != "List<int>" && vt != "List<String>" {
+	if vt != "List<int>" && vt != "List<String>" && vt != "List<float>" {
 		return nil, l.errfID(st.Pos, i18n.MsgCompilerForIterationOverSNotSupportedCompilerHandles, vt)
 	}
 	fc.push()
@@ -1326,6 +1335,47 @@ func (fc *funcCtx) declStmt(st *lang.DeclStmt) (stmt, error) {
 			return nil, err
 		}
 		return &declStmt{name: st.Name, typ: t, init: &expr{kind: kList, typ: t, lst: &listLit{items: items}}}, nil
+	case "List<float>":
+		// A float list lowers like the int list, with one difference: a declaration without an initializer is
+		// accepted and builds the interpreter's zero value, an empty list. List<int> still refuses one (§11.2),
+		// so this case synthesizes the empty literal rather than leaving the initializer absent.
+		if st.Init == nil {
+			if err := fc.declare(st.Name, t, st.Pos); err != nil {
+				return nil, err
+			}
+			return &declStmt{name: st.Name, typ: t, init: &expr{kind: kListF, typ: t, lst: &listLit{}}}, nil
+		}
+		lit, ok := st.Init.(*lang.ListLit)
+		if !ok {
+			it := fc.typeOf(st.Init)
+			if it != "List<float>" {
+				return nil, l.errfID(exprPos(st.Init, st.Pos), i18n.MsgCompilerInitializingSWithSElementsNot, it, t)
+			}
+			x, err := fc.expr(st.Init)
+			if err != nil {
+				return nil, err
+			}
+			if err := fc.declare(st.Name, t, st.Pos); err != nil {
+				return nil, err
+			}
+			return &declStmt{name: st.Name, typ: t, init: x}, nil
+		}
+		items := make([]*expr, 0, len(lit.Items))
+		for _, it := range lit.Items {
+			et := fc.typeOf(it)
+			if !fc.assignable(et, "float") {
+				return nil, l.errfID(exprPos(it, st.Pos), i18n.MsgCompilerInitializingSWithSElementsNot, et, t)
+			}
+			x, err := fc.expr(it)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, x)
+		}
+		if err := fc.declare(st.Name, t, st.Pos); err != nil {
+			return nil, err
+		}
+		return &declStmt{name: st.Name, typ: t, init: &expr{kind: kListF, typ: t, lst: &listLit{items: items}}}, nil
 	}
 
 	// T& / pointer T: nullable reference (new T allocates a cell; no initial value = null); normalized to T&
@@ -1420,7 +1470,7 @@ func (fc *funcCtx) printArgs(call *lang.CallExpr) ([]*expr, error) {
 			return nil, err
 		}
 		switch t := fc.typeOf(a); t {
-		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}", "List<String>", "uchar":
+		case "int", "String", "bool", "float", "long", "pointer", "null", "?", "interface{}", "List<String>", "List<float>", "uchar":
 		case "int&", "float&", "bool&", "String&", "long&": // T&: print the dereferenced value (same as the interpreter)
 		default:
 			if !isBitsT(t) {
@@ -1479,13 +1529,18 @@ func (fc *funcCtx) assignStmt(st *lang.AssignStmt) (stmt, error) {
 		if isBitsT(rt) {
 			return fc.bitAssign(st, tgt)
 		}
-		if _, ok := listElem(rt); !ok {
+		elem, isList := listElem(rt)
+		if !isList {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerThisSubscriptAssignmentNotSupportedCompiler)
 		}
 		if t := fc.typeOf(tgt.Idx); t != "int" && t != "?" {
 			return nil, l.errfID(exprPos(tgt.Idx, st.Pos), i18n.MsgCompilerIndexTypeSNotSupportedYet, t)
 		}
-		if t := fc.typeOf(st.X); !fc.assignable(t, "int") {
+		if elem == "float" {
+			if t := fc.typeOf(st.X); !fc.assignable(t, "float") {
+				return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSListFloatElementNot, t)
+			}
+		} else if t := fc.typeOf(st.X); !fc.assignable(t, "int") {
 			return nil, l.errfID(exprPos(st.X, st.Pos), i18n.MsgCompilerAssigningSListIntElementNot, t)
 		}
 		recv, err := fc.expr(tgt.X)
@@ -1603,13 +1658,13 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		}
 		return &expr{kind: kNewRef, typ: pt + "&", s: pt}, nil
 	case *lang.ListLit:
-		// list literal: valid in any expression position (the compiler lowers List<int> and List<String>)
+		// list literal: valid in any expression position (the compiler lowers List<int>, List<String> and List<float>)
 		t := "List<int>"
 		if _, ok := listElem(fc.expectT); ok {
 			t = fc.expectT
 		}
 		elem, ok := listElem(t)
-		if !ok || (elem != "int" && elem != "String") {
+		if !ok || (elem != "int" && elem != "String" && elem != "float") {
 			return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerListLiteralSNotSupportedCompiler, t)
 		}
 		items := make([]*expr, 0, len(e.Items))
@@ -1627,6 +1682,9 @@ func (fc *funcCtx) expr(x lang.Expr) (*expr, error) {
 		kind := kList
 		if elem == "String" {
 			kind = kListS
+		}
+		if elem == "float" {
+			kind = kListF
 		}
 		return &expr{kind: kind, typ: t, lst: &listLit{items: items}}, nil
 	case *lang.ScopeCall:
@@ -2499,6 +2557,50 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 			return &expr{kind: kMethod, typ: "void", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "append", args: args}}, nil
 		}
 		return nil, l.errfID(me.Pos, i18n.MsgCompilerListStringSNotSupportedYet, me.Name)
+	}
+	// List<float> builtin methods (the receiver may be any List<float> expression: a variable / struct field etc.)
+	if elem, ok := listElem(rt); ok && elem == "float" {
+		rx, err := fc.expr(me.X)
+		if err != nil {
+			return nil, err
+		}
+		args := make([]*expr, 0, len(c.Args))
+		for _, a := range c.Args {
+			x, err := fc.expr(a)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, x)
+		}
+		switch me.Name {
+		case "size":
+			if len(c.Args) != 0 {
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListSizeTakesNoArguments)
+			}
+			return &expr{kind: kMethod, typ: "int", method: &methodExpr{recv: rx, name: "size"}}, nil
+		case "get":
+			if len(c.Args) != 1 {
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListGetIRequires1Argument)
+			}
+			if t := fc.typeOf(c.Args[0]); t != "int" && t != "?" {
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListGetWithSIndexNot, t)
+			}
+			return &expr{kind: kMethod, typ: "float", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "get", args: args}}, nil
+		case "toString":
+			if len(c.Args) != 0 {
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerTostringTakesNoArguments)
+			}
+			return &expr{kind: kMethod, typ: "String", method: &methodExpr{recv: rx, name: "toString"}}, nil
+		case "append":
+			if len(c.Args) != 1 {
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerListAppendVRequires1Argument)
+			}
+			if t := fc.typeOf(c.Args[0]); !fc.assignable(t, "float") {
+				return nil, l.errfID(exprPos(c.Args[0], me.Pos), i18n.MsgCompilerListFloatAppendWithSArgument, t)
+			}
+			return &expr{kind: kMethod, typ: "void", line: me.Pos.Line, method: &methodExpr{recv: rx, name: "append", args: args}}, nil
+		}
+		return nil, l.errfID(me.Pos, i18n.MsgCompilerListFloatSNotSupportedYet, me.Name)
 	}
 	// List builtin methods (the receiver may be any List<int> expression: a variable / struct field etc.)
 	if elem, ok := listElem(rt); ok && elem == "int" {
