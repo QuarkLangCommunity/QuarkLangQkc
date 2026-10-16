@@ -951,6 +951,12 @@ func (l *lowerer) checkCopydType(t string, pos lang.Pos, depth int) error {
 	if t == "List<String>" {
 		return l.errfID(pos, i18n.MsgCompilerCopydListStringParametersNotSupported)
 	}
+	if t == "List<float>" {
+		// The deep-copy helper copies 4-byte elements of a %List, so a float list would be copied at the
+		// wrong stride — a silent miscompile. It is refused exactly as List<String> is, until the helper
+		// learns the element stride.
+		return l.errfID(pos, i18n.MsgCompilerCopydListFloatParametersNotSupported)
+	}
 	sd, sub := l.structSubst(t)
 	if sd == nil {
 		return nil // scalar / String / List<int> / unknown types are handled by checkType
