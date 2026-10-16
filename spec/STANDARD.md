@@ -334,6 +334,12 @@ differ, the code is wrong.
   than against the other engine. §11.3 keeps the record of the divergence this closes; the change was
   semantic (§5's order differs from C's and Go's), so it landed as its own reviewed change — three lines
   and their comment in the syntax layer, pinned by `parser_precedence_test.go` there.
+- `List<float>`, and its §9 spelling `List<double>`, in both engines: the literal, the element read and
+  write, `append`, `size`/`get`/`toString`, for-in iteration and print. The compiler carries each element in
+  an i64 slot as a bit-cast double, so a float list stores the bits the interpreter's list stores, and both
+  engines render an element through one float spelling. §11.2 states what a float list still lacks; before
+  this, the interpreter accepted `List<double>` and the compiler refused it with a hard error — an engine
+  difference the parity gate cannot see, because no case exercised the construct.
 
 ### 11.2 Limits of the current implementation
 
@@ -341,12 +347,23 @@ differ, the code is wrong.
 - a width takes a decimal literal only, not an arbitrary constant expression.
 - reinterpreting `float`/`double` is refused: this implementation's `float` is 64-bit while §3.2 says
   `float32`, so the widths cannot be trusted to agree yet.
-- a `List` element is `int` or `String` in the compiler, so `List<double>` is refused there
-  (`List<double> l = [1.5];` → `variable type "List<float>" is not supported (the compiler handles
-  List<int> and List<String>; element float)`) while the interpreter accepts it as a `float` list.
-  `List<char>` is *not* in this limit: it folds to `List<int>`. Closing the rest needs a `List<float>`
-  lowering in `compiler/internal/cgen` (element load/store through bit-casts, plus literal, `append`, index
-  and print paths), which no parity case exercises today.
+- a `List` element is `int`, `float` or `String` in the compiler, so `List<double>` is lowered as the
+  interpreter's `float` list, on every path the `List<int>` lowering has: literal, element read and write,
+  `append`, `size`/`get`/`toString`, for-in iteration and print. Both spellings work (`float`, and the §9
+  compatibility spelling `double`), and `List<char>` is *not* in this paragraph at all because it folds to
+  `List<int>`. Elements live in i64 slots each holding the element as a bit-cast double — the bit-cast the
+  other float paths use — and the runtime renders them through the same float spelling a bare float gets, so
+  a list and its elements cannot disagree. Measured in both engines: `compiler/testdata/cases/z_list_double.kq`
+  (no list printing, so it also runs under `lli` in `go test`) and `cases_run/z_list_double_print.kq` (the
+  print and `toString` paths, which need the linked runtime). What a `List<float>` still does not have is what
+  only the `int` list has: `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__` are refused with `List<float>.%s
+  is not supported yet (size/get/toString/append and for-in iteration are lowered)`; `delete` on a float list is
+  refused because the compiler releases a `List<int>` variable only (§11.3's §10 table); boxing one into
+  `interface{}` is not lowered; and printing a `List<int>` is still refused although a `List<String>` and a
+  `List<float>` print. A declaration without an initializer builds the interpreter's empty list where
+  `List<int>` still refuses one, because a null handle would fault the read paths — the lowerer synthesizes the
+  empty literal. Closing the rest needs an element type threaded through the method lowering, `delete`, the
+  boxing path and the zero-value path: one small change per path, and no new standard surface.
 - layout: a `bits<N>` whose width is not 8, 16 or 32 occupies the next storage size in compiled structs
   and is aligned to that type rather than to 1 as §3.1 requires. Values are exact; only layout rounds up.
 - call depth is capped at 8192 (`lang.MaxCallDepth`). A call made from a frame that deep is refused with
@@ -452,6 +469,7 @@ macro item), and stays open.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.5 | 2026-10-16 | §11.2's last `List` limit is closed: the compiler lowers `List<float>`, and `List<double>` with it. Elements live in i64 slots each carrying the element as a bit-cast double, the runtime renders them through the one float spelling a bare float gets, and the surface covers the literal, the element read and write, `append`, `size`/`get`/`toString`, for-in iteration and print. Pinned by `compiler/testdata/cases/z_list_double.kq` (which avoids list printing, so it also runs under `lli` in `go test`), `cases_run/z_list_double_print.kq` (the print and `toString` paths, which need the linked runtime) and `TestListDoubleIsLoweredLikeListInt`, which replaces the refusal test this section used to point at. What remains is what only `List<int>` has — `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__`, `delete`, `interface{}` boxing — and a declaration without an initializer builds the interpreter's empty list where `List<int>` still refuses one. The three diagnostics the change needed were filed at the append point of the message tables, so no shipped id was renumbered, and the texts that named only `List<int>`/`List<String>` now name `List<float>` too. Status sections and one lowering; no normative text changed, no language surface added |
 | 0.8.4 | 2026-10-16 | **§11.3's shift divergence is closed.** The pinned syntax layer now threads `parseBitAnd → parseShift → parseAdd → parseMul`, so §5's order holds: `1 + 2 << 3` is 24, `1 << 2 + 3` is 32 and `10 - 2 >> 1` is 4 in both engines under `LANG=C.UTF-8` and `LANG=zh_CN.UTF-8`, while `1 + (2 << 3)` still reads 17 — the parser erases the parenthesis node but decides the grouping, so the two readings are two trees and neither is traded for the other. The pin moves to `github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261015231811-3de63a5ff52d` in both `go.mod` files, the closed state is measured in §11.1, the history of the divergence stays in §11.3, and item 11 of §11.4 is now closed. Of the 23 corpus cases exactly one changed value, `z_precedence.kq`, the case that pins this level against the standard rather than against the other engine; no existing program changed. Status sections only; no normative text changed, no language surface added |
 | 0.8.3 | 2026-10-15 | Status and corrections, no normative text changed: §11.3 records the two divergences it could not see before — §5's shift precedence (a two-line exchange in the pinned syntax layer, measured in both engines under both locales, with the reason it cannot be repaired in this repository: that parser erases parentheses) and §10's four primitives per engine and per path, with the size of closing the compiled path; §11.2 adds the one `List` element type the compiler still refuses (`List<double>`), and §11.1 the legacy spellings both engines now accept (`char`, `double`, `long`, `pointer T`, `List<char>`), which the compiler refused until this revision. §1.4 now says what `compare.sh` proves and §1 records that diagnostics are not language surface; §3.2's claim that `pointer T` does not exist is corrected (it is what `new T[n]` yields, which `stdlib/vec.qk` is built on); §9 lists `pointer T` among the compatibility spellings. §11.4 records which of `docs/primitives.md` §7.6's twelve items this revision adopts and why the others wait for the owner's ruling |
 | 0.8.2 | 2026-10-11 | §10 gains one scope sentence: the section describes the contract of the compiled artifact, and the reference interpreter implements that policy as a layer over its host runtime's allocator. The corresponding doc comment in `internal/lang/value.go` said memory "is backed by the host Go GC" and cited a `§14` that does not exist; it now describes what the reference interpreter does (its `MemoryManager` implements the block policy as a logical layer above the host allocator) and cites §10. Scope wording and a stale citation only; no normative content changed and no language surface added |

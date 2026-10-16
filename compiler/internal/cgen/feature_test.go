@@ -674,11 +674,8 @@ func TestUnsupportedConstructs(t *testing.T) {
 				"fn main(IOStream io) { io.println(1); }\n",
 			want: "暂未支持返回类型 \"List<String>\"",
 		},
-		{
-			name: "List<float> 字面量（只 lower List<int> / List<String>）",
-			src:  "fn main(IOStream io) { List<float> l = [1.0]; io.println(1); }\n",
-			want: "暂未支持 variable 类型 \"List<float>\"",
-		},
+		// List<float> literals and the rest of the float-list surface are already lowered
+		// (see testdata/cases/z_list_double.kq and legacy_views_test.go)
 		{
 			name: "指针成员访问",
 			src: "type struct { int v; } P;\n" +

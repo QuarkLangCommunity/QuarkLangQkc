@@ -11,7 +11,16 @@
 # matches the id's domain, and it kept its number because it was the last row of the last table either
 # way.
 #
+# The three compiler.list_float_* rows are here for the number and not for the domain: the List<float>
+# lowering added them while compiler.tsv and every other domain table already had rows after them, so
+# filing them at home would have renumbered 171 shipped ids. They are compiler diagnostics and the ctx
+# column says so; the day this table's own rows move, these move with them, which is what the two tables
+# being one file already means.
+#
 # Columns, tab-separated: id, owner, ctx, note, src, then one value column per language (see
 # languages.tsv for the order). Every column is described at the head of typecheck.tsv.
 #
 typecheck.kind_for_loop_variable	local	internal/lang/typecheck.go:1268	the noun the checker puts in front of an interface mismatch	"for-loop variable"	"for-loop variable"	"for 迭代变量"
+compiler.assigning_s_list_float_element_not	local	compiler/internal/cgen/lower.go:1531	the compiler refuses a construct the interpreter accepts	"assigning %s to a List<float> element is not supported"	"assigning %s to a List<float> element is not supported"	"暂未支持用 %s 赋值给 List<float> 元素"
+compiler.list_float_s_not_supported_yet	local	compiler/internal/cgen/lower.go:2610	the compiler refuses a construct the interpreter accepts	"List<float>.%s is not supported yet (size/get/toString/append and for-in iteration are lowered)"	"List<float>.%s is not supported yet (size/get/toString/append and for-in iteration are lowered)"	"暂未支持 List<float>.%s（编译器 lower size/get/toString/append 与 for-in 迭代）"
+compiler.list_float_append_with_s_argument	local	compiler/internal/cgen/lower.go:2612	the compiler refuses a construct the interpreter accepts	"List<float>.append with a %s argument is not supported yet (float required)"	"List<float>.append with a %s argument is not supported yet (float required)"	"暂未支持 List<float>.append 的 %s 参数（需要 float）"
