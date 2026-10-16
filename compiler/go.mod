@@ -9,4 +9,4 @@ replace github.com/QuarkLangCommunity/QuarkLangQkc => ../
 // cgen never names the parser module directly — the AST types arrive through internal/lang's
 // re-exports — but the module graph still has to resolve it, so the pin is repeated here: while the
 // compiler is the main module, a replace declared by the root module does not apply.
-require github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261011044519-5316b66c4d5b // indirect
+require github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261015231811-3de63a5ff52d // indirect
