@@ -10,6 +10,7 @@ import "C"
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -17,7 +18,10 @@ import (
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
-// Windows FFI: LoadLibrary/GetProcAddress + a hand-written ABI wrapper (4 types x <=4 argument combinations).
+// Windows FFI: LoadLibrary/GetProcAddress + a hand-written x64 ABI thunk (see ffi_win.inc for the
+// register/stack split); arguments beyond the register file travel on the stack, so the only fixed
+// bound is the frame size below.
+const ffiWinMaxArgs = 32 // the same bound the libffi backends use (ffi_call.go/ffi_shim.c)
 
 const (
 	ffiVoid = 0
@@ -59,8 +63,8 @@ func (lh *libHandle) resolve(sym string) (unsafe.Pointer, error) {
 
 func ffiCall(fn unsafe.Pointer, paramTypes []int, nums []float64, ptrs []unsafe.Pointer, retType int) (int64, float64, unsafe.Pointer, error) {
 	n := len(paramTypes)
-	if n > 4 {
-		return 0, 0, nil, errors.New(msgID(i18n.MsgRuntimeFfierrorWindowsAbiShimSupportsMost))
+	if n > ffiWinMaxArgs {
+		return 0, 0, nil, fmt.Errorf(msgID(i18n.MsgRuntimeFfierrorWindowsAbiShimSupportsMost), ffiWinMaxArgs)
 	}
 	ctypes := make([]C.int, n)
 	cnums := make([]C.double, n)
