@@ -1,0 +1,15 @@
+// Historical tide shape: allocate and delete a list per round with no read, sink or checksum. The
+// optimizer removes the whole loop; this file exists only to measure that dead-code floor, which is
+// what the old "1e8 rounds = 1 ms" claim measured. It is not an allocation result.
+fn main(IOStream io) {
+    int rounds = 100000000;
+    int i = 0;
+    int t0 = clock();
+    while (i < rounds) {
+        List<int> a = [1, 2, 3];
+        delete a;
+        i = i + 1;
+    }
+    int t1 = clock();
+    io.println(t1 - t0);
+}
