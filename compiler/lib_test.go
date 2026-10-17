@@ -4,9 +4,15 @@ package main
 // (these cases lock down the key invariant "library and caller share the same ABI": it once caused a runtime dereference segfault at 0x15)
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
 
 const sampleLibIR = `source_filename = "ext.qk"
@@ -71,6 +77,9 @@ func TestQKLibRoundTrip(t *testing.T) {
 	if got.Name != "vfc-ext" || got.Version != "0.1.0" || got.Payload != "ir" {
 		t.Fatalf("wrong manifest round trip: %+v", got)
 	}
+	if got.Allocator != qklibAllocatorABI {
+		t.Fatalf("a freshly written artifact carries allocator stamp %q, want %q", got.Allocator, qklibAllocatorABI)
+	}
 	if len(got.Exports) != 1 || got.Exports[0].QLSig == "" {
 		t.Fatalf("the export signatures were lost: %+v", got.Exports)
 	}
@@ -94,6 +103,55 @@ func TestQKLibRoundTrip(t *testing.T) {
 	}
 	if _, _, rerr := readQKLib(badPath); rerr == nil {
 		t.Fatal("a tampered variant should fail verification")
+	}
+}
+
+// writeLegacyQKLib writes an artifact in the pre-stage-1 shape, whose manifest has no allocator field.
+func writeLegacyQKLib(t *testing.T, path string, variants map[string]string) {
+	t.Helper()
+	hashes := map[string]string{}
+	for target, ir := range variants {
+		sum := sha256.Sum256([]byte(ir))
+		hashes[target] = hex.EncodeToString(sum[:])
+	}
+	manifest := map[string]any{
+		"name": "legacy-ext", "version": "0.1.0", "abi": "qk-ir-1", "payload": "ir",
+		"targets": []string{"linux-x86_64"}, "sha256": hashes,
+	}
+	body, err := json.Marshal(map[string]any{"manifest": manifest, "variants": variants})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append([]byte(qklibMagic), body...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestQKLibWithoutAllocatorStampIsRefusedBothLocales pins the refusal of a pre-stage-1 artifact in English and Chinese.
+func TestQKLibWithoutAllocatorStampIsRefusedBothLocales(t *testing.T) {
+	path := t.TempDir() + "/legacy.qklib"
+	writeLegacyQKLib(t, path, map[string]string{"linux-x86_64": `define i32 @f() { ret i32 1 }`})
+	wantEN := fmt.Sprintf(`library %s has no compiled-memory allocator stamp: this engine requires %q because the allocator changed from libc malloc/free to counted slabs in compiled-memory stage 1; the library must be rebuilt with this qkc`, path, qklibAllocatorABI)
+	wantZH := i18n.New(i18n.ZH).Msg(i18n.MsgCompilerLibraryNoAllocatorStampRebuildS, path, qklibAllocatorABI)
+	if wantZH == wantEN {
+		t.Fatal("the Chinese rendering is the English one, so the locale check would be vacuous")
+	}
+	for _, lang := range []i18n.Lang{i18n.EN, i18n.ZH} {
+		t.Run(lang.String(), func(t *testing.T) {
+			previous := SetLocalizer(i18n.New(lang))
+			defer SetLocalizer(previous)
+			_, _, err := readQKLib(path)
+			if err == nil {
+				t.Fatal("a library with no allocator stamp was accepted")
+			}
+			want := wantEN
+			if lang == i18n.ZH {
+				want = wantZH
+			}
+			if got := err.Error(); got != want {
+				t.Fatalf("refusal rendered %q, want %q", got, want)
+			}
+		})
 	}
 }
 

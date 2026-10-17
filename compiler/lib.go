@@ -29,6 +29,9 @@ import (
 
 const qklibMagic = "QKLB"
 
+// qklibAllocatorABI is the compiled-memory allocator ABI an artifact is written with and must carry to load.
+const qklibAllocatorABI = "counted-slab/1"
+
 // QKExport an exported symbol: IR signature + QL-level signature (for the referrer to generate declarations)
 type QKExport struct {
 	Name   string `json:"name"`
@@ -43,6 +46,7 @@ type QKLibManifest struct {
 	Name       string            `json:"name"`
 	Version    string            `json:"version"`
 	ABI        string            `json:"abi"`
+	Allocator  string            `json:"allocator_abi"`
 	Payload    string            `json:"payload"`
 	Targets    []string          `json:"targets"`
 	Obfuscated bool              `json:"obfuscated"`
@@ -333,6 +337,8 @@ func writeQKLib(out string, man QKLibManifest, variants map[string]string) error
 	if man.ABI == "" {
 		man.ABI = "qk-ir-1"
 	}
+	// Every artifact carries the current allocator stamp so a pre-stage-1 library cannot be read silently.
+	man.Allocator = qklibAllocatorABI
 	man.Payload = "ir"
 	if man.QKC == "" {
 		man.QKC = version
@@ -372,6 +378,12 @@ func readQKLib(path string) (QKLibManifest, map[string]string, error) {
 	}
 	if err := json.Unmarshal(b[4:], &body); err != nil {
 		return man, nil, fmt.Errorf(msgID(i18n.MsgCompilerLibraryArtifactParseFailedW), err)
+	}
+	if stamp := body.Manifest.Allocator; stamp != qklibAllocatorABI {
+		if stamp == "" {
+			return body.Manifest, nil, errors.New(msgID(i18n.MsgCompilerLibraryNoAllocatorStampRebuildS, path, qklibAllocatorABI))
+		}
+		return body.Manifest, nil, errors.New(msgID(i18n.MsgCompilerLibraryAllocatorStampQRequiresQRebuildS, path, stamp, qklibAllocatorABI))
 	}
 	for t, ir := range body.Variants {
 		if want, ok := body.Manifest.SHA256[t]; ok {

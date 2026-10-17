@@ -204,11 +204,14 @@ updated together (revision 0.8.12; measurement text only, no normative change), 
 
 ## 8b. Known limitations of this boundary
 
-- **Pre-stage-1 `.qklib` artifacts are not allocator-compatible.** A library built by an older qkc
-  emits `malloc`/`free`; a new program's `delete` calls `ql_free`, and old library code can call
-  `free` on a `ql_alloc` pointer. Rebuild libraries with the new engine (the qkc cache/engine version
-  is bumped to 15; the `.qklib` format itself is not changed here). This is the ABI side of R5/D1 and
-  is best handled by a library-engine stamp in stage 3.
+- **Pre-stage-1 `.qklib` artifacts are refused, not migrated.** A library built by an older qkc emits
+  `malloc`/`free`; a new program's `delete` calls `ql_free`, and old library code can call `free` on a
+  `ql_alloc` pointer. Every artifact now carries `allocator_abi = "counted-slab/1"` in its manifest, and
+  `readQKLib` refuses an artifact with no stamp or a different one before it picks a variant, with a
+  message that names the change (libc `malloc`/`free` to counted slabs) and tells the user to rebuild the
+  library with this qkc. The qkc cache/engine version is 15; the artifact format gained one manifest field.
+  This closes the ABI side of R5/D1 at the artifact boundary and is pinned by
+  `TestQKLibWithoutAllocatorStampIsRefusedBothLocales`.
 - **Aliasing `delete` is still undefined.** `List<int> a = [1]; List<int> b = a; delete b;` releases
   storage `a` still refers to. The standard says releasing referenced storage is a programming error
   the runtime does not detect; stage 1 does not add detection. The allocator's debug build catches a
@@ -218,8 +221,8 @@ updated together (revision 0.8.12; measurement text only, no normative change), 
   language allocations only.
 - **Failure/misuse behavior is undefined in release** (D11): OOM returns NULL (the old libc path did
   not check it either), a foreign pointer is not accepted by `ql_free`, and only `QL_MEM_DEBUG` asserts.
-- **Windows has no allocator at all** (§5), and pre-stage-1 `.qklib` likewise cannot be assumed to use
-  the pool.
+- **Windows has no allocator at all** (§5); a pre-stage-1 `.qklib` is refused everywhere by its
+  missing allocator stamp (§8b).
 
 ## 9. What stage 2 needs
 
