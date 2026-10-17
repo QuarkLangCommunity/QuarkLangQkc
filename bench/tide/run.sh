@@ -66,6 +66,16 @@ sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" bench/tide/qk/tide_l
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-floor" "$BUILD/tide_floor.qk") >/dev/null
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-legacy" "$BUILD/tide_legacy_floor.qk") >/dev/null
 
+EVIDENCE="not checked on this platform"
+if command -v nm >/dev/null 2>&1; then
+  if nm -u "$BUILD/tide-qk" 2>/dev/null | grep -Eq 'malloc|calloc|free'; then
+    EVIDENCE="nm -u on the observable QuarkLang binary lists malloc/calloc/free"
+  else
+    echo "tide: the observable QuarkLang binary references no allocator symbol" >&2
+    exit 1
+  fi
+fi
+
 CFLAGS_C="-O3 -flto=thin"
 if ! clang $CFLAGS_C bench/tide/c/tide.c -o "$BUILD/tide-c" 2>"$BUILD/c.err"; then
   CFLAGS_C="-O3"
@@ -107,6 +117,11 @@ run_timing() { # usage: run_timing key label language checksum-mode note command
   shift 5
   local values=() out="$BUILD/out.txt" line
   local r
+  # One untimed warm-up keeps the first timed run from carrying the cold-start cost.
+  if ! "$@" "$N" > /dev/null 2>"$BUILD/err.txt"; then
+    echo "tide: $key warm-up failed: $(cat "$BUILD/err.txt")" >&2
+    exit 1
+  fi
   for ((r = 1; r <= RUNS; r++)); do
     if ! "$@" "$N" > "$out" 2>"$BUILD/err.txt"; then
       echo "tide: $key failed: $(cat "$BUILD/err.txt")" >&2
@@ -139,7 +154,7 @@ run_timing() { # usage: run_timing key label language checksum-mode note command
     --unit us --checksum "$checksum" --note "$note" >> "$ROWS"
 }
 
-NOTE_QK="List<int> literal + toString + opaque C sink + release + delete"
+NOTE_QK="`List<int>` literal + toString + opaque C sink + release + delete"
 NOTE_C="malloc(12) + 3 writes + volatile sink + free"
 NOTE_RUST="Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop"
 NOTE_GO="make([]int32,3) + global sink + GC"
@@ -151,13 +166,13 @@ if command -v rustc >/dev/null 2>&1; then
 fi
 run_timing go_observable "Go control, global sink" Go required "$NOTE_GO" "$BUILD/tide-go"
 
-run_timing compiled_floor "QuarkLang compiled, no sink (DCE floor)" QuarkLang required "same loop with the sink removed; the checksum keeps the loop alive" "$BUILD/tide-qk-floor"
-run_timing c_floor "C control, no sink (DCE floor)" C required "same loop with the volatile sink removed" "$BUILD/tide-c-floor"
+run_timing compiled_floor "QuarkLang compiled, no sink (optimizer floor)" QuarkLang required "same loop with the sink removed; the checksum keeps the loop alive" "$BUILD/tide-qk-floor"
+run_timing c_floor "C control, no sink (optimizer floor)" C required "same loop with the volatile sink removed" "$BUILD/tide-c-floor"
 if command -v rustc >/dev/null 2>&1; then
-  run_timing rust_floor "Rust control, no black_box (DCE floor)" Rust required "same loop with black_box removed" "$BUILD/tide-rs-floor"
+  run_timing rust_floor "Rust control, no black_box (optimizer floor)" Rust required "same loop with black_box removed" "$BUILD/tide-rs-floor"
 fi
-run_timing go_floor "Go control, local slice (DCE floor)" Go required "same loop with the global sink removed" "$BUILD/tide-go-floor"
-run_timing legacy_floor "QuarkLang compiled, legacy shape (DCE floor)" QuarkLang optional "allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured" "$BUILD/tide-qk-legacy"
+run_timing go_floor "Go control, local slice (optimizer floor)" Go required "same loop with the global sink removed" "$BUILD/tide-go-floor"
+run_timing legacy_floor "QuarkLang compiled, legacy shape (dead-code floor)" QuarkLang optional "allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured" "$BUILD/tide-qk-legacy"
 
 # Interpreter block-policy unit workload: counters, not wall time.
 POLICY="$(go run ./bench/tide/policy -waves 10000 -frag-waves 1000)"
@@ -185,6 +200,7 @@ print_record() {
   printf '# flags\t%s\n' "$STRICT"
   printf '# counted\t%s\n' "$COUNTED"
   printf '# skipped\t%s\n' "$SKIPPED"
+  printf '# evidence\t%s\n' "$EVIDENCE"
   printf '# columns\tkind\tkey\tlabel\tlanguage\trounds\truns\tmedian\tunit\tmin\tmax\tstdev\tspread_pct\tchecksum\tnote\n'
   cat "$ROWS"
 }
