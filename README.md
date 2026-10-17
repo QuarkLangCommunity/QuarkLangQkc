@@ -57,16 +57,24 @@ go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integ
 
 ```sh
 # ⑤ Install the compiler as a Go module (no checkout; requires Go ≥ 1.26)
-go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.0
+go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.1
 ```
 
-`v1.1.0` is the first tag that carries the public module path with the compiler inside the root module.
-The `v2.x` project tags are not Go module versions for this path, so `@latest` resolves to `v1.1.0`;
-see `docs/module-consumability.md` for the measurement and the tag rule.
+`v1.1.1` is the current Go module version, and the module is the supported distribution path for the
+compiler: the tag carries the public module path with the compiler inside the root module. The `v2.x`
+project tags are not Go module versions for this path, so `@latest` resolves to `v1.1.1`; see
+`docs/module-consumability.md` for the measurements and the tag rule.
 
-> Releases ship both **versioned** assets (`quark-2.1.0-linux-amd64`) and **version-less aliases**
-> (`quark-linux-amd64`) so scripts can pin a stable URL. Verify downloads against
-> `MANIFEST-<version>-<platform>.txt` (sha256).
+`v1.1.0` was the first consumable module tag but has **no release assets**: its tag-triggered
+`release.yml` run failed because the workflow pinned Go 1.21 while `go.mod` requires Go 1.26. `v1.1.1`
+was tagged after that pin was fixed, so it is the first tag that is both consumable as a module and has
+published assets. The Go module line advances independently of the project's `VERSION`/release numbering
+(`2.1.0`).
+
+> Project releases such as `v2.1.0` ship both **versioned** assets (`quark-2.1.0-linux-amd64`) and
+> **version-less aliases** (`quark-linux-amd64`) so scripts can pin a stable URL. Verify downloads against
+> `MANIFEST-<version>-<platform>.txt` (sha256). The `v1.1.1` module release publishes the version-less
+> binaries built by `release.yml`.
 
 <details>
 <summary>Building from source: full notes (interpreter / compiler dependencies)</summary>

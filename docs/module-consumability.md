@@ -1,8 +1,9 @@
 # Module consumability: making `compiler` installable from outside the checkout
 
-**Status:** implemented on 2026-10-17 as Option A; `v1.1.0` is the first tag whose module is
-consumable from outside the checkout. This document records what was measured, what the options cost,
-and what was applied.
+**Status:** implemented on 2026-10-17 as Option A. `v1.1.0` is the first tag whose module is consumable
+from outside the checkout; `v1.1.1` is the current Go module version and the first module release with
+published binaries. The module is the supported distribution path. This document records what was
+measured, what the options cost, and what was applied.
 
 The compiler is the only part of the toolchain a user is expected to install as a Go module. Today it can
 only be built from a clone. This note reproduces the failures, explains why the committed `replace` is
@@ -189,11 +190,22 @@ Option A was executed exactly as proposed, plus one mechanical move that the pro
 4. CI no longer builds and tests the same tree twice, and `scripts/coverage.sh` reports one module instead
    of the root module plus the compiler module.
 
-The tag is **`v1.1.0`**: the module path has no `/v2` suffix, so the existing `v2.0.0` and `v2.1.0` tags
-cannot be Go module versions for this path (`go get …@v2.x.y` is rejected outright). `v1.1.0` continues the
-only usable line, `v1.0.0`; it is the first tag whose `go.mod` declares the public module path and contains
-the compiler. `@latest` resolves to it because higher tags are invalid for this path. The project's own
-`VERSION` file and release numbering (`2.1.0`) remain independent of the Go module's `v1.x` line.
+The first tag after the change was **`v1.1.0`**: the module path has no `/v2` suffix, so the existing
+`v2.0.0` and `v2.1.0` tags cannot be Go module versions for this path (`go get …@v2.x.y` is rejected
+outright). `v1.1.0` continues the only usable line, `v1.0.0`; it is the first tag whose `go.mod` declares
+the public module path and contains the compiler. It has **no release assets**: its tag-triggered
+`release.yml` run failed because the workflow pinned Go 1.21 while `go.mod` requires Go 1.26 (the runner
+runs with `GOTOOLCHAIN=local`, so it does not auto-upgrade the toolchain).
+
+The current module version is **`v1.1.1`**, tagged on the `main` commit that carries the release-workflow
+fix (#121, `609811c`). It is the first tag that is both consumable as a module and has published release
+assets. `@latest` resolves to it because higher tags are invalid for this path. The project's own
+`VERSION` file and release numbering (`2.1.0`) remain independent of the Go module's `v1.x` line, and the
+module is the supported distribution path; the tag-triggered binaries are a convenience for users who do
+not want a Go toolchain.
+
+`v1.1.0` is immutable and remains without assets by history; do not move or re-cut it. The fix applies to
+later tags only.
 
 Consequences: build and test commands written as `(cd compiler && go build ./...)` keep working, because
 the directory still exists and Go finds the root module from it. Any future Go module tag must stay on the

@@ -295,8 +295,9 @@ The three Go modules in play:
   layer out broke CI on all three platforms".
 - **One module**: `compiler/go.mod`, `compiler/go.sum` and `bench/go.mod` were removed on 2026-10-17. The
   compiler's relative `replace` and its duplicate parser pin went with them, so
-  `go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.0` now works outside the checkout
-  (`docs/module-consumability.md` §5).
+  `go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.1` now works outside the checkout
+  (`docs/module-consumability.md` §5). `v1.1.0` is the first consumable version but has no release assets
+  (its tag-triggered run hit the old Go 1.21 pin); `v1.1.1` is the current module version.
 - **Verified by**: `go build ./...` + `go test ./...` on three OSes (`.github/workflows/ci.yml:28-31`).
   Locally the same two commands cover the root packages and `compiler/...` in one run; the gate is
   recorded in the PR that applied this change.
