@@ -9,6 +9,12 @@
  * combinatorial table: the x64 convention itself has four integer and four vector argument registers
  * and passes every later argument on the stack.
  *
+ * The two x64 conventions assign those registers differently. On Windows the register index is the
+ * argument's position: argument i at i < 4 uses the i-th integer register (RCX/RDX/R8/R9) or the i-th
+ * vector register (XMM0-XMM3) according to its class, and every argument from position 4 on travels on
+ * the stack. On System V the classes are counted separately: the sixth integer argument and the ninth
+ * vector argument, wherever they appear, are the first stack arguments.
+ *
  * The same dispatcher is compiled on a POSIX host for the local regression test, with the System V
  * register file (six integer, eight vector registers, no shadow space) and the same classification
  * code, so the logic that decides register versus stack can be exercised without Windows. The thunk
@@ -43,6 +49,9 @@ const char* qk_dlerror(void) { return "LoadLibrary/GetProcAddress failed (win32)
 
 /* The most arguments one call may carry; the same bound the libffi backends use. */
 #define QK_CALL_MAX_ARGS 32
+
+/* The Microsoft x64 rule maps each of the first four argument positions to the same-index register. */
+#define QK_CALL_WIN_REGS 4
 
 /* One prepared call: the classifier fills the register file and the stack slots, and the thunk runs it. */
 typedef struct {
@@ -153,6 +162,23 @@ __attribute__((naked)) static void qk_call_invoke(qk_call* c) {
 }
 #endif
 
+/* qk_is_float reports whether an FFI type code occupies a vector register. */
+static int qk_is_float(int type) { return type == 2 || type == 3; }
+
+/* qk_lay_out reports where argument k goes (0 integer register, 1 vector register, 2 stack) and its slot; win64 selects the assignment rule. */
+static int qk_lay_out(int win64, int k, int is_float, int *ni, int *nf, int *ns, int *slot) {
+    if (win64) {
+        if (k < QK_CALL_WIN_REGS) { *slot = k; return is_float; }
+    } else if (is_float) {
+        if (*nf < QK_CALL_FREGS) { *slot = (*nf)++; return 1; }
+    } else if (*ni < QK_CALL_IREGS) {
+        *slot = (*ni)++;
+        return 0;
+    }
+    *slot = (*ns)++;
+    return 2;
+}
+
 /* qk_ffi classifies the declared signature, runs the call through the thunk and decodes the return. */
 int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs, int n,
            int rettype, int64_t* ret_i, double* ret_f, void* ret_slot) {
@@ -193,10 +219,17 @@ int qk_ffi(void* fn, const int* types, const double* nums, void** ptrs, int n,
             v = (uint64_t)ptrs[k];
             break;
         }
-        if (is_float) {
-            if (nf < QK_CALL_FREGS) call.freg[nf++] = v; else stack[ns++] = v;
-        } else {
-            if (ni < QK_CALL_IREGS) call.ireg[ni++] = v; else stack[ns++] = v;
+        {
+            int slot = 0;
+            int cls;
+#ifdef QK_CALL_WIN64
+            cls = qk_lay_out(1, k, is_float, &ni, &nf, &ns, &slot);
+#else
+            cls = qk_lay_out(0, k, is_float, &ni, &nf, &ns, &slot);
+#endif
+            if (cls == 0) call.ireg[slot] = v;
+            else if (cls == 1) call.freg[slot] = v;
+            else stack[slot] = v;
         }
     }
     call.fn = fn;

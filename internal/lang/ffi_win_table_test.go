@@ -70,6 +70,17 @@ int main(void) {
       rc = qk_ffi((void*)h6, ty, nu, pt, 6, 1, &ri, &rf, &rp);
       check_i("six int arguments", rc ? -999 : ri, h6(1,2,3,4,5,6)); }
 
+    /* The Microsoft x64 layout, checked off-Windows: position, not per-class order, chooses the register. */
+    { int ty[18] = {3,1,2,3,1,2,3,1,3,1,2,3,1,1,1,1,1,3};
+      static const int want_where[18] = {1,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2};
+      static const int want_slot[18]  = {0,1,2,3,0,1,2,3,4,5,6,7,8,9,10,11,12,13};
+      int where[18], slot[18], ni = 0, nf = 0, ns = 0, ok = 1, k;
+      for (k = 0; k < 18; k++) {
+          where[k] = qk_lay_out(1, k, qk_is_float(ty[k]), &ni, &nf, &ns, &slot[k]);
+          if (where[k] != want_where[k] || slot[k] != want_slot[k]) ok = 0;
+      }
+      check_i("Microsoft x64 positional layout", ok, 1); }
+
     { int ty[17]; double nu[17]; void* pt[17] = {0};
       for (int i = 0; i < 17; i++) { ty[i] = 1; nu[i] = i + 1; }
       rc = qk_ffi((void*)h17, ty, nu, pt, 17, 6, &ri, &rf, &rp);
