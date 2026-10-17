@@ -1,0 +1,21 @@
+// The design's tide shape with an observable use: allocate a List<int>, grow it, read it, release it,
+// repeat. Stage 1 routes the allocation through the opaque counted-slab runtime, so this program can
+// no longer be optimized into the 1 ms "DCE floor" the design measured; the before/after numbers are
+// in docs/compiled-memory-stage1.md.
+fn main(IOStream io) void {
+    int i = 0;
+    int acc = 0;
+    while (i < 2000000) {
+        List<int> a = [i % 7, i % 11, i % 13];
+        a.append(i % 17);
+        int n = a.size();
+        acc = acc + a.get(0) + a.get(n - 1);
+        if (i % 1000 == 0) {
+            String s = a.toString();
+            acc = acc + s.size();
+        }
+        delete a;
+        i = i + 1;
+    }
+    io.println(acc);
+}

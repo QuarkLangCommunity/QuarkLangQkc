@@ -8,6 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+/* Set before the first worker thread exists. A program that has not started the task pool cannot
+ * allocate from two threads, so the allocator skips its lock there (design R2's "no lock when
+ * single-threaded"); the pool sets this to 1 before creating workers. */
+static volatile int ql_mem_multithreaded;
+
 #ifdef _WIN32
 /* Windows backend: _beginthreadex + SRWLOCK + CONDITION_VARIABLE (user-space API unchanged) */
 #include <process.h>
@@ -51,6 +57,11 @@ void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long l
     ql_task* t = qtasks[id]; if (!t) return;
     t->fn = fn; t->args[0] = a0; t->args[1] = a1; t->args[2] = a2; t->args[3] = a3;
     t->args[4] = a4; t->args[5] = a5; t->args[6] = a6; t->args[7] = a7; t->done = 0;
+#if defined(__GNUC__) || defined(__clang__)
+    /* This branch is not compiled by today's qkc (compiler/main.go returns no runtime source on
+     * Windows), but if it is ever linked the allocator must stop taking its single-threaded path. */
+    __atomic_store_n(&ql_mem_multithreaded, 1, __ATOMIC_RELEASE);
+#endif
     _beginthreadex(0, 0, runner_w, t, 0, 0);
 }
 void ql_block(int id) { if (id <= 0 || id >= QMAXTASK) return; ql_task* t = qtasks[id]; if (!t) return; while (1) { AcquireSRWLockExclusive(&t->mu); int d = t->done; ReleaseSRWLockExclusive(&t->mu); if (d) break; } }
@@ -137,6 +148,9 @@ static void* qworker(void* p) {
 }
 static void qpool_ensure(void) {
     if (qpool_started) return;
+    /* Store before pthread_create: a reader that still sees 0 is before any worker exists, and a
+     * task cannot run until after qpush(), which is after this store. */
+    __atomic_store_n(&ql_mem_multithreaded, 1, __ATOMIC_RELEASE);
     for (int i = 0; i < QPOOL_N; i++) pthread_create(&qpool[i], 0, qworker, 0);
     qpool_started = 1;
 }
@@ -315,6 +329,7 @@ static void ql_mem_assert_fail(int line, const char* expr) {
 
 static void ql_mem_lock(void) {
 #if defined(__GNUC__) || defined(__clang__)
+    if (!__atomic_load_n(&ql_mem_multithreaded, __ATOMIC_ACQUIRE)) return;
     while (__atomic_exchange_n(&ql_mem_lock_word, 1, __ATOMIC_ACQUIRE)) {
 #if defined(__x86_64__) || defined(__i386__)
         __builtin_ia32_pause();
@@ -327,6 +342,7 @@ static void ql_mem_lock(void) {
 
 static void ql_mem_unlock(void) {
 #if defined(__GNUC__) || defined(__clang__)
+    if (!__atomic_load_n(&ql_mem_multithreaded, __ATOMIC_RELAXED)) return;
     __atomic_store_n(&ql_mem_lock_word, 0, __ATOMIC_RELEASE);
 #endif
 }
@@ -619,10 +635,32 @@ void* ql_realloc(void* ptr, size_t size) {
         ql_mem_unlock();
         return ptr;
     }
-    fresh = ql_mem_alloc_locked(size, 0);
-    if (!fresh) {
-        ql_mem_unlock();
-        return 0;
+    /* The list growth paths ask for 2*tail elements, so once tail passes half the capacity the
+     * request grows by one element at a time. A realloc implementation that always allocates exactly
+     * the request would copy the whole buffer on nearly every append (O(n^2)); the host realloc gets
+     * away with it because it can often extend in place. The counted-slab large path cannot grow in
+     * place, so it keeps the doubled capacity it allocated and satisfies subsequent grew-in-place
+     * requests from it. This is ordinary realloc slack (the returned block may be larger than asked),
+     * only the bookkeeping reports the requested size. */
+    {
+        size_t grow = size;
+        ql_obj_hdr* nh;
+        if (size > ql_mem_class_size[QL_MEM_CLASS_COUNT - 1] && capacity <= (size_t)-1 / 2) {
+            size_t doubled = capacity * 2;
+            if (doubled > grow) grow = doubled;
+        }
+        fresh = ql_mem_alloc_locked(grow, 0);
+        if (!fresh) {
+            ql_mem_unlock();
+            return 0;
+        }
+        nh = (ql_obj_hdr*)((char*)fresh - QL_MEM_OBJ_HDR);
+        if (grow != size) {
+            QL_MEM_ASSERT(nh->kind == QL_MEM_KIND_LARGE);
+            QL_MEM_ASSERT(nh->requested == grow);
+            ql_mem_used_total -= grow - size;
+            nh->requested = size;
+        }
     }
     memcpy(fresh, ptr, old_requested < size ? old_requested : size);
     ql_mem_free_locked(ptr);

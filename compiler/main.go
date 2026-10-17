@@ -50,6 +50,8 @@ func cacheDir() string {
 // engineVersion is the compiler/runtime generation: it must be bumped on any cgen/macro-expansion behavior change,
 // to keep the IR/binary cache from returning artifacts of an old engine (a past trap: the macro-expansion mode and the done-bool fix were swallowed by the cache).
 // 14: the macro step hands cgen its tokens instead of printed source, so a string literal inside a macro keeps its quotes.
+// 15: stage 1 routes the code generator's allocations through the compiled runtime's counted-slab allocator
+// (except on Windows, where the runtime is still not linked).
 const engineVersion = "15"
 
 // version is the release version: injected at build time via -ldflags "-X main.version=vX.Y.Z".

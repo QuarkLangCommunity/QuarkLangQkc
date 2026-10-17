@@ -2465,6 +2465,11 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 		}
 	case tMemory:
 		switch name {
+		case "Fragmentation":
+			// The standard names the inspection primitive; neither engine exposes it, and stage 1 only
+			// supplies the compiled runtime's internal accessor. Name the situation instead of letting the
+			// generic "no method" message read as a typo.
+			return nil, c.errfID(pos, i18n.MsgTypecheckMemoryFragmentationNotExposedYet)
 		case "clear":
 			if err := c.checkArity(name, 0, len(args), pos); err != nil {
 				return nil, err

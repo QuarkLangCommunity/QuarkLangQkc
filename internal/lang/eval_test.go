@@ -231,6 +231,35 @@ fn main(IOStream io) {
 	}
 }
 
+// TestDeleteRunsStructDeleteMethod pins the interpreter's __delete__ dispatch: release runs the
+// method before the storage is returned, so a struct that declares it can observe the release. Stage 1
+// does not widen the compiled path's delete domain (a struct delete is still a positioned hard error
+// there; see compiler/internal/cgen/delete_surface_test.go), but the interpreter half must keep working.
+func TestDeleteRunsStructDeleteMethod(t *testing.T) {
+	out, err := runSrc(t, `
+type struct {
+    int n;
+} P;
+
+impl {
+    fn __delete__(P self) void {
+        self.n = 0;
+    }
+} P;
+
+fn main(IOStream io) {
+    P p = .{n: 5};
+    delete p;
+    io.println(p.n);
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "0\n" {
+		t.Fatalf("got %q", out)
+	}
+}
+
 func TestImplConformanceError(t *testing.T) {
 	withLocalizer(t, i18n.New(i18n.ZH)) // asserts the Chinese wording; English rendering is covered by this package's i18n tests
 	src := `

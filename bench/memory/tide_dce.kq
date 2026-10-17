@@ -1,0 +1,12 @@
+// The historical tide shape with no observable use of the list: allocate, delete, repeat. LLVM is
+// entitled to erase the whole allocation on the pre-stage-1 libc path, so this is the DCE floor row,
+// not a memory measurement. It is checked in to keep the before/after honest about what changed.
+fn main(IOStream io) void {
+    int i = 0;
+    while (i < 2000000) {
+        List<int> a = [1, 2, 3];
+        delete a;
+        i = i + 1;
+    }
+    io.println(i);
+}

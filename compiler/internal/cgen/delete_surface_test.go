@@ -27,6 +27,10 @@ type memoryRefusal struct {
 
 // memoryRefusalCases lists the audited forms: one per declaration kind and one per memory operation.
 func memoryRefusalCases() []memoryRefusal {
+	return append(deleteRefusalCases(), memoryCallRefusalCases()...)
+}
+
+func deleteRefusalCases() []memoryRefusal {
 	return []memoryRefusal{
 		{
 			name: "delete a by-reference List<int> parameter",
@@ -62,24 +66,36 @@ func memoryRefusalCases() []memoryRefusal {
 			line: 3,
 		},
 		{
+			name: "delete a struct",
+			src:  "type struct { int n; } P;\nfn main(IOStream io) {\n    P p;\n    delete p;\n}\n",
+			id:   i18n.MsgCompilerDeleteQNotSupportedCompilerHandles,
+			args: []any{"p"},
+			line: 4,
+		},
+	}
+}
+
+func memoryCallRefusalCases() []memoryRefusal {
+	return []memoryRefusal{
+		{
 			name: "memory.clear",
 			src:  "fn main(IOStream io) {\n    memory.clear();\n}\n",
-			id:   i18n.MsgCompilerCallingMethodSOnSNot,
-			args: []any{"?", "clear"},
+			id:   i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1,
+			args: []any{"clear"},
 			line: 2,
 		},
 		{
 			name: "memory.compact",
 			src:  "fn main(IOStream io) {\n    memory.compact();\n}\n",
-			id:   i18n.MsgCompilerCallingMethodSOnSNot,
-			args: []any{"?", "compact"},
+			id:   i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1,
+			args: []any{"compact"},
 			line: 2,
 		},
 		{
 			name: "memory.setBlock",
 			src:  "fn main(IOStream io) {\n    memory.setBlock(1024);\n}\n",
-			id:   i18n.MsgCompilerCallingMethodSOnSNot,
-			args: []any{"?", "setBlock"},
+			id:   i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1,
+			args: []any{"setBlock"},
 			line: 2,
 		},
 	}

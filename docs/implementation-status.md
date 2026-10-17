@@ -16,7 +16,7 @@ be left out silently.
 
 | Construct | Checker | Interpreter | Compiler | Evidence |
 |---|---|---|---|---|
-| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (25 files); `compiler/testdata/cases_run/*.kq` (18 files) |
+| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (25 files); `compiler/testdata/cases_run/*.kq` (19 files) |
 | `bit`, `bits<N>` (1 <= N <= 32), `uchar` | accepts | runs | lowers | `internal/lang:TestBitsValuesAndMasking`; `internal/lang:TestBitsCallSpelling`; `compiler/testdata/cases/z_bits.kq` |
 | raw bits: `& \| ^ ~ << >>`, `b[i]` read/write, the three conversion meanings | accepts | runs | lowers | `internal/lang:TestBitsOperators`; `internal/lang:TestBitIndexing`; `internal/lang:TestBitsConversions`; `compiler/testdata/cases/z_bits.kq` |
 | bitwise family on int views, hex literals | accepts | runs | lowers | `internal/lang:TestBitwiseOperators`; `compiler/testdata/cases/z_bits.kq`; `compiler/testdata/cases/z_precedence.kq` |
@@ -27,7 +27,7 @@ be left out silently.
 | conditional directives: `#ifdef`, `#ifndef`, `#if`, `#endif`, `#define`, `#undef` | accepts | runs | lowers | `internal/lang:TestMacroCompilerBranchDropped`; `compiler/testdata/cases/x_if_family.kq`; `compiler/testdata/cases/x_if_complement.kq`; `compiler/testdata/cases/x_if_pair.kq`; `compiler/testdata/cases/x_if_macro_body.kq` |
 
 
-The parity corpus has **25** cases under `compiler/testdata/cases` and **18** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
+The parity corpus has **25** cases under `compiler/testdata/cases` and **19** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
 
 This table is the corrected form of the old hand-written list. That list grouped `===`, permission
 references, `&lvalue` and `p++` with the constructs both engines implement; the compiler refuses all
@@ -90,11 +90,11 @@ is unimplemented and recorded as a gap in §11.3.
 | permission-carrying references (`&rw u T`) | accepts | runs | refuses | `internal/lang:TestRefPermissionEnforcement`; `compiler/internal/cgen:TestInterpreterOnlyConstructsAreRefusedNotMiscompiled` | Interpreter-only; the compiler refuses the syntax outright. |
 | address-of `&lvalue` | accepts | runs | refuses | `internal/lang:TestRefPermissionEnforcement`; `compiler/internal/cgen:TestInterpreterOnlyConstructsAreRefusedNotMiscompiled` | Interpreter-only; writes through the reference reach the original storage there. |
 | reference move `p++` | accepts | runs | refuses | `internal/lang:TestReferenceMove`; `compiler/internal/cgen:TestInterpreterOnlyConstructsAreRefusedNotMiscompiled` | Interpreter-only; section 4 says the variable is re-bound and moving past the end is an error. |
-| `delete x;` | accepts | runs | partly | `internal/lang:TestDeleteReclaimsBlock`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete`; `compiler/internal/cgen:TestCompiledMemorySurfaceRefusesBothLocales`; `compiler/internal/cgen:TestDeleteOnOwnedListIntStillLowers`; `compiler/internal/cgen:TestDeleteOnCopydListIntParameterStillLowers`; `compiler/testdata/cases/z_delete_local.kq` | The interpreter releases any variable, including a by-reference parameter; the compiler releases an owned `List<int>` only (a local variable, or a `copyd` parameter's callee-owned copy) and refuses a by-reference parameter with a positioned hard error instead of the silent no-op it emitted before 0.8.10. |
-| `memory.setBlock(n)` | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Interpreter runs it with 1 <= n <= 2^20; the compiler refuses it. |
-| `memory.compact()` | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Interpreter runs it; the compiler refuses it. |
-| `memory.Fragmentation()` | accepts | absent | absent | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | The standard names it, but no member exists; the shared type checker refuses it before either engine. |
-| `memory.clear()` (derived, not a §10 primitive) | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Section 10 defines it as the derived wipe (release plus zero-fill); the interpreter runs it, the compiler refuses it. |
+| `delete x;` | accepts | runs | partly | `internal/lang:TestDeleteReclaimsBlock`; `internal/lang:TestDeleteRunsStructDeleteMethod`; `compiler:TestCompiledAllocatorAssertionsUnderStress`; `compiler/internal/cgen:TestRoutedAllocationsUseRuntimeAllocator`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete`; `compiler/internal/cgen:TestCompiledMemorySurfaceRefusesBothLocales`; `compiler/internal/cgen:TestDeleteOnOwnedListIntStillLowers`; `compiler/internal/cgen:TestDeleteOnCopydListIntParameterStillLowers`; `compiler/testdata/cases/z_delete_local.kq`; `compiler/testdata/cases_run/z_delete_churn.kq` | The interpreter releases any variable, including a by-reference parameter, and runs a struct `__delete__` before release; the compiler releases an owned `List<int>` through the stage-1 counted-slab allocator (a local variable, or a `copyd` parameter's callee-owned copy) and refuses a by-reference parameter with a positioned hard error instead of the silent no-op it emitted before 0.8.10. The other delete shapes stay positioned hard errors; stage 1 does not widen the domain. |
+| `memory.setBlock(n)` | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Interpreter runs it with 1 <= n <= 2^20; the compiler refuses it with the stage-1 message naming the runtime block allocator and the one supported memory operation (`delete` on an owned `List<int>`). |
+| `memory.compact()` | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Interpreter runs it; the compiler refuses it with the same stage-1 message naming the runtime block allocator and the supported delete surface. |
+| `memory.Fragmentation()` | accepts | absent | absent | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | The standard names it, but no member exists; the shared type checker refuses it before either engine, now with a message that names the compiled runtime's internal fragmentation counter and the open cross-engine definition (D8). |
+| `memory.clear()` (derived, not a §10 primitive) | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Section 10 defines it as the derived wipe (release plus zero-fill); the interpreter runs it, the compiler refuses it with the stage-1 message naming what is supported. |
 | `#ifn` | refuses | refuses | refuses | `internal/lang:TestIfnHasNoDefinedMeaning` | The standard names it and defines it nowhere; no engine gives it a meaning, so the following `#endif` is refused. The safer reading is `#if !(condition)`. |
 | `#expand` / `#run` | refuses | refuses | refuses | `internal/lang:TestExpandRunAreNotImplemented` | Both are refused with a top-level ParseError in both engines; the standard's node namespace is undefined (docs/primitives.md Q-3, Q-5). |
 
@@ -131,13 +131,16 @@ The four primitive rows and the derived `clear` are the surface §10 defines. Th
 implements one row in a narrowed form (`delete` on an owned `List<int>`: a local variable, or a `copyd`
 parameter's callee-owned copy, while a by-reference parameter is refused) and none of the other four;
 the interpreter implements three of the four rows plus `clear`, and `memory.Fragmentation` exists in
-neither. Closing the rest on the compiled path means writing the block policy into
-`compiler/qthreads.c.txt`, which is `malloc`/`calloc`-based today (24 allocation sites, no pools, no
-block sizes, nothing to hook), and then lowering the primitives plus `__delete__` dispatch into
-`compiler/internal/cgen`: a new allocator with a free list and an occupancy rule, runtime entry points,
-`memory.*` call lowering, and `delete` for every variable kind. Size: large — one design review of its
-own, not a correction. Until then the generated table is the honest statement of the divergence §10's
-scope sentence assumes away.
+neither. Stage 1 of the design ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) now puts the
+block policy in the runtime: counted slabs with size classes, a per-class free list, per-object release,
+occupancy and fragmentation accessors, `compact`, large-object blocks, and the code generator's 20
+initial allocation sites plus 4 growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/
+`ql_free`. What remains is language surface and ownership: lowering `memory.*`, `__delete__` dispatch
+and the decided `delete` domain in the compiled path, exposing `Fragmentation` in both engines or
+deciding not to, routing the runtime's own C allocations, task-end reclaim, and Windows (the runtime is
+still not linked there; the generator keeps the libc path). Stage 1 changes no normative text and no
+language surface, so this report keeps the divergence honest until stage 2 takes the decisions the
+design lists. Size: large — one design review of its own, not a correction.
 
 ## 11.4 What `docs/primitives.md` §7.6 asks for, and what this revision does not do
 

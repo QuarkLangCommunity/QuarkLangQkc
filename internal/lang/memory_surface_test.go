@@ -28,3 +28,20 @@ func TestMemoryPrimitivesRun(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// TestFragmentationRefusalNamesTheSituation pins the shared type checker's message for the one
+// standard primitive neither engine exposes. Stage 1 gives the compiled runtime an internal
+// fragmentation accessor, but exposing it (and making the two engines agree) is still D8.
+func TestFragmentationRefusalNamesTheSituation(t *testing.T) {
+	for _, L := range []i18n.Lang{i18n.EN, i18n.ZH} {
+		withLocalizer(t, i18n.New(L))
+		_, err := runSrc(t, `fn main(IOStream io) { io.println(memory.Fragmentation()); }`)
+		if err == nil {
+			t.Fatalf("%s: expected a refusal", L)
+		}
+		want := i18n.New(L).Msg(i18n.MsgTypecheckMemoryFragmentationNotExposedYet)
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("%s: error %q does not carry %q", L, err.Error(), want)
+		}
+	}
+}

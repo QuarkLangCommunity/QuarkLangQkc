@@ -32,7 +32,7 @@ some of them; this table says which reading the code implements and which decisi
 | D1 | **Staged (c), language allocations first.** The code generator's 20 initial allocation sites and 4 growth sites go through the allocator. The runtime's own C allocations stay on the host allocator, except `ql_any_copy_list`, which can return a `List<int>` that `delete` releases and is therefore routed too. | The design's stage 1 is "allocator in the runtime + cgen routing"; routing every C helper is stage 3. `ql_any_copy_list` is the one runtime allocation that can cross into a deletable language value. | Runtime-wide routing (D1 b/c) and the scope sentence in §10. |
 | D2 | **Option C, class-partitioned slabs.** A block is one slab of `setBlock(n)` bytes dedicated to one size class. | This is the design's recommendation and the only option that makes all four §10 rows meaningful. | The owner's blessing of the class-partitioned reading of "block" (D2 a vs b). |
 | D3 | **(a) per-object release, payload preserved, no zero on `ql_alloc`.** `ql_calloc` zeroes because callers asked for `calloc`; `ql_free` does not wipe. A later same-class allocation may therefore see the previous payload. | The standard's `delete` row says the payload is **not** wiped, and `memory.clear()` is named as the wiping operation. Stage 1 must not silently turn `delete` into a wiping operation. | The contradiction in §10's "so a released block never hands another value's bytes to the next user" (F5) is still a normative decision. If the owner chooses "never hand over old bytes", the allocator needs a zero-on-allocate or a generation/clear rule; that is a stage 2 change. |
-| D5 | **One global allocator lock in stage 1.** Allocations are thread-safe, but the eight-worker task pool serializes on the allocator fast path. Per-object `owner` is recorded, not enforced. | Correctness before ownership. Per-thread arenas and task-end reclaim are stage 3. | Per-thread arenas, cross-thread `delete`, task-end reclaim (D5). |
+| D5 | **One global allocator lock, engaged when the task pool starts.** Before the first task pool exists the process cannot allocate from two threads, so the fast path is lock-free (the design's R2 mitigation). Once `qpool_ensure` runs, every allocation takes the global lock. Per-object `owner` is recorded, not enforced. | Correctness before ownership, without paying for an uncontended atomic on every single-threaded allocation. The pool store happens before any worker exists or any task is queued. | Per-thread arenas, cross-thread `delete`, task-end reclaim (D5). |
 | D8 | **`ql_mem_fragmentation()` implements the design's §3.3 formula** (unused bytes inside live slabs and live large blocks, over those blocks' bytes) and is **not exposed to the language**. `ql_mem_occupancy()` is its complement. | The design's formula is the only definition that matches §10's "unused space inside live blocks". Exposing it or claiming cross-engine equality is a decision stage 1 does not take. | Exposure and cross-engine equality (D8 a/b/c). |
 | D10 | **(b) every routed allocation is observable.** The compiler emits an opaque `ql_alloc`/`ql_free` call for every routed allocation and never elides one. D10(a) is rejected for the routed surface. | The standard makes `delete`, `compact` and `Fragmentation` observable; an allocation that the optimizer removes is not part of the memory policy the standard describes. The benchmark must be able to see the allocator (T5). | Whether the owner wants (a) for some shapes, or (c) with an escape analysis. Stage 1 takes the conservative reading and accepts the measured cost (R1). |
 | D11 | **OOM and misuse are undefined at language level; assertions exist only under `QL_MEM_DEBUG`.** Release builds do not promise double-free/use-after-free detection. | §10 says releasing referenced storage is a programming error the runtime does not detect; adding a language-visible panic or generation check is a new guarantee. | The failure policy (D11 a/b/c). |
@@ -70,7 +70,7 @@ affects slabs created afterwards. When `n` is smaller than the minimum a class n
 enlarged to hold one slot; that limit is recorded here because D7 (what a too-small `n` means) is still
 open.
 
-`ql_free` reads the 32-byte object header immediately before the payload. Payloads from the host
+`ql_realloc` keeps the requested size in the header but may keep a larger capacity: on the large path it doubles the capacity when it moves, which is ordinary realloc slack and stops the list append loop from copying the whole buffer on every element once the tail passes half the capacity (design R6). `ql_free` reads the 32-byte object header immediately before the payload. Payloads from the host
 allocator are not accepted: every code-generator allocation is routed, and `ql_any_copy_list` is the only
 runtime C allocation routed. A release build treats a foreign pointer as undefined (D11); the debug build
 asserts.
@@ -83,7 +83,7 @@ asserts.
 | `void* ql_calloc(size_t count, size_t size, int owner)` | Zeroes `count * size` bytes; overflow returns NULL. |
 | `void* ql_realloc(void* ptr, size_t size)` | Same class (or same large capacity) keeps the pointer; otherwise allocate/copy/min/free. `ptr == NULL` allocates; `size == 0` releases and returns NULL. |
 | `void ql_free(void* ptr)` | Per-object release back to the class slab; `NULL` is a no-op; does not wipe the payload. |
-| `int ql_mem_set_block(int n)` | 1 for an accepted future slab size (`1 … 2^20`), 0 otherwise; existing slabs unchanged. |
+| `int ql_mem_set_block(int n)` | 1 for an accepted future slab size (`1 … 2^20`), 0 otherwise; existing slabs unchanged. (`memory.setBlock` still refuses; the language lowering is stage 2.) |
 | `void ql_mem_compact(void)` | Releases every slab with `used == 0` to the host; never moves a live object. |
 | `double ql_mem_fragmentation(void)` | `(live_bytes - used_bytes) / live_bytes`, or 0 when nothing is live. |
 | `double ql_mem_occupancy(void)` | `used_bytes / live_bytes`, or 0 when nothing is live. |
@@ -123,9 +123,53 @@ floor is reported separately from the real allocator path.
 
 ## 7. Measurements
 
-To be filled by the stage-1 run: the checked-in workload is `bench/memory/alloc_bench.c` (host vs counted
-slabs, with a `volatile` sink), run through `scripts/bench-mem.sh`; the end-to-end program shape is
-`bench/qk/list.qk`, and the churn parity case is `compiler/testdata/cases_run/z_delete_churn.kq`.
+Measured on 2026-10-17 on Linux 7.2.10 (x86-64), clang 22.1.8, with the checked-in workload
+`bench/memory/alloc_bench.c` (a `volatile` sink stores every returned pointer and the payload is
+touched, so the optimizer cannot delete the allocation). Reproduce with:
+
+```sh
+scripts/bench-mem.sh            # n=15 runs x 2,000,000 iterations per cell, ns/op
+```
+
+Before = the pre-stage-1 libc path; after = `ql_alloc`/`ql_calloc` + `ql_free`. The values are medians
+with the sample standard deviation across the 15 runs (full min/max in the script output).
+
+| op | bytes | libc median (sd) | counted-slab median (sd) | ratio |
+|---|---:|---:|---:|---:|
+| malloc | 16 | 4.15 (0.90) | 7.41 (0.95) | 1.79x |
+| malloc | 64 | 4.26 (0.59) | 5.89 (1.48) | 1.38x |
+| malloc | 512 | 4.00 (0.80) | 7.03 (1.38) | 1.76x |
+| malloc | 4096 | 12.82 (0.72) | 18.41 (1.29) | 1.44x |
+| malloc | 8192 | 12.41 (1.42) | 18.00 (1.07) | 1.45x |
+| calloc | 16 | 4.49 (0.68) | 9.36 (0.73) | 2.08x |
+| calloc | 64 | 4.64 (0.74) | 8.78 (1.00) | 1.89x |
+| calloc | 512 | 6.40 (0.52) | 10.70 (0.97) | 1.67x |
+| calloc | 4096 | 32.21 (3.37) | 33.64 (2.46) | 1.04x |
+| calloc | 8192 | 45.88 (1.52) | 48.63 (2.20) | 1.06x |
+
+**R2 is real.** For ordinary small allocations the counted slabs are **1.4–2.1× slower than glibc's
+tcache**, the range the design predicted (1.5–3×). The overhead is the per-object header, the free-list
+walk through the object header (the payload must not be overwritten, so the link cannot live in it), the
+class lookup, and the atomic fast path when the task pool is enabled. Large blocks and zeroed 4–8 KiB
+allocations are close to libc (1.04–1.45×). This is the price of an allocator the program can observe;
+stage 2/3 can inline the fast path or add per-thread arenas if the owner wants it back.
+
+The end-to-end shapes use two checked-in programs:
+
+| program | before (origin/main `0fc0808`) | after | ratio |
+|---|---:|---:|---:|
+| `bench/memory/tide_dce.kq` (allocate/delete, nothing observed) | 0.55 ms (sd 0.07, n=15) | 24.36 ms (sd 1.30) | 44x |
+| `bench/memory/tide_loop.kq` (allocate, append, read, toString every 1000th) | 31.66 ms (sd 8.34, n=15; min 15.57, max 31.95) | 63.85 ms (sd 0.15) | 2.02x (median) |
+| `bench/qk/list.qk` (1,000,000 appends) | 7.56 ms (sd 4.08) | 7.63 ms (sd 3.94) | 1.01x |
+
+The first row is the design's R1 in one line: the old binary was fast because LLVM erased the allocation
+(the DCE floor), not because the allocator was good. The second row is the same program with an
+observable use; the after path is not just slower, it is **stable**, which is what a real allocator looks
+like. The append shape does not regress: `ql_realloc`'s large-path slack avoids the O(n²) copy an
+exactly-sized realloc would have caused once the list tail passed half its capacity.
+
+The parity churn case `compiler/testdata/cases_run/z_delete_churn.kq` exercises the same delete/reallocate
+path under `compare.sh`; its output is byte-identical in both engines.
 
 ## 8. What still hard-errors
 
