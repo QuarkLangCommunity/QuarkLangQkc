@@ -8,7 +8,6 @@
 package statusgen
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -95,7 +94,8 @@ func Run(opts Options) error {
 		if err != nil {
 			return fmt.Errorf("read %s: %w", display(absRoot, outPath), err)
 		}
-		if !bytes.Equal(old, rendered) {
+		want := strings.ReplaceAll(string(old), "\r\n", "\n")
+		if want != string(rendered) {
 			return fmt.Errorf("%s is out of date: run `go generate ./internal/statusgen`", display(absRoot, outPath))
 		}
 		return nil
@@ -399,7 +399,7 @@ func corpusCountOf(root string) (corpusCount, error) {
 
 // render substitutes the generated tables and the corpus count into the authored template.
 func render(root string, claims []claim, tmpl []byte, corpus corpusCount) ([]byte, error) {
-	text := string(tmpl)
+	text := strings.ReplaceAll(string(tmpl), "\r\n", "\n")
 	replacements := map[string]string{
 		"{{table:11.1}}": renderBoth(root, claims, "11.1"),
 		"{{table:11.3}}": renderDivergences(root, claims),
