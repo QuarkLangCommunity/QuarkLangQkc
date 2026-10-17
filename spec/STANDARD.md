@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8.8 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.9 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -26,7 +26,7 @@ it, and `compiler/testdata/compare.sh` must keep printing `all identical (interp
 4. **One semantic reference.** The tree-walking interpreter defines behaviour; the native compiler must
    match it bit for bit. A construct the compiler cannot lower is a **hard error**, never a silent
    difference. The parity gate proves *interpreter == compiler*, not *code == this document*: a rule both
-   engines implement the other way round, or a feature both engines omit, leaves it green, so §11.3 lists
+   engines implement the other way round, or a feature both engines omit, leaves it green, so the status report cited by §11 lists
    what it cannot see.
 5. **The core may shrink, never grow.** Legacy built-ins are migrated onto library types; the count of
    built-in containers is frozen by a test. Simplification counts as shrinkage: where there were six
@@ -275,9 +275,9 @@ The difference between the two, spelled out:
 
 - **Legacy spellings** (`long`, `double`, `pointer T`, and `char` used as a narrow integer) are
   implementation compatibility, not standard; they are being migrated onto the views of §3.2 — a `char`
-  used as a narrow integer becomes `uchar`. §11.1 records what each one means in the implementation today.
+  used as a narrow integer becomes `uchar`. The status report cited by §11 records what each one means in the implementation today.
 - **Legacy built-ins still present** (`List`, `HashTable`): scheduled for migration onto library types.
-  Their presence is frozen by a test — the count may only go down. See §11.3.
+  Their presence is frozen by a test — the count may only go down. See the status report cited by §11 (§11.3).
 
 ## 10. Memory and lifetime
 
@@ -310,190 +310,12 @@ and the permission system of §4 is what keeps it visible at compile time.
 
 ## 11. Implementation status
 
-This section is **not normative**: it records how far the code has caught up with §1–§10, so a reader can
-tell the specification from the implementation. The standard is the source of truth — where the two
-differ, the code is wrong.
-
-### 11.1 Implemented, in both engines
-
-- `bit`, `bits<N>` for `1 ≤ N ≤ 32`, and `uchar`: the bitwise family, `b[i]` read and write, the three
-  conversion meanings of §3.4, and unsigned decimal printing. `compare.sh` keeps the interpreter and the
-  compiler identical on every corpus case.
-- the bitwise family on int views, hex literals, `===` storage identity, permission references, `&lvalue`
-  and the reference move `p++`.
-- the legacy spellings of §9 that §3.2 does not define, each folded onto the view this implementation
-  lowers: `char` is the int view (`internal/lang/typecheck.go` maps it to `tInt`), `double` is the 64-bit
-  float view this implementation spells `float` (see §11.2 on the width), `long` computes as the int view in
-  both engines (measured: `long x = 1000000000; x * 4` is `-294967296` in each), and `pointer T` is the
-  nullable handle `new T[n]` yields. Both engines accept them in a declaration, a parameter, a return type, a
-  struct field, a conversion (`char(66)`) and a `List` element (`List<char>` is `List<int>`, as the
-  interpreter's `char[]` is). `compiler/testdata/cases/z_legacy_views.kq` is the case that keeps the two
-  engines on one behaviour; before it, the interpreter accepted these spellings and the compiler refused them
-  with a hard error, which the parity gate could not see.
-- §5's precedence table at the shift level: `<<`/`>>` is *looser* than `+`/`-`, so `1 + 2 << 3` reads
-  `(1 + 2) << 3` = 24. Measured in both engines under `LANG=C.UTF-8` and `LANG=zh_CN.UTF-8`:
-
-  | Expression | Both engines | §5's order |
-  |---|---|---|
-  | `1 + 2 << 3` | 24 — `(1 + 2) << 3` | 24 — agrees |
-  | `1 << 2 + 3` | 32 — `1 << (2 + 3)` | 32 — agrees |
-  | `10 - 2 >> 1` | 4 — `(10 - 2) >> 1` | 4 — agrees |
-  | `1 + (2 << 3)` | 17 | 17 — agrees |
-  | `(1 + 2) << 3` | 24 | 24 — agrees |
-
-  The grouping is decided in the syntax layer, the pinned module
-  `github.com/QuarkLangCommunity/QuarkLangQkparser`, which now threads
-  `parseBitAnd → parseShift → parseAdd → parseMul` — that chain, and nothing in this checkout, is what
-  makes the three rows above print §5's values. It is also the only place they *can* be decided: that
-  parser erases the parenthesis node (its `TLParen` case returns the inner expression), so an engine
-  receives a tree whose operands are already grouped, and the two readings must therefore be two trees
-  when they leave the parser. `internal/lang/precedence_test.go` pins both facts — that
-  `1 + 2 << 3` and `(1 + 2) << 3` are one shape, and that `1 + (2 << 3)` is another — and
-  `compiler/testdata/cases/z_precedence.kq` pins one line per level of §5 against the standard rather
-  than against the other engine. §11.3 keeps the record of the divergence this closes; the change was
-  semantic (§5's order differs from C's and Go's), so it landed as its own reviewed change — three lines
-  and their comment in the syntax layer, pinned by `parser_precedence_test.go` there.
-- `List<float>`, and its §9 spelling `List<double>`, in both engines: the literal, the element read and
-  write, `append`, `size`/`get`/`toString`, for-in iteration and print. The compiler carries each element in
-  an i64 slot as a bit-cast double, so a float list stores the bits the interpreter's list stores, and both
-  engines render an element through one float spelling. §11.2 states what a float list still lacks; before
-  this, the interpreter accepted `List<double>` and the compiler refused it with a hard error — an engine
-  difference the parity gate cannot see, because no case exercised the construct.
-
-### 11.2 Limits of the current implementation
-
-- `bits<N>` with `N > 32` is refused by the shared frontend, with one identical message in both engines.
-- a width takes a decimal literal only, not an arbitrary constant expression.
-- reinterpreting `float`/`double` is refused: this implementation's `float` is 64-bit while §3.2 says
-  `float32`, so the widths cannot be trusted to agree yet.
-- a `List` element is `int`, `float` or `String` in the compiler, so `List<double>` is lowered as the
-  interpreter's `float` list, on every path the `List<int>` lowering has: literal, element read and write,
-  `append`, `size`/`get`/`toString`, for-in iteration and print. Both spellings work (`float`, and the §9
-  compatibility spelling `double`), and `List<char>` is *not* in this paragraph at all because it folds to
-  `List<int>`. Elements live in i64 slots each holding the element as a bit-cast double — the bit-cast the
-  other float paths use — and the runtime renders them through the same float spelling a bare float gets, so
-  a list and its elements cannot disagree. Measured in both engines: `compiler/testdata/cases/z_list_double.kq`
-  (no list printing, so it also runs under `lli` in `go test`) and `cases_run/z_list_double_print.kq` (the
-  print and `toString` paths, which need the linked runtime). What a `List<float>` still does not have is what
-  only the `int` list has: `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__` are refused with `List<float>.%s
-  is not supported yet (size/get/toString/append and for-in iteration are lowered)`; `delete` on a float list is
-  refused because the compiler releases a `List<int>` variable only (§11.3's §10 table); boxing one into
-  `interface{}` is not lowered; and printing a `List<int>` is still refused although a `List<String>` and a
-  `List<float>` print. A declaration without an initializer builds the interpreter's empty list where
-  `List<int>` still refuses one, because a null handle would fault the read paths — the lowerer synthesizes the
-  empty literal. Closing the rest needs an element type threaded through the method lowering, `delete`, the
-  boxing path and the zero-value path: one small change per path, and no new standard surface. `copyd
-  List<float>` is refused the way `copyd List<String>` is — deep-copying a float list is not lowered, and the
-  helper copies 4-byte elements of a `%List`, so copying a float list through it would be a silent miscompile
-  — but a float list *inside* a struct that is itself passed `copyd` is not covered by that refusal: it
-  reaches the struct deep-copy path, which emits invalid IR for a `List<int>` member too (measured on 0.8.4,
-  before this lowering, so it is a defect of that path and not of the element type).
-- layout: a `bits<N>` whose width is not 8, 16 or 32 occupies the next storage size in compiled structs
-  and is aligned to that type rather than to 1 as §3.1 requires. Values are exact; only layout rounds up.
-- call depth is capped at 8192 (`lang.MaxCallDepth`). A call made from a frame that deep is refused with
-  `StackOverflowError: recursion depth exceeded 8192` and the line of the refused call. The interpreter
-  counts the depth per call context and the compiler bakes the same counter into the generated code, so
-  both engines stop at the same depth — including a self tail call, which the compiler counts although it
-  needs no new native frame.
-- expression nesting is capped at 65536 levels (`lang.MaxExprDepth`, the parser module's
-  `qkparser.MaxExprDepth`). The depth is measured differently on the two paths that enforce it: the
-  parser counts recursion levels and refuses a deep parenthesis nest as a positioned `ParseError`,
-  `nesting is deeper than 65536 levels, the limit of this implementation: split the expression into
-  smaller statements`, while the type checker counts expression nodes and refuses a long operator chain
-  as `CompileError: expression nesting is deeper than 65536 levels, the limit of this implementation:
-  split the expression into smaller statements`. Both limits are explicit counters, never a probe of the
-  Go stack, so the three platforms answer alike.
-
-### 11.3 The code does not follow the standard here
-
-- **§7.2 `#ifn`.** §7.2 names `#ifn` in the conditional family and defines it nowhere. No engine gives it
-  a meaning: the shared preprocessor matches only `#if`/`#elif`, so `#ifn` opens no group and the following
-  `#endif` is refused with `#endif without a matching #if` in both engines. The safer reading, if the owner
-  ever defines it, is `#if !(condition)` — the complement of `#ifndef` — because it is the only reading that
-  derives from the existing conditional family without new surface. Until then this is a recorded gap, not
-  an implementation: `TestIfnHasNoDefinedMeaning` pins that a program using it is refused rather than
-  accepted with an invented meaning. Defining it needs a change in the pinned syntax layer and its own
-  parity case.
-- **§7.2 macro spelling.** The standard says `macro x($a $b) { … }`. The implementation still accepts
-  `#macro name (params) { body }` and rejects `$`. A change that made the code conform was proposed and
-  then rolled back; it has to come back as its own reviewed change.
-- **§8 no exceptions.** `try`/`catch` still exist in the parser, the AST, the evaluator, the linter and
-  the compiler, although the standard has no exceptions. They are scheduled for removal, after which
-  `Option<T>` and `Result<T, E>` are the only way to carry failure.
-- **§9 core minus containers.** `List` and `HashTable` are still built in; their count is frozen by a test.
-- **§5 shift precedence — closed in 0.8.4.** Kept here as the record of what the divergence was. §5 says:
-  "Precedence, loosest first: `||`, `&&`, `== != < <= > >=`, `|`, `^`, `&`, `<< >>`, `+ -`, `* / %`, then
-  the unary operators." Read as written, `<<`/`>>` is *looser* than `+`/`-` (C's grouping), so `1 + 2 << 3`
-  is `(1 + 2) << 3` = 24; both engines grouped it the other way (Go's), measured under `LANG=C.UTF-8` and
-  `LANG=zh_CN.UTF-8`:
-
-  | Expression | Both engines, before | §5's order |
-  |---|---|---|
-  | `1 + 2 << 3` | 17 — `1 + (2 << 3)` | 24 — `(1 + 2) << 3` |
-  | `1 << 2 + 3` | 7 — `(1 << 2) + 3` | 32 — `1 << (2 + 3)` |
-  | `10 - 2 >> 1` | 9 — `10 - (2 >> 1)` | 4 — `(10 - 2) >> 1` |
-  | `1 + (2 << 3)` | 17 | 17 — agrees |
-  | `(1 + 2) << 3` | 24 | 24 — agrees |
-
-  The cause was never in this repository: the syntax layer is the pinned module
-  `github.com/QuarkLangCommunity/QuarkLangQkparser`, whose parser called `parseShift` from `parseAdd`
-  (`parseAdd → parseShift → parseMul`), i.e. additive looser than shift. The fix is that chain's exchange
-  (`parseBitAnd` takes `parseShift`, `parseShift` takes `parseAdd`, `parseAdd` takes `parseMul`, plus the
-  comment above them), and it cannot be done in this checkout afterwards either: that parser erases
-  parentheses (its `TLParen` case returns the inner expression), so `1 + 2 << 3` and `1 + (2 << 3)` used to
-  reach both engines as **one and the same tree**, and no later pass could have given them 24 and 17. The
-  syntax layer carries the change (its PR QuarkLangQkparser#5, pinned here as
-  `v0.0.0-20261015231811-3de63a5ff52d`), the two readings are two trees again, and §11.1 carries the
-  measurement of the closed state. Of the 40 corpus cases the pin then covered — 23 under `cases/` and 17
-  under `cases_run/` — exactly one changed value, `z_precedence.kq`, and only its three shift rows (17, 7 and
-  9 become 24, 32 and 4); every other case is byte-identical in both engines, which was measured by running
-  each case through an engine built from the commit before the pin and one built after it. No existing
-  program in this repository changed.
-- **§10 memory on the compiled path.** §10 states its own scope: "This section describes the contract of
-  the compiled artifact; the reference interpreter implements that policy as a layer over its host
-  runtime's allocator." Measured per engine and per primitive:
-
-  | §10 row | Interpreter (`internal/lang`) | Compiled artifact (`compiler/`) |
-  |---|---|---|
-  | `delete x;` | any variable: runs `__delete__()` for a struct, then returns a `List`'s block to the free pool (`eval.go` `DeleteStmt`) | **only `List<int>` variables**; any other operand is a hard error, `delete %q is not supported (the compiler handles delete on a List variable only)` |
-  | `memory.setBlock(n)` | implemented, `1 ≤ n ≤ 2^20` (`eval.go` `MemoryManager`, `typecheck.go` `setBlock`) | none: `calling method ? on setBlock is not supported by the compiler (available in the interpreter)` |
-  | `memory.compact()` | implemented (`MemoryManager.Compact`) | none: same hard error |
-  | `memory.Fragmentation()` | **not exposed**: the member does not exist, although `MemoryManager.Fragmentation()` does (`eval.go`) | not exposed: the shared type checker refuses it first, `TypeError: no method "Fragmentation" on memory` |
-  | (`memory.clear()`, not a row of §10) | implemented | none: same hard error as `setBlock` |
-
-  So the compiled artifact implements one of §10's four rows, in a narrowed form, and the interpreter
-  implements three of them (one of those — `clear` — is not in §10's table at all). Closing the rest on
-  the compiled path means writing the block policy into `compiler/qthreads.c.txt`, which is `malloc`/
-  `calloc`-based today (24 allocation sites, no pools, no block sizes, nothing to hook), and then lowering
-  four primitives plus `__delete__` dispatch into `compiler/internal/cgen`: a new allocator with a free
-  list and an occupancy rule, three runtime entry points, `memory.*` call lowering, and `delete` for every
-  variable kind. Size: large — one design review of its own, not a correction. Until then this table is the
-  honest statement of the divergence §10's scope sentence assumes away.
-
-### 11.4 What `docs/primitives.md` §7.6 asks for, and what this revision does not do
-
-§7.6 lists twelve changes, smallest first, and calls the first nine pure restatement. This revision adopts
-the ones that are corrections or one-line facts and records the rest with their size, because a rewrite of
-a normative section is not a correction and §12 puts it behind the owner's ruling:
-
-| §7.6 | Item | State |
-|---|---|---|
-| 1 | generate §11 outside the standard | **not done**: it needs a new generator plus a drift gate of the `cmd/qki18n -check` kind, and it would remove the section this revision has just made accurate. Size: one tool and its gate |
-| 2 | add the two missing corpus kinds | **done**: `z_legacy_views.kq` (one case per §3.2 view row the standard claims is core) and `z_precedence.kq` (one line per precedence level, against §5 rather than against the other engine) |
-| 3 | record the tool/lint boundary in one sentence | **done**: the paragraph closing §1 |
-| 4 | state what `compare.sh` proves | **done**: the last sentence of §1.4 |
-| 5 | `stdlib/vec.qk`'s `pointer T`, or §3.2 corrected | **done as the correction**: `pointer T` is measured to exist in both engines and is what `new T[n]` yields, which `stdlib/vec.qk` is built on, so §3.2's claim that the spelling does not exist was the factual error |
-| 6 | delete `#ifdef`/`#ifndef` in favour of `#if defined(…)`, and `#ifn` | **not done as a deletion, done as the record**: deleting a spelling is surface removal, and the spellings live in the syntax layer's preprocessor (a sibling repository); §8's Q-4 recorded that `#ifn` is defined nowhere, and §11.3 now records that state with the safer reading (`#if !(condition)`) and pins the refusal with `TestIfnHasNoDefinedMeaning`. Defining or deleting it still needs the owner's ruling |
-| 7 | collapse `IndexOutOfBoundsError`/`IndexOutOfRangeError` to one id | **done as the opposite**: the two name different conditions — a container subscript and a bit subscript (or a reference moved past the end) — so §8 now defines each one and where it is raised, and the names stay distinct. The catalog rows and both runtime messages are unchanged; `internal/lang/error_names_test.go` pins one case of each and asserts the other name is absent |
-| 8 | reduce §4's 28 reference types to a `(set, rank)` algebra | **done as the reconciliation, not the rewrite**: Q-1 and Q-2 are answered in §4 without new surface — the reference variable may be re-bound with `m` while its referent does not move, the four scopes are one lifetime order `u > t > a > f`, `a` has no behaviour beyond that rank, and the empty permission set is not spellable because it would permit nothing. The 7 × 4 enumeration is exactly what the checker accepts, so reducing it to an algebra is a later simplification, not a correction |
-| 9 | reduce §10 to release + block granularity | **done as the reconciliation, not the rewrite**: Q-6 is answered in §10 without new surface — `delete` does not wipe, `memory.clear()` is the derived wipe (release plus zero-fill), and the four primitive rows plus that derived operation are the surface; the per-engine divergence for those rows stays in §11.3, so reducing the table further is a later simplification rather than a factual correction |
-
-§7.6's items 10–12 are the semantic ones: item 10 (`char`/`double`) was closed the way §7.6 offers — by
-lowering them in the compiler (§11.1) — and no program changes meaning; item 11 (shift precedence) is
-**closed** — the ruling was given, the syntax layer carries the three-line exchange, this checkout pins it,
-and §11.3 keeps the record of the divergence (§11.1 measures the closed state); item 12
-(`#expand`/`#run`/`macro x($a $b)`) is untouched, needs a definition of "node" (§8's Q-3, Q-5, and §11.3's
-macro item), and stays open.
+This section is **not normative**. The status report — what is implemented in both engines, what each
+engine refuses, the limits and the remaining divergences — is generated from machine-checkable facts into
+`docs/implementation-status.md`, and is not maintained by hand here. Its claims and their evidence live
+in `spec/status/claims.tsv`, the prose that cannot be generated lives in `spec/status/template.md`, and
+`go run ./cmd/qkstatus -check` (driven by `TestGeneratedStatusIsCurrent`) fails when the committed report
+is stale. The standard is the source of truth: where the code differs, the code is wrong.
 
 ## 12. Change policy and revision log
 
@@ -504,6 +326,7 @@ macro item), and stays open.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.9 | 2026-10-17 | **§11 is generated, not hand-written.** The section is now a citation to `docs/implementation-status.md`, rendered by `cmd/qkstatus` from `spec/status/claims.tsv` (each claim names the test or parity case that pins it) and `spec/status/template.md` (the prose that cannot be generated). Generation resolves every evidence reference, requires a test and both engine paths for each implemented claim, and checks that every parity case is covered; `TestGeneratedStatusIsCurrent` regenerates in memory and fails when the committed report is stale, in the same style as `cmd/qki18n -check`. The generated report corrects the old §11.1 list, which had grouped `===`, permission references, `&lvalue` and `p++` with the constructs both engines implement although the compiler refuses all four; they are §11.3 rows now. The report also carries §11.2's limits, the closed shift-precedence history, the §10 per-engine table and §11.4's item states. Status section only; no normative text changed, no language surface added |
 | 0.8.8 | 2026-10-17 | §4 and §10 now say the measured truth their open questions left unresolved, without new surface. §4 distinguishes the referent from the reference variable: a reference's storage does not move, while `p++` re-binds the variable holding either a reference or a pointer when it has `m`; the four scopes are one lifetime order `u > t > a > f`, `a` has no behaviour beyond that rank, and the seven permission spellings are complete because the empty set would permit nothing. §10 names `memory.clear()` as the derived wiping operation (release plus zero-fill) the `delete` row already refers to, so release does not wipe and the four primitive rows stay the surface. These answer `docs/primitives.md` Q-1, Q-2 and Q-6; §11.4's items 8 and 9 record them as reconciliations rather than rewrites. No syntax, type, operator or protocol was added |
 | 0.8.7 | 2026-10-17 | §11.3 records what §7.2 leaves open about `#ifn`: the standard names it and defines it nowhere, the shared preprocessor gives it no meaning (only `#if`/`#elif` open a group, so the following `#endif` is refused in both engines), and the safer reading — if it is ever defined — is `#if !(condition)`, the complement of `#ifndef`. The choice is to record the gap rather than invent the semantics: defining it needs surface and a syntax-layer change, while deleting it is surface removal, so both wait for the owner. `TestIfnHasNoDefinedMeaning` pins that the implementation refuses it instead of accepting an invented meaning. §11.4's item 6 is updated to the record. Status section only; no normative text changed, no language surface added |
 | 0.8.6 | 2026-10-17 | §8 defines the two index errors it used to leave ambiguous: `IndexOutOfBoundsError` is a container subscript outside `0 … size-1` (a `List` read or write), while `IndexOutOfRangeError` is a bit subscript outside `0 … N-1` (§3.3) or a reference moved past the end of its container (§4, interpreter-only today). The names stay distinct because they name different conditions and a user sees them; `internal/lang/error_names_test.go` pins one case each and asserts the other name is absent. The header's version number was stale at 0.8.3 while the log already carried 0.8.4 and 0.8.5; it now matches the log. Correction only; no language surface changed |
