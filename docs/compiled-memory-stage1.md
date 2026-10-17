@@ -187,6 +187,25 @@ path under `compare.sh`; its output is byte-identical in both engines.
 | `delete` on a by-reference parameter, a struct, a scalar, `List<String>`, `List<float>` | Unchanged positioned hard errors; the supported domain is named in the message. |
 | `memory.mode(...)` | Refused; not part of §10. |
 
+## 8b. Known limitations of this boundary
+
+- **Pre-stage-1 `.qklib` artifacts are not allocator-compatible.** A library built by an older qkc
+  emits `malloc`/`free`; a new program's `delete` calls `ql_free`, and old library code can call
+  `free` on a `ql_alloc` pointer. Rebuild libraries with the new engine (the qkc cache/engine version
+  is bumped to 15; the `.qklib` format itself is not changed here). This is the ABI side of R5/D1 and
+  is best handled by a library-engine stamp in stage 3.
+- **Aliasing `delete` is still undefined.** `List<int> a = [1]; List<int> b = a; delete b;` releases
+  storage `a` still refers to. The standard says releasing referenced storage is a programming error
+  the runtime does not detect; stage 1 does not add detection. The allocator's debug build catches a
+  double release of the same object, not an alias.
+- **Runtime C allocations remain outside the metric.** Strings, split lists, hash tables, memo buffers
+  and task/channel objects are still host allocations (D1 staged). `Fragmentation()` counts the routed
+  language allocations only.
+- **Failure/misuse behavior is undefined in release** (D11): OOM returns NULL (the old libc path did
+  not check it either), a foreign pointer is not accepted by `ql_free`, and only `QL_MEM_DEBUG` asserts.
+- **Windows has no allocator at all** (§5), and pre-stage-1 `.qklib` likewise cannot be assumed to use
+  the pool.
+
 ## 9. What stage 2 needs
 
 1. The owner's ruling on D2 (class-partitioned block), D3 (payload/reuse safety), D4 (delete domain),
