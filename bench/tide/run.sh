@@ -164,7 +164,7 @@ run_timing() { # usage: run_timing key label language checksum-mode note command
     --unit us --checksum "$checksum" --note "$note" >> "$ROWS"
 }
 
-NOTE_QK="`List<int>` literal + toString + opaque C sink + release + delete"
+NOTE_QK='`List<int>` literal + toString + opaque C sink + release + delete'
 NOTE_C="malloc(12) + 3 writes + volatile sink + free"
 NOTE_RUST="Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop"
 NOTE_GO="make([]int32,3) + global sink + GC"
