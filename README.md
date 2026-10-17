@@ -596,7 +596,8 @@ Written down on purpose — a young language is better judged by what it admits 
   builds (`QKM_OFFLINE=1`) and ships project templates (`qkm init -t app|cli|lib|gui|test`); `qkc -L` links `.qklib` artifacts.
 - **Macro system**: token-level macros are shared by both engines, but compile-time symbol insertion (`#ast`) and
   import resolution are still in progress.
-- **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
+- **FFI calls** carry at most 32 arguments on every backend; the Windows x64 shim passes arguments beyond the four
+  integer and four vector registers on the stack, and its error names that bound.
 - **Coverage is measured for the single Go module** by `scripts/coverage.sh`; the linter's statistical gates cover its generated corpus, not all code.
 - **Repository text is English-only**: comments, documentation and configuration carry no Chinese. The *runtime* is a
   separate matter: messages are authored in `internal/i18n/source/*.tsv` and rendered in the reader's language.
