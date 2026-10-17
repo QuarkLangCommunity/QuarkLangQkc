@@ -166,9 +166,9 @@ and a change of meaning that keeps the width is free rather than a conversion.
 
 **References and pointers are different things, not two spellings of one.** A reference (`&`) is an
 alias of storage; the storage it names does not move. A pointer (`*`) is an address value. `p++` advances
-either variable one element and rebinds the variable holding it (requires `m`), and moving past the end is
-an error rather than a dangling pointer: a reference is an address with a permission, and `m` is the bit
-that lets the address be re-bound.
+a pointer, or a reference that names a container element, one element and rebinds the variable holding it
+(requires `m`), and moving past the end is an error rather than a dangling pointer: a reference is an
+address with a permission, and `m` is the bit that lets the address be re-bound.
 
 Enforced statically, in the type checker, for declarations and assignments alike: writing needs `w`,
 reading needs `r`, moving needs `m`, a reference may not be stored in a wider-scoped variable, and a

@@ -835,8 +835,8 @@ an address with a permission — which is the model in §2.1, and `m` becomes th
 sentence changed.
 
 **Resolved, 2026-10-17 — the checker's reading, without new surface.** §4 now distinguishes the referent
-from the variable: a reference's storage does not move, while `p++` re-binds the variable holding either a
-reference or a pointer when it has `m`, so `m` is the movability bit. The implementation already did this
+from the variable: a reference's storage does not move, while `p++` re-binds the variable holding a pointer
+or a reference that names a container element when it has `m`, so `m` is the movability bit. The implementation already did this
 (`internal/lang/typecheck.go:1647-1666` for the type check, `internal/lang/eval.go:1626` for `moveRef`),
 and no syntax or type was added. The consequence stands: `D-11` is a composition; the 28-type enumeration
 in §4 is the surface and is correct.
