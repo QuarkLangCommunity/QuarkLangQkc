@@ -1,0 +1,7 @@
+fn main(IOStream io) {
+    List<int> xs = [1, 2, 3];
+    io.println(xs.size());
+    io.println(xs.get(1));
+    delete xs;
+    io.println(9);
+}

@@ -39,7 +39,7 @@ is unimplemented and recorded as a gap in §11.3.
   print and `toString` paths, which need the linked runtime). What a `List<float>` still does not have is what
   only the `int` list has: `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__` are refused with `List<float>.%s
   is not supported yet (size/get/toString/append and for-in iteration are lowered)`; `delete` on a float list is
-  refused because the compiler releases a `List<int>` variable only (§11.3's §10 table); boxing one into
+  refused because the compiler releases an owned `List<int>` only (§11.3's §10 table); boxing one into
   `interface{}` is not lowered; and printing a `List<int>` is still refused although a `List<String>` and a
   `List<float>` print. A declaration without an initializer builds the interpreter's empty list where
   `List<int>` still refuses one, because a null handle would fault the read paths — the lowerer synthesizes the
@@ -99,7 +99,8 @@ keeps it in one place so the fix is not mistaken for permission to relax the pin
 ### §10 memory on the compiled path
 
 The four primitive rows and the derived `clear` are the surface §10 defines. The compiled artifact
-implements one row in a narrowed form (`delete` on a `List<int>` variable) and none of the other four;
+implements one row in a narrowed form (`delete` on an owned `List<int>`: a local variable, or a `copyd`
+parameter's callee-owned copy, while a by-reference parameter is refused) and none of the other four;
 the interpreter implements three of the four rows plus `clear`, and `memory.Fragmentation` exists in
 neither. Closing the rest on the compiled path means writing the block policy into
 `compiler/qthreads.c.txt`, which is `malloc`/`calloc`-based today (24 allocation sites, no pools, no

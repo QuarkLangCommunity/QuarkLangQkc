@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/lang"
 )
 
@@ -41,8 +42,7 @@ func Transpile(src, filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	e := newEmitter(lp)
-	return e.emitProgram(lp), nil
+	return emitLowered(lp)
 }
 
 // TranspileTokens is Transpile for a main file whose macros the caller has already expanded: toks is that
@@ -64,8 +64,19 @@ func transpileProgram(prog *lang.Program, src, filename string) (string, error) 
 	if err != nil {
 		return "", err
 	}
+	return emitLowered(lp)
+}
+
+// emitLowered emits the IR of a lowered program. Lowering must have refused every construct the
+// emitter cannot encode, so an error recorded here is a compiler bug; it is returned rather than
+// silently dropping the construct, which is the policy the lowering layer already follows.
+func emitLowered(lp *lowered) (string, error) {
 	e := newEmitter(lp)
-	return e.emitProgram(lp), nil
+	ir := e.emitProgram(lp)
+	if e.err != nil {
+		return "", e.err
+	}
+	return ir, nil
 }
 
 // ---------- cgen IR ----------
@@ -578,6 +589,10 @@ type emitter struct {
 	needPanicBits  bool
 	needDepthGuard bool // the generated code counts call depth (see depthGuardHelper)
 	depthGuarded   bool // the function currently being emitted is a QL function, not the generated main
+
+	// err is the first code-generation error. The emitter never drops a construct silently: a shape
+	// that lowering should have refused is recorded here and returned by emitLowered.
+	err error
 }
 
 func newEmitter(lp *lowered) *emitter {
@@ -2386,31 +2401,31 @@ func (e *emitter) emitTry(st *tryStmt) {
 	e.setBlock(afterL)
 }
 
+// failID records the first code-generation error. A construct that reaches the emitter but cannot be
+// encoded has no IR to return, and a silent return here would be exactly the no-op the project forbids;
+// the error is carried back to the caller by emitLowered.
+func (e *emitter) failID(id i18n.Msg, args ...any) {
+	if e.err == nil {
+		e.err = &diagError{msg: msgID(id, args...)}
+	}
+}
+
 func (e *emitter) emitDelete(st *deleteStmt) {
 	info, ok := e.vars[st.name]
-	if !ok {
+	if !ok || info.ref || info.param || info.direct || info.typ != "List<int>" {
+		// Lowering accepts only an owned local List<int> variable, so this is unreachable for a program
+		// it accepted; it is still an error rather than a dropped release.
+		e.failID(i18n.MsgCompilerInternalDeleteQReachedCodeGeneration, st.name)
 		return
 	}
-	if info.ref {
-		return // by-reference parameter: the storage belongs to the caller and must not be freed here
-	}
-	if info.typ == "List<int>" {
-		lo := e.listObj(st.name)
-		p := e.listBuf(lo)
-		c := e.newReg()
-		e.emitInstr("%s = bitcast i32* %s to i8*", c, p)
-		e.emitInstr("call void @free(i8* %s)", c)
-		c2 := e.newReg()
-		e.emitInstr("%s = bitcast %%List* %s to i8*", c2, lo)
-		e.emitInstr("call void @free(i8* %s)", c2)
-		return
-	}
-	if info.param || info.direct {
-		return
-	}
+	lo := e.listObj(st.name)
+	p := e.listBuf(lo)
 	c := e.newReg()
-	e.emitInstr("%s = bitcast %s* %s to i8*", c, e.ir(info.typ), info.reg)
+	e.emitInstr("%s = bitcast i32* %s to i8*", c, p)
 	e.emitInstr("call void @free(i8* %s)", c)
+	c2 := e.newReg()
+	e.emitInstr("%s = bitcast %%List* %s to i8*", c2, lo)
+	e.emitInstr("call void @free(i8* %s)", c2)
 }
 
 func (e *emitter) emitIf(st *ifStmt) {

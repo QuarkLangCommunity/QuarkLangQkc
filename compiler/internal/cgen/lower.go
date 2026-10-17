@@ -799,6 +799,10 @@ type funcCtx struct {
 	top    *scope
 	logged bool // log appears in the body (the return value may be nil)
 
+	// byRefParams are the parameters whose storage belongs to the caller. Only a `copyd` parameter is a
+	// callee-owned copy; every other parameter is passed by reference, so the callee cannot release it.
+	byRefParams map[string]bool
+
 	// discarded is the current "value is discarded" call (a top-level call in an expression statement):
 	// the return value of a function containing log may be nil, so it may only be called in this position.
 	discarded *lang.CallExpr
@@ -842,7 +846,7 @@ func (fc *funcCtx) exprAs(x lang.Expr, want string) (*expr, error) {
 }
 
 func (l *lowerer) newCtx(fn, ret string) *funcCtx {
-	return &funcCtx{l: l, fn: fn, ret: ret, top: &scope{vars: map[string]string{}}}
+	return &funcCtx{l: l, fn: fn, ret: ret, top: &scope{vars: map[string]string{}}, byRefParams: map[string]bool{}}
 }
 
 func (fc *funcCtx) push() { fc.top = &scope{vars: map[string]string{}, parent: fc.top} }
@@ -912,6 +916,8 @@ func (l *lowerer) lowerFunc(f *lang.FuncDecl, irName, selfTyp, selfParam string,
 			if err := l.checkCopydType(pt, p.Pos, 0); err != nil {
 				return nil, err
 			}
+		} else {
+			fc.byRefParams[p.Name] = true
 		}
 		params = append(params, funcParam{name: p.Name, typ: pt, copyd: cp})
 	}
@@ -1177,6 +1183,13 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 		id, ok := st.X.(*lang.Ident)
 		if !ok {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnNonVariableExpressionNot)
+		}
+		// A by-reference parameter names the caller's list; releasing it here would free storage this
+		// callee does not own, and dropping the release silently would be a no-op the interpreter does
+		// not share. Refuse it with a position instead (a copyd parameter is a callee-owned copy and
+		// keeps the supported path).
+		if fc.byRefParams[id.Name] {
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnByReferenceParameterQNotSupported, id.Name)
 		}
 		if t, _ := fc.lookup(id.Name); t != "List<int>" {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteQNotSupportedCompilerHandles, id.Name)

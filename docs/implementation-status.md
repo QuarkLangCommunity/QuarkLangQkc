@@ -16,7 +16,7 @@ be left out silently.
 
 | Construct | Checker | Interpreter | Compiler | Evidence |
 |---|---|---|---|---|
-| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (24 files); `compiler/testdata/cases_run/*.kq` (18 files) |
+| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (25 files); `compiler/testdata/cases_run/*.kq` (18 files) |
 | `bit`, `bits<N>` (1 <= N <= 32), `uchar` | accepts | runs | lowers | `internal/lang:TestBitsValuesAndMasking`; `internal/lang:TestBitsCallSpelling`; `compiler/testdata/cases/z_bits.kq` |
 | raw bits: `& \| ^ ~ << >>`, `b[i]` read/write, the three conversion meanings | accepts | runs | lowers | `internal/lang:TestBitsOperators`; `internal/lang:TestBitIndexing`; `internal/lang:TestBitsConversions`; `compiler/testdata/cases/z_bits.kq` |
 | bitwise family on int views, hex literals | accepts | runs | lowers | `internal/lang:TestBitwiseOperators`; `compiler/testdata/cases/z_bits.kq`; `compiler/testdata/cases/z_precedence.kq` |
@@ -27,7 +27,7 @@ be left out silently.
 | conditional directives: `#ifdef`, `#ifndef`, `#if`, `#endif`, `#define`, `#undef` | accepts | runs | lowers | `internal/lang:TestMacroCompilerBranchDropped`; `compiler/testdata/cases/x_if_family.kq`; `compiler/testdata/cases/x_if_complement.kq`; `compiler/testdata/cases/x_if_pair.kq`; `compiler/testdata/cases/x_if_macro_body.kq` |
 
 
-The parity corpus has **24** cases under `compiler/testdata/cases` and **18** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
+The parity corpus has **25** cases under `compiler/testdata/cases` and **18** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
 
 This table is the corrected form of the old hand-written list. That list grouped `===`, permission
 references, `&lvalue` and `p++` with the constructs both engines implement; the compiler refuses all
@@ -52,7 +52,7 @@ is unimplemented and recorded as a gap in §11.3.
   print and `toString` paths, which need the linked runtime). What a `List<float>` still does not have is what
   only the `int` list has: `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__` are refused with `List<float>.%s
   is not supported yet (size/get/toString/append and for-in iteration are lowered)`; `delete` on a float list is
-  refused because the compiler releases a `List<int>` variable only (§11.3's §10 table); boxing one into
+  refused because the compiler releases an owned `List<int>` only (§11.3's §10 table); boxing one into
   `interface{}` is not lowered; and printing a `List<int>` is still refused although a `List<String>` and a
   `List<float>` print. A declaration without an initializer builds the interpreter's empty list where
   `List<int>` still refuses one, because a null handle would fault the read paths — the lowerer synthesizes the
@@ -90,7 +90,7 @@ is unimplemented and recorded as a gap in §11.3.
 | permission-carrying references (`&rw u T`) | accepts | runs | refuses | `internal/lang:TestRefPermissionEnforcement`; `compiler/internal/cgen:TestInterpreterOnlyConstructsAreRefusedNotMiscompiled` | Interpreter-only; the compiler refuses the syntax outright. |
 | address-of `&lvalue` | accepts | runs | refuses | `internal/lang:TestRefPermissionEnforcement`; `compiler/internal/cgen:TestInterpreterOnlyConstructsAreRefusedNotMiscompiled` | Interpreter-only; writes through the reference reach the original storage there. |
 | reference move `p++` | accepts | runs | refuses | `internal/lang:TestReferenceMove`; `compiler/internal/cgen:TestInterpreterOnlyConstructsAreRefusedNotMiscompiled` | Interpreter-only; section 4 says the variable is re-bound and moving past the end is an error. |
-| `delete x;` | accepts | runs | partly | `internal/lang:TestDeleteReclaimsBlock`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | The interpreter releases any variable; the compiler lowers only a `List<int>` variable. |
+| `delete x;` | accepts | runs | partly | `internal/lang:TestDeleteReclaimsBlock`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete`; `compiler/internal/cgen:TestCompiledMemorySurfaceRefusesBothLocales`; `compiler/internal/cgen:TestDeleteOnOwnedListIntStillLowers`; `compiler/internal/cgen:TestDeleteOnCopydListIntParameterStillLowers`; `compiler/testdata/cases/z_delete_local.kq` | The interpreter releases any variable, including a by-reference parameter; the compiler releases an owned `List<int>` only (a local variable, or a `copyd` parameter's callee-owned copy) and refuses a by-reference parameter with a positioned hard error instead of the silent no-op it emitted before 0.8.10. |
 | `memory.setBlock(n)` | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Interpreter runs it with 1 <= n <= 2^20; the compiler refuses it. |
 | `memory.compact()` | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Interpreter runs it; the compiler refuses it. |
 | `memory.Fragmentation()` | accepts | absent | absent | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | The standard names it, but no member exists; the shared type checker refuses it before either engine. |
@@ -128,7 +128,8 @@ keeps it in one place so the fix is not mistaken for permission to relax the pin
 ### §10 memory on the compiled path
 
 The four primitive rows and the derived `clear` are the surface §10 defines. The compiled artifact
-implements one row in a narrowed form (`delete` on a `List<int>` variable) and none of the other four;
+implements one row in a narrowed form (`delete` on an owned `List<int>`: a local variable, or a `copyd`
+parameter's callee-owned copy, while a by-reference parameter is refused) and none of the other four;
 the interpreter implements three of the four rows plus `clear`, and `memory.Fragmentation` exists in
 neither. Closing the rest on the compiled path means writing the block policy into
 `compiler/qthreads.c.txt`, which is `malloc`/`calloc`-based today (24 allocation sites, no pools, no
