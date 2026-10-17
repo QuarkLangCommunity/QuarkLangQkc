@@ -29,7 +29,6 @@ han-literal	compiler/macros_test.go	1
 han-literal	internal/i18n/proof_test.go	3
 han-literal	internal/lang/doc_test.go	4
 han-literal	internal/lang/eval_test.go	13
-han-literal	internal/lang/ffi_win_table_test.go	2
 han-literal	internal/lang/i18n_en_test.go	1
 han-literal	internal/lang/lint_test.go	7
 han-literal	internal/lang/lintbench_test.go	5

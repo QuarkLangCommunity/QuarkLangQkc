@@ -29,6 +29,13 @@ jobs:
         run: |
           go build ./...
           go test ./... -count=1
+      # The Windows leg is the real proof of the Microsoft x64 thunk: the probe library has six- and
+      # eighteen-argument functions, and the grep makes a skip or a cgo-off build fail instead of pass.
+      - name: FFI arity (six and eighteen arguments; Windows uses the x64 ABI thunk)
+        shell: bash
+        run: |
+          go test ./internal/lang -run '^TestLibraryFFIArity$' -count=1 -v | tee ffi-arity.log
+          grep -q -- '--- PASS: TestLibraryFFIArity' ffi-arity.log
       - name: qkcheck false-positive/false-negative statistics (multi-round P99 gate)
         env:
           LINT_ROUNDS: '2000'
