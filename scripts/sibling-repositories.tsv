@@ -1,0 +1,12 @@
+# Sibling repository roles, measured 2026-10-17; see docs/sibling-repositories.md.
+# repo	main_path	role	go_code_digest
+QuarkLangQkcheck	cmd/qkcheck	legacy	1cb87a8d980ab4a68cf744231fdd1c06cc9696ecc85b842bdf648d7750f2f930
+QuarkLangQkdoc	cmd/qkdoc	legacy	cdb12c2aaa6b93c25f43602ed35d17f6e6d6ced515faaad0981a56a33ec2afb0
+QuarkLangQklsp	cmd/qklsp	legacy	13c38e9406be0506d94fef03c91bc83b7f22baba762c4a5f3dcaa7c94a44bf24
+QuarkLangQkrepl	cmd/qkrepl	legacy	75d6f7fad71df4711c7f836364d0601feb0c1329252e08fe363e337504765806
+QuarkLangQkm	-	independent	-
+QuarkLangQkd	-	independent	-
+QuarkLangPlayground	-	independent	-
+QuarkLangQuark	-	independent	-
+QuarkLangQkfmt	-	independent	-
+QuarkLangQktest	-	independent	-

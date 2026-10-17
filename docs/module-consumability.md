@@ -1,7 +1,8 @@
 # Module consumability: making `compiler` installable from outside the checkout
 
-**Status:** proposal — no `go.mod` and no workflow has been changed. This document records what was
-measured, what the options cost, and which one is recommended.
+**Status:** implemented on 2026-10-17 as Option A; `v1.1.0` is the first tag whose module is
+consumable from outside the checkout. This document records what was measured, what the options cost,
+and what was applied.
 
 The compiler is the only part of the toolchain a user is expected to install as a Go module. Today it can
 only be built from a clone. This note reproduces the failures, explains why the committed `replace` is
@@ -174,3 +175,26 @@ Two smaller notes for whoever executes this:
   `compiler/vX.Y.Z` tags of its own, because a nested package's version is its module's version. Measured
   with the local proxy, not assumed.
 * This document changes no `go.mod` and no workflow. Steps 1–4 are the proposal.
+
+## 5. Applied change (2026-10-17)
+
+Option A was executed exactly as proposed, plus one mechanical move that the proposal did not name:
+
+1. `compiler/go.mod`, `compiler/go.sum` and `bench/go.mod` were deleted. The repository is one Go module
+   again, and `github.com/QuarkLangCommunity/QuarkLangQkc/compiler` is a package inside it.
+2. The parser pin already existed in the root `go.mod`, so no `require` moved; the duplicate pin and the
+   relative `replace` disappeared with the nested module.
+3. `bench/fib.c` moved to `bench/c/fib.c`. Without `bench/go.mod`, `go build ./...` treats `bench/` as a Go
+   package, and Go rejects a bare C file in a package that does not use cgo; the Makefile follows the move.
+4. CI no longer builds and tests the same tree twice, and `scripts/coverage.sh` reports one module instead
+   of the root module plus the compiler module.
+
+The tag is **`v1.1.0`**: the module path has no `/v2` suffix, so the existing `v2.0.0` and `v2.1.0` tags
+cannot be Go module versions for this path (`go get …@v2.x.y` is rejected outright). `v1.1.0` continues the
+only usable line, `v1.0.0`; it is the first tag whose `go.mod` declares the public module path and contains
+the compiler. `@latest` resolves to it because higher tags are invalid for this path. The project's own
+`VERSION` file and release numbering (`2.1.0`) remain independent of the Go module's `v1.x` line.
+
+Consequences: build and test commands written as `(cd compiler && go build ./...)` keep working, because
+the directory still exists and Go finds the root module from it. Any future Go module tag must stay on the
+`v1.x` line unless the module path gains a `/v2` suffix and every import path follows.

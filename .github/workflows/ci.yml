@@ -141,7 +141,7 @@ jobs:
         run: |
           GOOS=js GOARCH=wasm go build -o "$RUNNER_TEMP/quark.wasm" ./cmd/quarkwasm
           ls -la "$RUNNER_TEMP/quark.wasm"
-      - name: Coverage report (root + compiler modules; written to the job summary and uploaded)
+      - name: Coverage report (single module; written to the job summary and uploaded)
         run: |
           ./scripts/coverage.sh -o "$RUNNER_TEMP/coverage.md"
           cat "$RUNNER_TEMP/coverage.md" >> "$GITHUB_STEP_SUMMARY"

@@ -4,7 +4,7 @@ package i18n
 // generator writes today; the compiled path reads a second artefact, compiler/internal/rtcat/msg_c.h,
 // and an artefact no ordinary test checks is an artefact that drifts. It is the same table, the same
 // generator and the same run: only the reader differs (clang, not Go), which is why the check belongs
-// here rather than in the compiler module — the tables and the list are this package's.
+// here rather than in the compiler package — the tables and the list are this package's.
 
 import (
 	"os"

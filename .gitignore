@@ -50,3 +50,5 @@ go.work.sum
 !docs/i18n-design.md
 # the qkcheck fix mode design and its fixability inventory (deliverable of the linter fix work)
 !cmd/qkcheck/README.md
+# the measured roles of the organisation's sibling repositories and the drift contract
+!docs/sibling-repositories.md
