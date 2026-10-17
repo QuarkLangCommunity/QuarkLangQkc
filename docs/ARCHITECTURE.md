@@ -811,6 +811,11 @@ under `-count=200` (also `-count=2000`).
 | `stress/NOTES.md` | all three findings of the first full run are **closed**; the 3 fixed defects are the front-end crash, the quadratic VM compilation, and the engines disagreeing at the recursion limit |
 | `stress/known-failures.txt` | empty, with the rules for adding an entry, and the reason a stale entry is itself reported as a warning |
 
+The §11 rows above quote the hand-written status at `67ce88c`. §11 of the standard is now a citation to
+the generated `docs/implementation-status.md`, and the generated §11.1 corrects the old list: `===`,
+permission references, `&lvalue` and `p++` are **interpreter-only**, because the compiler refuses all
+four; the generated report also carries `#ifn`, `#expand`/`#run` and the per-engine memory rows.
+
 ### 6.1 Gaps the sources state themselves
 
 | # | Gap | Where it is stated |
@@ -818,8 +823,8 @@ under `-count=200` (also `-count=2000`).
 | G-1 | a caller's `try` does not catch a runtime error raised inside a callee, in the compiled engine | `stress/NOTES.md:102-105` |
 | G-2 | cgen's IR generation is superlinear on one deep chain: 6.0 s @20k, 29.2 s @40k, 175.5 s @80k additions, while the shared frontend is 0.15 s @80k | `stress/NOTES.md:107-112` |
 | G-3 | `path_fn_10k_params` sits just inside the 10 s default bound (9.18 s, 1660 MiB peak) — deliberately *not* in the allow-list, and CI skips it | `stress/NOTES.md:116-121`, `ci.yml:49-53` |
-| G-4 | macro spelling, exceptions and built-in containers still diverge from the standard | `spec/STANDARD.md` §11.3 |
-| G-5 | `bits<N>` layout rounds up rather than aligning to 1 as §3.1 requires; values are exact | `spec/STANDARD.md` §11.2 |
+| G-4 | macro spelling, exceptions and built-in containers still diverge from the standard | generated status report §11.3 (`docs/implementation-status.md`) |
+| G-5 | `bits<N>` layout rounds up rather than aligning to 1 as §3.1 requires; values are exact | generated status report §11.2 (`docs/implementation-status.md`) |
 
 ### 6.2 Gaps found by reading the code in this pass
 
