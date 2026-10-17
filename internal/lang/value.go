@@ -476,7 +476,7 @@ func (l *List) setIndex(i int, v Value) error {
 func (l *List) Get(i int) (Value, error) {
 	idx := l.head + i
 	if i < 0 || idx >= l.tail {
-		return NilV(), fmt.Errorf("IndexOutOfBoundsError: index %d out of range [0,%d)", i, l.Size())
+		return NilV(), fmt.Errorf("%s", msgID(i18n.MsgFieldIndexoutofboundserrorIndexDOutRange0, i, l.Size()))
 	}
 	return l.items[idx], nil
 }
