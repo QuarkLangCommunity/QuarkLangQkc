@@ -122,8 +122,12 @@ func TestDeleteOnOwnedListIntStillLowers(t *testing.T) {
 		"    delete xs;\n"+
 		"    io.println(9);\n"+
 		"}\n")
-	if got := strings.Count(ir, "call void @free(i8*"); got != 2 {
-		t.Fatalf("delete on a local List<int> emits %d free call(s), want 2 (buffer and header):\n%s", got, ir)
+	freeCall := "call void @ql_free(i8*"
+	if hostAllocatorFallback {
+		freeCall = "call void @free(i8*"
+	}
+	if got := strings.Count(ir, freeCall); got != 2 {
+		t.Fatalf("delete on a local List<int> emits %d %s call(s), want 2 (buffer and header):\n%s", got, freeCall, ir)
 	}
 }
 
@@ -138,7 +142,11 @@ func TestDeleteOnCopydListIntParameterStillLowers(t *testing.T) {
 		"    drop(xs);\n"+
 		"    io.println(xs.size());\n"+
 		"}\n")
-	if got := strings.Count(ir, "call void @free(i8*"); got != 2 {
-		t.Fatalf("delete on a copyd List<int> parameter emits %d free call(s), want 2:\n%s", got, ir)
+	freeCall := "call void @ql_free(i8*"
+	if hostAllocatorFallback {
+		freeCall = "call void @free(i8*"
+	}
+	if got := strings.Count(ir, freeCall); got != 2 {
+		t.Fatalf("delete on a copyd List<int> parameter emits %d %s call(s), want 2:\n%s", got, freeCall, ir)
 	}
 }

@@ -3,6 +3,11 @@
  * task: task object (fn + arg + done flag), executed by the worker thread pool
  * Cross-platform: POSIX pthread (Linux/macOS); the Windows branch uses _beginthreadex/WaitForSingleObject
  */
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #ifdef _WIN32
 /* Windows backend: _beginthreadex + SRWLOCK + CONDITION_VARIABLE (user-space API unchanged) */
 #include <process.h>
@@ -195,6 +200,648 @@ char* ql_strcat(const char* a, const char* b) {
     return r;
 }
 #endif
+
+/* ================= Counted-slab allocator (stage 1 of docs/compiled-memory-design.md) =================
+ *
+ * This is the compiled runtime's memory policy: a block is a slab of `ql_mem_block_size` bytes
+ * dedicated to one size class; an allocation occupies one slot of that class; release is per object.
+ * The classes are small enough that a List header, a list buffer, a boxed scalar and a struct share the
+ * same path, while a request above the largest class gets a dedicated large block (one object, tail
+ * waste counted by Fragmentation).
+ *
+ * The public allocation API keeps the design's owner argument even though stage 1 records the owner
+ * rather than enforcing it (D5 is still open):
+ *   ql_alloc(size, owner), ql_calloc(count, size, owner), ql_realloc(ptr, size), ql_free(ptr).
+ *
+ * The language surface is deliberate: stage 1 routes what cgen emits and what an owned `List<int>` can
+ * release. The runtime's other C allocations stay on the host allocator until stage 3 decides D1; the
+ * one exception is `ql_any_copy_list`, which can hand a `List<int>` to a deletable variable and is
+ * routed below.
+ *
+ * D3 reading: release preserves the payload (it does not wipe). `ql_calloc` zeroes because callers
+ * asked for calloc; `ql_alloc` does not. A later same-class allocation may therefore see the previous
+ * payload; the standard's contradictory "never hands another value's bytes" sentence is still an owner
+ * decision, recorded in docs/compiled-memory-stage1.md.
+ *
+ * D10 reading: every routed allocation is an opaque call. The compiler never elides one and LLVM cannot
+ * see through it, which is what makes occupancy/fragmentation observable. The cost is measured, not
+ * assumed (R1/R2).
+ */
+#ifndef QL_MEM_DEBUG
+#define QL_MEM_DEBUG 0
+#endif
+
+#define QL_MEM_CLASS_COUNT 7
+#define QL_MEM_ALIGN 16
+#define QL_MEM_OBJ_HDR 32
+#define QL_MEM_DEFAULT_BLOCK 4096
+#define QL_MEM_MAX_BLOCK (1 << 20)
+#define QL_MEM_OBJ_MAGIC 0x514C4F42u   /* "QLOB" */
+#define QL_MEM_SLAB_MAGIC 0x514C5342u  /* "QLSB" */
+#define QL_MEM_LARGE_MAGIC 0x514C4C42u /* "QLLB" */
+#define QL_MEM_KIND_SLOT 1u
+#define QL_MEM_KIND_LARGE 2u
+#define QL_MEM_FLAG_LIVE 1u
+
+static const size_t ql_mem_class_size[QL_MEM_CLASS_COUNT] = {16, 32, 64, 128, 256, 512, 1024};
+
+typedef struct ql_slab ql_slab;
+typedef struct ql_obj_hdr ql_obj_hdr;
+
+/* One object's header. The payload starts at header + 32, so a 16-byte-aligned slab slot gives a
+ * 16-byte-aligned payload. `next_free` lives here, never in the payload: release must preserve the
+ * payload, so the allocator cannot overwrite its first bytes with a free-list pointer. */
+struct ql_obj_hdr {
+    uint32_t magic;
+    uint16_t kind;
+    uint16_t flags;
+    size_t requested;
+    void* block; /* ql_slab* for a slot, ql_large_meta* for a large object */
+    ql_obj_hdr* next_free;
+};
+
+/* Metadata for a large block. It sits before the object header, so ql_free still finds the common
+ * header at payload - 32 and reaches this metadata through h->block. */
+typedef struct ql_large_meta {
+    uint32_t magic;
+    uint32_t owner;
+    size_t capacity;
+    size_t total;
+    void* raw;
+    struct ql_large_meta* prev;
+    struct ql_large_meta* next;
+} ql_large_meta;
+
+struct ql_slab {
+    uint32_t magic;
+    uint16_t cls;
+    uint16_t in_partial;
+    uint32_t slot_count;
+    uint32_t used;
+    size_t used_bytes;
+    size_t size;
+    ql_obj_hdr* free_head;
+    ql_slab* next_partial;
+    ql_slab* all_prev;
+    ql_slab* all_next;
+    void* raw;
+};
+
+static ql_slab* ql_mem_slabs;
+static ql_slab* ql_mem_partial[QL_MEM_CLASS_COUNT];
+static ql_large_meta* ql_mem_larges;
+static size_t ql_mem_block_size = QL_MEM_DEFAULT_BLOCK;
+static size_t ql_mem_used_total;
+static size_t ql_mem_live_total;
+static size_t ql_mem_slab_bytes;
+static long long ql_mem_alloc_total;
+static long long ql_mem_free_total;
+static long long ql_mem_reuse;
+static long long ql_mem_new_blocks;
+static long long ql_mem_slab_count;
+static long long ql_mem_large_count;
+static volatile int ql_mem_lock_word;
+
+#if QL_MEM_DEBUG
+static void ql_mem_assert_fail(int line, const char* expr) {
+    fprintf(stderr, "ql_mem assertion failed at qthreads.c.txt:%d: %s\n", line, expr);
+    fflush(stderr);
+    abort();
+}
+#define QL_MEM_ASSERT(cond) do { if (!(cond)) ql_mem_assert_fail(__LINE__, #cond); } while (0)
+#else
+#define QL_MEM_ASSERT(cond) ((void)0)
+#endif
+
+static void ql_mem_lock(void) {
+#if defined(__GNUC__) || defined(__clang__)
+    while (__atomic_exchange_n(&ql_mem_lock_word, 1, __ATOMIC_ACQUIRE)) {
+#if defined(__x86_64__) || defined(__i386__)
+        __builtin_ia32_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+        __asm__ __volatile__("yield");
+#endif
+    }
+#endif
+}
+
+static void ql_mem_unlock(void) {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_store_n(&ql_mem_lock_word, 0, __ATOMIC_RELEASE);
+#endif
+}
+
+static size_t ql_mem_slab_hdr(void) {
+    return (sizeof(ql_slab) + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
+}
+
+static size_t ql_mem_stride(int cls) {
+    size_t n = QL_MEM_OBJ_HDR + ql_mem_class_size[cls];
+    return (n + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
+}
+
+/* A 16-byte-aligned host block. The host pointer is stored immediately before the aligned address;
+ * allocating one alignment unit plus one pointer guarantees that slot is inside the allocation. */
+static void* ql_mem_host_alloc(size_t size) {
+    void* raw = malloc(size + QL_MEM_ALIGN + sizeof(void*));
+    uintptr_t base;
+    if (!raw) return 0;
+    base = ((uintptr_t)raw + sizeof(void*) + QL_MEM_ALIGN - 1) & ~(uintptr_t)(QL_MEM_ALIGN - 1);
+    ((void**)base)[-1] = raw;
+    return (void*)base;
+}
+
+static void ql_mem_host_free(void* p) {
+    if (p) free(((void**)p)[-1]);
+}
+
+static int ql_mem_class_of(size_t n) {
+    int i;
+    for (i = 0; i < QL_MEM_CLASS_COUNT; i++) {
+        if (n <= ql_mem_class_size[i]) return i;
+    }
+    return -1;
+}
+
+static void ql_mem_obj_init(ql_obj_hdr* h, uint16_t kind, void* block, size_t requested) {
+    h->magic = QL_MEM_OBJ_MAGIC;
+    h->kind = kind;
+    h->flags = QL_MEM_FLAG_LIVE;
+    h->requested = requested;
+    h->block = block;
+    h->next_free = 0;
+}
+
+static size_t ql_mem_slab_size_for(int cls) {
+    size_t min_size = ql_mem_slab_hdr() + ql_mem_stride(cls);
+    size_t size = ql_mem_block_size;
+    if (size < min_size) size = min_size;
+    return (size + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
+}
+
+static void ql_mem_partial_push(int cls, ql_slab* s) {
+    s->next_partial = ql_mem_partial[cls];
+    ql_mem_partial[cls] = s;
+    s->in_partial = 1;
+}
+
+static void ql_mem_partial_remove(int cls, ql_slab* s) {
+    ql_slab** pp = &ql_mem_partial[cls];
+    while (*pp && *pp != s) pp = &(*pp)->next_partial;
+    if (*pp == s) *pp = s->next_partial;
+    s->next_partial = 0;
+    s->in_partial = 0;
+}
+
+static ql_slab* ql_mem_slab_new(int cls) {
+    size_t stride = ql_mem_stride(cls);
+    size_t size = ql_mem_slab_size_for(cls);
+    uint32_t i;
+    ql_slab* s;
+    char* first;
+    void* base = ql_mem_host_alloc(size);
+    if (!base) return 0;
+    s = (ql_slab*)base;
+    s->magic = QL_MEM_SLAB_MAGIC;
+    s->cls = (uint16_t)cls;
+    s->in_partial = 0;
+    s->slot_count = (uint32_t)((size - ql_mem_slab_hdr()) / stride);
+    s->used = 0;
+    s->used_bytes = 0;
+    s->size = size;
+    s->free_head = 0;
+    s->next_partial = 0;
+    s->all_prev = 0;
+    s->all_next = ql_mem_slabs;
+    if (ql_mem_slabs) ql_mem_slabs->all_prev = s;
+    ql_mem_slabs = s;
+    s->raw = base;
+    if (s->slot_count == 0) {
+        ql_mem_slabs = s->all_next;
+        if (ql_mem_slabs) ql_mem_slabs->all_prev = 0;
+        ql_mem_host_free(s);
+        return 0;
+    }
+    first = (char*)base + ql_mem_slab_hdr();
+    for (i = s->slot_count; i > 0; i--) {
+        ql_obj_hdr* h = (ql_obj_hdr*)(first + (size_t)(i - 1) * stride);
+        h->magic = QL_MEM_OBJ_MAGIC;
+        h->kind = QL_MEM_KIND_SLOT;
+        h->flags = 0;
+        h->requested = 0;
+        h->block = s;
+        h->next_free = s->free_head;
+        s->free_head = h;
+    }
+    ql_mem_slab_count++;
+    ql_mem_slab_bytes += size;
+    return s;
+}
+
+/* The caller holds the allocator lock. */
+static void* ql_mem_alloc_locked(size_t n, int owner) {
+    int cls;
+    ql_slab* best;
+    ql_obj_hdr* h;
+    (void)owner;
+    if (n == 0) n = 1;
+    cls = ql_mem_class_of(n);
+    if (cls >= 0) {
+        size_t stride = ql_mem_stride(cls);
+        ql_slab* s;
+        best = 0;
+        for (s = ql_mem_partial[cls]; s; s = s->next_partial) {
+            QL_MEM_ASSERT(s->magic == QL_MEM_SLAB_MAGIC);
+            QL_MEM_ASSERT(s->cls == (uint16_t)cls);
+            QL_MEM_ASSERT(s->used <= s->slot_count);
+            QL_MEM_ASSERT(s->size >= ql_mem_slab_hdr() + stride);
+            if (s->free_head && (!best || s->used < best->used)) best = s;
+        }
+        if (!best) {
+            best = ql_mem_slab_new(cls);
+            if (!best) return 0;
+            ql_mem_new_blocks++;
+            if (best->slot_count > 1) ql_mem_partial_push(cls, best);
+        } else {
+            ql_mem_reuse++;
+        }
+        h = best->free_head;
+        QL_MEM_ASSERT(h != 0);
+        QL_MEM_ASSERT(h->magic == QL_MEM_OBJ_MAGIC);
+        QL_MEM_ASSERT(h->kind == QL_MEM_KIND_SLOT);
+        QL_MEM_ASSERT((h->flags & QL_MEM_FLAG_LIVE) == 0);
+        QL_MEM_ASSERT(h->block == best);
+        best->free_head = h->next_free;
+        h->next_free = 0;
+        h->flags = QL_MEM_FLAG_LIVE;
+        h->requested = n;
+        if (best->used == 0) ql_mem_live_total += best->size;
+        best->used++;
+        best->used_bytes += n;
+        if (best->used == best->slot_count) {
+            if (best->in_partial) ql_mem_partial_remove(cls, best);
+        } else if (!best->in_partial) {
+            ql_mem_partial_push(cls, best);
+        }
+        ql_mem_alloc_total++;
+        ql_mem_used_total += n;
+        QL_MEM_ASSERT(((uintptr_t)((char*)h + QL_MEM_OBJ_HDR) % QL_MEM_ALIGN) == 0);
+        return (char*)h + QL_MEM_OBJ_HDR;
+    }
+    {
+        size_t cap = (n + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
+        size_t total;
+        void* base;
+        ql_large_meta* m;
+        if (cap < n) return 0;
+        total = sizeof(ql_large_meta) + QL_MEM_OBJ_HDR + cap;
+        if (total < n) return 0;
+        base = ql_mem_host_alloc(total);
+        if (!base) return 0;
+        m = (ql_large_meta*)base;
+        h = (ql_obj_hdr*)((char*)base + sizeof(ql_large_meta));
+        m->magic = QL_MEM_LARGE_MAGIC;
+        m->owner = (uint32_t)owner;
+        m->capacity = cap;
+        m->total = total;
+        m->raw = base;
+        m->prev = 0;
+        m->next = ql_mem_larges;
+        if (ql_mem_larges) ql_mem_larges->prev = m;
+        ql_mem_larges = m;
+        ql_mem_large_count++;
+        ql_mem_new_blocks++;
+        ql_mem_obj_init(h, QL_MEM_KIND_LARGE, m, n);
+        ql_mem_alloc_total++;
+        ql_mem_live_total += total;
+        ql_mem_used_total += n;
+        QL_MEM_ASSERT(((uintptr_t)((char*)h + QL_MEM_OBJ_HDR) % QL_MEM_ALIGN) == 0);
+        return (char*)h + QL_MEM_OBJ_HDR;
+    }
+}
+
+static size_t ql_mem_obj_capacity(ql_obj_hdr* h) {
+    if (h->kind == QL_MEM_KIND_SLOT) {
+        ql_slab* s = (ql_slab*)h->block;
+        return ql_mem_class_size[s->cls];
+    }
+    return ((ql_large_meta*)h->block)->capacity;
+}
+
+/* The caller holds the allocator lock. */
+static void ql_mem_free_locked(void* p) {
+    ql_obj_hdr* h;
+    if (!p) return;
+    h = (ql_obj_hdr*)((char*)p - QL_MEM_OBJ_HDR);
+    QL_MEM_ASSERT(h->magic == QL_MEM_OBJ_MAGIC);
+    QL_MEM_ASSERT((h->flags & QL_MEM_FLAG_LIVE) != 0);
+    QL_MEM_ASSERT(((uintptr_t)p % QL_MEM_ALIGN) == 0);
+    ql_mem_free_total++;
+    if (h->kind == QL_MEM_KIND_SLOT) {
+        ql_slab* s = (ql_slab*)h->block;
+        QL_MEM_ASSERT(s->magic == QL_MEM_SLAB_MAGIC);
+        QL_MEM_ASSERT(s->used > 0);
+        QL_MEM_ASSERT(s->used_bytes >= h->requested);
+        QL_MEM_ASSERT(h->requested <= ql_mem_class_size[s->cls]);
+        h->flags = 0;
+        h->next_free = s->free_head;
+        s->free_head = h;
+        s->used--;
+        s->used_bytes -= h->requested;
+        if (s->used == 0) ql_mem_live_total -= s->size;
+        if (!s->in_partial) ql_mem_partial_push(s->cls, s);
+        ql_mem_used_total -= h->requested;
+        return;
+    }
+    QL_MEM_ASSERT(h->kind == QL_MEM_KIND_LARGE);
+    {
+        ql_large_meta* m = (ql_large_meta*)h->block;
+        QL_MEM_ASSERT(m->magic == QL_MEM_LARGE_MAGIC);
+        QL_MEM_ASSERT(m->capacity >= h->requested);
+        QL_MEM_ASSERT(m->total >= sizeof(ql_large_meta) + QL_MEM_OBJ_HDR);
+        if (m->prev) m->prev->next = m->next;
+        else ql_mem_larges = m->next;
+        if (m->next) m->next->prev = m->prev;
+        ql_mem_large_count--;
+        ql_mem_used_total -= h->requested;
+        ql_mem_live_total -= m->total;
+        ql_mem_host_free(m);
+    }
+}
+
+void ql_free(void* ptr);
+
+void* ql_alloc(size_t size, int owner) {
+    void* p;
+    ql_mem_lock();
+    p = ql_mem_alloc_locked(size, owner);
+    ql_mem_unlock();
+    return p;
+}
+
+void* ql_calloc(size_t count, size_t size, int owner) {
+    size_t n;
+    void* p;
+    if (size != 0 && count > (size_t)-1 / size) return 0;
+    n = count * size;
+    ql_mem_lock();
+    p = ql_mem_alloc_locked(n, owner);
+    if (p) memset(p, 0, n);
+    ql_mem_unlock();
+    return p;
+}
+
+void* ql_realloc(void* ptr, size_t size) {
+    ql_obj_hdr* h;
+    size_t old_requested;
+    size_t capacity;
+    void* fresh;
+    if (!ptr) return ql_alloc(size, 0);
+    if (size == 0) {
+        ql_free(ptr);
+        return 0;
+    }
+    ql_mem_lock();
+    h = (ql_obj_hdr*)((char*)ptr - QL_MEM_OBJ_HDR);
+    QL_MEM_ASSERT(h->magic == QL_MEM_OBJ_MAGIC);
+    QL_MEM_ASSERT((h->flags & QL_MEM_FLAG_LIVE) != 0);
+    old_requested = h->requested;
+    capacity = ql_mem_obj_capacity(h);
+    if (size <= capacity) {
+        if (h->kind == QL_MEM_KIND_SLOT) {
+            ql_slab* s = (ql_slab*)h->block;
+            if (size >= old_requested) s->used_bytes += size - old_requested;
+            else s->used_bytes -= old_requested - size;
+        }
+        if (size >= old_requested) ql_mem_used_total += size - old_requested;
+        else ql_mem_used_total -= old_requested - size;
+        h->requested = size;
+        ql_mem_unlock();
+        return ptr;
+    }
+    fresh = ql_mem_alloc_locked(size, 0);
+    if (!fresh) {
+        ql_mem_unlock();
+        return 0;
+    }
+    memcpy(fresh, ptr, old_requested < size ? old_requested : size);
+    ql_mem_free_locked(ptr);
+    ql_mem_unlock();
+    return fresh;
+}
+
+void ql_free(void* ptr) {
+    if (!ptr) return;
+    ql_mem_lock();
+    ql_mem_free_locked(ptr);
+    ql_mem_unlock();
+}
+
+int ql_mem_set_block(int n) {
+    if (n < 1 || n > QL_MEM_MAX_BLOCK) return 0;
+    ql_mem_lock();
+    ql_mem_block_size = (size_t)n;
+    ql_mem_unlock();
+    return 1;
+}
+
+void ql_mem_compact(void) {
+    ql_slab* s;
+    ql_slab* next;
+    int cls;
+    ql_mem_lock();
+    s = ql_mem_slabs;
+    while (s) {
+        next = s->all_next;
+        if (s->used == 0) {
+            if (s->all_prev) s->all_prev->all_next = s->all_next;
+            else ql_mem_slabs = s->all_next;
+            if (s->all_next) s->all_next->all_prev = s->all_prev;
+            ql_mem_slab_count--;
+            ql_mem_slab_bytes -= s->size;
+            ql_mem_host_free(s);
+        }
+        s = next;
+    }
+    for (cls = 0; cls < QL_MEM_CLASS_COUNT; cls++) ql_mem_partial[cls] = 0;
+    for (s = ql_mem_slabs; s; s = s->all_next) {
+        s->next_partial = 0;
+        s->in_partial = 0;
+        if (s->free_head) ql_mem_partial_push(s->cls, s);
+    }
+    ql_mem_unlock();
+}
+
+double ql_mem_fragmentation(void) {
+    double r;
+    ql_mem_lock();
+    if (ql_mem_live_total == 0) r = 0.0;
+    else r = (double)(ql_mem_live_total - ql_mem_used_total) / (double)ql_mem_live_total;
+    ql_mem_unlock();
+    return r;
+}
+
+double ql_mem_occupancy(void) {
+    double r;
+    ql_mem_lock();
+    if (ql_mem_live_total == 0) r = 0.0;
+    else r = (double)ql_mem_used_total / (double)ql_mem_live_total;
+    ql_mem_unlock();
+    return r;
+}
+
+long long ql_mem_block_count(void) {
+    long long n;
+    ql_mem_lock();
+    n = ql_mem_slab_count + ql_mem_large_count;
+    ql_mem_unlock();
+    return n;
+}
+
+long long ql_mem_live_bytes(void) {
+    long long n;
+    ql_mem_lock();
+    n = (long long)ql_mem_live_total;
+    ql_mem_unlock();
+    return n;
+}
+
+long long ql_mem_used_bytes(void) {
+    long long n;
+    ql_mem_lock();
+    n = (long long)ql_mem_used_total;
+    ql_mem_unlock();
+    return n;
+}
+
+long long ql_mem_alloc_calls(void) {
+    long long n;
+    ql_mem_lock();
+    n = ql_mem_alloc_total;
+    ql_mem_unlock();
+    return n;
+}
+
+long long ql_mem_free_calls(void) {
+    long long n;
+    ql_mem_lock();
+    n = ql_mem_free_total;
+    ql_mem_unlock();
+    return n;
+}
+
+void ql_mem_stats(long long* reuse, long long* new_blocks, long long* block_count) {
+    ql_mem_lock();
+    if (reuse) *reuse = ql_mem_reuse;
+    if (new_blocks) *new_blocks = ql_mem_new_blocks;
+    if (block_count) *block_count = ql_mem_slab_count + ql_mem_large_count;
+    ql_mem_unlock();
+}
+
+static int ql_mem_check_one(const char* what) {
+    fprintf(stderr, "ql_mem_check: %s\n", what);
+    return 1;
+}
+
+/* Full invariant walk. It is O(all slots + all large blocks); the debug assertions on the hot path
+ * are the cheap subset, and the tests call this after a batch of operations. Returns 0 on success. */
+static int ql_mem_check_locked(void) {
+    int errors = 0;
+    long long slab_count = 0;
+    size_t slab_bytes = 0;
+    size_t live_bytes = 0;
+    size_t used_bytes = 0;
+    long long large_count = 0;
+    ql_slab* s;
+    ql_large_meta* m;
+    if (ql_mem_alloc_total != ql_mem_reuse + ql_mem_new_blocks) errors += ql_mem_check_one("alloc_calls != reuse + new_blocks");
+    for (s = ql_mem_slabs; s; s = s->all_next) {
+        size_t stride;
+        uint32_t i;
+        uint32_t live = 0;
+        uint32_t free_slots = 0;
+        ql_obj_hdr* h;
+        ql_obj_hdr* f;
+        if (s->magic != QL_MEM_SLAB_MAGIC) { errors += ql_mem_check_one("slab magic"); continue; }
+        if (s->cls >= QL_MEM_CLASS_COUNT) { errors += ql_mem_check_one("slab class"); continue; }
+        if (s->all_next && s->all_next->all_prev != s) errors += ql_mem_check_one("slab all_next->all_prev");
+        if (s->used > s->slot_count) errors += ql_mem_check_one("slab used > slot_count");
+        if (s->used_bytes > s->size) errors += ql_mem_check_one("slab used_bytes > size");
+        if (s->size < ql_mem_slab_hdr() + ql_mem_stride(s->cls)) errors += ql_mem_check_one("slab too small for one slot");
+        stride = ql_mem_stride(s->cls);
+        if (s->slot_count != (uint32_t)((s->size - ql_mem_slab_hdr()) / stride)) errors += ql_mem_check_one("slab slot_count");
+        for (i = 0; i < s->slot_count; i++) {
+            h = (ql_obj_hdr*)((char*)s + ql_mem_slab_hdr() + (size_t)i * stride);
+            if (h->magic != QL_MEM_OBJ_MAGIC) { errors += ql_mem_check_one("slot magic"); continue; }
+            if (h->kind != QL_MEM_KIND_SLOT) errors += ql_mem_check_one("slot kind");
+            if (h->block != s) errors += ql_mem_check_one("slot block");
+            if (h->flags & QL_MEM_FLAG_LIVE) {
+                live++;
+                if (h->requested > ql_mem_class_size[s->cls]) errors += ql_mem_check_one("slot requested > class");
+                used_bytes += h->requested;
+            }
+            if (((uintptr_t)((char*)h + QL_MEM_OBJ_HDR) % QL_MEM_ALIGN) != 0) errors += ql_mem_check_one("slot alignment");
+        }
+        for (f = s->free_head; f; f = f->next_free) {
+            free_slots++;
+            if (free_slots > s->slot_count) { errors += ql_mem_check_one("free list cycle"); break; }
+            if (f->magic != QL_MEM_OBJ_MAGIC) { errors += ql_mem_check_one("free slot magic"); break; }
+            if (f->kind != QL_MEM_KIND_SLOT) { errors += ql_mem_check_one("free slot kind"); break; }
+            if (f->block != s) { errors += ql_mem_check_one("free slot block"); break; }
+            if (f->flags & QL_MEM_FLAG_LIVE) { errors += ql_mem_check_one("free slot live"); break; }
+        }
+        if (live + free_slots != s->slot_count) errors += ql_mem_check_one("slab live + free != slot_count");
+        if (live != s->used) errors += ql_mem_check_one("slab used != live slots");
+        {
+            size_t slab_live_bytes = 0;
+            for (i = 0; i < s->slot_count; i++) {
+                h = (ql_obj_hdr*)((char*)s + ql_mem_slab_hdr() + (size_t)i * stride);
+                if (h->flags & QL_MEM_FLAG_LIVE) slab_live_bytes += h->requested;
+            }
+            if (slab_live_bytes != s->used_bytes) errors += ql_mem_check_one("slab used_bytes mismatch");
+        }
+        if (s->in_partial) {
+            ql_slab* p = ql_mem_partial[s->cls];
+            while (p && p != s) p = p->next_partial;
+            if (p != s) errors += ql_mem_check_one("in_partial slab missing from partial list");
+        }
+        if (s->free_head && !s->in_partial) errors += ql_mem_check_one("free slot on a slab not in partial");
+        if (!s->free_head && s->in_partial) errors += ql_mem_check_one("full slab still in partial");
+        if (s->used > 0) live_bytes += s->size;
+        slab_count++;
+        slab_bytes += s->size;
+    }
+    for (m = ql_mem_larges; m; m = m->next) {
+        ql_obj_hdr* h = (ql_obj_hdr*)((char*)m + sizeof(ql_large_meta));
+        if (m->magic != QL_MEM_LARGE_MAGIC) { errors += ql_mem_check_one("large magic"); continue; }
+        if (m->next && m->next->prev != m) errors += ql_mem_check_one("large next->prev");
+        if (h->magic != QL_MEM_OBJ_MAGIC) { errors += ql_mem_check_one("large object magic"); continue; }
+        if (h->kind != QL_MEM_KIND_LARGE) errors += ql_mem_check_one("large kind");
+        if (h->block != m) errors += ql_mem_check_one("large block");
+        if (!(h->flags & QL_MEM_FLAG_LIVE)) errors += ql_mem_check_one("large not live");
+        if (h->requested > m->capacity) errors += ql_mem_check_one("large requested > capacity");
+        if (m->total != sizeof(ql_large_meta) + QL_MEM_OBJ_HDR + m->capacity) errors += ql_mem_check_one("large total");
+        if (((uintptr_t)((char*)h + QL_MEM_OBJ_HDR) % QL_MEM_ALIGN) != 0) errors += ql_mem_check_one("large alignment");
+        live_bytes += m->total;
+        used_bytes += h->requested;
+        large_count++;
+    }
+    if (slab_count != ql_mem_slab_count) errors += ql_mem_check_one("slab_count counter");
+    if (slab_bytes != ql_mem_slab_bytes) errors += ql_mem_check_one("slab_bytes counter");
+    if (large_count != ql_mem_large_count) errors += ql_mem_check_one("large_count counter");
+    if (live_bytes != ql_mem_live_total) errors += ql_mem_check_one("live_bytes counter");
+    if (used_bytes != ql_mem_used_total) errors += ql_mem_check_one("used_bytes counter");
+    return errors;
+}
+
+int ql_mem_check(void) {
+    int errors;
+    ql_mem_lock();
+    if (sizeof(ql_obj_hdr) != QL_MEM_OBJ_HDR) errors = ql_mem_check_one("object header size");
+    else errors = ql_mem_check_locked();
+    ql_mem_unlock();
+    return errors;
+}
 
 /* ================= Messages =================
  * The strings this runtime prints come from the generated C catalog (compiler/internal/rtcat/msg_c.h,
@@ -855,9 +1502,9 @@ void* ql_any_copy_list(void* d) {
     if (!src) return 0;
     int n = src->tail - src->head;
     if (n < 0) n = 0;
-    int* buf = (int*)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    int* buf = (int*)ql_alloc(sizeof(int) * (size_t)(n > 0 ? n : 1), 0);
     for (int i = 0; i < n; i++) buf[i] = src->buf[src->head + i];
-    ql_list_c* cp = (ql_list_c*)calloc(1, sizeof(ql_list_c));
+    ql_list_c* cp = (ql_list_c*)ql_calloc(1, sizeof(ql_list_c), 0);
     cp->buf = buf; cp->head = 0; cp->tail = n;
     return cp;
 }
