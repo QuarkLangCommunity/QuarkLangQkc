@@ -18,15 +18,18 @@ lang.CompileWithImports(src, filename)   // lexing/parsing/type checking + recur
 
 ## Install
 
-The compiler is a package in the repository's single Go module, so it installs without a checkout:
+The compiler is a package in the repository's single Go module, so it installs without a checkout, and
+that module is the supported distribution path:
 
 ~~~sh
-go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.0
+go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.1
 ~~~
 
-`v1.1.0` is the first tag that declares the public module path, and `@latest` resolves to it because the
-project's `v2.x` tags are not Go module versions for a path without `/v2`. See
-[`docs/module-consumability.md`](../docs/module-consumability.md) for the measurements.
+`v1.1.1` is the current module version; `@latest` resolves to it because the project's `v2.x` tags are not
+Go module versions for a path without `/v2`. `v1.1.0` was the first consumable tag but has no GitHub
+release assets: its tag-triggered run failed on the old Go 1.21 pin, before the workflow was corrected.
+The project's `VERSION`/release numbering (`2.1.0`) is independent of the Go module line. See
+[`docs/module-consumability.md`](../docs/module-consumability.md) for the measurements and the tag rule.
 
 ## Usage
 
