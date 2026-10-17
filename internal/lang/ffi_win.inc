@@ -12,8 +12,8 @@
  * The two x64 conventions assign those registers differently. On Windows the register index is the
  * argument's position: argument i at i < 4 uses the i-th integer register (RCX/RDX/R8/R9) or the i-th
  * vector register (XMM0-XMM3) according to its class, and every argument from position 4 on travels on
- * the stack. On System V the classes are counted separately: the sixth integer argument and the ninth
- * vector argument, wherever they appear, are the first stack arguments.
+ * the stack. On System V the classes are counted separately: the seventh integer-class argument and
+ * the ninth vector argument, wherever they appear, begin the stack arguments.
  *
  * The same dispatcher is compiled on a POSIX host for the local regression test, with the System V
  * register file (six integer, eight vector registers, no shadow space) and the same classification
@@ -32,7 +32,6 @@ const char* qk_dlerror(void) { return "LoadLibrary/GetProcAddress failed (win32)
 
 #define QK_CALL_IREGS 4
 #define QK_CALL_FREGS 4
-#define QK_CALL_SHADOW 32
 #define QK_CALL_WIN64 1
 #elif defined(__x86_64__)
 #include <stdint.h>
@@ -41,8 +40,6 @@ const char* qk_dlerror(void) { return "LoadLibrary/GetProcAddress failed (win32)
 
 #define QK_CALL_IREGS 6
 #define QK_CALL_FREGS 8
-#define QK_CALL_SHADOW 0
-#define QK_CALL_SYSV64 1
 #else
 #error "the local FFI shim test build requires an x86-64 host"
 #endif
