@@ -576,6 +576,21 @@ fn main(IOStream io) {
 	}
 }
 
+// TestIfnHasNoDefinedMeaning pins the record in §11.3: the standard names #ifn but defines it nowhere,
+// and the shared preprocessor gives it no meaning, so a program that uses it is refused rather than
+// accepted with an invented one.
+func TestIfnHasNoDefinedMeaning(t *testing.T) {
+	withLocalizer(t, i18n.New(i18n.EN))
+	_, err := runSrc(t, `#define X
+#ifn X
+fn main(IOStream io) { io.println(1); }
+#endif
+`)
+	if err == nil || !strings.Contains(err.Error(), "#endif without a matching #if") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 // The compiler's branches are dropped at run time: `#ifdef COMPILE` is the compiler's symbol (spec §7.2),
 // so the interpreter — which defines EXPLAIN — does not see that body at all.
 func TestMacroCompilerBranchDropped(t *testing.T) {
