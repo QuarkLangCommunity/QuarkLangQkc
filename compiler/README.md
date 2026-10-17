@@ -16,6 +16,18 @@ lang.CompileWithImports(src, filename)   // lexing/parsing/type checking + recur
 - Macro expansion still goes through the interpreter's token-level macro system (`compiler/macros.go`, compile mode) and is then handed to the language front end.
 - The former home-grown cgen parser has been deleted: there is only the one canonical syntax (type-first).
 
+## Install
+
+The compiler is a package in the repository's single Go module, so it installs without a checkout:
+
+~~~sh
+go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.0
+~~~
+
+`v1.1.0` is the first tag that declares the public module path, and `@latest` resolves to it because the
+project's `v2.x` tags are not Go module versions for a path without `/v2`. See
+[`docs/module-consumability.md`](../docs/module-consumability.md) for the measurements.
+
 ## Usage
 
 ~~~sh

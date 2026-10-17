@@ -17,7 +17,7 @@ everything else lives in the code and the docs.
 git clone https://github.com/QuarkLangCommunity/QuarkLangQkc && cd QuarkLangQkc
 git switch -c fix/short-description    # branch names: fix/… feat/… docs/… ci/…
 # …make your change…
-go test ./... && (cd compiler && go test ./...)      # ① both test layers
+go test ./...                                    # ① one module: interpreter, tools, compiler
 (cd compiler && ./testdata/compare.sh)               # ② dual-path parity (must print "all identical")
 git commit -m "Short title (English or Chinese, one line)"   # ③ commit message: imperative, add a body when useful
 git push -u origin HEAD && gh pr create --fill       # ④ open the PR; CI runs the three-platform matrix
@@ -33,8 +33,7 @@ Merge requirements (automated — no human approval needed today):
 ## Pre-push checklist (runs locally)
 
 ```sh
-go test ./...                                    # interpreter + toolchain (includes the lint FP/FN gates)
-(cd compiler && go test ./...)                   # compiler
+go test ./...                                    # interpreter + toolchain + compiler (includes the lint FP/FN gates)
 (cd compiler && ./testdata/compare.sh)           # dual-path parity (both backends must agree)
 go build -o qkcheck ./cmd/qkcheck && ./qkcheck examples/ compiler/testdata   # dogfood the linter
 ```
@@ -69,10 +68,10 @@ CI keeps building the published revision:
 
 ```sh
 git clone https://github.com/QuarkLangCommunity/QuarkLangQkparser   # → ./QuarkLangQkparser
-go work init . ./compiler ./QuarkLangQkparser                       # go.work is per-machine, not tracked
+go work init . ./QuarkLangQkparser                                  # go.work is per-machine, not tracked
 ```
 
-When a parser change lands, bump the pin in both modules: `go get github.com/QuarkLangCommunity/QuarkLangQkparser@<commit>`.
+When a parser change lands, bump the pin in the root `go.mod`: `go get github.com/QuarkLangCommunity/QuarkLangQkparser@<commit>`.
 
 When you add a language feature, **all four of these must be updated together**:
 

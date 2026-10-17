@@ -10,3 +10,9 @@ compiler/qkc binary
 # every checkout: a CRLF working tree would otherwise put a carriage return inside a message's text on
 # Windows and make the generator's output platform-dependent. (The syntax layer pins the same pattern.)
 internal/i18n/source/*.tsv text eol=lf
+# The generated status report and its authored inputs are compared byte for byte by the drift gate:
+# pin them to LF in every checkout, or a Windows working tree checks them out CRLF and the gate fails
+# on the line endings rather than on a stale report.
+docs/implementation-status.md text eol=lf
+spec/status/claims.tsv text eol=lf
+spec/status/template.md text eol=lf

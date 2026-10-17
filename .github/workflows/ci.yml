@@ -25,12 +25,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26'
-      - name: Build & test (interpreter + toolchain + editor artifacts)
-        run: |
-          go build ./...
-          go test ./... -count=1
-      - name: Build & test (compiler qkc)
-        working-directory: compiler
+      - name: Build & test (one module, interpreter + toolchain + compiler qkc)
         run: |
           go build ./...
           go test ./... -count=1
@@ -146,7 +141,7 @@ jobs:
         run: |
           GOOS=js GOARCH=wasm go build -o "$RUNNER_TEMP/quark.wasm" ./cmd/quarkwasm
           ls -la "$RUNNER_TEMP/quark.wasm"
-      - name: Coverage report (root + compiler modules; written to the job summary and uploaded)
+      - name: Coverage report (single module; written to the job summary and uploaded)
         run: |
           ./scripts/coverage.sh -o "$RUNNER_TEMP/coverage.md"
           cat "$RUNNER_TEMP/coverage.md" >> "$GITHUB_STEP_SUMMARY"

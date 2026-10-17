@@ -81,7 +81,7 @@ The three Go modules in play:
 | I-8 | cgen → LLVM IR | `compiler/internal/cgen` | `parity_test.go`, `compare.sh` | refuses unsupported constructs; never miscompiles |
 | I-9 | Memory manager | `internal/lang/eval.go:199-354` | `eval_test.go:372,708` | interpreter-only engine surface |
 | I-10 | i18n catalog + localizer | `internal/i18n` | `coverage_test.go` (8 gates) | ratcheted, not exhaustively covered |
-| I-11 | Module wiring | root `go.mod`, `compiler/go.mod` | `go build ./...` × 3 OS × 2 modules | a local `replace` is honoured only in-checkout |
+| I-11 | Module wiring | root `go.mod` (compiler is a package in it) | `go build ./...` × 3 OS | one module; no nested replace |
 | I-12 | Tool frontends | `cmd/*` | per-`cmd` `main_test.go` | CLI help says "default Chinese" (§6.5) |
 | I-13 | CI gates | `.github/workflows/*.yml` | — | see §2.3 for the job × OS matrix |
 
@@ -226,7 +226,7 @@ The three Go modules in play:
   interpreter's aliasing so writes through any alias are visible. A construct the backend has not
   lowered returns an explicit, position-carrying error — **never a silent miscompile**
   (`cgen.go:11-12`).
-- **Who composes it**: `compiler/main.go` (the `qkc` CLI) and the compiler module's tests.
+- **Who composes it**: `compiler/main.go` (the `qkc` CLI) and the compiler package's tests.
 - **Verified by**: `parity_test.go` — `TestParityCaseIRSyntax` (`:35`) pipes every case through LLVM's
   own `llvm-as` and **skips when it is absent** (`:38-40`); `TestParityCaseOutput` (`:69`) compares
   stdout **byte for byte** against a committed `.out` fixture produced by the interpreter and **skips
@@ -287,18 +287,19 @@ The three Go modules in play:
 
 ### I-11 · Module wiring
 
-- **Location**: root `go.mod:1-10`, `compiler/go.mod:1-12`.
+- **Location**: root `go.mod:1-10`; the compiler is a package in that same module, not a submodule.
 - **Contract**: `go.mod:5-10` pins the syntax layer to one exact pseudo-version
-  (`v0.0.0-20261010115438-20ae746ffdee`) resolved through the module proxy, so a fresh clone needs no
+  (`v0.0.0-20261015231811-3de63a5ff52d`) resolved through the module proxy, so a fresh clone needs no
   sibling checkout. The comment at `go.mod:5-9` records the failure this repaired: a relative `replace`
   is honoured only inside the checkout and ignored by importers, "which is exactly how moving the syntax
   layer out broke CI on all three platforms".
-- **Submodule**: `compiler/go.mod:7` replaces the root module with `../`; `:12` repeats the parser pin
-  because **while the compiler is the main module, a replace declared by the root module does not
-  apply** (`compiler/go.mod:9-11`).
-- **Verified by**: `go build ./...` + `go test ./...` in each module on three OSes
-  (`.github/workflows/ci.yml:28-36`). Locally on 2026-10-10 (linux, Go 1.26.9, clang 22.1.8): root and
-  compiler both build and test clean (`ok internal/lang 10.6s`, `ok compiler/internal/cgen 1.1s`).
+- **One module**: `compiler/go.mod`, `compiler/go.sum` and `bench/go.mod` were removed on 2026-10-17. The
+  compiler's relative `replace` and its duplicate parser pin went with them, so
+  `go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.0` now works outside the checkout
+  (`docs/module-consumability.md` §5).
+- **Verified by**: `go build ./...` + `go test ./...` on three OSes (`.github/workflows/ci.yml:28-31`).
+  Locally the same two commands cover the root packages and `compiler/...` in one run; the gate is
+  recorded in the PR that applied this change.
 - **Failure modes**: the shared frontend is **stdlib-only** (`qkparser/go.mod` has no `require` block) —
   that is what lets it be consumed without this repository. The price is that the parser cannot import
   `internal/i18n`, so it defines its own one-method `Localizer` interface and *waits to be injected*
@@ -334,7 +335,7 @@ with a version comment (`:24-25`, `:69-70`, `:99`, `:111-115`).
 
 | Job | Matrix | Composition it defines |
 |---|---|---|
-| `test` (`:16`) | ubuntu, macos, windows | `go build`+`go test` root then `compiler/`; P99 lint gate (`:37-40`); CRLF/perturbation gate (`:41-42`) |
+| `test` (`:16`) | ubuntu, macos, windows | `go build` + `go test` (one module, compiler included); P99 lint gate; CRLF/perturbation gate |
 | `stress` (`:58`) | ubuntu, macos, windows | extreme corpus against **both** engines, `-timeout 90s`, two skipped cases, allow-list file |
 | `linux-extras` (`:107`) | ubuntu only | dual-path `compare.sh`, toolchain build, editor/LSP, wasm, coverage, benchmarks, release smoke |
 | `libraries` (`:182`) | ubuntu, macos, windows | emit-lib → link → **run**, asserting the platform branch value 58/59/61 |
@@ -499,7 +500,7 @@ all** today.
  │ CONSTRAINT: stdlib only — it cannot import internal/i18n     │
  └──────────────────────────────────────────────────────────────┘
         ▲ injected at runtime                  ▲ pinned by pseudo-version
-        │ (SetLocalizer)                       │ (go.mod:7, compiler/go.mod:12)
+        │ (SetLocalizer)                       │ (go.mod:10)
  PRIVATE (module-internal; importers cannot reach these)
  ┌──────────────────────────────┐   ┌──────────────────────────────────┐
  │ internal/lang                │   │ internal/i18n                    │
@@ -507,8 +508,8 @@ all** today.
  │ cmd/*                        │   └──────────────────────────────────┘
  └──────────────────────────────┘   ┌──────────────────────────────────┐
                                     │ compiler/internal/cgen           │
-                                    │ separate module; its own         │
-                                    │ preproc.go + macros.go           │
+                                    │ package in the same module;      │
+                                    │ its own preproc.go + macros.go   │
                                     └──────────────────────────────────┘
 ```
 
@@ -526,7 +527,7 @@ direction matters. The parser cannot call the catalog, so the root module calls 
 | `MaxExprDepth` in the parser module | nothing to update: the root reads it by alias (`internal/lang/limits.go:30`) | drift made impossible by construction |
 | `MaxCallDepth` (`internal/lang/limits.go:37`) | the interpreter's counter **and** the value baked into generated IR — wording included (`:39-42`) | the `p_recursion_*` parity cases |
 | a message template | its catalog entry, in the same commit | `TestTemplatesRegistered` — **but only for templates written in this repository** (§5.2) |
-| the pinned parser commit | everything; the pin is one line (`go.mod:7`) repeated in `compiler/go.mod:12` | `go build` on 3 OS × 2 modules |
+| the pinned parser commit | everything; the pin is one line (`go.mod:10`) | `go build` on 3 OS |
 | a new tool frontend | `cmd/`, `scripts/build-release.sh`, `install.sh`, `ci.yml`'s build loop | manual lists — no generator |
 
 The last row is a real boundary hazard: `ci.yml:124` builds `qkcheck qkdoc qkrepl qklsp` from a
@@ -810,6 +811,11 @@ under `-count=200` (also `-count=2000`).
 | `stress/NOTES.md` | all three findings of the first full run are **closed**; the 3 fixed defects are the front-end crash, the quadratic VM compilation, and the engines disagreeing at the recursion limit |
 | `stress/known-failures.txt` | empty, with the rules for adding an entry, and the reason a stale entry is itself reported as a warning |
 
+The §11 rows above quote the hand-written status at `67ce88c`. §11 of the standard is now a citation to
+the generated `docs/implementation-status.md`, and the generated §11.1 corrects the old list: `===`,
+permission references, `&lvalue` and `p++` are **interpreter-only**, because the compiler refuses all
+four; the generated report also carries `#ifn`, `#expand`/`#run` and the per-engine memory rows.
+
 ### 6.1 Gaps the sources state themselves
 
 | # | Gap | Where it is stated |
@@ -817,8 +823,8 @@ under `-count=200` (also `-count=2000`).
 | G-1 | a caller's `try` does not catch a runtime error raised inside a callee, in the compiled engine | `stress/NOTES.md:102-105` |
 | G-2 | cgen's IR generation is superlinear on one deep chain: 6.0 s @20k, 29.2 s @40k, 175.5 s @80k additions, while the shared frontend is 0.15 s @80k | `stress/NOTES.md:107-112` |
 | G-3 | `path_fn_10k_params` sits just inside the 10 s default bound (9.18 s, 1660 MiB peak) — deliberately *not* in the allow-list, and CI skips it | `stress/NOTES.md:116-121`, `ci.yml:49-53` |
-| G-4 | macro spelling, exceptions and built-in containers still diverge from the standard | `spec/STANDARD.md` §11.3 |
-| G-5 | `bits<N>` layout rounds up rather than aligning to 1 as §3.1 requires; values are exact | `spec/STANDARD.md` §11.2 |
+| G-4 | macro spelling, exceptions and built-in containers still diverge from the standard | generated status report §11.3 (`docs/implementation-status.md`) |
+| G-5 | `bits<N>` layout rounds up rather than aligning to 1 as §3.1 requires; values are exact | generated status report §11.2 (`docs/implementation-status.md`) |
 
 ### 6.2 Gaps found by reading the code in this pass
 
@@ -934,7 +940,7 @@ the compile state, the interpreter in the run state" and adds a test named
 whose `#when` branches all miss — turning today's silent divergence into a hard error. It cannot run now:
 it imports `quarklang/internal/lang`, and that module path was renamed to the public
 `github.com/QuarkLangCommunity/...` one by `6dad203` (2026-10-09 19:47), after the file was written.
-`go test ./...` in the compiler module does not see it (untracked), so the suite stays green. So the
+`go test ./...` in the compiler package does not see it (untracked), so the suite stays green. So the
 intended fix was *diagnosed before this document*; the choice among the three readings below was the part
 left open.
 
