@@ -85,6 +85,30 @@ func between(t *testing.T, text, start, end string) string {
 	return text[i:j]
 }
 
+// TestValidateRequiresExplicitSkip checks that a missing Rust or Go control is accepted only when the
+// record names the missing toolchain, which is the "skip explicitly, never invent a number" rule.
+func TestValidateRequiresExplicitSkip(t *testing.T) {
+	rec, err := Load(repoRoot(t), filepath.Join(repoRoot(t), DefaultTSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []Row
+	for _, row := range rec.Rows {
+		if !strings.HasPrefix(row.Key, "rust_") {
+			rows = append(rows, row)
+		}
+	}
+	rec.Rows = rows
+	rec.Meta["skipped"] = "rust: rustc not found"
+	if err := rec.Validate(); err != nil {
+		t.Fatalf("an explicitly skipped Rust control was rejected: %v", err)
+	}
+	rec.Meta["skipped"] = "none"
+	if err := rec.Validate(); err == nil {
+		t.Fatal("a missing Rust control with no skip note was accepted")
+	}
+}
+
 // TestMeasurementRecordCoversControls checks that the record still carries the observable language
 // workload, the C control, the dead-code floor and the policy counters, and that the controls did
 // the same work.

@@ -37,6 +37,10 @@ done
 
 [[ "$N" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --n must be a positive integer" >&2; exit 2; }
 [[ "$RUNS" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --runs must be a positive integer" >&2; exit 2; }
+if [ "$RECORD" -eq 1 ] && [ "$RUNS" -lt 3 ]; then
+  echo "tide: --record needs at least 3 runs so the recorded spread is meaningful" >&2
+  exit 2
+fi
 command -v python3 >/dev/null 2>&1 || { echo "tide: python3 is required for the statistics" >&2; exit 2; }
 command -v clang >/dev/null 2>&1 || { echo "tide: clang is required (qkc lowers to LLVM IR)" >&2; exit 2; }
 command -v go >/dev/null 2>&1 || { echo "tide: go is required (qkc and the policy workload)" >&2; exit 2; }
@@ -61,6 +65,12 @@ ar rcs "$BUILD/libtide.a" "$BUILD/sink.o"
 sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" bench/tide/qk/tide.qk > "$BUILD/tide.qk"
 sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" bench/tide/qk/tide_floor.qk > "$BUILD/tide_floor.qk"
 sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" bench/tide/qk/tide_legacy_floor.qk > "$BUILD/tide_legacy_floor.qk"
+for src in tide tide_floor tide_legacy_floor; do
+  grep -q "int rounds = $N;" "$BUILD/$src.qk" || {
+    echo "tide: the round count in $src.qk was not replaced (expected $N)" >&2
+    exit 1
+  }
+done
 
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk" "$BUILD/tide.qk") >/dev/null
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-floor" "$BUILD/tide_floor.qk") >/dev/null
