@@ -97,6 +97,7 @@ is unimplemented and recorded as a gap in §11.3.
 | `memory.clear()` (derived, not a §10 primitive) | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptListDelete` | Section 10 defines it as the derived wipe (release plus zero-fill); the interpreter runs it, the compiler refuses it with the stage-1 message naming what is supported. |
 | `#ifn` | refuses | refuses | refuses | `internal/lang:TestIfnHasNoDefinedMeaning` | The standard names it and defines it nowhere; no engine gives it a meaning, so the following `#endif` is refused. The safer reading is `#if !(condition)`. |
 | `#expand` / `#run` | refuses | refuses | refuses | `internal/lang:TestExpandRunAreNotImplemented` | Both are refused with a top-level ParseError in both engines; the standard's node namespace is undefined (docs/primitives.md Q-3, Q-5). |
+| the compiled path on Windows (no compiled runtime; libc allocator fallback) | accepts | runs | partly | `compiler/internal/cgen:TestRoutedAllocationsUseRuntimeAllocator`; `compiler:TestCompiledAllocatorAssertionsUnderStress` | Section 10 makes the compiled artifact's block policy observable; on Windows the compiled runtime is not linked, so compile and link keep the libc path and `delete` releases host storage, but the stage-1 counted-slab allocator is absent: there is no occupancy or fragmentation accounting and no block-reuse policy. Closing the gap means linking the compiled runtime on Windows (the design's R8/T6) or splitting the allocator into a platform-neutral translation unit: size large, one runtime port or one allocator extraction, not a correction. |
 
 
 The interpreter-only rows are the project's hard-error policy: when the compiler cannot reproduce the
@@ -141,6 +142,19 @@ deciding not to, routing the runtime's own C allocations, task-end reclaim, and 
 still not linked there; the generator keeps the libc path). Stage 1 changes no normative text and no
 language surface, so this report keeps the divergence honest until stage 2 takes the decisions the
 design lists. Size: large — one design review of its own, not a correction.
+
+### §10 memory on Windows
+
+`spec/status/claims.tsv` 11.3-15 records the platform gap. The compiled runtime is not linked on Windows,
+so stage 1's counted-slab allocator is absent there: compile and link keep the libc path and `delete` on an
+owned `List<int>` still releases host storage. What a Windows user loses is the policy itself — there is no
+occupancy or fragmentation accounting and no block-reuse policy, so the allocator's stable block set
+cannot be observed; the `memory.setBlock`, `memory.compact` and `memory.Fragmentation` accessors have no
+compiled implementation on any platform yet, and on Windows there is not even the internal counter they
+would read. This is the accepted position, not a promise. Closing it means linking the compiled runtime on
+Windows (the design's R8/T6) or splitting the allocator into a platform-neutral translation unit compiled
+on all three; either is stage 3 work. Size: large — one runtime port or one allocator extraction, not a
+correction.
 
 ## 11.4 What `docs/primitives.md` §7.6 asks for, and what this revision does not do
 
