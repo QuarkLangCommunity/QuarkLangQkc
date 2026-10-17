@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coverage report for both modules (root: interpreter + toolchain; compiler: qkc + LLVM IR emitter), as markdown.
+# Coverage report for the single module (interpreter, toolchain and compiler), as markdown.
 #
 #   scripts/coverage.sh [-o report.md]       # markdown to stdout, or to a file with -o
 #
@@ -54,21 +54,17 @@ run_tests() { # usage: run_tests <module dir> <profile> <label>
   fi
 }
 
-echo '→ root module: go test ./... -covermode=atomic' >&2
-run_tests "." "$tmp/root.out" "root module"
-echo '→ compiler module: go test ./... -covermode=atomic' >&2
-run_tests "compiler" "$tmp/compiler.out" "compiler module"
+echo '→ module: go test ./... -covermode=atomic' >&2
+run_tests "." "$tmp/root.out" "module"
 
-module_table() { # usage: module_table <title> <profile> <module dir>
-  # the cover tool resolves package paths through the module it runs in, so each profile is read
-  # from its own module directory (the profile itself is an absolute path)
+module_table() { # usage: module_table <title> <profile>
   echo "### $1"
   echo
   echo '| Package | Coverage |'
   echo '|---|---|'
-  (cd "$3" && go tool cover -func="$2") | awk '{split($1,a,":"); pkg=a[1]; cov[pkg]=$NF} END {for (p in cov) printf "| %s | %s |\n", p, cov[p]}' | sort
+  go tool cover -func="$2" | awk '{split($1,a,":"); pkg=a[1]; cov[pkg]=$NF} END {for (p in cov) printf "| %s | %s |\n", p, cov[p]}' | sort
   echo
-  echo "**Total: $( (cd "$3" && go tool cover -func="$2") | tail -1 | awk '{print $NF}')**"
+  echo "**Total: $(go tool cover -func="$2" | tail -1 | awk '{print $NF}')**"
   echo
 }
 
@@ -79,8 +75,7 @@ module_table() { # usage: module_table <title> <profile> <module dir>
   echo "- Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "- Go: $(go version | awk '{print $3}')"
   echo
-  module_table 'root module (interpreter + toolchain)' "$tmp/root.out" "."
-  module_table 'compiler module (qkc + LLVM IR emitter)' "$tmp/compiler.out" "compiler"
+  module_table 'module (interpreter + toolchain + compiler)' "$tmp/root.out"
 } > "$tmp/report.md"
 
 if [ -n "$out" ]; then

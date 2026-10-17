@@ -25,12 +25,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26'
-      - name: Build & test (interpreter + toolchain + editor artifacts)
-        run: |
-          go build ./...
-          go test ./... -count=1
-      - name: Build & test (compiler qkc)
-        working-directory: compiler
+      - name: Build & test (one module: interpreter + toolchain + compiler qkc)
         run: |
           go build ./...
           go test ./... -count=1
