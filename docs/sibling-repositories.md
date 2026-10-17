@@ -31,8 +31,12 @@ machine location is part of the result.
 | `QuarkLangQkd` ↔ (no `cmd/qkd`) | `546b805` | 4 (1) | — | — | — | — | — | independent tool; no counterpart in this repository |
 | `QuarkLangPlayground` ↔ (no `cmd/playground`) | `1acd2ee` | 21 (0) | — | — | — | — | — | independent frontend; consumes `cmd/quarkwasm`, does not duplicate it |
 | `QuarkLangQuark` ↔ (no `cmd/quark`) | `10a556a` | 3 (0) | — | — | — | — | — | independent runtime service; builds from this source tree |
-| `QuarkLangQkfmt` ↔ (no `cmd/qkfmt`) | `3c042c2` | 9 (3) | — | — | — | — | — | independent tool; no counterpart in this repository |
+| `QuarkLangQkfmt` ↔ (no `cmd/qkfmt`) | `d89824d` | 9 (3) | — | — | — | — | — | independent tool; no counterpart in this repository |
 | `QuarkLangQktest` ↔ (no `cmd/qktest`) | `08ac62f` | 10 (1) | — | — | — | — | — | independent tool; no counterpart in this repository |
+
+The four legacy HEADs are the commits at measurement. The reconciliation PRs add exactly one docs-only
+commit on top of each (the README pointer), so the current sibling HEAD is that merge commit; the Go-code
+digests below are unchanged because those commits touch only `README.md`.
 
 The premise that this tree carries `cmd/qkm` (and the other unmatched names) does not hold at the measured
 commit: `git ls-tree -r origin/main cmd/` contains `qkcheck`, `qkdoc`, `qklsp`, `qkrepl`, `quarkwasm`,
