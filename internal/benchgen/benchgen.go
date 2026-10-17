@@ -199,76 +199,110 @@ func parseNumber(s string) (float64, error) {
 
 // Validate checks the record's required rows, its arithmetic and its platform neutrality.
 func (r *Record) Validate() error {
-	for _, key := range []string{"class", "toolchain", "flags", "counted", "skipped", "evidence"} {
-		if strings.TrimSpace(r.Meta[key]) == "" {
-			return fmt.Errorf("metadata is missing %q", key)
-		}
+	if err := validateMeta(r.Meta); err != nil {
+		return err
 	}
 	seen := map[string]bool{}
 	checksums := map[string]bool{}
 	for _, row := range r.Rows {
-		if row.Key == "" || seen[row.Key] {
-			return fmt.Errorf("row key %q is empty or duplicated", row.Key)
-		}
-		seen[row.Key] = true
-		if row.Label == "" || row.Language == "" || row.Note == "" {
-			return fmt.Errorf("%s: label, language and note are required", row.Key)
-		}
-		for _, s := range []string{row.Key, row.Label, row.Language, row.Unit, row.Checksum, row.Note} {
-			if machineSpecific(s) {
-				return fmt.Errorf("%s: %q is machine-specific", row.Key, s)
-			}
-		}
-		switch row.Kind {
-		case "timing":
-			if row.Unit != "us" {
-				return fmt.Errorf("%s: timing unit must be us, got %q", row.Key, row.Unit)
-			}
-			if row.Runs < 1 || row.Rounds < 1 {
-				return fmt.Errorf("%s: rounds and runs must be positive", row.Key)
-			}
-			if row.Min > row.Median || row.Median > row.Max {
-				return fmt.Errorf("%s: median %v is outside %v..%v", row.Key, row.Median, row.Min, row.Max)
-			}
-			if row.Stdev < 0 || row.Spread < 0 {
-				return fmt.Errorf("%s: stdev and spread must be non-negative", row.Key)
-			}
-			if row.Checksum != "-" {
-				if _, err := strconv.ParseInt(row.Checksum, 10, 64); err != nil {
-					return fmt.Errorf("%s: checksum %q is not an integer", row.Key, row.Checksum)
-				}
-				checksums[row.Checksum] = true
-			}
-		case "counter":
-			if row.Unit != "ratio" && row.Unit != "blocks" {
-				return fmt.Errorf("%s: counter unit must be ratio or blocks, got %q", row.Key, row.Unit)
-			}
-			if row.Unit == "ratio" && row.Median > 1 {
-				return fmt.Errorf("%s: ratio %v is above 1", row.Key, row.Median)
-			}
-			if row.Unit == "blocks" && row.Median != float64(int64(row.Median)) {
-				return fmt.Errorf("%s: block count %v is not an integer", row.Key, row.Median)
-			}
-		default:
-			return fmt.Errorf("%s: unknown kind %q", row.Key, row.Kind)
+		if err := validateRow(row, seen, checksums); err != nil {
+			return err
 		}
 	}
 	if len(checksums) > 1 {
 		return fmt.Errorf("the controls disagree on the checksum: %v", checksums)
 	}
+	return validateCoverage(seen, r.Meta["skipped"])
+}
+
+// validateMeta checks the required metadata keys and their platform neutrality.
+func validateMeta(meta map[string]string) error {
+	for _, key := range []string{"class", "toolchain", "flags", "counted", "skipped", "evidence"} {
+		if strings.TrimSpace(meta[key]) == "" {
+			return fmt.Errorf("metadata is missing %q", key)
+		}
+	}
+	for _, value := range meta {
+		if machineSpecific(value) {
+			return fmt.Errorf("metadata %q is machine-specific", value)
+		}
+	}
+	return nil
+}
+
+// validateRow checks one row and records its key and checksum.
+func validateRow(row Row, seen, checksums map[string]bool) error {
+	if row.Key == "" || seen[row.Key] {
+		return fmt.Errorf("row key %q is empty or duplicated", row.Key)
+	}
+	seen[row.Key] = true
+	if row.Label == "" || row.Language == "" || row.Note == "" {
+		return fmt.Errorf("%s: label, language and note are required", row.Key)
+	}
+	for _, s := range []string{row.Key, row.Label, row.Language, row.Unit, row.Checksum, row.Note} {
+		if machineSpecific(s) {
+			return fmt.Errorf("%s: %q is machine-specific", row.Key, s)
+		}
+	}
+	switch row.Kind {
+	case "timing":
+		return validateTiming(row, checksums)
+	case "counter":
+		return validateCounter(row)
+	default:
+		return fmt.Errorf("%s: unknown kind %q", row.Key, row.Kind)
+	}
+}
+
+// validateTiming checks a timing row and records its checksum.
+func validateTiming(row Row, checksums map[string]bool) error {
+	if row.Unit != "us" {
+		return fmt.Errorf("%s: timing unit must be us, got %q", row.Key, row.Unit)
+	}
+	if row.Runs < 1 || row.Rounds < 1 {
+		return fmt.Errorf("%s: rounds and runs must be positive", row.Key)
+	}
+	if row.Min > row.Median || row.Median > row.Max {
+		return fmt.Errorf("%s: median %v is outside %v..%v", row.Key, row.Median, row.Min, row.Max)
+	}
+	if row.Stdev < 0 || row.Spread < 0 {
+		return fmt.Errorf("%s: stdev and spread must be non-negative", row.Key)
+	}
+	if row.Checksum == "-" {
+		return nil
+	}
+	if _, err := strconv.ParseInt(row.Checksum, 10, 64); err != nil {
+		return fmt.Errorf("%s: checksum %q is not an integer", row.Key, row.Checksum)
+	}
+	checksums[row.Checksum] = true
+	return nil
+}
+
+// validateCounter checks a counter row's unit and range.
+func validateCounter(row Row) error {
+	if row.Unit != "ratio" && row.Unit != "blocks" {
+		return fmt.Errorf("%s: counter unit must be ratio or blocks, got %q", row.Key, row.Unit)
+	}
+	if row.Unit == "ratio" && row.Median > 1 {
+		return fmt.Errorf("%s: ratio %v is above 1", row.Key, row.Median)
+	}
+	if row.Unit == "blocks" && row.Median != float64(int64(row.Median)) {
+		return fmt.Errorf("%s: block count %v is not an integer", row.Key, row.Median)
+	}
+	return nil
+}
+
+// validateCoverage checks that every required row is present and that a missing control names its skip.
+func validateCoverage(seen map[string]bool, skipped string) error {
 	for _, key := range []string{"compiled_observable", "c_observable", "compiled_floor", "legacy_floor", "policy_reuse", "policy_fragmentation"} {
 		if !seen[key] {
 			return fmt.Errorf("the record is missing the required row %q", key)
 		}
 	}
 	for _, key := range []string{"rust_observable", "go_observable"} {
-		if !seen[key] && !strings.Contains(strings.ToLower(r.Meta["skipped"]), strings.SplitN(key, "_", 2)[0]) {
-			return fmt.Errorf("%s is missing and the skipped metadata does not name %s", key, strings.SplitN(key, "_", 2)[0])
-		}
-	}
-	for _, value := range r.Meta {
-		if machineSpecific(value) {
-			return fmt.Errorf("metadata %q is machine-specific", value)
+		language := strings.SplitN(key, "_", 2)[0]
+		if !seen[key] && !strings.Contains(strings.ToLower(skipped), language) {
+			return fmt.Errorf("%s is missing and the skipped metadata does not name %s", key, language)
 		}
 	}
 	return nil
