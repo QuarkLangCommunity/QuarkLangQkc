@@ -1,0 +1,24 @@
+// Tide benchmark, dead-code floor with a checksum: the same allocate/use/delete loop as tide.qk, but
+// without the opaque sink, so the optimizer may remove the allocation. The checksum keeps the loop
+// itself alive, which separates "the allocation was removed" from "the whole loop was removed".
+fn main(IOStream io) {
+    // See tide.qk: the linked runtime needs both generated string helpers at link time.
+    String fs = (1.5).toString();
+    String is = (0 - 1).toString();
+    if (fs.size() + is.size() < 0) {
+        io.println(fs, is);
+    }
+    int rounds = 100000000;
+    long acc = 0;
+    int i = 0;
+    int t0 = clock();
+    while (i < rounds) {
+        List<int> a = [i % 7, i % 11, i % 13];
+        acc = acc + a.get(0) + a.get(2);
+        delete a;
+        i = i + 1;
+    }
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(acc);
+}
