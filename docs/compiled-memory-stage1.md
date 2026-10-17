@@ -95,6 +95,11 @@ asserts.
 
 `QL_MEM_DEBUG=1` adds assertions on the object/slab magic, occupancy bounds, free-list membership,
 alignment, double release and counter consistency. The ordinary compiled runtime is built without it.
+The checked-in C stress test (`compiler/testdata/memory/qthreads_mem_test.c`, driven by
+`compiler/memory_runtime_test.go`) runs it twice (debug and release), covers a deterministic
+delete/reallocate loop, the tide reuse, the large path, compact, and a concurrent worker + main loop
+through the task pool so the multi-threaded lock path is exercised too. It is also run under
+ThreadSanitizer in the stage-1 audit (clean); the gate itself uses clang without a sanitizer.
 
 ## 5. Windows
 

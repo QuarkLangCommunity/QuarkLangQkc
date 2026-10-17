@@ -2,7 +2,7 @@ package main
 
 // The allocator's assertion and stress gate. compiler/qthreads.c.txt is the translation unit qkc
 // embeds and links into every compiled program; this test compiles that exact source (through
-// runtimeSource(), which prepends the generated message catalog) with the checked-in C harness and
+// runtimeSrc(), which prepends the generated message catalog) with the checked-in C harness and
 // runs the T4 shape: delete/reallocate under load, a tide, the large path, compact and the full
 // ql_mem_check() invariant walk.
 //

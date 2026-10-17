@@ -31,6 +31,12 @@ long long ql_mem_free_calls(void);
 void ql_mem_stats(long long* reuse, long long* new_blocks, long long* block_count);
 int ql_mem_check(void);
 
+/* qthreads' task pool: used here only to put the allocator on its multi-threaded lock path. */
+int ql_spawn(void);
+void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3,
+              long long a4, long long a5, long long a6, long long a7);
+void ql_block(int id);
+
 /* The generated IR owns these in a real compiled program; the allocator test never calls them. */
 char* ql_int_to_str(int v);
 char* ql_float_to_str(double v);
@@ -175,6 +181,42 @@ static int fragmentation_and_occupancy(void) {
     return 0;
 }
 
+/* The task pool enables the allocator lock before its workers start. Run one worker and the main
+ * thread concurrently through alloc/free/realloc; the debug build's assertions and the final
+ * ql_mem_check() then cover the lock path, not just the single-threaded fast path. */
+static void mem_worker(long long iterations, long long a1, long long a2, long long a3,
+                       long long a4, long long a5, long long a6, long long a7) {
+    long long i;
+    (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; (void)a7;
+    for (i = 0; i < iterations; i++) {
+        size_t size = (size_t)((i * 37) % 5000 + 1);
+        void* p = ql_alloc(size, 1);
+        if (!p) abort();
+        ((unsigned char*)p)[0] = (unsigned char)i;
+        p = ql_realloc(p, (size_t)((i * 53) % 5000 + 1));
+        if (!p) abort();
+        ql_free(p);
+    }
+}
+
+static int multithreaded_stress(void) {
+    int id = ql_spawn();
+    long long i;
+    CHECK(id > 0);
+    ql_merge(id, (void*)mem_worker, 30000, 0, 0, 0, 0, 0, 0, 0);
+    for (i = 0; i < 30000; i++) {
+        void* p = ql_alloc((size_t)((i * 29) % 3000 + 1), 0);
+        CHECK(p != 0);
+        ql_free(p);
+    }
+    ql_block(id);
+    CHECK(ql_mem_check() == 0);
+    ql_mem_compact();
+    CHECK(ql_mem_check() == 0);
+    CHECK(ql_mem_block_count() == 0);
+    return 0;
+}
+
 /* T4: deterministic delete/reallocate under load across classes and the large path. */
 static int delete_reallocate_stress(void) {
     enum { SLOTS = 512 };
@@ -246,6 +288,7 @@ int main(void) {
     CHECK(block_size() == 0);
     CHECK(tide_reuses() == 0);
     CHECK(fragmentation_and_occupancy() == 0);
+    CHECK(multithreaded_stress() == 0);
     CHECK(delete_reallocate_stress() == 0);
     ql_mem_stats(&reuse, &blocks, &count);
     printf("ok reuse=%lld new_blocks=%lld block_count=%lld alloc_calls=%lld free_calls=%lld\n",
