@@ -6,31 +6,34 @@ The tide workload allocates a three-element list, uses it and releases it in a l
 README row `Tide, 1e8 rounds = 1 ms` had no checked-in source, and a design review showed that the
 1 ms was LLVM dead-code elimination: at `-O3` the allocation was removed, while the same IR at `-O0`
 still referenced `malloc`/`calloc`/`free`. This report and the harness behind it replace the claim
-with a measurement the optimizer cannot erase.
+with a measurement the optimizer cannot erase. Since stage 1 of the compiled memory design
+([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) the compiled `List` allocation goes through
+the counted-slab runtime allocator on POSIX, so the QuarkLang rows below measure that allocator, and
+the historical no-use shape is no longer erased by the optimizer.
 
 <!-- tide-measurements -->
 Measured on Linux x86_64, 16 logical CPUs. Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44). Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default). Skipped controls: none.
 
-What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed. Evidence: nm -u on the observable QuarkLang binary lists malloc/calloc/free.
+What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed. Evidence: the observable QuarkLang binary defines ql_alloc/ql_free for the List allocation and imports malloc/free for the toString string (nm -u lists malloc/calloc/free).
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, observable | 1e8 | 5 | 8.58 s | 8.54–9.08 s | 6.31% | 899,999,977 | `List<int>` literal + toString + opaque C sink + release + delete |
-| C control, volatile sink | 1e8 | 5 | 401.91 ms | 394.10–433.24 ms | 9.74% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
-| Rust control, black_box | 1e8 | 5 | 625.79 ms | 623.36–641.70 ms | 2.93% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
-| Go control, global sink | 1e8 | 5 | 1.20 s | 1.19–1.22 s | 2.35% | 899,999,977 | make([]int32,3) + global sink + GC |
+| QuarkLang compiled, observable | 1e8 | 5 | 9.44 s | 9.33–9.63 s | 3.27% | 899,999,977 | `List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete |
+| C control, volatile sink | 1e8 | 5 | 394.56 ms | 392.21–400.18 ms | 2.02% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
+| Rust control, black_box | 1e8 | 5 | 628.88 ms | 623.44–641.71 ms | 2.90% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
+| Go control, global sink | 1e8 | 5 | 1.20 s | 1.17–1.22 s | 4.50% | 899,999,977 | make([]int32,3) + global sink + GC |
 
-The same loops without the sink. The checksum keeps the loop alive; the legacy row removes the use entirely.
+The same loops without the sink. The checksum keeps the loop alive; on the pre-stage-1 libc path the legacy row removed the use entirely. Since stage 1 the QuarkLang rows call the opaque counted-slab allocator, so they measure allocation too; the C/Rust/Go floor rows still measure their own optimizer floors.
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, no sink (optimizer floor) | 1e8 | 5 | 56.25 ms | 55.06–61.41 ms | 11.29% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive |
-| C control, no sink (optimizer floor) | 1e8 | 5 | 91.97 ms | 91.07–100.71 ms | 10.48% | 899,999,977 | same loop with the volatile sink removed |
-| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 149.15 ms | 144.63–159.23 ms | 9.79% | 899,999,977 | same loop with black_box removed |
-| Go control, local slice (optimizer floor) | 1e8 | 5 | 98.68 ms | 95.19–109.21 ms | 14.21% | 899,999,977 | same loop with the global sink removed |
-| QuarkLang compiled, legacy shape (dead-code floor) | 1e8 | 5 | 0 µs | 0–0 µs | 0.00% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured |
+| QuarkLang compiled, no sink | 1e8 | 5 | 1.07 s | 1.01–1.12 s | 10.23% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided |
+| C control, no sink (optimizer floor) | 1e8 | 5 | 91.85 ms | 91.19–96.09 ms | 5.33% | 899,999,977 | same loop with the volatile sink removed |
+| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 145.98 ms | 144.41–152.15 ms | 5.30% | 899,999,977 | same loop with black_box removed |
+| Go control, local slice (optimizer floor) | 1e8 | 5 | 96.12 ms | 94.40–96.76 ms | 2.45% | 899,999,977 | same loop with the global sink removed |
+| QuarkLang compiled, legacy shape (no read/sink) | 1e8 | 5 | 983.02 ms | 960.52–1058.45 ms | 9.96% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs |
 
-The legacy row is the dead-code floor the old `1 ms` claim measured: LLVM removes the loop, so `0 µs` is the correct reading, not an allocation result.
+The historical `1 ms` claim measured the legacy row on the pre-stage-1 libc path, where LLVM removed the loop; that is what `0 µs` meant. On the stage-1 tree the same row is no longer erased (the allocator call is opaque), so the recorded value is a real allocation measurement and the label no longer calls it a dead-code floor.
 
 | Policy measurement | Waves | Allocations | Value | Note |
 |---|---:|---:|---:|---|
@@ -67,16 +70,19 @@ smoke; the checked-in record uses 1e8 rounds and five runs.
 
 The QuarkLang observable row necessarily includes the `List` header, the buffer and `toString()`,
 because that runtime call is the only opaque sink the compiler exposes. The C control is the minimal
-`malloc`/`free` shape the old claim compared against, not a rendering-equivalent workload. The
-`QuarkLang compiled, no sink` row keeps the checksum and removes only the sink, so it separates
-"the allocation was removed" from "the whole loop was removed"; the legacy row is the fully removed
-loop. The last row is therefore the dead-code floor the old `1 ms` figure measured, not an
-allocation result.
+`malloc`/`free` shape the old claim compared against, not a rendering-equivalent workload. On the
+pre-stage-1 libc path the `QuarkLang compiled, no sink` row and the legacy row measured LLVM removing
+the allocation and then the whole loop. Stage 1 emits opaque `ql_alloc`/`ql_free` calls, so those two
+rows now measure the counted slabs as well; the historical no-use shape is kept precisely to show
+that the optimizer can no longer erase it. The C/Rust/Go floor rows still measure their own optimizer
+floors.
 
-The interpreter and the compiled artifact are different allocators today: the interpreter implements
-the block policy as a logical layer over the host allocator, while `qkc` lowers `List` allocation to
-the host `malloc`/`calloc`/`free`. The policy rows describe the former and do not describe the
-compiled tide.
+The interpreter implements the block policy as a logical layer over the host allocator; its policy
+rows describe that accounting and not the compiled tide. The compiled artifact's `List` allocations
+go through the stage-1 counted-slab allocator on POSIX, while its runtime helper strings (including
+the `toString()` string) remain on the host allocator; Windows keeps the libc path because the
+runtime is not linked there. The compiled rows therefore measure the counted-slab path, not the
+interpreter's logical blocks.
 
 ## Reproducing and checking
 

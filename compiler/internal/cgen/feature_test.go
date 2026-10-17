@@ -356,6 +356,10 @@ func TestPhaseCGenerics(t *testing.T) {
 // so here we check that the IR really calls the matching helpers; end-to-end byte alignment is covered by
 // cases_run/s_string_methods.kq and t_list_methods.kq in compare.sh.
 func TestBuiltinMethodsIR(t *testing.T) {
+	reallocCall := "call i8* @ql_realloc("
+	if hostAllocatorFallback {
+		reallocCall = "call i8* @realloc("
+	}
 	str := transpile(t, "fn main(IOStream io) {\n"+
 		"    String s = \"abc\";\n"+
 		"    io.println(s.size(), s.contains(\"b\"), s.startsWith(\"a\"), s.endsWith(\"c\"));\n"+
@@ -385,7 +389,7 @@ func TestBuiltinMethodsIR(t *testing.T) {
 		"}\n")
 	for _, want := range []string{
 		"call void @ql_list_int_sort(", "call i8* @ql_list_int_str(",
-		"@realloc(", "ListExhaustedError",
+		reallocCall, "ListExhaustedError",
 	} {
 		if !strings.Contains(lst, want) {
 			t.Fatalf("List method IR missing %q:\n%s", want, lst)
@@ -400,7 +404,7 @@ func TestBuiltinMethodsIR(t *testing.T) {
 	}
 	// List<String> literals and append are lowered as well (engine 13): a heap %ListS with i8* elements
 	lit := transpile(t, "fn main(IOStream io) { List<String> l = [\"a\", \"b\"]; l.append(\"c\"); io.println(l.size(), l.get(2), l.toString()); }\n")
-	for _, want := range []string{"%ListS", "@realloc(", "call i8* @ql_list_str_str("} {
+	for _, want := range []string{"%ListS", reallocCall, "call i8* @ql_list_str_str("} {
 		if !strings.Contains(lit, want) {
 			t.Fatalf("List<String> literal/append IR missing %q:\n%s", want, lit)
 		}

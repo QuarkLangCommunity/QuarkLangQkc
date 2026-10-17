@@ -2735,6 +2735,16 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		if fc.ioName != "" && id.Name == fc.ioName {
 			return nil, l.errfID(me.Pos, i18n.MsgCompilerIoSReturnsNothingCannotUsed, me.Name)
 		}
+		// The memory receiver's runtime entry points exist (stage 1), but lowering memory.* is stage 2.
+		// Refuse with a message that names the supported memory surface rather than the generic
+		// "available in the interpreter" fallback: a runtime that exists but is not wired must not read
+		// like a feature that does not exist.
+		if id.Name == "memory" {
+			switch me.Name {
+			case "setBlock", "compact", "clear", "mode":
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
+			}
+		}
 	}
 	return nil, l.errfID(me.Pos, i18n.MsgCompilerCallingMethodSOnSNot, rt, me.Name)
 }

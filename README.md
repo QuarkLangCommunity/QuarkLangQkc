@@ -362,9 +362,10 @@ git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: nati
 
 - **Compiled performance = C on compute-bound code**: same LLVM `-O3` backend (fib35 21 ms vs C 22 ms; P99 latency on par at every quantile); allocation-heavy loops are measured separately in the tide block and are not a parity claim.
 - **Erlang-style concurrency**: `spawn/merge/block/done/channel` user-space tasks on a thread pool — Erlang's model with C-level performance.
-- **Zero-GC memory**: linear block allocation + an occupancy min-heap; `delete` returns blocks to the free queue (data preserved),
-  `clear` actually wipes them — no GC pauses; the checked-in `bench/tide` policy workload measures reuse,
-  fragmentation and block count (`docs/tide-benchmark.md`).
+- **Zero-GC memory**: the interpreter uses a linear block policy over the host allocator, and the
+  compiled path (stage 1) uses counted slabs with per-object release; `delete` preserves the payload,
+  `clear` wipes; the checked-in `bench/tide` policy workload measures reuse, fragmentation and block
+  count (`docs/tide-benchmark.md`).
 - **Mathematical `sum` optimization**: closed form for linear/periodic/uniform-random sums — 1e9 terms in O(1) (2 ms; a Go loop needs 223 ms).
 - **Incremental compilation**: two-level IR + binary cache, 16× faster rebuilds.
 - **Zero third-party dependencies**: lexer, parser, type checker, evaluator and LLVM IR emission are all hand-written.
@@ -401,33 +402,35 @@ to identical output; `QUARK_NO_VM=1` disables the VM entirely.
 
 The tide row is measured by `bench/tide/run.sh`; the generated block below is embedded here and in
 `spec/STANDARD.md` §10, and `TestTideClaimsMatchMeasurement` fails when the three copies differ. It
-reports the observable path, the sink-free floor, the legacy shape the old `1 ms` figure measured, and
-the interpreter's block-policy counters. Reproduce the cross-language fib rows with `bench/Makefile`
-and the tide block with `bench/tide/run.sh`.
+reports the observable path, the no-sink and historical no-use rows, and the interpreter's
+block-policy counters. Since stage 1 of the compiled memory design the compiled `List` allocation goes
+through the counted-slab runtime allocator on POSIX, so the no-sink and no-use rows are no longer
+optimizer floors; the historical row is kept to show that the optimizer can no longer erase it.
+Reproduce the cross-language fib rows with `bench/Makefile` and the tide block with `bench/tide/run.sh`.
 
 <!-- tide-measurements -->
 Measured on Linux x86_64, 16 logical CPUs. Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44). Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default). Skipped controls: none.
 
-What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed. Evidence: nm -u on the observable QuarkLang binary lists malloc/calloc/free.
+What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed. Evidence: the observable QuarkLang binary defines ql_alloc/ql_free for the List allocation and imports malloc/free for the toString string (nm -u lists malloc/calloc/free).
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, observable | 1e8 | 5 | 8.58 s | 8.54–9.08 s | 6.31% | 899,999,977 | `List<int>` literal + toString + opaque C sink + release + delete |
-| C control, volatile sink | 1e8 | 5 | 401.91 ms | 394.10–433.24 ms | 9.74% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
-| Rust control, black_box | 1e8 | 5 | 625.79 ms | 623.36–641.70 ms | 2.93% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
-| Go control, global sink | 1e8 | 5 | 1.20 s | 1.19–1.22 s | 2.35% | 899,999,977 | make([]int32,3) + global sink + GC |
+| QuarkLang compiled, observable | 1e8 | 5 | 9.44 s | 9.33–9.63 s | 3.27% | 899,999,977 | `List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete |
+| C control, volatile sink | 1e8 | 5 | 394.56 ms | 392.21–400.18 ms | 2.02% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
+| Rust control, black_box | 1e8 | 5 | 628.88 ms | 623.44–641.71 ms | 2.90% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
+| Go control, global sink | 1e8 | 5 | 1.20 s | 1.17–1.22 s | 4.50% | 899,999,977 | make([]int32,3) + global sink + GC |
 
-The same loops without the sink. The checksum keeps the loop alive; the legacy row removes the use entirely.
+The same loops without the sink. The checksum keeps the loop alive; on the pre-stage-1 libc path the legacy row removed the use entirely. Since stage 1 the QuarkLang rows call the opaque counted-slab allocator, so they measure allocation too; the C/Rust/Go floor rows still measure their own optimizer floors.
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, no sink (optimizer floor) | 1e8 | 5 | 56.25 ms | 55.06–61.41 ms | 11.29% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive |
-| C control, no sink (optimizer floor) | 1e8 | 5 | 91.97 ms | 91.07–100.71 ms | 10.48% | 899,999,977 | same loop with the volatile sink removed |
-| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 149.15 ms | 144.63–159.23 ms | 9.79% | 899,999,977 | same loop with black_box removed |
-| Go control, local slice (optimizer floor) | 1e8 | 5 | 98.68 ms | 95.19–109.21 ms | 14.21% | 899,999,977 | same loop with the global sink removed |
-| QuarkLang compiled, legacy shape (dead-code floor) | 1e8 | 5 | 0 µs | 0–0 µs | 0.00% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured |
+| QuarkLang compiled, no sink | 1e8 | 5 | 1.07 s | 1.01–1.12 s | 10.23% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided |
+| C control, no sink (optimizer floor) | 1e8 | 5 | 91.85 ms | 91.19–96.09 ms | 5.33% | 899,999,977 | same loop with the volatile sink removed |
+| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 145.98 ms | 144.41–152.15 ms | 5.30% | 899,999,977 | same loop with black_box removed |
+| Go control, local slice (optimizer floor) | 1e8 | 5 | 96.12 ms | 94.40–96.76 ms | 2.45% | 899,999,977 | same loop with the global sink removed |
+| QuarkLang compiled, legacy shape (no read/sink) | 1e8 | 5 | 983.02 ms | 960.52–1058.45 ms | 9.96% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs |
 
-The legacy row is the dead-code floor the old `1 ms` claim measured: LLVM removes the loop, so `0 µs` is the correct reading, not an allocation result.
+The historical `1 ms` claim measured the legacy row on the pre-stage-1 libc path, where LLVM removed the loop; that is what `0 µs` meant. On the stage-1 tree the same row is no longer erased (the allocator call is opaque), so the recorded value is a real allocation measurement and the label no longer calls it a dead-code floor.
 
 | Policy measurement | Waves | Allocations | Value | Note |
 |---|---:|---:|---:|---|
@@ -629,7 +632,8 @@ PRs and issues are welcome. The three lowest-friction ways to get involved:
 ## Status
 
 The v2 syntax surface is complete (interpreter and compiler agree); compiled performance is on par with C
-on compute-bound code, while the allocation-heavy tide is measured separately in `docs/tide-benchmark.md`.
+on compute-bound code, while the allocation-heavy tide is measured separately in `docs/tide-benchmark.md`
+on the stage-1 counted-slab allocator.
 
 ## Known gaps
 

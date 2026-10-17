@@ -4,16 +4,16 @@
 # flags	qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default)
 # counted	in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed
 # skipped	none
-# evidence	nm -u on the observable QuarkLang binary lists malloc/calloc/free
+# evidence	the observable QuarkLang binary defines ql_alloc/ql_free for the List allocation and imports malloc/free for the toString string (nm -u lists malloc/calloc/free)
 # columns	kind	key	label	language	rounds	runs	median	unit	min	max	stdev	spread_pct	checksum	note
-timing	compiled_observable	QuarkLang compiled, observable	QuarkLang	100000000	5	8576599	us	8536416	9077405	225250	6.31	899999977	`List<int>` literal + toString + opaque C sink + release + delete
-timing	c_observable	C control, volatile sink	C	100000000	5	401914	us	394095	433236	15605	9.74	899999977	malloc(12) + 3 writes + volatile sink + free
-timing	rust_observable	Rust control, black_box	Rust	100000000	5	625788	us	623356	641700	7684	2.93	899999977	Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop
-timing	go_observable	Go control, global sink	Go	100000000	5	1197918	us	1194292	1222417	11747	2.35	899999977	make([]int32,3) + global sink + GC
-timing	compiled_floor	QuarkLang compiled, no sink (optimizer floor)	QuarkLang	100000000	5	56246	us	55056	61407	2656	11.29	899999977	same loop with the sink removed; the checksum keeps the loop alive
-timing	c_floor	C control, no sink (optimizer floor)	C	100000000	5	91975	us	91072	100713	4036	10.48	899999977	same loop with the volatile sink removed
-timing	rust_floor	Rust control, no black_box (optimizer floor)	Rust	100000000	5	149146	us	144626	159226	5633	9.79	899999977	same loop with black_box removed
-timing	go_floor	Go control, local slice (optimizer floor)	Go	100000000	5	98679	us	95186	109208	5693	14.21	899999977	same loop with the global sink removed
-timing	legacy_floor	QuarkLang compiled, legacy shape (dead-code floor)	QuarkLang	100000000	5	0	us	0	0	0	0.00	-	allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured
+timing	compiled_observable	QuarkLang compiled, observable	QuarkLang	100000000	5	9443905	us	9325653	9634327	119201	3.27	899999977	`List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete
+timing	c_observable	C control, volatile sink	C	100000000	5	394558	us	392215	400184	3460	2.02	899999977	malloc(12) + 3 writes + volatile sink + free
+timing	rust_observable	Rust control, black_box	Rust	100000000	5	628885	us	623444	641707	7248	2.90	899999977	Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop
+timing	go_observable	Go control, global sink	Go	100000000	5	1196111	us	1170853	1224677	22371	4.50	899999977	make([]int32,3) + global sink + GC
+timing	compiled_floor	QuarkLang compiled, no sink	QuarkLang	100000000	5	1073906	us	1006162	1115974	46519	10.23	899999977	same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided
+timing	c_floor	C control, no sink (optimizer floor)	C	100000000	5	91852	us	91190	96090	2405	5.33	899999977	same loop with the volatile sink removed
+timing	rust_floor	Rust control, no black_box (optimizer floor)	Rust	100000000	5	145983	us	144408	152151	3299	5.30	899999977	same loop with black_box removed
+timing	go_floor	Go control, local slice (optimizer floor)	Go	100000000	5	96121	us	94402	96758	943	2.45	899999977	same loop with the global sink removed
+timing	legacy_floor	QuarkLang compiled, legacy shape (no read/sink)	QuarkLang	100000000	5	983017	us	960521	1058447	37350	9.96	-	allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs
 counter	policy_reuse	Interpreter block policy, reuse workload	interpreter	10000	1000000	0.999998	ratio	-	-	-	-	-	ReusedCount/AllocCalls; the block count converges to 2 blocks
 counter	policy_fragmentation	Interpreter block policy, mixed survival	interpreter	1000	1000000	0.001953	ratio	-	-	-	-	-	Fragmentation() after the mixed-size waves; 3005 blocks stay live by design

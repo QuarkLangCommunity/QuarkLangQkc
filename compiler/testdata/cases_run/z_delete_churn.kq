@@ -1,0 +1,17 @@
+// Stage 1 allocation churn: every iteration allocates an owned List<int>, grows it with append,
+// reads it back, and releases it with delete. This is the parity half of the allocator stress gate:
+// the interpreter accounts for the block and the compiler's counted slabs must produce the same
+// program output byte for byte.
+fn main(IOStream io) void {
+    int i = 0;
+    int acc = 0;
+    while (i < 20000) {
+        List<int> a = [i % 7, i % 11, i % 13];
+        a.append(i % 17);
+        int n = a.size();
+        acc = acc + a.get(0) + a.get(n - 1) + n;
+        delete a;
+        i = i + 1;
+    }
+    io.println(acc);
+}

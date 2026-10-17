@@ -22,6 +22,29 @@ func transpile(t *testing.T, src string) string {
 // llvm-as/lli does not link it, so the tests add a definition via libc strlen/memcpy/malloc).
 const testRuntime = `declare i64 @strlen(i8*)
 declare i8* @memcpy(i8*, i8*, i64)
+; ql test runtime: the allocator entry points the routed IR calls. lli has no qthreads.c, so these
+; wrappers keep the unit tests focused on IR shape; the C allocator itself is exercised by
+; compiler/memory_runtime_test.go.
+define i8* @ql_alloc(i64 %n, i32 %owner) {
+entry:
+  %p = call i8* @malloc(i64 %n)
+  ret i8* %p
+}
+define i8* @ql_calloc(i64 %n, i64 %sz, i32 %owner) {
+entry:
+  %p = call i8* @calloc(i64 %n, i64 %sz)
+  ret i8* %p
+}
+define i8* @ql_realloc(i8* %p, i64 %n) {
+entry:
+  %r = call i8* @realloc(i8* %p, i64 %n)
+  ret i8* %r
+}
+define void @ql_free(i8* %p) {
+entry:
+  call void @free(i8* %p)
+  ret void
+}
 define i8* @ql_strcat(i8* %a, i8* %b) {
 entry:
   %la = call i64 @strlen(i8* %a)
@@ -38,9 +61,31 @@ entry:
 `
 
 // withTestRuntime strips the module's ql_strcat declaration and appends the test runtime definition.
+// It is idempotent: lliRun applies it automatically, and a test that already wrapped the IR keeps one
+// copy of the definitions.
 func withTestRuntime(ir string) string {
-	ir = strings.Replace(ir, "declare i8* @ql_strcat(i8*, i8*)\n", "", 1)
-	return ir + "\n" + testRuntime
+	if strings.Contains(ir, "; ql test runtime:") {
+		return ir
+	}
+	// LLVM 22 rejects a declaration followed by a definition of the same function in one module, and
+	// rejects duplicate declarations too. The test runtime defines these names, so drop the module's
+	// declarations before appending it. libc malloc/calloc/realloc/free stay declared: the wrappers call
+	// them and the code generator always emits those four declarations.
+	stripped := make([]string, 0, len(strings.Split(ir, "\n")))
+	for _, line := range strings.Split(ir, "\n") {
+		if strings.HasPrefix(line, "declare ") &&
+			(strings.Contains(line, "@ql_alloc(") ||
+				strings.Contains(line, "@ql_calloc(") ||
+				strings.Contains(line, "@ql_realloc(") ||
+				strings.Contains(line, "@ql_free(") ||
+				strings.Contains(line, "@ql_strcat(") ||
+				strings.Contains(line, "@strlen(") ||
+				strings.Contains(line, "@memcpy(")) {
+			continue
+		}
+		stripped = append(stripped, line)
+	}
+	return strings.Join(stripped, "\n") + "\n" + testRuntime
 }
 
 // lliRun runs IR with lli and returns stdout (skips the test when lli is missing).
@@ -50,6 +95,7 @@ func lliRun(t *testing.T, ir string) string {
 	if err != nil {
 		t.Skip("lli not available")
 	}
+	ir = withTestRuntime(ir)
 	f, err := os.CreateTemp("", "quark-test-*.ll")
 	if err != nil {
 		t.Fatal(err)

@@ -78,11 +78,14 @@ done
 
 EVIDENCE="not checked on this platform"
 if command -v nm >/dev/null 2>&1; then
-  if nm -u "$BUILD/tide-qk" 2>/dev/null | grep -Eq 'malloc|calloc|free'; then
-    EVIDENCE="nm -u on the observable QuarkLang binary lists malloc/calloc/free"
-  else
-    echo "tide: the observable QuarkLang binary references no allocator symbol" >&2
+  if ! nm -u "$BUILD/tide-qk" 2>/dev/null | grep -Eq 'malloc|calloc|free'; then
+    echo "tide: the observable QuarkLang binary references no host allocator symbol" >&2
     exit 1
+  fi
+  if nm "$BUILD/tide-qk" 2>/dev/null | grep -Eq 'ql_alloc|ql_free'; then
+    EVIDENCE="the observable QuarkLang binary defines ql_alloc/ql_free for the List allocation and imports malloc/free for the toString string (nm -u lists malloc/calloc/free)"
+  else
+    EVIDENCE="nm -u on the observable QuarkLang binary lists malloc/calloc/free (the List allocation is not routed through ql_alloc on this platform)"
   fi
 fi
 
@@ -164,7 +167,7 @@ run_timing() { # usage: run_timing key label language checksum-mode note command
     --unit us --checksum "$checksum" --note "$note" >> "$ROWS"
 }
 
-NOTE_QK='`List<int>` literal + toString + opaque C sink + release + delete'
+NOTE_QK='`List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete'
 NOTE_C="malloc(12) + 3 writes + volatile sink + free"
 NOTE_RUST="Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop"
 NOTE_GO="make([]int32,3) + global sink + GC"
@@ -176,13 +179,13 @@ if command -v rustc >/dev/null 2>&1; then
 fi
 run_timing go_observable "Go control, global sink" Go required "$NOTE_GO" "$BUILD/tide-go"
 
-run_timing compiled_floor "QuarkLang compiled, no sink (optimizer floor)" QuarkLang required "same loop with the sink removed; the checksum keeps the loop alive" "$BUILD/tide-qk-floor"
+run_timing compiled_floor "QuarkLang compiled, no sink" QuarkLang required "same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided" "$BUILD/tide-qk-floor"
 run_timing c_floor "C control, no sink (optimizer floor)" C required "same loop with the volatile sink removed" "$BUILD/tide-c-floor"
 if command -v rustc >/dev/null 2>&1; then
   run_timing rust_floor "Rust control, no black_box (optimizer floor)" Rust required "same loop with black_box removed" "$BUILD/tide-rs-floor"
 fi
 run_timing go_floor "Go control, local slice (optimizer floor)" Go required "same loop with the global sink removed" "$BUILD/tide-go-floor"
-run_timing legacy_floor "QuarkLang compiled, legacy shape (dead-code floor)" QuarkLang optional "allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured" "$BUILD/tide-qk-legacy"
+run_timing legacy_floor "QuarkLang compiled, legacy shape (no read/sink)" QuarkLang optional "allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs" "$BUILD/tide-qk-legacy"
 
 # Interpreter block-policy unit workload: counters, not wall time.
 POLICY="$(go run ./bench/tide/policy -waves 10000 -frag-waves 1000)"

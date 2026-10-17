@@ -20,6 +20,7 @@ package cgen
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -595,6 +596,69 @@ type emitter struct {
 	err error
 }
 
+// hostAllocatorFallback is true on Windows. compiler/main.go's runtimeSrc still returns no runtime
+// source there, so the counted-slab allocator in qthreads.c.txt is not linked and ql_alloc/ql_free have
+// no definition. The Windows IR keeps the libc allocation path it had before stage 1; the allocator's
+// tests and the occupancy/fragmentation accounting are therefore absent on Windows. See
+// docs/compiled-memory-stage1.md §5.
+const hostAllocatorFallback = runtime.GOOS == "windows"
+
+// emitAlloc / emitCalloc / emitRealloc / emitFree are the one place where cgen chooses between the
+// compiled runtime's allocator and the Windows libc fallback. Every allocation site goes through them,
+// so the audit of "no raw malloc/free on the routed path" is one function wide.
+func (e *emitter) emitAlloc(dst, size string) {
+	if hostAllocatorFallback {
+		e.emitInstr("%s = call i8* @malloc(i64 %s)", dst, size)
+		return
+	}
+	e.emitInstr("%s = call i8* @ql_alloc(i64 %s, i32 0)", dst, size)
+}
+
+func (e *emitter) emitCalloc(dst, count, size string) {
+	if hostAllocatorFallback {
+		e.emitInstr("%s = call i8* @calloc(i64 %s, i64 %s)", dst, count, size)
+		return
+	}
+	e.emitInstr("%s = call i8* @ql_calloc(i64 %s, i64 %s, i32 0)", dst, count, size)
+}
+
+func (e *emitter) emitRealloc(dst, ptr, size string) {
+	if hostAllocatorFallback {
+		e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", dst, ptr, size)
+		return
+	}
+	e.emitInstr("%s = call i8* @ql_realloc(i8* %s, i64 %s)", dst, ptr, size)
+}
+
+func (e *emitter) emitFree(ptr string) {
+	if hostAllocatorFallback {
+		e.emitInstr("call void @free(i8* %s)", ptr)
+		return
+	}
+	e.emitInstr("call void @ql_free(i8* %s)", ptr)
+}
+
+// allocCallExpr is the allocator call used inside the fixed runtime-helper bodies (int/float/pointer
+// toString), which are plain IR strings rather than emitInstr sites.
+func (e *emitter) allocCallExpr(size string) string {
+	if hostAllocatorFallback {
+		return fmt.Sprintf("call i8* @malloc(i64 %s)", size)
+	}
+	return fmt.Sprintf("call i8* @ql_alloc(i64 %s, i32 0)", size)
+}
+
+func (e *emitter) intToStrHelperSrc() string {
+	return strings.ReplaceAll(intToStrHelper, "QL_ALLOC_12", e.allocCallExpr("12"))
+}
+
+func (e *emitter) floatToStrHelperSrc() string {
+	return strings.ReplaceAll(floatToStrHelper, "QL_ALLOC_40", e.allocCallExpr("40"))
+}
+
+func (e *emitter) ptrToStrHelperSrc() string {
+	return strings.ReplaceAll(ptrToStrHelper, "QL_ALLOC_20", e.allocCallExpr("20"))
+}
+
 func newEmitter(lp *lowered) *emitter {
 	e := &emitter{
 		fnMeta:     programMeta(lp.funcs, lp.mainStmts),
@@ -1033,6 +1097,12 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @calloc(i64, i64)\n")
 	e.decls.WriteString("declare void @free(i8*)\n")
 	e.decls.WriteString("declare i8* @realloc(i8*, i64)\n")
+	// The compiled runtime's counted-slab allocator (stage 1). On Windows the runtime is not linked and
+	// emitAlloc keeps the libc calls above; the declarations stay unused there.
+	e.decls.WriteString("declare i8* @ql_alloc(i64, i32)\n")
+	e.decls.WriteString("declare i8* @ql_calloc(i64, i64, i32)\n")
+	e.decls.WriteString("declare i8* @ql_realloc(i8*, i64)\n")
+	e.decls.WriteString("declare void @ql_free(i8*)\n")
 	e.decls.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
 	e.decls.WriteString("declare i8* @ql_strcat(i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @snprintf(i8*, i64, i8*, ...)\n")
@@ -1218,13 +1288,13 @@ func (e *emitter) emitProgram(lp *lowered) string {
 		}
 	} else {
 		if e.needIntToStr || forceHelpers {
-			helpers += intToStrHelper
+			helpers += e.intToStrHelperSrc()
 		}
 		if e.needFloatToStr || forceHelpers {
-			helpers += floatToStrHelper
+			helpers += e.floatToStrHelperSrc()
 		}
 		if e.needPtrToStr || forceHelpers {
-			helpers += ptrToStrHelper
+			helpers += e.ptrToStrHelperSrc()
 		}
 		if e.needPanic || forceHelpers {
 			helpers += panicHelper
@@ -1452,7 +1522,7 @@ func (e *emitter) ensureDeepCopyList() {
 	e.emitInstr("ret %%List* null")
 	e.setBlock(yB)
 	obj := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	e.emitCalloc(obj, "1", "16")
 	lo := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
 	head, size := e.listHeadSize("%src")
@@ -1467,7 +1537,7 @@ func (e *emitter) ensureDeepCopyList() {
 	sz := e.newReg()
 	e.emitInstr("%s = mul i64 %s, 4", sz, c64)
 	buf := e.newReg()
-	e.emitInstr("%s = call i8* @malloc(i64 %s)", buf, sz)
+	e.emitAlloc(buf, sz)
 	np := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to i32*", np, buf)
 	// Copy the visible elements in a loop
@@ -2007,11 +2077,11 @@ func (e *emitter) emitDecl(st *declStmt) {
 		lit := st.init.lst
 		n := len(lit.items)
 		obj := e.newReg()
-		e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+		e.emitCalloc(obj, "1", "16")
 		lo := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
 		buf := e.newReg()
-		e.emitInstr("%s = call i8* @malloc(i64 %d)", buf, max(1, n)*4)
+		e.emitAlloc(buf, strconv.Itoa(max(1, n)*4))
 		p := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to i32*", p, buf)
 		for i, it := range lit.items {
@@ -2202,7 +2272,7 @@ func (e *emitter) structAlloc(typ string) string {
 	sz := e.newReg()
 	e.emitInstr("%s = ptrtoint %s* %s to i64", sz, elem, g)
 	obj := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 1, i64 %s)", obj, sz)
+	e.emitCalloc(obj, "1", sz)
 	return obj
 }
 
@@ -2222,7 +2292,7 @@ func (e *emitter) emitAssign(st *assignStmt) {
 		isnull := e.newReg()
 		e.emitInstr("%s = icmp eq %s %s, null", isnull, pllt, ptr)
 		raw := e.newReg()
-		e.emitInstr("%s = call i8* @calloc(i64 1, i64 %d)", raw, e.sizeOf(base))
+		e.emitCalloc(raw, "1", strconv.Itoa(e.sizeOf(base)))
 		blt := e.ir(base)
 		fresh := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to %s", fresh, raw, pllt)
@@ -2422,10 +2492,10 @@ func (e *emitter) emitDelete(st *deleteStmt) {
 	p := e.listBuf(lo)
 	c := e.newReg()
 	e.emitInstr("%s = bitcast i32* %s to i8*", c, p)
-	e.emitInstr("call void @free(i8* %s)", c)
+	e.emitFree(c)
 	c2 := e.newReg()
 	e.emitInstr("%s = bitcast %%List* %s to i8*", c2, lo)
-	e.emitInstr("call void @free(i8* %s)", c2)
+	e.emitFree(c2)
 }
 
 func (e *emitter) emitIf(st *ifStmt) {
@@ -2932,14 +3002,14 @@ func (e *emitter) boxAny(v, from string) string {
 	switch from {
 	case "int", "thread", "cbool":
 		p := e.newReg()
-		e.emitInstr("%s = call i8* @malloc(i64 4)", p)
+		e.emitAlloc(p, "4")
 		cp := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to i32*", cp, p)
 		e.emitInstr("store i32 %s, i32* %s", v, cp)
 		data = p
 	case "bool":
 		p := e.newReg()
-		e.emitInstr("%s = call i8* @malloc(i64 4)", p)
+		e.emitAlloc(p, "4")
 		cp := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to i32*", cp, p)
 		z := e.newReg()
@@ -2948,14 +3018,14 @@ func (e *emitter) boxAny(v, from string) string {
 		data = p
 	case "float", "double":
 		p := e.newReg()
-		e.emitInstr("%s = call i8* @malloc(i64 8)", p)
+		e.emitAlloc(p, "8")
 		cp := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to double*", cp, p)
 		e.emitInstr("store double %s, double* %s", v, cp)
 		data = p
 	case "String":
 		p := e.newReg()
-		e.emitInstr("%s = call i8* @malloc(i64 8)", p)
+		e.emitAlloc(p, "8")
 		cp := e.newReg()
 		e.emitInstr("%s = bitcast i8* %s to i8**", cp, p)
 		e.emitInstr("store i8* %s, i8** %s", v, cp)
@@ -3405,11 +3475,11 @@ func (e *emitter) compileListLit(x *expr) (string, string) {
 	e.ensureList()
 	n := len(x.lst.items)
 	obj := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	e.emitCalloc(obj, "1", "16")
 	lo := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
 	buf := e.newReg()
-	e.emitInstr("%s = call i8* @malloc(i64 %d)", buf, max(1, n)*4)
+	e.emitAlloc(buf, strconv.Itoa(max(1, n)*4))
 	p := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to i32*", p, buf)
 	for i, it := range x.lst.items {
@@ -3435,11 +3505,11 @@ func (e *emitter) compileListSLit(x *expr) (string, string) {
 	e.ensureListS()
 	n := len(x.lst.items)
 	obj := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	e.emitCalloc(obj, "1", "16")
 	lo := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to %%ListS*", lo, obj)
 	buf := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 %d, i64 8)", buf, max(1, n))
+	e.emitCalloc(buf, strconv.Itoa(max(1, n)), "8")
 	p := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to i8**", p, buf)
 	for i, it := range x.lst.items {
@@ -3466,11 +3536,11 @@ func (e *emitter) compileListFLit(x *expr) (string, string) {
 	e.ensureListF()
 	n := len(x.lst.items)
 	obj := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 1, i64 16)", obj)
+	e.emitCalloc(obj, "1", "16")
 	lo := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to %%ListF*", lo, obj)
 	buf := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 %d, i64 8)", buf, max(1, n))
+	e.emitCalloc(buf, strconv.Itoa(max(1, n)), "8")
 	p := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to i64*", p, buf)
 	for i, it := range x.lst.items {
@@ -3639,7 +3709,7 @@ func (e *emitter) compileNewRef(x *expr) (string, string) {
 		}
 	}
 	obj := e.newReg()
-	e.emitInstr("%s = call i8* @calloc(i64 1, i64 %s)", obj, sz)
+	e.emitCalloc(obj, "1", sz)
 	p := e.newReg()
 	e.emitInstr("%s = bitcast i8* %s to %s", p, obj, ptlt)
 	return p, base + "&"
@@ -4002,7 +4072,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			bc := e.newReg()
 			e.emitInstr("%s = bitcast i8** %s to i8*", bc, lp)
 			rc := e.newReg()
-			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			e.emitRealloc(rc, bc, sz)
 			np := e.newReg()
 			e.emitInstr("%s = bitcast i8* %s to i8**", np, rc)
 			e.emitInstr("store i8** %s, i8*** %s", np, bf)
@@ -4062,7 +4132,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			bc := e.newReg()
 			e.emitInstr("%s = bitcast i64* %s to i8*", bc, lp)
 			rc := e.newReg()
-			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			e.emitRealloc(rc, bc, sz)
 			np := e.newReg()
 			e.emitInstr("%s = bitcast i8* %s to i64*", np, rc)
 			e.emitInstr("store i64* %s, i64** %s", np, bf)
@@ -4212,7 +4282,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			bc := e.newReg()
 			e.emitInstr("%s = bitcast i32* %s to i8*", bc, cur)
 			rc := e.newReg()
-			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			e.emitRealloc(rc, bc, sz)
 			np := e.newReg()
 			e.emitInstr("%s = bitcast i8* %s to i32*", np, rc)
 			e.emitInstr("store i32* %s, i32** %s", np, bf)
@@ -4269,7 +4339,7 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			bc := e.newReg()
 			e.emitInstr("%s = bitcast i32* %s to i8*", bc, lp)
 			rc := e.newReg()
-			e.emitInstr("%s = call i8* @realloc(i8* %s, i64 %s)", rc, bc, sz)
+			e.emitRealloc(rc, bc, sz)
 			np := e.newReg()
 			e.emitInstr("%s = bitcast i8* %s to i32*", np, rc)
 			e.emitInstr("store i32* %s, i32** %s", np, bf)
@@ -5364,7 +5434,7 @@ func constEval(x *expr) (int64, bool) {
 const intToStrHelper = `@.ql.fmt.d = private unnamed_addr constant [3 x i8] c"%d\00", align 1
 define i8* @ql_int_to_str(i32 %v) {
 entry:
-  %b = call i8* @malloc(i64 12)
+  %b = QL_ALLOC_12
   %f = getelementptr inbounds [3 x i8], [3 x i8]* @.ql.fmt.d, i64 0, i64 0
   %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %b, i64 12, i8* %f, i32 %v)
   ret i8* %b
@@ -5377,7 +5447,7 @@ entry:
 const floatToStrHelper = `@.ql.fmt.f = private unnamed_addr constant [5 x i8] c"%.*f\00", align 1
 define i8* @ql_float_to_str(double %v) {
 entry:
-  %buf = call i8* @malloc(i64 40)
+  %buf = QL_ALLOC_40
   %fmt = getelementptr inbounds [5 x i8], [5 x i8]* @.ql.fmt.f, i64 0, i64 0
   br label %loop
 loop:
@@ -5407,7 +5477,7 @@ nil:
   %np = getelementptr inbounds [4 x i8], [4 x i8]* @.ql.nil, i64 0, i64 0
   ret i8* %np
 hex:
-  %b = call i8* @malloc(i64 20)
+  %b = QL_ALLOC_20
   %f = getelementptr inbounds [7 x i8], [7 x i8]* @.ql.fmt.p, i64 0, i64 0
   %v = ptrtoint i8* %p to i64
   %n = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %b, i64 20, i8* %f, i64 %v)
