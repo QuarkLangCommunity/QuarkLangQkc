@@ -176,6 +176,21 @@ exactly-sized realloc would have caused once the list tail passed half its capac
 The parity churn case `compiler/testdata/cases_run/z_delete_churn.kq` exercises the same delete/reallocate
 path under `compare.sh`; its output is byte-identical in both engines.
 
+**Coordination with the merged `bench/tide` harness (PR #125).** The harness landed on `main` while
+stage 1 was in review. Its record was measured on the pre-stage-1 libc path. Re-running
+`bench/tide/run.sh --record` on the stage-1 tree (1e8 rounds, 5 runs) gives:
+
+| row | pre-stage-1 record (`0fc0808` + #125) | stage-1 re-record | what happened |
+|---|---:|---:|---|
+| QuarkLang compiled, observable | 8.58 s | 9.44 s (spread 3.27%) | the `List` allocation now goes through the counted slabs; C control unchanged at 394.56 ms |
+| QuarkLang compiled, no sink | 56.25 ms (optimizer floor) | 1.07 s | the opaque `ql_alloc`/`ql_free` calls cannot be erased, so this is no longer an optimizer floor |
+| QuarkLang compiled, legacy shape | 0 µs (dead-code floor) | 983.02 ms | same: D10(b) keeps the allocation in the historical shape |
+
+This is the D10(b) reading in action, not an accidental benchmark change. The standard's §10 measurement
+paragraph and the generated block in `README.md`, `spec/STANDARD.md` and `docs/tide-benchmark.md` were
+updated together (revision 0.8.12; measurement text only, no normative change), and the existing
+`TestTideClaimsMatchMeasurement`/`TestGeneratedTideBenchmarkIsCurrent` gates are green.
+
 ## 8. What still hard-errors
 
 | Surface | Status after stage 1 |

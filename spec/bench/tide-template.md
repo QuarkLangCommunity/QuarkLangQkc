@@ -4,7 +4,10 @@ The tide workload allocates a three-element list, uses it and releases it in a l
 README row `Tide, 1e8 rounds = 1 ms` had no checked-in source, and a design review showed that the
 1 ms was LLVM dead-code elimination: at `-O3` the allocation was removed, while the same IR at `-O0`
 still referenced `malloc`/`calloc`/`free`. This report and the harness behind it replace the claim
-with a measurement the optimizer cannot erase.
+with a measurement the optimizer cannot erase. Since stage 1 of the compiled memory design
+([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) the compiled `List` allocation goes through
+the counted-slab runtime allocator on POSIX, so the QuarkLang rows below measure that allocator, and
+the historical no-use shape is no longer erased by the optimizer.
 
 {{summary}}
 
@@ -36,16 +39,19 @@ smoke; the checked-in record uses 1e8 rounds and five runs.
 
 The QuarkLang observable row necessarily includes the `List` header, the buffer and `toString()`,
 because that runtime call is the only opaque sink the compiler exposes. The C control is the minimal
-`malloc`/`free` shape the old claim compared against, not a rendering-equivalent workload. The
-`QuarkLang compiled, no sink` row keeps the checksum and removes only the sink, so it separates
-"the allocation was removed" from "the whole loop was removed"; the legacy row is the fully removed
-loop. The last row is therefore the dead-code floor the old `1 ms` figure measured, not an
-allocation result.
+`malloc`/`free` shape the old claim compared against, not a rendering-equivalent workload. On the
+pre-stage-1 libc path the `QuarkLang compiled, no sink` row and the legacy row measured LLVM removing
+the allocation and then the whole loop. Stage 1 emits opaque `ql_alloc`/`ql_free` calls, so those two
+rows now measure the counted slabs as well; the historical no-use shape is kept precisely to show
+that the optimizer can no longer erase it. The C/Rust/Go floor rows still measure their own optimizer
+floors.
 
-The interpreter and the compiled artifact are different allocators today: the interpreter implements
-the block policy as a logical layer over the host allocator, while `qkc` lowers `List` allocation to
-the host `malloc`/`calloc`/`free`. The policy rows describe the former and do not describe the
-compiled tide.
+The interpreter implements the block policy as a logical layer over the host allocator; its policy
+rows describe that accounting and not the compiled tide. The compiled artifact's `List` allocations
+go through the stage-1 counted-slab allocator on POSIX, while its runtime helper strings (including
+the `toString()` string) remain on the host allocator; Windows keeps the libc path because the
+runtime is not linked there. The compiled rows therefore measure the counted-slab path, not the
+interpreter's logical blocks.
 
 ## Reproducing and checking
 

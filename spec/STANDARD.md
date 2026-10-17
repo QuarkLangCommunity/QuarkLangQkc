@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8.11 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.12 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -302,38 +302,41 @@ names.
 **Reuse is the point.** Allocation prefers the least-occupied block that has room, so a workload whose
 temporary data arrives in *tides* — allocate, use, delete, repeat — reuses a small, stable set of blocks
 instead of growing the heap. The policy above is normative; the numbers are generated measurements.
-The reference interpreter implements the policy as a logical layer over the host allocator, while the
-compiled artifact currently lowers `List` allocation to the host `malloc`/`calloc`/`free`, so the two
-paths are measured separately. The checked-in `bench/tide` harness makes the compiled allocation
-observable with an opaque sink, reports the sink-free and legacy dead-code floors, and drives the
-interpreter's counters. The earlier compiled `1 ms` figure measured the legacy dead-code floor, not
-allocation. The block below is generated from `spec/bench/tide.tsv`; `TestTideClaimsMatchMeasurement`
-fails when this copy, the copy in `README.md`, or `docs/tide-benchmark.md` disagrees. When a task ends,
-the blocks it owns become reclaimable.
+The reference interpreter implements the policy as a logical layer over the host allocator. Stage 1 of
+the compiled memory design (`docs/compiled-memory-stage1.md`) routes the code generator's allocations
+through the counted-slab runtime allocator on POSIX; the runtime's other C allocations, including the
+string returned by `toString()`, remain on the host allocator, and Windows keeps the libc path because
+the runtime is not linked there. The checked-in `bench/tide` harness makes the compiled `List`
+allocation observable with an opaque sink, reports the no-sink and historical no-use rows (no longer
+optimizer floors on POSIX after stage 1), and drives the interpreter's counters. The earlier compiled
+`1 ms` figure measured the legacy dead-code floor on the pre-stage-1 libc path, not allocation. The
+block below is generated from `spec/bench/tide.tsv`; `TestTideClaimsMatchMeasurement` fails when this
+copy, the copy in `README.md`, or `docs/tide-benchmark.md` disagrees. When a task ends, the blocks it
+owns become reclaimable.
 
 <!-- tide-measurements -->
 Measured on Linux x86_64, 16 logical CPUs. Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44). Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default). Skipped controls: none.
 
-What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed. Evidence: nm -u on the observable QuarkLang binary lists malloc/calloc/free.
+What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed. Evidence: the observable QuarkLang binary defines ql_alloc/ql_free for the List allocation and imports malloc/free for the toString string (nm -u lists malloc/calloc/free).
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, observable | 1e8 | 5 | 8.58 s | 8.54–9.08 s | 6.31% | 899,999,977 | `List<int>` literal + toString + opaque C sink + release + delete |
-| C control, volatile sink | 1e8 | 5 | 401.91 ms | 394.10–433.24 ms | 9.74% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
-| Rust control, black_box | 1e8 | 5 | 625.79 ms | 623.36–641.70 ms | 2.93% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
-| Go control, global sink | 1e8 | 5 | 1.20 s | 1.19–1.22 s | 2.35% | 899,999,977 | make([]int32,3) + global sink + GC |
+| QuarkLang compiled, observable | 1e8 | 5 | 9.44 s | 9.33–9.63 s | 3.27% | 899,999,977 | `List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete |
+| C control, volatile sink | 1e8 | 5 | 394.56 ms | 392.21–400.18 ms | 2.02% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
+| Rust control, black_box | 1e8 | 5 | 628.88 ms | 623.44–641.71 ms | 2.90% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
+| Go control, global sink | 1e8 | 5 | 1.20 s | 1.17–1.22 s | 4.50% | 899,999,977 | make([]int32,3) + global sink + GC |
 
-The same loops without the sink. The checksum keeps the loop alive; the legacy row removes the use entirely.
+The same loops without the sink. The checksum keeps the loop alive; on the pre-stage-1 libc path the legacy row removed the use entirely. Since stage 1 the QuarkLang rows call the opaque counted-slab allocator, so they measure allocation too; the C/Rust/Go floor rows still measure their own optimizer floors.
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, no sink (optimizer floor) | 1e8 | 5 | 56.25 ms | 55.06–61.41 ms | 11.29% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive |
-| C control, no sink (optimizer floor) | 1e8 | 5 | 91.97 ms | 91.07–100.71 ms | 10.48% | 899,999,977 | same loop with the volatile sink removed |
-| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 149.15 ms | 144.63–159.23 ms | 9.79% | 899,999,977 | same loop with black_box removed |
-| Go control, local slice (optimizer floor) | 1e8 | 5 | 98.68 ms | 95.19–109.21 ms | 14.21% | 899,999,977 | same loop with the global sink removed |
-| QuarkLang compiled, legacy shape (dead-code floor) | 1e8 | 5 | 0 µs | 0–0 µs | 0.00% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured |
+| QuarkLang compiled, no sink | 1e8 | 5 | 1.07 s | 1.01–1.12 s | 10.23% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided |
+| C control, no sink (optimizer floor) | 1e8 | 5 | 91.85 ms | 91.19–96.09 ms | 5.33% | 899,999,977 | same loop with the volatile sink removed |
+| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 145.98 ms | 144.41–152.15 ms | 5.30% | 899,999,977 | same loop with black_box removed |
+| Go control, local slice (optimizer floor) | 1e8 | 5 | 96.12 ms | 94.40–96.76 ms | 2.45% | 899,999,977 | same loop with the global sink removed |
+| QuarkLang compiled, legacy shape (no read/sink) | 1e8 | 5 | 983.02 ms | 960.52–1058.45 ms | 9.96% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs |
 
-The legacy row is the dead-code floor the old `1 ms` claim measured: LLVM removes the loop, so `0 µs` is the correct reading, not an allocation result.
+The historical `1 ms` claim measured the legacy row on the pre-stage-1 libc path, where LLVM removed the loop; that is what `0 µs` meant. On the stage-1 tree the same row is no longer erased (the allocator call is opaque), so the recorded value is a real allocation measurement and the label no longer calls it a dead-code floor.
 
 | Policy measurement | Waves | Allocations | Value | Note |
 |---|---:|---:|---:|---|
@@ -362,7 +365,9 @@ is stale. The standard is the source of truth: where the code differs, the code 
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.12 | 2026-10-17 | **§10's measurement paragraph and generated block now describe stage 1 of the compiled memory design.** The compiled `List` allocation is routed through the counted-slab runtime allocator on POSIX; runtime helper strings remain on the host allocator, and Windows keeps the libc path. The tide table was re-recorded on the stage-1 tree, and the historical no-use row is no longer an optimizer floor because `ql_alloc`/`ql_free` are opaque. The §10 primitive rows and policy are unchanged; measurement wording only, no language surface changed |
 | 0.8.11 | 2026-10-17 | **§10's tide numbers are generated, not hand-written, and the old `1 ms` is named for what it measured: LLVM dead-code elimination, not allocation.** The checked-in `bench/tide` harness makes the compiled allocation observable with an opaque sink and reports the observable path, the sink-free and legacy floors, the C/Rust/Go controls, and the interpreter's reuse/fragmentation/block counters; a missing toolchain is skipped explicitly. `spec/bench/tide.tsv` is the measured record, `docs/tide-benchmark.md` is generated from it, and the marked block is embedded here and in `README.md`; `TestTideClaimsMatchMeasurement` fails when the three copies or the recorded arithmetic disagree. The prior 99.96% reuse and 0.195% fragmentation figures are replaced by the measured 99.9998% and 0.1953% (the second was already right). The §10 primitives and policy are unchanged; measurement wording and the historical correction only, and no language surface changed |
+ | 2026-10-17 | **§10's tide numbers are generated, not hand-written, and the old `1 ms` is named for what it measured: LLVM dead-code elimination, not allocation.** The checked-in `bench/tide` harness makes the compiled allocation observable with an opaque sink and reports the observable path, the sink-free and legacy floors, the C/Rust/Go controls, and the interpreter's reuse/fragmentation/block counters; a missing toolchain is skipped explicitly. `spec/bench/tide.tsv` is the measured record, `docs/tide-benchmark.md` is generated from it, and the marked block is embedded here and in `README.md`; `TestTideClaimsMatchMeasurement` fails when the three copies or the recorded arithmetic disagree. The prior 99.96% reuse and 0.195% fragmentation figures are replaced by the measured 99.9998% and 0.1953% (the second was already right). The §10 primitives and policy are unchanged; measurement wording and the historical correction only, and no language surface changed |
 | 0.8.10 | 2026-10-17 | §11's generated status report records the correction of 0.8.5's silent `delete`: on a by-reference `List<int>` parameter the compiler accepted the form and emitted nothing, neither a release nor an error, while the interpreter releases the caller's block. Lowering now tracks by-reference parameters and refuses them with a positioned message; an owned `List<int>` — a local variable or a `copyd` parameter's callee-owned copy — still releases its buffer and header. `spec/status/claims.tsv` 11.3-08 and `spec/status/template.md` §10 record the narrowed ownership rule and the interpreter/compiler gap, pinned by `TestCompiledMemorySurfaceRefusesBothLocales` (eight forms, both languages), `TestDeleteOnOwnedListIntStillLowers`, `TestDeleteOnCopydListIntParameterStillLowers`, the kept `TestMemoryPrimitivesAreRefusedExceptListDelete`, and `compiler/testdata/cases/z_delete_local.kq` (byte-identical in both engines). Two diagnostics were appended at the append point, so no shipped message id was renumbered. Status sections only; no normative text changed, no language surface added |
 | 0.8.9 | 2026-10-17 | **§11 is generated, not hand-written.** The section is now a citation to `docs/implementation-status.md`, rendered by `cmd/qkstatus` from `spec/status/claims.tsv` (each claim names the test or parity case that pins it) and `spec/status/template.md` (the prose that cannot be generated). Generation resolves every evidence reference, requires a test and both engine paths for each implemented claim, and checks that every parity case is covered; `TestGeneratedStatusIsCurrent` regenerates in memory and fails when the committed report is stale, in the same style as `cmd/qki18n -check`. The generated report corrects the old §11.1 list, which had grouped `===`, permission references, `&lvalue` and `p++` with the constructs both engines implement although the compiler refuses all four; they are §11.3 rows now. The report also carries §11.2's limits, the closed shift-precedence history, the §10 per-engine table and §11.4's item states. Status section only; no normative text changed, no language surface added |
 | 0.8.8 | 2026-10-17 | §4 and §10 now say the measured truth their open questions left unresolved, without new surface. §4 distinguishes the referent from the reference variable: a reference's storage does not move, while `p++` re-binds the variable holding either a reference or a pointer when it has `m`; the four scopes are one lifetime order `u > t > a > f`, `a` has no behaviour beyond that rank, and the seven permission spellings are complete because the empty set would permit nothing. §10 names `memory.clear()` as the derived wiping operation (release plus zero-fill) the `delete` row already refers to, so release does not wipe and the four primitive rows stay the surface. These answer `docs/primitives.md` Q-1, Q-2 and Q-6; §11.4's items 8 and 9 record them as reconciliations rather than rewrites. No syntax, type, operator or protocol was added |

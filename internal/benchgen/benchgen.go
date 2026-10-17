@@ -344,7 +344,7 @@ func SummaryBlock(rec *Record) (string, error) {
 		writeTimingRow(&b, row)
 	}
 
-	b.WriteString("\nThe same loops without the sink. The checksum keeps the loop alive; the legacy row removes the use entirely.\n\n")
+	b.WriteString("\nThe same loops without the sink. The checksum keeps the loop alive; on the pre-stage-1 libc path the legacy row removed the use entirely. Since stage 1 the QuarkLang rows call the opaque counted-slab allocator, so they measure allocation too; the C/Rust/Go floor rows still measure their own optimizer floors.\n\n")
 	b.WriteString("| Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |\n")
 	b.WriteString("|---|---:|---:|---:|---:|---:|---:|---|\n")
 	for _, row := range rec.Rows {
@@ -353,7 +353,7 @@ func SummaryBlock(rec *Record) (string, error) {
 		}
 		writeTimingRow(&b, row)
 	}
-	b.WriteString("\nThe legacy row is the dead-code floor the old `1 ms` claim measured: LLVM removes the loop, so `0 µs` is the correct reading, not an allocation result.\n\n")
+	b.WriteString("\nThe historical `1 ms` claim measured the legacy row on the pre-stage-1 libc path, where LLVM removed the loop; that is what `0 µs` meant. On the stage-1 tree the same row is no longer erased (the allocator call is opaque), so the recorded value is a real allocation measurement and the label no longer calls it a dead-code floor.\n\n")
 
 	b.WriteString("| Policy measurement | Waves | Allocations | Value | Note |\n")
 	b.WriteString("|---|---:|---:|---:|---|\n")
