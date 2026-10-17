@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8.3 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.6 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -246,8 +246,16 @@ The difference between the two, spelled out:
   `unwrapOr`, `unwrapErr`.
 - `unwrap` on `none`/`err` **terminates** the program with a `PanicError` rather than inventing a zero
   value. `panic(msg)` is the core primitive behind it.
-- Runtime errors that remain (`DivisionByZeroError`, `IndexOutOfRangeError`, `NullPointerError`,
-  `PanicError`) are reported with position and an execution log.
+- Runtime errors that remain (`DivisionByZeroError`, `IndexOutOfBoundsError`, `IndexOutOfRangeError`,
+  `NullPointerError`, `PanicError`) are reported with position and an execution log.
+- **`IndexOutOfBoundsError`** is a **container subscript** outside the container: a `List` read or write
+  `l[i]` with `i` outside `0 … size-1`, reported as
+  `IndexOutOfBoundsError: index <i> out of range [0,<size>)`. Strings have their own
+  `StringIndexOutOfBoundsError`, which names the string operation and its range.
+- **`IndexOutOfRangeError`** is a **bit subscript** outside the width of §3.3 (`b[i]` with `i` outside
+  `0 … N-1` when `i` is not a constant), or a **reference moved past the end** of its container in §4
+  (`p++`). These are different conditions from the container subscript above, so the names stay
+  distinct; §11 records that the reference-move form is interpreter-only today.
 
 ## 9. Core vs standard library
 
@@ -457,7 +465,7 @@ a normative section is not a correction and §12 puts it behind the owner's ruli
 | 4 | state what `compare.sh` proves | **done**: the last sentence of §1.4 |
 | 5 | `stdlib/vec.qk`'s `pointer T`, or §3.2 corrected | **done as the correction**: `pointer T` is measured to exist in both engines and is what `new T[n]` yields, which `stdlib/vec.qk` is built on, so §3.2's claim that the spelling does not exist was the factual error |
 | 6 | delete `#ifdef`/`#ifndef` in favour of `#if defined(…)`, and `#ifn` | **not done**: deleting a spelling is surface removal, and the spellings live in the syntax layer's preprocessor (a sibling repository). §8's Q-4 also records that `#ifn` is defined nowhere, so a ruling is needed before either list shrinks |
-| 7 | collapse `IndexOutOfBoundsError`/`IndexOutOfRangeError` to one id | **not done**: §7.6 itself notes it "changes a user-visible message". The two name different conditions (a `List` subscript and a bit subscript), both are in the message catalogues of both engines and in the compiled runtime's strings, so it is a surface change awaiting the ruling, not a restatement |
+| 7 | collapse `IndexOutOfBoundsError`/`IndexOutOfRangeError` to one id | **done as the opposite**: the two name different conditions — a container subscript and a bit subscript (or a reference moved past the end) — so §8 now defines each one and where it is raised, and the names stay distinct. The catalog rows and both runtime messages are unchanged; `internal/lang/error_names_test.go` pins one case of each and asserts the other name is absent |
 | 8 | reduce §4's 28 reference types to a `(set, rank)` algebra | **not done**: §4 is normative and §8's Q-1/Q-2 record that `m`'s meaning for a reference and `a`'s definition are still open — a rewrite would answer questions this document says are unresolved |
 | 9 | reduce §10 to release + block granularity | **not done**: §10 is normative and §7.6's own Q-6 ("does release wipe?") is open; rewriting the table would also erase the row-by-row status §11.3 has just recorded |
 
@@ -477,6 +485,7 @@ macro item), and stays open.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.6 | 2026-10-17 | §8 defines the two index errors it used to leave ambiguous: `IndexOutOfBoundsError` is a container subscript outside `0 … size-1` (a `List` read or write), while `IndexOutOfRangeError` is a bit subscript outside `0 … N-1` (§3.3) or a reference moved past the end of its container (§4, interpreter-only today). The names stay distinct because they name different conditions and a user sees them; `internal/lang/error_names_test.go` pins one case each and asserts the other name is absent. The header's version number was stale at 0.8.3 while the log already carried 0.8.4 and 0.8.5; it now matches the log. Correction only; no language surface changed |
 | 0.8.5 | 2026-10-16 | §11.2's last `List` limit is closed: the compiler lowers `List<float>`, and `List<double>` with it. Elements live in i64 slots each carrying the element as a bit-cast double, the runtime renders them through the one float spelling a bare float gets, and the surface covers the literal, the element read and write, `append`, `size`/`get`/`toString`, for-in iteration and print. Pinned by `compiler/testdata/cases/z_list_double.kq` (which avoids list printing, so it also runs under `lli` in `go test`), `cases_run/z_list_double_print.kq` (the print and `toString` paths, which need the linked runtime) and `TestListDoubleIsLoweredLikeListInt`, which replaces the refusal test this section used to point at. What remains is what only `List<int>` has — `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__`, `delete`, `interface{}` boxing — a declaration without an initializer builds the interpreter's empty list where `List<int>` still refuses one, and `copyd List<float>` is refused like `copyd List<String>` because the deep-copy helper copies 4-byte elements. The four diagnostics the change needed were filed at the append point of the message tables, so no shipped id was renumbered, and the texts that named only `List<int>`/`List<String>` now name `List<float>` too. Status sections and one lowering; no normative text changed, no language surface added |
 | 0.8.4 | 2026-10-16 | **§11.3's shift divergence is closed.** The pinned syntax layer now threads `parseBitAnd → parseShift → parseAdd → parseMul`, so §5's order holds: `1 + 2 << 3` is 24, `1 << 2 + 3` is 32 and `10 - 2 >> 1` is 4 in both engines under `LANG=C.UTF-8` and `LANG=zh_CN.UTF-8`, while `1 + (2 << 3)` still reads 17 — the parser erases the parenthesis node but decides the grouping, so the two readings are two trees and neither is traded for the other. The pin moves to `github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261015231811-3de63a5ff52d` in both `go.mod` files, the closed state is measured in §11.1, the history of the divergence stays in §11.3, and item 11 of §11.4 is now closed. Of the 40 corpus cases the pin then covered exactly one changed value, `z_precedence.kq`, the case that pins this level against the standard rather than against the other engine, and only its three shift rows; no existing program changed. Status sections only; no normative text changed, no language surface added |
 | 0.8.3 | 2026-10-15 | Status and corrections, no normative text changed: §11.3 records the two divergences it could not see before — §5's shift precedence (a two-line exchange in the pinned syntax layer, measured in both engines under both locales, with the reason it cannot be repaired in this repository: that parser erases parentheses) and §10's four primitives per engine and per path, with the size of closing the compiled path; §11.2 adds the one `List` element type the compiler still refuses (`List<double>`), and §11.1 the legacy spellings both engines now accept (`char`, `double`, `long`, `pointer T`, `List<char>`), which the compiler refused until this revision. §1.4 now says what `compare.sh` proves and §1 records that diagnostics are not language surface; §3.2's claim that `pointer T` does not exist is corrected (it is what `new T[n]` yields, which `stdlib/vec.qk` is built on); §9 lists `pointer T` among the compatibility spellings. §11.4 records which of `docs/primitives.md` §7.6's twelve items this revision adopts and why the others wait for the owner's ruling |
