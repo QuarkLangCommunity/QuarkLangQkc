@@ -18,6 +18,9 @@ OUT="${1:-}"
 command -v clang >/dev/null 2>&1 || { echo "clang is required" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
 
+case "$BUILD" in
+  ""|"/"|"$HOME") echo "refusing BUILD_DIR=$BUILD: give a scratch directory to rebuild" >&2; exit 2 ;;
+esac
 rm -rf "$BUILD"
 mkdir -p "$BUILD"
 cat "$ROOT/compiler/internal/rtcat/msg_c.h" "$ROOT/compiler/qthreads.c.txt" > "$BUILD/runtime.c"

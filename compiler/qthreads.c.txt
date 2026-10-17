@@ -359,6 +359,10 @@ static size_t ql_mem_slab_hdr(void) {
     return (sizeof(ql_slab) + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
 }
 
+static size_t ql_mem_large_hdr(void) {
+    return (sizeof(ql_large_meta) + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
+}
+
 static size_t ql_mem_stride(int cls) {
     size_t n = QL_MEM_OBJ_HDR + ql_mem_class_size[cls];
     return (n + QL_MEM_ALIGN - 1) & ~(size_t)(QL_MEM_ALIGN - 1);
@@ -518,12 +522,12 @@ static void* ql_mem_alloc_locked(size_t n, int owner) {
         void* base;
         ql_large_meta* m;
         if (cap < n) return 0;
-        total = sizeof(ql_large_meta) + QL_MEM_OBJ_HDR + cap;
+        total = ql_mem_large_hdr() + QL_MEM_OBJ_HDR + cap;
         if (total < n) return 0;
         base = ql_mem_host_alloc(total);
         if (!base) return 0;
         m = (ql_large_meta*)base;
-        h = (ql_obj_hdr*)((char*)base + sizeof(ql_large_meta));
+        h = (ql_obj_hdr*)((char*)base + ql_mem_large_hdr());
         m->magic = QL_MEM_LARGE_MAGIC;
         m->owner = (uint32_t)owner;
         m->capacity = cap;
@@ -582,7 +586,7 @@ static void ql_mem_free_locked(void* p) {
         ql_large_meta* m = (ql_large_meta*)h->block;
         QL_MEM_ASSERT(m->magic == QL_MEM_LARGE_MAGIC);
         QL_MEM_ASSERT(m->capacity >= h->requested);
-        QL_MEM_ASSERT(m->total >= sizeof(ql_large_meta) + QL_MEM_OBJ_HDR);
+        QL_MEM_ASSERT(m->total >= ql_mem_large_hdr() + QL_MEM_OBJ_HDR);
         if (m->prev) m->prev->next = m->next;
         else ql_mem_larges = m->next;
         if (m->next) m->next->prev = m->prev;
@@ -858,7 +862,7 @@ static int ql_mem_check_locked(void) {
         slab_bytes += s->size;
     }
     for (m = ql_mem_larges; m; m = m->next) {
-        ql_obj_hdr* h = (ql_obj_hdr*)((char*)m + sizeof(ql_large_meta));
+        ql_obj_hdr* h = (ql_obj_hdr*)((char*)m + ql_mem_large_hdr());
         if (m->magic != QL_MEM_LARGE_MAGIC) { errors += ql_mem_check_one("large magic"); continue; }
         if (m->next && m->next->prev != m) errors += ql_mem_check_one("large next->prev");
         if (h->magic != QL_MEM_OBJ_MAGIC) { errors += ql_mem_check_one("large object magic"); continue; }
@@ -866,7 +870,7 @@ static int ql_mem_check_locked(void) {
         if (h->block != m) errors += ql_mem_check_one("large block");
         if (!(h->flags & QL_MEM_FLAG_LIVE)) errors += ql_mem_check_one("large not live");
         if (h->requested > m->capacity) errors += ql_mem_check_one("large requested > capacity");
-        if (m->total != sizeof(ql_large_meta) + QL_MEM_OBJ_HDR + m->capacity) errors += ql_mem_check_one("large total");
+        if (m->total != ql_mem_large_hdr() + QL_MEM_OBJ_HDR + m->capacity) errors += ql_mem_check_one("large total");
         if (((uintptr_t)((char*)h + QL_MEM_OBJ_HDR) % QL_MEM_ALIGN) != 0) errors += ql_mem_check_one("large alignment");
         live_bytes += m->total;
         used_bytes += h->requested;
@@ -883,7 +887,7 @@ static int ql_mem_check_locked(void) {
 int ql_mem_check(void) {
     int errors;
     int locked = ql_mem_lock();
-    if (sizeof(ql_obj_hdr) != QL_MEM_OBJ_HDR) errors = ql_mem_check_one("object header size");
+    if (sizeof(ql_obj_hdr) > QL_MEM_OBJ_HDR) errors = ql_mem_check_one("object header larger than its fixed payload offset");
     else errors = ql_mem_check_locked();
     ql_mem_unlock(locked);
     return errors;
