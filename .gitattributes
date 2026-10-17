@@ -16,3 +16,9 @@ internal/i18n/source/*.tsv text eol=lf
 docs/implementation-status.md text eol=lf
 spec/status/claims.tsv text eol=lf
 spec/status/template.md text eol=lf
+
+# The generated tide report is compared byte for byte by the drift gate, and its record/template are
+# its inputs: pin them to LF so a Windows checkout cannot fail on line endings instead of on a stale report.
+docs/tide-benchmark.md text eol=lf
+spec/bench/tide.tsv text eol=lf
+spec/bench/tide-template.md text eol=lf

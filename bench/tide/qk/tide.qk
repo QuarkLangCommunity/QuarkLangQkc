@@ -1,0 +1,34 @@
+// Tide benchmark, observable allocation: allocate, use and delete a list under load, with an opaque
+// C sink so the optimizer cannot remove the allocation. The same loop without the sink is
+// tide_floor.qk; the loop with no use at all is tide_legacy_floor.qk, the shape the old 1 ms figure
+// measured.
+library tide {
+    fn qtide_sink(String s) void;
+    fn qtide_release(String s) void;
+}
+
+fn main(IOStream io) {
+    // The linked runtime refers to the generated int/float string helpers; force both to be emitted
+    // once so the benchmark links, then never take the branch.
+    String fs = (1.5).toString();
+    String is = (0 - 1).toString();
+    if (fs.size() + is.size() < 0) {
+        io.println(fs, is);
+    }
+    int rounds = 100000000;
+    long acc = 0;
+    int i = 0;
+    int t0 = clock();
+    while (i < rounds) {
+        List<int> a = [i % 7, i % 11, i % 13];
+        String s = a.toString();
+        tide.qtide_sink(s);
+        acc = acc + a.get(0) + a.get(2);
+        tide.qtide_release(s);
+        delete a;
+        i = i + 1;
+    }
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(acc);
+}

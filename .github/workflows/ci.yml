@@ -160,6 +160,11 @@ jobs:
         run: go test ./internal/lang/ ./cmd/qkcheck ./cmd/qkdoc ./cmd/qklsp -run XXX -bench . -benchtime 1x -count=1
       - name: Toolchain benchmark smoke
         run: ./scripts/bench-tools.sh 3
+      - name: Tide benchmark harness (observable allocation; quick smoke, missing toolchains skipped)
+        run: |
+          ./bench/tide/run.sh --quick > "$RUNNER_TEMP/tide-quick.tsv"
+          cat "$RUNNER_TEMP/tide-quick.tsv" >> "$GITHUB_STEP_SUMMARY"
+          go run ./cmd/qkbench -check
       - name: Release artifact smoke (this platform only; verifies the script; absolute output paths to cover path normalization)
         run: |
           out="${RUNNER_TEMP:-/tmp}/quarklang-dist-ci"
