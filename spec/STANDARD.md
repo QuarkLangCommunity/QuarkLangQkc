@@ -1,6 +1,6 @@
 # QuarkLang Standard — frozen snapshot
 
-**Version:** 0.8.7 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
+**Version:** 0.8.8 — **`bit` is the mother of every basic type**: every basic type is *implemented from*
 `bit`/`bits<N>` — they are not separate storage — and raw bits admit bitwise operations only
 **Frozen:** 2026-10-10 · **Review after:** 2026-11-10
 **Status:** the surface described here is intended to stay unchanged for one month. Corrections to
@@ -154,15 +154,21 @@ and a change of meaning that keeps the width is free rather than a conversion.
 ```
 
 - **perm** is a stack of `r` (read), `w` (write), `m` (move): `r`, `w`, `m`, `rw`, `rm`, `wm`, `rwm`.
+  These seven are the complete permission set; the empty set is not a permission, because a reference
+  carrying it could neither read, write, nor move.
 - **scope** is `u` (program), `f` (function), `a` (area), `t` (thread) — 7 × 4 = **28 reference types**.
+  Scopes order by lifetime, widest first: `u` > `t` > `a` > `f`; a reference may be stored only in a
+  variable of equal or narrower scope. `a` is an area scope, and this standard gives it no behaviour
+  beyond that rank.
 - A bare `T&` keeps full permission and program scope.
 - `&lvalue` takes the address of a variable, a struct field or a list element; writes through it reach
   the original storage.
 
 **References and pointers are different things, not two spellings of one.** A reference (`&`) is an
-alias of storage and never moves. A pointer (`*`) is an address value and is the only thing that moves:
-`p++` advances it one element and rebinds the variable holding it (requires `m`), and moving past the
-end is an error rather than a dangling pointer.
+alias of storage; the storage it names does not move. A pointer (`*`) is an address value. `p++` advances
+either variable one element and rebinds the variable holding it (requires `m`), and moving past the end is
+an error rather than a dangling pointer: a reference is an address with a permission, and `m` is the bit
+that lets the address be re-bound.
 
 Enforced statically, in the type checker, for declarations and assignments alike: writing needs `w`,
 reading needs `r`, moving needs `m`, a reference may not be stored in a wider-scoped variable, and a
@@ -287,6 +293,11 @@ implements that policy as a layer over its host runtime's allocator.
 | `memory.setBlock(n)` | set the block size, the unit the runtime allocates and reuses |
 | `memory.compact()` | free the blocks nobody occupies; it does not return |
 | `memory.Fragmentation()` | the unused space inside live blocks, as a ratio (inspection) |
+
+`memory.clear()` is the wiping operation the `delete` row refers to: it is derived — release plus
+zero-fill, not a separate primitive — so `delete` keeps the bytes and `clear` removes them. The table's
+four rows are the primitive surface, and `clear` is the one derived operation the `delete` row already
+names.
 
 **Reuse is the point.** Allocation prefers the least-occupied block that has room, so a workload whose
 temporary data arrives in *tides* — allocate, use, delete, repeat — reuses a small, stable set of blocks
@@ -474,8 +485,8 @@ a normative section is not a correction and §12 puts it behind the owner's ruli
 | 5 | `stdlib/vec.qk`'s `pointer T`, or §3.2 corrected | **done as the correction**: `pointer T` is measured to exist in both engines and is what `new T[n]` yields, which `stdlib/vec.qk` is built on, so §3.2's claim that the spelling does not exist was the factual error |
 | 6 | delete `#ifdef`/`#ifndef` in favour of `#if defined(…)`, and `#ifn` | **not done as a deletion, done as the record**: deleting a spelling is surface removal, and the spellings live in the syntax layer's preprocessor (a sibling repository); §8's Q-4 recorded that `#ifn` is defined nowhere, and §11.3 now records that state with the safer reading (`#if !(condition)`) and pins the refusal with `TestIfnHasNoDefinedMeaning`. Defining or deleting it still needs the owner's ruling |
 | 7 | collapse `IndexOutOfBoundsError`/`IndexOutOfRangeError` to one id | **done as the opposite**: the two name different conditions — a container subscript and a bit subscript (or a reference moved past the end) — so §8 now defines each one and where it is raised, and the names stay distinct. The catalog rows and both runtime messages are unchanged; `internal/lang/error_names_test.go` pins one case of each and asserts the other name is absent |
-| 8 | reduce §4's 28 reference types to a `(set, rank)` algebra | **not done**: §4 is normative and §8's Q-1/Q-2 record that `m`'s meaning for a reference and `a`'s definition are still open — a rewrite would answer questions this document says are unresolved |
-| 9 | reduce §10 to release + block granularity | **not done**: §10 is normative and §7.6's own Q-6 ("does release wipe?") is open; rewriting the table would also erase the row-by-row status §11.3 has just recorded |
+| 8 | reduce §4's 28 reference types to a `(set, rank)` algebra | **done as the reconciliation, not the rewrite**: Q-1 and Q-2 are answered in §4 without new surface — the reference variable may be re-bound with `m` while its referent does not move, the four scopes are one lifetime order `u > t > a > f`, `a` has no behaviour beyond that rank, and the empty permission set is not spellable because it would permit nothing. The 7 × 4 enumeration is exactly what the checker accepts, so reducing it to an algebra is a later simplification, not a correction |
+| 9 | reduce §10 to release + block granularity | **done as the reconciliation, not the rewrite**: Q-6 is answered in §10 without new surface — `delete` does not wipe, `memory.clear()` is the derived wipe (release plus zero-fill), and the four primitive rows plus that derived operation are the surface; the per-engine divergence for those rows stays in §11.3, so reducing the table further is a later simplification rather than a factual correction |
 
 §7.6's items 10–12 are the semantic ones: item 10 (`char`/`double`) was closed the way §7.6 offers — by
 lowering them in the compiler (§11.1) — and no program changes meaning; item 11 (shift precedence) is
@@ -493,6 +504,7 @@ macro item), and stays open.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8.8 | 2026-10-17 | §4 and §10 now say the measured truth their open questions left unresolved, without new surface. §4 distinguishes the referent from the reference variable: a reference's storage does not move, while `p++` re-binds the variable holding either a reference or a pointer when it has `m`; the four scopes are one lifetime order `u > t > a > f`, `a` has no behaviour beyond that rank, and the seven permission spellings are complete because the empty set would permit nothing. §10 names `memory.clear()` as the derived wiping operation (release plus zero-fill) the `delete` row already refers to, so release does not wipe and the four primitive rows stay the surface. These answer `docs/primitives.md` Q-1, Q-2 and Q-6; §11.4's items 8 and 9 record them as reconciliations rather than rewrites. No syntax, type, operator or protocol was added |
 | 0.8.7 | 2026-10-17 | §11.3 records what §7.2 leaves open about `#ifn`: the standard names it and defines it nowhere, the shared preprocessor gives it no meaning (only `#if`/`#elif` open a group, so the following `#endif` is refused in both engines), and the safer reading — if it is ever defined — is `#if !(condition)`, the complement of `#ifndef`. The choice is to record the gap rather than invent the semantics: defining it needs surface and a syntax-layer change, while deleting it is surface removal, so both wait for the owner. `TestIfnHasNoDefinedMeaning` pins that the implementation refuses it instead of accepting an invented meaning. §11.4's item 6 is updated to the record. Status section only; no normative text changed, no language surface added |
 | 0.8.6 | 2026-10-17 | §8 defines the two index errors it used to leave ambiguous: `IndexOutOfBoundsError` is a container subscript outside `0 … size-1` (a `List` read or write), while `IndexOutOfRangeError` is a bit subscript outside `0 … N-1` (§3.3) or a reference moved past the end of its container (§4, interpreter-only today). The names stay distinct because they name different conditions and a user sees them; `internal/lang/error_names_test.go` pins one case each and asserts the other name is absent. The header's version number was stale at 0.8.3 while the log already carried 0.8.4 and 0.8.5; it now matches the log. Correction only; no language surface changed |
 | 0.8.5 | 2026-10-16 | §11.2's last `List` limit is closed: the compiler lowers `List<float>`, and `List<double>` with it. Elements live in i64 slots each carrying the element as a bit-cast double, the runtime renders them through the one float spelling a bare float gets, and the surface covers the literal, the element read and write, `append`, `size`/`get`/`toString`, for-in iteration and print. Pinned by `compiler/testdata/cases/z_list_double.kq` (which avoids list printing, so it also runs under `lli` in `go test`), `cases_run/z_list_double_print.kq` (the print and `toString` paths, which need the linked runtime) and `TestListDoubleIsLoweredLikeListInt`, which replaces the refusal test this section used to point at. What remains is what only `List<int>` has — `head`/`tail`/`next`/`reset`/`appendAll`/`__sort__`, `delete`, `interface{}` boxing — a declaration without an initializer builds the interpreter's empty list where `List<int>` still refuses one, and `copyd List<float>` is refused like `copyd List<String>` because the deep-copy helper copies 4-byte elements. The four diagnostics the change needed were filed at the append point of the message tables, so no shipped id was renumbered, and the texts that named only `List<int>`/`List<String>` now name `List<float>` too. Status sections and one lowering; no normative text changed, no language surface added |

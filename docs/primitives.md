@@ -321,9 +321,9 @@ nowhere. This is not declared in §11.2 or §11.3.
 
 ### 1.8 Error constructs — 17 reason prefixes, 2 Go types
 
-Standard §8 (`:234-243`) names 4 runtime errors (`DivisionByZeroError`, `IndexOutOfRangeError`,
-`NullPointerError`, `PanicError`), `panic(msg)` as the core primitive, and `Option<T>`/`Result<T, E>` as
-**library** types.
+Standard §8 (`:234-243`) names 5 runtime errors (`DivisionByZeroError`, `IndexOutOfBoundsError`,
+`IndexOutOfRangeError`, `NullPointerError`, `PanicError`), `panic(msg)` as the core primitive, and
+`Option<T>`/`Result<T, E>` as **library** types.
 
 Implementation ✔ — two Go carrier types (`RunError` at `internal/lang/eval.go:26`, `CheckError` at
 `internal/lang/typecheck.go:479`), the `panic` builtin at `internal/lang/eval.go:2933` (checked at
@@ -346,11 +346,16 @@ measured in `internal/i18n/source/*.tsv` (`grep -rhoE '[A-Za-z]+Error:' internal
 in §11.2, but no line of the catalog carries that prefix — ✘ **UNVERIFIED** whether it reaches the user
 through the catalog or is composed in the compiler.
 
-Two of the 17 are the **same condition in two spellings**: `IndexOutOfBoundsError` (a `List` index,
-`internal/lang/eval.go`) and `IndexOutOfRangeError` (a bit index, `internal/lang/eval.go`; also a
-reference moved past the end). §8 names only `IndexOutOfRangeError`, while §3.3 (`:109-110`) also says
-`IndexOutOfRangeError` — and the interpreter's actual message for a list index is
-`IndexOutOfBoundsError: index 5 out of range [0,1)` (measured).
+Two of the 17 name **different conditions**, and the names stay distinct: `IndexOutOfBoundsError` is a
+container subscript — a `List` read or write outside `0 … size-1` (`internal/lang/value.go:462,479`,
+catalog row `field.indexoutofboundserror_index_d_out_range_0`) — while `IndexOutOfRangeError` is a bit
+subscript outside the width (`internal/lang/eval.go:3527`) and a reference moved past the end
+(`internal/i18n/source/runtime.tsv:61`). The compiler's runtime carries one helper per condition
+(`compiler/internal/cgen/cgen.go:5404,5421`). When this document was written §8 named only
+`IndexOutOfRangeError`; the standard now defines both and says where each is raised (§8, 0.8.6), and
+`internal/lang/error_names_test.go` pins one case of each and asserts the other name is absent. Measured
+interpreter message for a list index: `IndexOutOfBoundsError: index 5 out of range [0,1)`; for a bit
+index: `IndexOutOfRangeError: bit index 9 is out of range for bits<8> (0..7)`.
 
 `Option`/`Result` are correctly library, not core ✔: `stdlib/option.qk`, `stdlib/result.qk` (with
 `pub fn<T, E> ok(...)` at `stdlib/result.qk:12`), and §8's list of methods matches those files. No core
@@ -781,11 +786,36 @@ and the standard records the divergence in §11.3 with the reason it cannot be r
 Item 12 has no definition to implement against (§8's Q-3, Q-5). The standard's §11.4 lists which of items
 1–9 this revision adopted and which of them are not restatements after all.
 
+Disposition, 2026-10-17, under the standard-is-truth rule:
+
+- **Item 6 is completed as a record, not a deletion.** §7.2 names `#ifn` but defines it nowhere, and the
+  shared preprocessor gives it no meaning. Defining it would invent surface; deleting it is surface
+  removal; both wait for the owner. The standard's §11.3 now records the gap and the safer reading
+  (`#if !(condition)`, the complement of `#ifndef`), and `TestIfnHasNoDefinedMeaning` makes the
+  implementation refuse it rather than accept an invented meaning. The consequence is a weak diagnostic
+  (`#endif without a matching #if`) and no `#ifn` form until the owner rules.
+- **Item 7 is completed as the opposite of the proposal.** The two names describe different conditions —
+  a container subscript and a bit subscript (or a reference moved past the end) — so collapsing them
+  would change a user-visible message and conflate the conditions. §8 now defines each and says where it
+  is raised; the catalog rows are unchanged; `internal/lang/error_names_test.go` pins the distinction.
+- **Item 8 is completed as the reconciliation, not the rewrite.** §4 now says what the checker does: the
+  referent does not move while the variable holding a reference may be re-bound with `m` (Q-1); the four
+  scopes are one lifetime order `u > t > a > f`, `a` has no behaviour beyond that rank, and the empty
+  permission set is not spellable because it would permit nothing (Q-2). No new surface; the 7 × 4
+  enumeration is correct as it stands. Reducing it to the `(set, rank)` algebra remains a later
+  simplification, not a correction.
+- **Item 9 is completed as the reconciliation, not the rewrite.** §10 now names `memory.clear()` as the
+  derived wiping operation (release plus zero-fill) that the `delete` row already referred to (Q-6), so
+  release does not wipe and the four primitive rows stay the surface. Reducing the table to release plus
+  block granularity remains a later simplification; §11.3 keeps the per-engine status of every row.
+
 ---
 
 ## 8. Open questions
 
-Each question is stated with the consequence of each answer. **None is resolved here.**
+Each question is stated with the consequence of each answer. **None was resolved when this document was
+written**; the resolutions dated 2026-10-17 record which questions the standard has since answered, and
+which remain open.
 
 **Q-1 · Is a reference an address with a permission, or a second kind of thing?**
 §4 (`:155-158`) says a reference "never moves" and that moving is what distinguishes a pointer; the
@@ -798,6 +828,13 @@ an address with a permission — which is the model in §2.1, and `m` becomes th
 *Consequence either way:* `D-11`(28 reference types) becomes a *composition*, and §4's prose needs one
 sentence changed.
 
+**Resolved, 2026-10-17 — the checker's reading, without new surface.** §4 now distinguishes the referent
+from the variable: a reference's storage does not move, while `p++` re-binds the variable holding either a
+reference or a pointer when it has `m`, so `m` is the movability bit. The implementation already did this
+(`internal/lang/typecheck.go:1647-1666` for the type check, `internal/lang/eval.go:1626` for `moveRef`),
+and no syntax or type was added. The consequence stands: `D-11` is a composition; the 28-type enumeration
+in §4 is the surface and is correct.
+
 **Q-2 · What is an "area" (`a`), and why is the empty permission set unspellable?**
 §4 (`:150`) names four scopes in one line and never defines `a`. `refScopeRank`
 (`internal/lang/refperm.go:63-75`) orders it `u > t > a > f` with no other consumer.
@@ -807,6 +844,15 @@ become a lattice.
 *On the empty set:* the parser enumerates 7 of the 8 subsets (`qkparser/refperm.go:12`). If "no
 permission" is meaningful, the enumeration is incomplete; if it is not, §4 should say the empty set is
 refused *and why*.
+
+**Resolved as far as the surface allows, 2026-10-17.** §4 now says the four scopes are one lifetime order,
+`u > t > a > f`, and that `a` is an area scope with no behaviour beyond that rank — which is exactly what
+the implementation does (`internal/lang/refperm.go:63-75`; `internal/lang/typecheck.go:1367,1417` enforce
+the order). The empty set is now stated as not a permission, because a reference carrying it could neither
+read, write, nor move; the parser's seven spellings (`qkparser/refperm.go:10-16`) are therefore complete,
+not truncated. No new surface. A real region model for `a` would be new surface and waits for the review
+date; its consequence today is that `a` is a rank only, indistinguishable in behaviour from any other
+scope of the same order.
 
 **Q-3 · What is a "node" for `#expand`/`#run`?**
 §7.2's example (`:222-230`) is the only specification. `docs/ARCHITECTURE.md` §6.8 records that the AST
@@ -821,6 +867,15 @@ either engine can implement it identically.
 `docs/ARCHITECTURE.md` §6.8 already reports the gap.
 *If it means `#if !(…)`:* it is derived (D-40), deletable, and costs nothing to remove.
 *If it means something else:* §7.2 needs a definition and one parity case.
+
+**Resolved as a record, not a definition, 2026-10-17.** Neither answer is adopted: defining `#ifn` would
+invent surface, and deleting it would remove surface, so both wait for the owner. The standard now records
+in §11.3 that the semantics are undecided and that the safer reading is `#if !(condition)`, the complement
+of `#ifndef`, because it is the only reading derivable from the existing conditional family. The
+implementation gives it no meaning: the shared preprocessor leaves the line unresolved, so the following
+`#endif` is refused with `#endif without a matching #if` in both engines, and `TestIfnHasNoDefinedMeaning`
+pins that refusal. Consequence: a program using `#ifn` gets that diagnostic rather than a defined branch,
+and no parity case exists until the owner rules.
 
 **Q-5 · Is the macro a directive or a rewrite stage, and which spelling is the language's?**
 §7.2 (`:218`) puts `macro x($a $b) { … }` in the directives table; the implementation has `#macro name
@@ -839,6 +894,14 @@ operation, D-31), and the security sentence stays in `delete`'s row.
 *If it should wipe:* the sentence moves and `delete` becomes release + zero-fill.
 *Consequence:* this decides whether the memory surface is 2 or 3 entries, and it is the one place where
 "derived" and "normative" must both be said of the same operation.
+
+**Resolved, 2026-10-17 — release does not wipe; `clear` is derivable.** §10 now names `memory.clear()` as
+the derived wiping operation (release plus zero-fill) that the `delete` row already referred to, and keeps
+the four primitive rows as the surface. The implementation matches: `delete` keeps the data
+(`internal/lang/eval.go` `DeleteStmt`), `clear` wipes it (`MemoryManager.Clear`), and the interpreter
+exposes `memory.clear()`. No new primitive was added; the consequence is that the memory surface is four
+primitives plus one derived operation, not five primitives, and the reduction to release plus block
+granularity remains a later simplification.
 
 ---
 
