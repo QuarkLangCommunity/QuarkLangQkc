@@ -187,8 +187,7 @@ var textKeyedEntryPoints = []string{
 
 // TestDecouplingRatchet is R-3 as an exact contract: there are no text-keyed entry points at all, in
 // any package, which is stronger than a count that may only shrink and is the claim the design asked
-// for. It scans this module and the compiler module, which shares these packages through a relative
-// replace.
+// for. It scans the whole module, so the compiler packages are included.
 func TestDecouplingRatchet(t *testing.T) {
 	root := filepath.Join("..", "..")
 	found := map[string][]string{}
@@ -234,7 +233,7 @@ func TestDecouplingRatchet(t *testing.T) {
 			t.Errorf("%q is a text-keyed entry point and came back in: %s", name, strings.Join(found[name], ", "))
 		}
 	}
-	t.Logf("text-keyed entry points: %d (scanned %d Go files in both modules)", len(found), scanned)
+	t.Logf("text-keyed entry points: %d (scanned %d Go files in the module)", len(found), scanned)
 }
 
 // TestGeneratedFileIsParsable reads the artefact the runtime actually ships: a truncated or hand-edited

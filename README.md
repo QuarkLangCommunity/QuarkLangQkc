@@ -55,6 +55,15 @@ go build -o qkrepl  ./cmd/qkrepl  && ./qkrepl -e "int x = 6;" -e "x * 7"
 go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integration in editors/
 ```
 
+```sh
+# ⑤ Install the compiler as a Go module (no checkout; requires Go ≥ 1.26)
+go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.0
+```
+
+`v1.1.0` is the first tag that carries the public module path with the compiler inside the root module.
+The `v2.x` project tags are not Go module versions for this path, so `@latest` resolves to `v1.1.0`;
+see `docs/module-consumability.md` for the measurement and the tag rule.
+
 > Releases ship both **versioned** assets (`quark-2.1.0-linux-amd64`) and **version-less aliases**
 > (`quark-linux-amd64`) so scripts can pin a stable URL. Verify downloads against
 > `MANIFEST-<version>-<platform>.txt` (sha256).
@@ -62,7 +71,7 @@ go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integ
 <details>
 <summary>Building from source: full notes (interpreter / compiler dependencies)</summary>
 
-### Interpreter (repository root, Go module `github.com/QuarkLangCommunity/QuarkLangQkc`)
+### One Go module (`github.com/QuarkLangCommunity/QuarkLangQkc`)
 
 ```sh
 go build -o quark .
@@ -70,7 +79,7 @@ go build -o quark .
 go test ./internal/lang/     # full test suite (-race works too)
 ```
 
-### Compiler (`compiler/`, LLVM backend)
+### Compiler (`compiler/`, LLVM backend; same module)
 
 ```sh
 cd compiler && go build -o qkc .
@@ -529,7 +538,7 @@ Usage: put the library's `.qk` file next to your source and `import "json";` / `
 - `cmd/` — toolchain sharing the same front end: `qkcheck`, `qkdoc`, `qkrepl`, `qklsp`
 - `cmd/quarkwasm/` — the interpreter as a WebAssembly module (the engine behind the web playground)
 - `scripts/` — release & ops: `build-release.sh` (three-platform artifacts, version injection, sha256 manifest),
-  `changelog.sh`, `coverage.sh` (per-package coverage report for both modules), `bench-report.sh`
+  `changelog.sh`, `coverage.sh` (per-package coverage report for the module), `bench-report.sh`
   (interpreter vs native on `bench/qk/`, parity asserted), `make-demo-gif.py`
 - `editors/` — editor support: VS Code extension (`vscode/`) + tree-sitter grammar (`tree-sitter-quarklang/`)
 - `bench/` — cross-language benchmark sources (C/Rust/Go/Erlang + Makefile) and `bench/qk/` (dual-backend programs)
@@ -588,7 +597,7 @@ Written down on purpose — a young language is better judged by what it admits 
 - **Macro system**: token-level macros are shared by both engines, but compile-time symbol insertion (`#ast`) and
   import resolution are still in progress.
 - **Windows FFI** uses a custom ABI shim limited to ≤ 4 arguments.
-- **Test coverage is 65.0%** (root module, 75.3% for the compiler module — `scripts/coverage.sh`); the linter's statistical gates cover its generated corpus, not all code.
+- **Coverage is measured for the single Go module** by `scripts/coverage.sh`; the linter's statistical gates cover its generated corpus, not all code.
 - **Repository text is English-only**: comments, documentation and configuration carry no Chinese. The *runtime* is a
   separate matter: messages are authored in `internal/i18n/source/*.tsv` and rendered in the reader's language.
 - **The compiled path renders in the reader's language too.** `QK_LANG=en` switches the interpreter's diagnostics and

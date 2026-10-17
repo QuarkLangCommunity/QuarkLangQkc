@@ -1,0 +1,30 @@
+name: sibling-drift
+
+# The toolchain has standalone sibling repositories, several of which share a tool name with cmd/.
+# docs/sibling-repositories.md records which is the source and which is frozen; this job re-checks that
+# declaration weekly so a frozen copy cannot quietly become a second source (or a mirror silently drift).
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out every declared sibling repository
+        run: |
+          mkdir -p "$RUNNER_TEMP/siblings"
+          awk -F'\t' '!/^#/ && NF {print $1}' scripts/sibling-repositories.tsv |
+          while read -r repo; do
+            git clone --depth 1 "https://github.com/QuarkLangCommunity/$repo.git" "$RUNNER_TEMP/siblings/$repo"
+          done
+      - name: Verify roles, frozen snapshots and pointers
+        run: python3 scripts/check_sibling_drift.py --root "$RUNNER_TEMP/siblings" --require-all
+      - name: Self-test the mirror comparator
+        run: python3 scripts/check_sibling_drift.py --self-test

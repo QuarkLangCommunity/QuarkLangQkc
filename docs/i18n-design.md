@@ -115,8 +115,7 @@ internal compiler cmd` → no matches), so that half of the table is dead scanne
 
 ### D-4 — coverage is enforced by ratchets plus runtime counting, and the scanner cannot see the pinned parser module ✔ verified — the worst of the six
 
-`github.com/QuarkLangCommunity/QuarkLangQkparser` is pinned by pseudo-version in `go.mod` and again in
-`compiler/go.mod`. Its 30 `msg(...)` templates are the parser's user-facing diagnostics. The scanner
+`github.com/QuarkLangCommunity/QuarkLangQkparser` is pinned by pseudo-version in the root `go.mod`. Its 30 `msg(...)` templates are the parser's user-facing diagnostics. The scanner
 walks the repository root, and stops at any directory that contains `.git`:
 
 ```
@@ -623,7 +622,7 @@ point. Steps 0-2 are this branch.
 |---|---|---|---|
 | **0 ✔ done** | `cmd/qki18n`, `internal/i18ngen`, `source/languages.tsv`, generator tests. No call site touched. | nothing | revert the commit |
 | **1 ✔ done** | Migrate the syntax layer's `msg()` surface: 25 rows in `source/parser.tsv`, `internal/i18n/msg_gen.go`, the module's own IDs and blob, the `Localizer` seam, `proof/byte_identical.sh`. | nothing observable: the 25 renderings removed from `table_macro.go`, `table_compiler.go` and `table_lexer.go` are byte-identical to the values the blob now carries, which the corpus checks | revert the commit; the tables come back with it |
-| **2 ✔ done (module branch pushed)** | **qkparser** gains `i18n/source/messages.tsv`, `cmd/mkmsg`, `messages_gen.go` and the ID-based `Localizer`; this repository's generator reads that table at the pinned revision and checks its IDs. | the pin moves, so `compiler/go.mod` follows; **the module must merge first**, and the pin bump is the second PR | revert the pin bump. ⚠ A revision without `i18n/source/messages.tsv` makes `go list` succeed but `Load` fail on the missing file — a hard failure, which is the honest behaviour, but it means the pin and the module must move together. When the module's `Localizer` interface changed from text-keyed `T` to `Msg(ID, …)`, this repository's `internal/lang` had to change in the same commit: there is no deprecation window in the prototype, and the final design owes one (§9) |
+| **2 ✔ done (module branch pushed)** | **qkparser** gains `i18n/source/messages.tsv`, `cmd/mkmsg`, `messages_gen.go` and the ID-based `Localizer`; this repository's generator reads that table at the pinned revision and checks its IDs. | the pin moves in the root `go.mod`; **the module must merge first**, and the pin bump is the second PR | revert the pin bump. ⚠ A revision without `i18n/source/messages.tsv` makes `go list` succeed but `Load` fail on the missing file — a hard failure, which is the honest behaviour, but it means the pin and the module must move together. When the module's `Localizer` interface changed from text-keyed `T` to `Msg(ID, …)`, this repository's `internal/lang` had to change in the same commit: there is no deprecation window in the prototype, and the final design owes one (§9) |
 | **3 ✔ done (module + consumer)** | The rest of the syntax layer: the `errf(…)` templates in `qkparser`, then this repository's 13 `table_lexer.go` messages, whose call sites are all in the module. Measured surface, not the estimate this row used to carry: **40 call sites, 38 distinct templates** — 13 written in Chinese and 25 English-only. See §7.2 and §7.3. | the module's `errf` becomes `errfID` and the two `errf` methods are deleted, so there is no text-keyed path left in the module; every `src` value in `parser.tsv` moves to its English text, and a `src` that no longer matches the pin fails generation — which is the intended coupling | per-commit revert |
 | **4 ⚠ in progress: `docgen` done, 7 domains left** | The eight in-repository domains: `shared` (1), `docgen` (7), `repl` (13), `lint` (22), `cli` (27), `runtime` (65), `typecheck` (142), `compiler` (252). One commit each, largest last. See §7.4 for what the first domain cost and what is left, with call-site counts measured rather than estimated. | each commit deletes that domain's rows; unmigrated domains keep working through `T` | per-domain revert |
 | **5** | Delete the shim: `Localizer.T`, `i18n.T`, `Load`, `Catalog`, `miss.go`, the `table_*.go` files, and the retired ratchets (§4). Point `TestCatalogIntegrity`/`TestVerbSetsMatch` at the generated data. | any out-of-tree consumer of `i18n.T` — none: the package is `internal/`, so it is unreachable outside this module | revert |
@@ -809,9 +808,8 @@ callee/argument table — these are the numbers the next commits start from:
 Two consequences worth stating before the work is scheduled. `cli` has 25 direct `i18n.T(` call sites —
 the count `TestDecouplingRatchet` freezes — and they live in four `cmd/` packages that have no localizer
 of their own, so that domain needs an ID-rendering path introduced per package before a single row can
-move. And the two largest domains are in the `compiler` module, which pins this one by a relative
-`replace`; their tables are read from this repository's `internal/i18n`, so they migrate here, but every
-gate for them has to run in both modules.
+move. And the two largest domains are in the `compiler` packages; their tables are read from the same
+module's `internal/i18n`, so they migrate here and one gate run covers them.
 
 ### 7.5 The prerequisite step 4 was hiding: a message in a struct field
 
