@@ -16,7 +16,7 @@ be left out silently.
 
 | Construct | Checker | Interpreter | Compiler | Evidence |
 |---|---|---|---|---|
-| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (25 files); `compiler/testdata/cases_run/*.kq` (19 files) |
+| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (25 files); `compiler/testdata/cases_run/*.kq` (20 files) |
 | `bit`, `bits<N>` (1 <= N <= 32), `uchar` | accepts | runs | lowers | `internal/lang:TestBitsValuesAndMasking`; `internal/lang:TestBitsCallSpelling`; `compiler/testdata/cases/z_bits.kq` |
 | raw bits: `& \| ^ ~ << >>`, `b[i]` read/write, the three conversion meanings | accepts | runs | lowers | `internal/lang:TestBitsOperators`; `internal/lang:TestBitIndexing`; `internal/lang:TestBitsConversions`; `compiler/testdata/cases/z_bits.kq` |
 | bitwise family on int views, hex literals | accepts | runs | lowers | `internal/lang:TestBitwiseOperators`; `compiler/testdata/cases/z_bits.kq`; `compiler/testdata/cases/z_precedence.kq` |
@@ -27,7 +27,7 @@ be left out silently.
 | conditional directives: `#ifdef`, `#ifndef`, `#if`, `#endif`, `#define`, `#undef` | accepts | runs | lowers | `internal/lang:TestMacroCompilerBranchDropped`; `compiler/testdata/cases/x_if_family.kq`; `compiler/testdata/cases/x_if_complement.kq`; `compiler/testdata/cases/x_if_pair.kq`; `compiler/testdata/cases/x_if_macro_body.kq` |
 
 
-The parity corpus has **25** cases under `compiler/testdata/cases` and **19** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
+The parity corpus has **25** cases under `compiler/testdata/cases` and **20** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
 
 This table is the corrected form of the old hand-written list. That list grouped `===`, permission
 references, `&lvalue` and `p++` with the constructs both engines implement; the compiler refuses all
