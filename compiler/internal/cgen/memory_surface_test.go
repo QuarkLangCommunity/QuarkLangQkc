@@ -11,7 +11,6 @@ import (
 func TestMemoryPrimitivesAreRefusedExceptLoweredRows(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"delete int", "fn main(IOStream io) { int x = 1; delete x; }\n", "delete"},
-		{"compact", "fn main(IOStream io) { memory.compact(); }\n", "compact"},
 		{"Fragmentation", "fn main(IOStream io) { io.println(memory.Fragmentation()); }\n", "Fragmentation"},
 		{"clear", "fn main(IOStream io) { memory.clear(); }\n", "clear"},
 		{"mode", "fn main(IOStream io) { memory.mode(1); }\n", "mode"},
@@ -60,5 +59,26 @@ func TestMemorySetBlockErrorJoinsTry(t *testing.T) {
 	}
 	if !strings.Contains(ir, "br i1 %") {
 		t.Fatalf("the range check does not branch (no catch edge):\n%s", ir)
+	}
+}
+
+// TestMemoryCompactLowersAndReturns pins D6 from the interpreter's behaviour: eval.go calls
+// MemoryManager.Compact() and returns normally (the comment "never returns at all" is not what the
+// code does), so the compiled call returns too. A terminating lowering would be a language-visible
+// control-flow primitive the standard does not describe.
+func TestMemoryCompactLowersAndReturns(t *testing.T) {
+	ir := transpile(t, "fn main(IOStream io) {\n"+
+		"    memory.compact();\n"+
+		"    io.println(1);\n"+
+		"}\n")
+	if !strings.Contains(ir, "call void @ql_mem_compact()") {
+		t.Fatalf("memory.compact does not call the runtime entry point:\n%s", ir)
+	}
+	// The call is followed by the println in the same function body: control continues, as in the
+	// interpreter (a terminating lowering would have no reachable statement after it).
+	call := strings.Index(ir, "call void @ql_mem_compact()")
+	print := strings.Index(ir[call:], "@printf")
+	if call < 0 || print < 0 {
+		t.Fatalf("memory.compact does not return control to the next statement:\n%s", ir)
 	}
 }

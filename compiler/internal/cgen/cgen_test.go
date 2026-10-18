@@ -51,6 +51,12 @@ define i32 @ql_mem_set_block(i32 %n) {
 entry:
   ret i32 1
 }
+; memory.compact: releasing empty slabs is a no-op for the unit tests; the C allocator test and the
+; linked parity case exercise the real one.
+define void @ql_mem_compact() {
+entry:
+  ret void
+}
 define i8* @ql_strcat(i8* %a, i8* %b) {
 entry:
   %la = call i64 @strlen(i8* %a)
@@ -85,6 +91,7 @@ func withTestRuntime(ir string) string {
 				strings.Contains(line, "@ql_realloc(") ||
 				strings.Contains(line, "@ql_free(") ||
 				strings.Contains(line, "@ql_mem_set_block(") ||
+				strings.Contains(line, "@ql_mem_compact(") ||
 				strings.Contains(line, "@ql_strcat(") ||
 				strings.Contains(line, "@strlen(") ||
 				strings.Contains(line, "@memcpy(")) {

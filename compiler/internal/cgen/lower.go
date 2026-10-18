@@ -2753,7 +2753,12 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 					return nil, err
 				}
 				return &expr{kind: kMem, typ: "void", line: me.Pos.Line, s: me.Name, l: x}, nil
-			case "compact", "clear", "mode":
+			case "compact":
+				if len(c.Args) != 0 {
+					return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
+				}
+				return &expr{kind: kMem, typ: "void", line: me.Pos.Line, s: me.Name}, nil
+			case "clear", "mode":
 				return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
 			}
 		}

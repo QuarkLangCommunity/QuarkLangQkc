@@ -1107,6 +1107,7 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	// The §10 memory primitives. They are defined by the compiled runtime; the Windows fallback never
 	// reaches them because lowering refuses the calls there (the runtime is not linked).
 	e.decls.WriteString("declare i32 @ql_mem_set_block(i32)\n")
+	e.decls.WriteString("declare void @ql_mem_compact()\n")
 	e.decls.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
 	e.decls.WriteString("declare i8* @ql_strcat(i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @snprintf(i8*, i64, i8*, ...)\n")
@@ -4787,6 +4788,11 @@ func (e *emitter) compileMemPrimitive(x *expr) (string, string) {
 			e.emitInstr("unreachable")
 		}
 		e.setBlock(cont)
+	case "compact":
+		// D6 answered by the interpreter, not by choosing: eval.go calls MemoryManager.Compact and
+		// returns normally (its comment says "never returns at all", the code does), so the compiled
+		// path calls the runtime and control continues.
+		e.emitInstr("call void @ql_mem_compact()")
 	}
 	return "", "void"
 }
