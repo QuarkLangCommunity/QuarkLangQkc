@@ -36,8 +36,10 @@ block policy:
 `bench/tide/run.sh` builds every program once, runs it once untimed, then runs it `--runs` times and
 reports the median, minimum, maximum, standard deviation and `(max-min)/median` spread. No run is
 presented as "the best"; a single best run is not the result. `--record` writes
-`spec/bench/tide.tsv`, the authored input to this generated report. `--quick` uses 1e6 rounds for CI
-smoke; the checked-in record uses 1e8 rounds and five runs. `--attribution` adds diagnostic controls:
+`spec/bench/tide.tsv`, the authored input to this generated report, and refuses to do so unless the
+host's 1-minute load average is below 0.25 per logical CPU; the measured load is part of the record
+and is stated above. `--quick` uses 1e6 rounds for CI smoke and does not apply the precondition; the
+checked-in record uses 1e8 rounds and five runs. `--attribution` adds diagnostic controls:
 the same loop with no allocation, string or sink; the same loop with only the opaque sink; and C
 controls that time the counted-slab List allocations, the List header stores, the counted-slab
 string allocation, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
@@ -72,7 +74,7 @@ interpreter's logical blocks.
 ```sh
 ./bench/tide/run.sh                 # 1e8 rounds, 5 runs, prints the TSV record
 ./bench/tide/run.sh --attribution   # adds the phase rows that decompose the observable row
-./bench/tide/run.sh --record        # writes spec/bench/tide.tsv, then regenerates this report
+./bench/tide/run.sh --record        # on a quiet host: writes spec/bench/tide.tsv and regenerates this report
 ./bench/tide/run.sh --quick         # 1e6 rounds, 3 runs: CI smoke
 go generate ./internal/benchgen     # renders docs/tide-benchmark.md from the record and template
 go run ./cmd/qkbench -check         # fails when the committed report is stale

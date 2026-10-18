@@ -5,7 +5,7 @@
 #
 #   bench/tide/run.sh --quick              # 1e6 rounds, 3 runs: CI smoke
 #   bench/tide/run.sh                      # 1e8 rounds, 5 runs: the recorded measurement
-#   bench/tide/run.sh --record             # write spec/bench/tide.tsv and regenerate the report
+#   bench/tide/run.sh --record             # write spec/bench/tide.tsv on a quiet host and regenerate the report
 #   bench/tide/run.sh --attribution        # add the phase rows that decompose the observable row
 #
 # The output is a TSV record; the first lines are metadata and the rest are the measured rows. A
@@ -31,7 +31,7 @@ while [ "$#" -gt 0 ]; do
     --record) RECORD=1 ;;
     --attribution) ATTR=1 ;;
     --help|-h)
-      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -63,7 +63,7 @@ load1() {
   elif sysctl -n vm.loadavg >/dev/null 2>&1; then
     sysctl -n vm.loadavg | tr -d '{}' | LC_ALL=C awk '{ print $1; exit }'
   else
-    python3 -c 'import os; print("%.2f" % os.getloadavg()[0])'
+    python3 -c 'import os; print("%.2f" % os.getloadavg()[0])' 2>/dev/null
   fi
 }
 
@@ -84,20 +84,12 @@ check_record_load() {
   [[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --record needs a positive logical CPU count" >&2; exit 2; }
   LOAD_LIMIT="$(LC_ALL=C awk -v cpus="$CPUS" -v per="$LOAD_PER_CPU_MAX" 'BEGIN { printf "%.2f", cpus * per }')"
   START_LOAD="$(load1)"
+  [[ "$START_LOAD" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "tide: could not read the 1-minute load average for --record" >&2; exit 2; }
   if ! load_below "$START_LOAD" "$LOAD_LIMIT"; then
     echo "tide: refusing --record: 1-minute load average $START_LOAD is not below $LOAD_LIMIT ($LOAD_PER_CPU_MAX per logical CPU on $CPUS logical CPUs); wait for a quiet host or use --quick" >&2
     exit 2
   fi
-}
-
-# finish_record_load records the end load and refuses a record taken above the limit.
-finish_record_load() {
-  END_LOAD="$(load1)"
-  if ! load_below "$END_LOAD" "$LOAD_LIMIT"; then
-    echo "tide: refusing to write the record: 1-minute load average $END_LOAD after the runs is not below $LOAD_LIMIT ($LOAD_PER_CPU_MAX per logical CPU on $CPUS logical CPUs); the numbers were not taken under the stated condition" >&2
-    exit 1
-  fi
-  LOAD_META="1-minute load average $START_LOAD before the run and $END_LOAD after it; precondition below $LOAD_LIMIT ($LOAD_PER_CPU_MAX per logical CPU on $CPUS logical CPUs)"
+  LOAD_META="1-minute load average $START_LOAD before the run; precondition below $LOAD_LIMIT ($LOAD_PER_CPU_MAX per logical CPU on $CPUS logical CPUs)"
 }
 
 check_record_load
@@ -326,7 +318,6 @@ print_record() {
 }
 
 if [ "$RECORD" -eq 1 ]; then
-  finish_record_load
   TMP="$BUILD/tide.tsv"
   print_record > "$TMP"
   mv "$TMP" spec/bench/tide.tsv

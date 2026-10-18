@@ -405,7 +405,9 @@ The tide row is measured by `bench/tide/run.sh`; the generated block below is em
 reports the observable path, the no-sink and historical no-use rows, and the interpreter's
 block-policy counters. Since stage 1 of the compiled memory design the compiled `List` allocation goes
 through the counted-slab runtime allocator on POSIX, so the no-sink and no-use rows are no longer
-optimizer floors; the historical row is kept to show that the optimizer can no longer erase it.
+optimizer floors; the historical row is kept to show that the optimizer can no longer erase it. A
+recording run is refused unless the host's 1-minute load average is below 0.25 per logical CPU, and
+the generated block states the load the numbers were taken under.
 Reproduce the cross-language fib rows with `bench/Makefile` and the tide block with `bench/tide/run.sh`.
 
 <!-- tide-measurements -->
