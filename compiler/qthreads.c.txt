@@ -1388,6 +1388,7 @@ char* ql_list_int_str(const int* buf, int head, int tail) {
     if (count >= 0 && count <= 16) {
         char out[16 * 11 + 15 * 2 + 3];
         size_t o = 0;
+        memset(out, 0, 16); /* the short copy below reads a fixed 16 bytes */
         out[o++] = '[';
         for (int i = head; i < tail; i++) {
             if (i > head) { out[o++] = ','; out[o++] = ' '; }
@@ -1395,6 +1396,11 @@ char* ql_list_int_str(const int* buf, int head, int tail) {
         }
         out[o++] = ']';
         out[o] = 0;
+        if (o < 16) {
+            char* r = ql_alloc(16, 0);
+            memcpy(r, out, 16);
+            return r;
+        }
         char* r = ql_alloc(o + 1, 0);
         memcpy(r, out, o + 1);
         return r;
