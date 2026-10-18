@@ -645,7 +645,6 @@ static void ql_mem_free_locked(void* p) {
         s->used_bytes -= h->requested;
         if (s->used == 0) ql_mem_live_total -= s->size;
         if (!s->in_partial) ql_mem_partial_push(s->cls, s);
-        ql_mem_current[s->cls] = s;
         ql_mem_used_total -= h->requested;
         return;
     }
