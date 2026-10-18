@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -224,5 +225,48 @@ func TestClaimsHarnessRefusesProbesAndAcceptsCanonical(t *testing.T) {
 	}
 	if got := fileHash(t, record); got != before {
 		t.Errorf("the canonical dry run changed %s", ClaimsTSV)
+	}
+}
+
+// TestREADMENumbersStayInMarkedBlocks fails when a timing value appears outside the generated blocks.
+func TestREADMENumbersStayInMarkedBlocks(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := normalize(string(b))
+	for _, block := range [][2]string{{BlockStart, BlockEnd}, {ClaimsBlockStart, ClaimsBlockEnd}} {
+		start := strings.Index(text, block[0])
+		end := strings.Index(text, block[1])
+		if start < 0 || end < start {
+			t.Fatalf("README.md has no complete %s block", block[0])
+		}
+		text = text[:start] + text[end+len(block[1]):]
+	}
+	timing := regexp.MustCompile(`[0-9]+(\.[0-9]+)? ?(ms|µs|ns)\b`)
+	for n, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), ">") {
+			continue
+		}
+		if timing.MatchString(line) {
+			t.Errorf("README.md line %d has a timing value outside the generated blocks: %s", n+1, line)
+		}
+	}
+}
+
+// TestHistoricalDocsCarryTheBanner keeps the one-off measurements from reading as current claims.
+func TestHistoricalDocsCarryTheBanner(t *testing.T) {
+	for _, path := range []string{
+		"docs/compiled-memory-design.md",
+		"docs/compiled-memory-stage1.md",
+		"docs/compiled-memory-stage2.md",
+	} {
+		b, err := os.ReadFile(filepath.Join(repoRoot(t), path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), "**Historical measurements.**") {
+			t.Errorf("%s carries timing figures without the historical banner", path)
+		}
 	}
 }
