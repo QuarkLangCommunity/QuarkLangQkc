@@ -41,6 +41,13 @@ func deleteRefusalCases() []memoryRefusal {
 			line: 2,
 		},
 		{
+			name: "delete a by-reference struct parameter",
+			src:  "type struct { int n; } P;\nfn drop(P p) void {\n    delete p;\n}\nfn main(IOStream io) { io.println(1); }\n",
+			id:   i18n.MsgCompilerDeleteOnByReferenceParameterQNotSupported,
+			args: []any{"p"},
+			line: 3,
+		},
+		{
 			name: "delete a struct field",
 			src:  "type struct { List<int> xs; } Box;\nfn main(IOStream io) {\n    Box b;\n    delete b.xs;\n}\n",
 			id:   i18n.MsgCompilerDeleteOnNonVariableExpressionNot,
@@ -60,18 +67,11 @@ func deleteRefusalCases() []memoryRefusal {
 			line: 3,
 		},
 		{
-			name: "delete a List<String> local",
-			src:  "fn main(IOStream io) {\n    List<String> s = [\"a\"];\n    delete s;\n}\n",
+			name: "delete a String local",
+			src:  "fn main(IOStream io) {\n    String s = \"a\";\n    delete s;\n}\n",
 			id:   i18n.MsgCompilerDeleteQNotSupportedCompilerHandles,
 			args: []any{"s"},
 			line: 3,
-		},
-		{
-			name: "delete a struct",
-			src:  "type struct { int n; } P;\nfn main(IOStream io) {\n    P p;\n    delete p;\n}\n",
-			id:   i18n.MsgCompilerDeleteQNotSupportedCompilerHandles,
-			args: []any{"p"},
-			line: 4,
 		},
 	}
 }
@@ -139,5 +139,75 @@ func TestDeleteOnCopydListIntParameterStillLowers(t *testing.T) {
 	}
 	if got := strings.Count(ir, freeCall); got != 2 {
 		t.Fatalf("delete on a copyd List<int> parameter emits %d %s call(s), want 2:\n%s", got, freeCall, ir)
+	}
+}
+
+// deleteFreeCall is the release symbol the emitter uses on the host platform (Windows keeps libc).
+func deleteFreeCall() string {
+	if hostAllocatorFallback {
+		return "call void @free(i8*"
+	}
+	return "call void @ql_free(i8*"
+}
+
+// TestDeleteOnListStringAndFloatLowers covers the other two list layouts the compiler emits: every one
+// is a header plus a heap buffer, so release is two frees of the same pair, not a special case.
+func TestDeleteOnListStringAndFloatLowers(t *testing.T) {
+	ir := transpile(t, "fn main(IOStream io) {\n"+
+		"    List<String> s = [\"a\", \"b\"];\n"+
+		"    io.println(s.size());\n"+
+		"    delete s;\n"+
+		"    List<float> f = [1.5, 2.5];\n"+
+		"    io.println(f.get(1));\n"+
+		"    delete f;\n"+
+		"}\n")
+	if got := strings.Count(ir, deleteFreeCall()); got != 4 {
+		t.Fatalf("delete on List<String>/List<float> emits %d release call(s), want 4 (two per list):\n%s", got, ir)
+	}
+}
+
+// TestDeleteOnStructRunsDeleteMethodThenReleases pins §10's order: __delete__() first, then the
+// storage. The call is the ordinary self-method call, so it has the same receiver convention a direct
+// call has.
+func TestDeleteOnStructRunsDeleteMethodThenReleases(t *testing.T) {
+	ir := transpile(t, "type struct { int n; } P;\n"+
+		"impl {\n"+
+		"    fn __delete__(P self) void { self.n = 0; }\n"+
+		"} P;\n"+
+		"fn main(IOStream io) {\n"+
+		"    P p = .{n: 1};\n"+
+		"    delete p;\n"+
+		"}\n")
+	call := strings.Index(ir, "@P___delete__(")
+	free := strings.Index(ir, deleteFreeCall())
+	if call < 0 {
+		t.Fatalf("delete on a struct does not call __delete__:\n%s", ir)
+	}
+	if free < 0 || free < call {
+		t.Fatalf("the release does not follow __delete__ (call=%d free=%d):\n%s", call, free, ir)
+	}
+}
+
+// TestDeleteOnStructWithoutDeleteMethodReleases: a struct that declares no __delete__ still owns its
+// cell, and releasing it must not be a silent no-op.
+func TestDeleteOnStructWithoutDeleteMethodReleases(t *testing.T) {
+	ir := transpile(t, "type struct { int n; } P;\n"+
+		"fn main(IOStream io) {\n"+
+		"    P p = .{n: 1};\n"+
+		"    delete p;\n"+
+		"}\n")
+	if got := strings.Count(ir, deleteFreeCall()); got != 1 {
+		t.Fatalf("delete on a struct without __delete__ emits %d release call(s), want 1:\n%s", got, ir)
+	}
+}
+
+// TestDeleteOnCopydStructParameterLowers: a copyd struct parameter is a callee-owned deep copy, so it
+// is releasable; the by-reference refusal must not swallow it.
+func TestDeleteOnCopydStructParameterLowers(t *testing.T) {
+	ir := transpile(t, "type struct { int n; } P;\n"+
+		"fn drop(copyd P p) void { delete p; }\n"+
+		"fn main(IOStream io) { P p = .{n: 1}; drop(p); io.println(p.n); }\n")
+	if !strings.Contains(ir, deleteFreeCall()) {
+		t.Fatalf("delete on a copyd struct parameter emits no release:\n%s", ir)
 	}
 }

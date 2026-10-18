@@ -99,8 +99,12 @@ keeps it in one place so the fix is not mistaken for permission to relax the pin
 ### §10 memory on the compiled path
 
 The four primitive rows and the derived `clear` are the surface §10 defines. The compiled artifact
-implements `delete` in a narrowed form (an owned `List<int>`: a local variable, or a `copyd` parameter's
-callee-owned copy, while a by-reference parameter is refused) and, as stage 2 lands, has wired
+implements `delete` for an owned variable of every heap-backed type it lowers — a list of any element
+type it supports (`List<int>`, `List<String>`, `List<float>`), released through the counted-slab
+allocator as a buffer plus a header, or a struct, whose `__delete__()` runs before its cell is
+returned — for a local variable or a `copyd` parameter's callee-owned copy. A by-reference parameter
+(the storage belongs to the caller), a scalar or a `String` (no heap storage to release) and a
+non-variable expression keep positioned hard errors. Stage 2 has also wired
 `memory.setBlock(n)` to the runtime block allocator: the accepted range is the interpreter's `1 … 2^20`,
 a value outside it is the interpreter's runtime error with the same message and position (catchable by
 `try`), and the size applies to slabs created afterwards, as the interpreter reads `BlockSize` when a
@@ -114,13 +118,11 @@ values, not storage). `memory.Fragmentation()` remains unexposed in both engines
 ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
-growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. What remains is the rest of
-the language surface and ownership: the other `memory.*` rows, `__delete__` dispatch and the decided
-`delete` domain in the compiled path, exposing `Fragmentation` in both engines or deciding not to,
-routing the runtime's own C allocations, task-end reclaim, and Windows (the runtime is still not linked
-there; the generator keeps the libc path). Stage 2 adds no normative text and no language surface
-beyond the rows the standard already names. Size: large — one design review of its own, not a
-correction.
+growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. What remains is exposing
+`Fragmentation` in both engines or deciding not to, routing the runtime's own C allocations, task-end
+reclaim, and Windows (the runtime is still not linked there; the generator keeps the libc path).
+Stage 2 adds no normative text and no language surface beyond the rows the standard already names.
+Size: large — one design review of its own, not a correction.
 
 ### §10 memory on Windows
 

@@ -1,0 +1,31 @@
+// The compiled delete matrix: every row the interpreter accepts and the compiled path can release
+// honestly. A list of any lowered element type releases its buffer and header; a struct runs
+// __delete__() (observable through a field that aliases another struct) and then releases its cell;
+// a copyd parameter's callee-owned copy is released without touching the caller's value.
+type struct { int n; } Mark;
+type struct { Mark m; } P;
+impl {
+    fn __delete__(P self) void { self.m.n = 42; }
+} P;
+type struct { int n; } Q;
+fn drop(copyd P p) void { delete p; }
+fn main(IOStream io) {
+    Mark m = .{n: 5};
+    P p = .{m: m};
+    io.println(m.n);
+    delete p;
+    io.println(m.n);
+    Mark m2 = .{n: 1};
+    P c = .{m: m2};
+    drop(c);
+    io.println(c.m.n);
+    Q q = .{n: 7};
+    delete q;
+    List<String> s = ["a", "b"];
+    io.println(s.size(), s.get(1));
+    delete s;
+    List<float> f = [1.5, 2.5];
+    io.println(f.get(1));
+    delete f;
+    io.println(7);
+}

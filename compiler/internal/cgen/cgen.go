@@ -243,7 +243,11 @@ type tryStmt struct {
 	catch []stmt
 }
 
-type deleteStmt struct{ name string }
+type deleteStmt struct {
+	name string
+	typ  string // the variable's static type: a list layout or a struct
+	del  *expr  // the __delete__ call to run before release, nil when the type declares none
+}
 
 type logStmt struct{ x *expr }
 
@@ -2389,7 +2393,14 @@ func (e *emitter) emitFieldAssign(st *fieldAssignStmt) {
 
 // listObj returns the object pointer of a List variable.
 func (e *emitter) listObj(name string) string {
-	e.ensureList()
+	return e.listObjTyped(name, "List<int>")
+}
+
+// listObjTyped returns the header pointer of a list variable of any element type. The three layouts
+// (%List, %ListS, %ListF) all start with a pointer, so callers that only free the storage can treat
+// the header uniformly; element access still goes through the typed paths.
+func (e *emitter) listObjTyped(name, typ string) string {
+	llt := e.ir(typ) // %List* / %ListS* / %ListF* (ir() also declares the layout type)
 	info, ok := e.vars[name]
 	if !ok {
 		return "null"
@@ -2398,7 +2409,7 @@ func (e *emitter) listObj(name string) string {
 		return info.reg
 	}
 	r := e.newReg()
-	e.emitInstr("%s = load %%List*, %%List** %s", r, info.reg)
+	e.emitInstr("%s = load %s, %s* %s", r, llt, llt, info.reg)
 	return r
 }
 
@@ -2487,21 +2498,45 @@ func (e *emitter) failID(id i18n.Msg, args ...any) {
 }
 
 func (e *emitter) emitDelete(st *deleteStmt) {
+	if st.del != nil {
+		// §10 release order: run __delete__() first. The call is the ordinary self-method call, so a
+		// method that mutates a field of a struct the deleted value aliases has the same effect it has
+		// in the interpreter (a mutation of the deleted value's own storage is unobservable by contract).
+		e.compileExpr(st.del)
+	}
 	info, ok := e.vars[st.name]
-	if !ok || info.ref || info.param || info.direct || info.typ != "List<int>" {
-		// Lowering accepts only an owned local List<int> variable, so this is unreachable for a program
-		// it accepted; it is still an error rather than a dropped release.
+	if !ok || info.ref || info.param || info.direct || info.typ != st.typ {
+		// Lowering accepts only owned variables, so this is unreachable for a program it accepted; it is
+		// still an error rather than a dropped release.
 		e.failID(i18n.MsgCompilerInternalDeleteQReachedCodeGeneration, st.name)
 		return
 	}
-	lo := e.listObj(st.name)
-	p := e.listBuf(lo)
-	c := e.newReg()
-	e.emitInstr("%s = bitcast i32* %s to i8*", c, p)
-	e.emitFree(c)
-	c2 := e.newReg()
-	e.emitInstr("%s = bitcast %%List* %s to i8*", c2, lo)
-	e.emitFree(c2)
+	if isListType(st.typ) {
+		// Every list layout is a header plus a heap buffer, and both are counted-slab allocations. The
+		// header's first field is the buffer pointer whatever the element width, so one release covers
+		// List<int>, List<String> and List<float>.
+		lo := e.listObjTyped(st.name, st.typ)
+		llt := e.ir(st.typ)
+		bf := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8**", bf, llt, lo)
+		p := e.newReg()
+		e.emitInstr("%s = load i8*, i8** %s", p, bf)
+		e.emitFree(p)
+		c2 := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8*", c2, llt, lo)
+		e.emitFree(c2)
+		return
+	}
+	if e.isStruct(st.typ) {
+		// A struct variable owns its cell (a local's literal/zero cell or a copyd parameter's deep
+		// copy); release the cell after the dispatch above.
+		v, _ := e.loadVar(st.name, false)
+		c := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8*", c, e.ir(st.typ), v)
+		e.emitFree(c)
+		return
+	}
+	e.failID(i18n.MsgCompilerInternalDeleteQReachedCodeGeneration, st.name)
 }
 
 func (e *emitter) emitIf(st *ifStmt) {

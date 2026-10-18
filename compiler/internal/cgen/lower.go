@@ -1184,17 +1184,41 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 		if !ok {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnNonVariableExpressionNot)
 		}
-		// A by-reference parameter names the caller's list; releasing it here would free storage this
+		// A by-reference parameter names the caller's storage; releasing it here would free storage this
 		// callee does not own, and dropping the release silently would be a no-op the interpreter does
 		// not share. Refuse it with a position instead (a copyd parameter is a callee-owned copy and
 		// keeps the supported path).
 		if fc.byRefParams[id.Name] {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnByReferenceParameterQNotSupported, id.Name)
 		}
-		if t, _ := fc.lookup(id.Name); t != "List<int>" {
+		t, found := fc.lookup(id.Name)
+		if !found {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteQNotSupportedCompilerHandles, id.Name)
 		}
-		return &deleteStmt{name: id.Name}, nil
+		d := &deleteStmt{name: id.Name, typ: t}
+		switch {
+		case t == "List<int>", t == "List<String>", t == "List<float>":
+			// Every list layout cgen emits is a header plus a heap buffer, and both are counted-slab
+			// allocations, so release is the same two frees whichever element type the header carries.
+		case l.isStructType(t):
+			// §10's release order: run __delete__() if the type declares it, then return the storage.
+			// The dispatch is the ordinary self-method call the language already has, so it is the same
+			// call a direct `p.__delete__()` makes, including its by-value receiver convention.
+			if mi := l.lookupSelf(t, "__delete__"); mi != nil {
+				imi, err := l.instantiateFor(mi, t, nil, fc, st.Pos)
+				if err != nil {
+					return nil, err
+				}
+				call, err := fc.methodCall(imi, t, st.X, nil, st.Pos)
+				if err != nil {
+					return nil, err
+				}
+				d.del = call
+			}
+		default:
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteQNotSupportedCompilerHandles, id.Name)
+		}
+		return d, nil
 	}
 	return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerCompilerInternalErrorUnknownStatementType, s)
 }
