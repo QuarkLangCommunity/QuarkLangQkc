@@ -329,6 +329,12 @@ struct ql_slab {
 
 static ql_slab* ql_mem_slabs;
 static ql_slab* ql_mem_partial[QL_MEM_CLASS_COUNT];
+/* The slab the last same-class allocation/release used, per class. It is a hint, never a policy
+ * change to the accounting: an allocation takes the cached slab when it still has a free slot and
+ * the owner matches, and otherwise falls back to the least-occupied scan over the partial list.
+ * Keeping this out of the scan is what keeps the common tide (one cached slab per class) from
+ * walking the partial list on every allocation. */
+static ql_slab* ql_mem_current[QL_MEM_CLASS_COUNT];
 static ql_large_meta* ql_mem_larges;
 static size_t ql_mem_block_size = QL_MEM_DEFAULT_BLOCK;
 static size_t ql_mem_used_total;
@@ -454,6 +460,7 @@ static void ql_mem_partial_remove(int cls, ql_slab* s) {
     if (*pp == s) *pp = s->next_partial;
     s->next_partial = 0;
     s->in_partial = 0;
+    if (ql_mem_current[cls] == s) ql_mem_current[cls] = 0;
 }
 
 static ql_slab* ql_mem_slab_new(int cls, int owner) {
@@ -512,22 +519,38 @@ static void* ql_mem_alloc_locked(size_t n, int owner) {
     if (cls >= 0) {
         size_t stride = ql_mem_stride(cls);
         ql_slab* s;
+        ql_slab* cur = ql_mem_current[cls];
         best = 0;
-        for (s = ql_mem_partial[cls]; s; s = s->next_partial) {
-            /* D5: a task allocates from its own slabs and the main thread from owner-0 slabs, so a
-             * task's storage can be released wholesale when it ends without touching anyone else. */
-            if (s->owner != (uint32_t)owner) continue;
-            QL_MEM_ASSERT(s->magic == QL_MEM_SLAB_MAGIC);
-            QL_MEM_ASSERT(s->cls == (uint16_t)cls);
-            QL_MEM_ASSERT(s->used <= s->slot_count);
-            QL_MEM_ASSERT(s->size >= ql_mem_slab_hdr() + stride);
-            if (s->free_head && (!best || s->used < best->used)) best = s;
+        /* Fast path: the cached slab is the one the last release returned a slot to, so its free
+         * list head is the object just released. The owner check preserves D5: a task's slab is
+         * never handed to the main thread (or to another task). */
+        if (cur && cur->owner == (uint32_t)owner && cur->free_head) {
+            QL_MEM_ASSERT(cur->magic == QL_MEM_SLAB_MAGIC);
+            QL_MEM_ASSERT(cur->cls == (uint16_t)cls);
+            QL_MEM_ASSERT(cur->used <= cur->slot_count);
+            QL_MEM_ASSERT(cur->size >= ql_mem_slab_hdr() + stride);
+            best = cur;
+        } else {
+            for (s = ql_mem_partial[cls]; s; s = s->next_partial) {
+                /* D5: a task allocates from its own slabs and the main thread from owner-0 slabs, so a
+                 * task's storage can be released wholesale when it ends without touching anyone else. */
+                if (s->owner != (uint32_t)owner) continue;
+                QL_MEM_ASSERT(s->magic == QL_MEM_SLAB_MAGIC);
+                QL_MEM_ASSERT(s->cls == (uint16_t)cls);
+                QL_MEM_ASSERT(s->used <= s->slot_count);
+                QL_MEM_ASSERT(s->size >= ql_mem_slab_hdr() + stride);
+                if (s->free_head && (!best || s->used < best->used)) best = s;
+            }
+            if (best) ql_mem_current[cls] = best;
         }
         if (!best) {
             best = ql_mem_slab_new(cls, owner);
             if (!best) return 0;
             ql_mem_new_blocks++;
-            if (best->slot_count > 1) ql_mem_partial_push(cls, best);
+            if (best->slot_count > 1) {
+                ql_mem_partial_push(cls, best);
+                ql_mem_current[cls] = best;
+            }
         } else {
             ql_mem_reuse++;
         }
@@ -622,6 +645,7 @@ static void ql_mem_free_locked(void* p) {
         s->used_bytes -= h->requested;
         if (s->used == 0) ql_mem_live_total -= s->size;
         if (!s->in_partial) ql_mem_partial_push(s->cls, s);
+        ql_mem_current[s->cls] = s;
         ql_mem_used_total -= h->requested;
         return;
     }
@@ -744,7 +768,10 @@ int ql_mem_set_block(int n) {
 static void ql_mem_rebuild_partial(void) {
     ql_slab* s;
     int cls;
-    for (cls = 0; cls < QL_MEM_CLASS_COUNT; cls++) ql_mem_partial[cls] = 0;
+    for (cls = 0; cls < QL_MEM_CLASS_COUNT; cls++) {
+        ql_mem_partial[cls] = 0;
+        ql_mem_current[cls] = 0;
+    }
     for (s = ql_mem_slabs; s; s = s->all_next) {
         s->next_partial = 0;
         s->in_partial = 0;
