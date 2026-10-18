@@ -39,7 +39,11 @@ presented as "the best"; a single best run is not the result. `--record` writes
 `spec/bench/tide.tsv`, the authored input to this generated report, and refuses to do so unless the
 host's 1-minute load average is below 0.25 per logical CPU; the measured load is part of the record
 and is stated above. `--quick` uses 1e6 rounds for CI smoke and does not apply the precondition; the
-checked-in record uses 1e8 rounds and five runs. `--attribution` adds diagnostic controls:
+checked-in record uses 1e8 rounds and five runs. Because the record's authority depends on its
+parameters, `--record` refuses every other shape and writes `# rounds` and `# runs` into the metadata;
+the generator rejects a record whose declarations or timing rows are not the canonical 1e8 rounds and
+five runs, and `--record --dry-run` validates that shape without measuring or writing. `--attribution`
+adds diagnostic controls:
 the same loop with no allocation, string or sink; the same loop with only the opaque sink; and C
 controls that time the counted-slab List allocations, the List header stores, the counted-slab
 string allocation, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
@@ -75,6 +79,7 @@ interpreter's logical blocks.
 ./bench/tide/run.sh                 # 1e8 rounds, 5 runs, prints the TSV record
 ./bench/tide/run.sh --attribution   # adds the phase rows that decompose the observable row
 ./bench/tide/run.sh --record        # on a quiet host: writes spec/bench/tide.tsv and regenerates this report
+./bench/tide/run.sh --record --dry-run  # validates the canonical 1e8/5 shape, prints the plan, writes nothing
 ./bench/tide/run.sh --quick         # 1e6 rounds, 3 runs: CI smoke
 go generate ./internal/benchgen     # renders docs/tide-benchmark.md from the record and template
 go run ./cmd/qkbench -check         # fails when the committed report is stale

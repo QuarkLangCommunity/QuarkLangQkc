@@ -28,6 +28,12 @@ const (
 	BlockEnd   = "<!-- /tide-measurements -->"
 )
 
+// canonicalRounds is the round count every timing row in the authoritative record must carry.
+const canonicalRounds int64 = 100_000_000
+
+// canonicalRuns is the timed-run count every timing row in the authoritative record must carry.
+const canonicalRuns int64 = 5
+
 // Options locates the inputs and chooses whether to write or to check the report.
 type Options struct {
 	Root     string // checkout root (default ".")
@@ -215,16 +221,40 @@ func (r *Record) Validate() error {
 	return validateCoverage(seen, r.Meta["skipped"])
 }
 
-// validateMeta checks the required metadata keys and their platform neutrality.
+// validateMeta checks the required metadata keys, the canonical shape and their platform neutrality.
 func validateMeta(meta map[string]string) error {
 	for _, key := range []string{"class", "load", "toolchain", "flags", "counted", "skipped", "evidence"} {
 		if strings.TrimSpace(meta[key]) == "" {
 			return fmt.Errorf("metadata is missing %q", key)
 		}
 	}
+	if err := validateCanonicalShape(meta); err != nil {
+		return err
+	}
 	for _, value := range meta {
 		if machineSpecific(value) {
 			return fmt.Errorf("metadata %q is machine-specific", value)
+		}
+	}
+	return nil
+}
+
+// validateCanonicalShape refuses metadata that does not declare the canonical 1e8-round, 5-run shape.
+func validateCanonicalShape(meta map[string]string) error {
+	for _, param := range []struct {
+		key  string
+		want int64
+	}{{"rounds", canonicalRounds}, {"runs", canonicalRuns}} {
+		raw := strings.TrimSpace(meta[param.key])
+		if raw == "" {
+			return fmt.Errorf("metadata is missing %q: a canonical record must declare %q and %q (the 1e8-round, 5-run measurement that bench/tide/run.sh --record writes)", param.key, "# rounds 100000000", "# runs 5")
+		}
+		got, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return fmt.Errorf("metadata %q is %q, not an integer: a canonical record must declare %q and %q", param.key, raw, "# rounds 100000000", "# runs 5")
+		}
+		if got != param.want {
+			return fmt.Errorf("metadata %q is %d, but a canonical record must have %d rounds and %d timed runs; a probe is not a record", param.key, got, canonicalRounds, canonicalRuns)
 		}
 	}
 	return nil
@@ -261,6 +291,9 @@ func validateTiming(row Row, checksums map[string]bool) error {
 	}
 	if row.Runs < 1 || row.Rounds < 1 {
 		return fmt.Errorf("%s: rounds and runs must be positive", row.Key)
+	}
+	if row.Rounds != canonicalRounds || row.Runs != canonicalRuns {
+		return fmt.Errorf("%s: a canonical timing row must carry %d rounds and %d timed runs, got %d rounds and %d runs", row.Key, canonicalRounds, canonicalRuns, row.Rounds, row.Runs)
 	}
 	if row.Min > row.Median || row.Median > row.Max {
 		return fmt.Errorf("%s: median %v is outside %v..%v", row.Key, row.Median, row.Min, row.Max)

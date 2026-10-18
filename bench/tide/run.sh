@@ -4,8 +4,9 @@
 # historical no-use shape the old 1 ms claim measured, and the interpreter block-policy counters.
 #
 #   bench/tide/run.sh --quick              # 1e6 rounds, 3 runs: CI smoke
-#   bench/tide/run.sh                      # 1e8 rounds, 5 runs: the recorded measurement
-#   bench/tide/run.sh --record             # write spec/bench/tide.tsv on a quiet host and regenerate the report
+#   bench/tide/run.sh                      # 1e8 rounds, 5 runs: print the record
+#   bench/tide/run.sh --record             # write spec/bench/tide.tsv: canonical 1e8 rounds / 5 runs only
+#   bench/tide/run.sh --record --dry-run   # validate the canonical shape and print the plan without measuring
 #   bench/tide/run.sh --attribution        # add the phase rows that decompose the observable row
 #
 # The output is a TSV record; the first lines are metadata and the rest are the measured rows. A
@@ -13,15 +14,20 @@
 #
 # --record is a measurement, so it refuses a busy host: the 1-minute load average must be below
 # 0.25 per logical CPU before the recording starts, and the measured load is written to the record.
+# --record also refuses every shape but the canonical 1e8 rounds and 5 runs, and writes those
+# parameters into the record metadata so the generator can reject a probe record.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-N=100000000
-RUNS=5
+CANONICAL_N=100000000
+CANONICAL_RUNS=5
+N=$CANONICAL_N
+RUNS=$CANONICAL_RUNS
 RECORD=0
 ATTR=0
+DRY_RUN=0
 LOAD_PER_CPU_MAX=0.25
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -29,9 +35,10 @@ while [ "$#" -gt 0 ]; do
     --n) N="${2:?--n needs a value}"; shift ;;
     --runs) RUNS="${2:?--runs needs a value}"; shift ;;
     --record) RECORD=1 ;;
+    --dry-run) DRY_RUN=1 ;;
     --attribution) ATTR=1 ;;
     --help|-h)
-      sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -44,13 +51,27 @@ done
 
 [[ "$N" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --n must be a positive integer" >&2; exit 2; }
 [[ "$RUNS" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --runs must be a positive integer" >&2; exit 2; }
-if [ "$RECORD" -eq 1 ] && [ "$RUNS" -lt 3 ]; then
-  echo "tide: --record needs at least 3 runs so the recorded spread is meaningful" >&2
-  exit 2
-fi
 if [ "$RECORD" -eq 1 ] && [ "$ATTR" -eq 1 ]; then
   echo "tide: --attribution is a diagnostic and cannot be recorded as the canonical measurement" >&2
   exit 2
+fi
+if [ "$DRY_RUN" -eq 1 ] && [ "$RECORD" -eq 0 ]; then
+  echo "tide: --dry-run previews a record and needs --record" >&2
+  exit 2
+fi
+# The record's authority depends on its parameters, so --record writes only the canonical shape: any
+# other --n/--runs is a probe, and a probe must not be able to replace spec/bench/tide.tsv.
+if [ "$RECORD" -eq 1 ] && { [ "$N" -ne "$CANONICAL_N" ] || [ "$RUNS" -ne "$CANONICAL_RUNS" ]; }; then
+  echo "tide: refusing --record for a non-canonical shape: got --n $N --runs $RUNS, but the record is the canonical $CANONICAL_N-round, $CANONICAL_RUNS-run measurement" >&2
+  echo "tide: spec/bench/tide.tsv is authoritative only at that shape; a probe must run without --record" >&2
+  exit 2
+fi
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "tide: dry run: canonical shape accepted ($N rounds, $RUNS timed runs)"
+  echo "tide: dry run: the record metadata would declare '# rounds<TAB>$N' and '# runs<TAB>$RUNS'"
+  echo "tide: dry run: would write spec/bench/tide.tsv after measuring the timing rows and the two policy counters"
+  echo "tide: dry run: no measurement taken and no file written"
+  exit 0
 fi
 command -v python3 >/dev/null 2>&1 || { echo "tide: python3 is required for the statistics" >&2; exit 2; }
 command -v clang >/dev/null 2>&1 || { echo "tide: clang is required (qkc lowers to LLVM IR)" >&2; exit 2; }
@@ -304,6 +325,8 @@ done <<< "$POLICY"
 
 print_record() {
   printf '# record\ttide-v1\n'
+  printf '# rounds\t%s\n' "$N"
+  printf '# runs\t%s\n' "$RUNS"
   printf '# class\t%s\n' "$CLASS"
   if [ -n "${LOAD_META:-}" ]; then
     printf '# load\t%s\n' "$LOAD_META"
