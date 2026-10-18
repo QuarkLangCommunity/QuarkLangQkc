@@ -8,9 +8,13 @@
 #   bench/tide/run.sh --record             # write spec/bench/tide.tsv: canonical 1e8 rounds / 5 runs only
 #   bench/tide/run.sh --record --dry-run   # validate the canonical shape and print the plan without measuring
 #   bench/tide/run.sh --attribution        # add the phase rows that decompose the observable row
+#   bench/tide/run.sh --compile-only       # build every C control and exit without measuring
 #
 # The output is a TSV record; the first lines are metadata and the rest are the measured rows. A
 # missing Rust or Go toolchain is skipped explicitly and recorded as a skip, never invented.
+#
+# --compile-only is the CI gate for the checked-in C controls: it builds them with warnings fatal and
+# never runs a loop, so a stale prototype fails the ordinary test run instead of the next measurement.
 #
 # --record is a measurement, so it refuses a busy host: the 1-minute load average must be below
 # 0.25 per logical CPU before the recording starts, and the measured load is written to the record.
@@ -28,7 +32,11 @@ RUNS=$CANONICAL_RUNS
 RECORD=0
 ATTR=0
 DRY_RUN=0
+COMPILE_ONLY=0
 LOAD_PER_CPU_MAX=0.25
+# CFLAGS_C is the strict build the C control is measured under; the fallback drops LTO when the
+# platform's clang lacks the thin-LTO plugin.
+CFLAGS_C="-O3 -flto=thin"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quick) N=1000000; RUNS=3 ;;
@@ -37,8 +45,9 @@ while [ "$#" -gt 0 ]; do
     --record) RECORD=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --attribution) ATTR=1 ;;
+    --compile-only) COMPILE_ONLY=1 ;;
     --help|-h)
-      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -73,8 +82,80 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "tide: dry run: no measurement taken and no file written"
   exit 0
 fi
-command -v python3 >/dev/null 2>&1 || { echo "tide: python3 is required for the statistics" >&2; exit 2; }
+if [ "$COMPILE_ONLY" -eq 1 ] && { [ "$RECORD" -eq 1 ] || [ "$ATTR" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; }; then
+  echo "tide: --compile-only builds the C controls and cannot be combined with a measurement mode" >&2
+  exit 2
+fi
+
+# make_build_dir creates the scratch directory this harness owns and refuses a suspicious path.
+make_build_dir() {
+  CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
+  mkdir -p "$CACHE"
+  BUILD="$(mktemp -d "$CACHE/tide-bench.XXXXXX")"
+  case "$BUILD" in
+    "$CACHE"/tide-bench.*) ;;
+    *) echo "tide: refusing to use build directory $BUILD" >&2; exit 2 ;;
+  esac
+  cleanup() { rm -rf "$BUILD"; }
+  trap cleanup EXIT
+}
+
+# compile_c_controls builds the sink library and both C controls with every warning fatal.
+compile_c_controls() {
+  clang -O2 -Wall -Wextra -Werror -c bench/tide/sink/sink.c -o "$BUILD/sink.o"
+  ar rcs "$BUILD/libtide.a" "$BUILD/sink.o"
+  if ! clang $CFLAGS_C -Wall -Wextra -Werror bench/tide/c/tide.c -o "$BUILD/tide-c" 2>"$BUILD/c.err"; then
+    CFLAGS_C="-O3"
+    clang $CFLAGS_C -Wall -Wextra -Werror bench/tide/c/tide.c -o "$BUILD/tide-c"
+  fi
+  clang $CFLAGS_C -Wall -Wextra -Werror bench/tide/c/tide_floor.c -o "$BUILD/tide-c-floor"
+}
+
+# compile_attribution builds the attribution control against the runtime's extracted allocator ABI.
+compile_attribution() {
+  # The helper is extracted verbatim so the render phase times the runtime function itself.
+  awk '
+    /^static int ql_itoa\(int v, char\* buf\) \{/ { copy = 1 }
+    copy { print }
+    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { in_list = 1 }
+    in_list && /^\}/ { exit }
+  ' compiler/qthreads.c.txt > "$BUILD/ql_list_int_str.inc"
+  grep -q '^char\* ql_list_int_str(const int\* buf, int head, int tail) {' "$BUILD/ql_list_int_str.inc" || {
+    echo "tide: could not extract ql_list_int_str from compiler/qthreads.c.txt" >&2
+    exit 1
+  }
+  # The runtime's own allocator prototypes are generated here and included by attrib.c after its
+  # hand-written declarations, so a changed signature is a conflicting declaration instead of a silent
+  # link against a stale one.
+  grep -E '^void[[:space:]]*\*?[[:space:]]*ql_(alloc|calloc|realloc|free)\(' compiler/qthreads.c.txt | head -n 4 > "$BUILD/ql_alloc_abi.inc"
+  for sym in ql_alloc ql_calloc ql_realloc ql_free; do
+    grep -Eq "^void[[:space:]]*\*?[[:space:]]*$sym\(" "$BUILD/ql_alloc_abi.inc" || {
+      echo "tide: could not extract the allocator prototype for $sym from compiler/qthreads.c.txt" >&2
+      exit 1
+    }
+  done
+  awk '
+    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { skip = 1 }
+    skip == 0 { print }
+    skip == 1 && /^\}/ { skip = 0 }
+  ' compiler/qthreads.c.txt > "$BUILD/attrib_runtime_body.c"
+  printf 'char* ql_list_int_str(const int* buf, int head, int tail);\n' > "$BUILD/attrib_runtime.c"
+  cat compiler/internal/rtcat/msg_c.h "$BUILD/attrib_runtime_body.c" >> "$BUILD/attrib_runtime.c"
+  clang -O2 -pthread -Wall -Wextra -Werror -I"$BUILD" -c bench/tide/attrib/attrib.c -o "$BUILD/attrib.o"
+  clang -O2 -pthread -c "$BUILD/attrib_runtime.c" -o "$BUILD/attrib_runtime.o"
+  clang "$BUILD/attrib.o" "$BUILD/attrib_runtime.o" -pthread -o "$BUILD/tide-attrib"
+}
+
 command -v clang >/dev/null 2>&1 || { echo "tide: clang is required (qkc lowers to LLVM IR)" >&2; exit 2; }
+if [ "$COMPILE_ONLY" -eq 1 ]; then
+  make_build_dir
+  compile_c_controls
+  compile_attribution
+  echo "tide: compiled the checked-in C controls with -Werror; no measurement was run" >&2
+  exit 0
+fi
+
+command -v python3 >/dev/null 2>&1 || { echo "tide: python3 is required for the statistics" >&2; exit 2; }
 command -v go >/dev/null 2>&1 || { echo "tide: go is required (qkc and the policy workload)" >&2; exit 2; }
 
 # load1 prints this platform's 1-minute load average.
@@ -114,23 +195,13 @@ check_record_load() {
 }
 
 check_record_load
-
-CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
-mkdir -p "$CACHE"
-BUILD="$(mktemp -d "$CACHE/tide-bench.XXXXXX")"
-case "$BUILD" in
-  "$CACHE"/tide-bench.*) ;;
-  *) echo "tide: refusing to use build directory $BUILD" >&2; exit 2 ;;
-esac
-cleanup() { rm -rf "$BUILD"; }
-trap cleanup EXIT
+make_build_dir
 
 echo "→ building qkc and the harness binaries in $BUILD" >&2
 (cd compiler && go build -o "$BUILD/qkc" .)
 export QUARK_CACHE="$BUILD/qkc-cache"
 
-clang -O2 -c bench/tide/sink/sink.c -o "$BUILD/sink.o"
-ar rcs "$BUILD/libtide.a" "$BUILD/sink.o"
+compile_c_controls
 
 sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" bench/tide/qk/tide.qk > "$BUILD/tide.qk"
 sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" bench/tide/qk/tide_floor.qk > "$BUILD/tide_floor.qk"
@@ -171,13 +242,6 @@ if command -v nm >/dev/null 2>&1; then
     EVIDENCE="nm -u on the observable QuarkLang binary lists malloc/calloc/free (the List allocation is not routed through ql_alloc on this platform)"
   fi
 fi
-
-CFLAGS_C="-O3 -flto=thin"
-if ! clang $CFLAGS_C bench/tide/c/tide.c -o "$BUILD/tide-c" 2>"$BUILD/c.err"; then
-  CFLAGS_C="-O3"
-  clang $CFLAGS_C bench/tide/c/tide.c -o "$BUILD/tide-c"
-fi
-clang $CFLAGS_C bench/tide/c/tide_floor.c -o "$BUILD/tide-c-floor"
 
 SKIPS=()
 if command -v rustc >/dev/null 2>&1; then
@@ -283,21 +347,7 @@ if [ "$ATTR" -eq 1 ]; then
 
   # C controls that split the phases the language surface cannot isolate: the real runtime helper is
   # extracted verbatim, and the List allocations go through the same counted-slab runtime.
-  # Extract the real helper together with the formatter it uses, verbatim.
-  awk '
-    /^static int ql_itoa\(int v, char\* buf\) \{/ { copy = 1 }
-    copy { print }
-    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { in_list = 1 }
-    in_list && /^\}/ { exit }
-  ' compiler/qthreads.c.txt > "$BUILD/ql_list_int_str.inc"
-  awk '
-    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { skip = 1 }
-    skip == 0 { print }
-    skip == 1 && /^\}/ { skip = 0 }
-  ' compiler/qthreads.c.txt > "$BUILD/attrib_runtime_body.c"
-  printf 'char* ql_list_int_str(const int* buf, int head, int tail);\n' > "$BUILD/attrib_runtime.c"
-  cat compiler/internal/rtcat/msg_c.h "$BUILD/attrib_runtime_body.c" >> "$BUILD/attrib_runtime.c"
-  clang -O2 -pthread -I"$BUILD" bench/tide/attrib/attrib.c "$BUILD/attrib_runtime.c" -o "$BUILD/tide-attrib"
+  compile_attribution
   for phase in base allocpair header listinline string_alloc int_fmt fast_fmt bookkeeping render; do
     run_timing "attr_$phase" "Attribution control, $phase" C optional "C control for the $phase phase of the observable path; the render control calls the real ql_list_int_str extracted from compiler/qthreads.c.txt" "$BUILD/tide-attrib" "$phase"
   done
