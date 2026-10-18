@@ -11,13 +11,15 @@
 #include <string.h>
 #include <time.h>
 
-#include "ql_list_int_str.inc"
-
-/* The counted-slab runtime the compiled tide links. */
+/* The counted-slab runtime the compiled tide links. These declarations must precede the extracted
+ * helper because D1 routed ql_list_int_str through ql_alloc/ql_realloc; the helper is compiled into
+ * this translation unit, so an implicit declaration here would be a conflicting one. */
 void *ql_alloc(size_t size, int owner);
 void *ql_calloc(size_t count, size_t size, int owner);
 void *ql_realloc(void *ptr, size_t size);
 void ql_free(void *ptr);
+
+#include "ql_list_int_str.inc"
 
 /* The module-generated helpers the runtime's interface{} dispatch refers to. The attribution
  * phases never take that path, but the runtime object needs the symbols to link. */
@@ -34,7 +36,17 @@ char *ql_float_to_str(double v) {
 }
 
 static void *volatile sink;
+static void *volatile sink_second;
 static long long volatile acc;
+
+/* The %List layout the literal path emits: the buffer pointer, the head cursor and the tail. It is
+ * 16 bytes, so a co-allocated buffer starts at offset 16 — the offset the generated release/grow
+ * helpers compare against. */
+struct ql_list_hdr {
+    void *buf;
+    int head;
+    int tail;
+};
 
 /* now_us returns a monotonic timestamp in microseconds. */
 static long long now_us(void) {
@@ -49,34 +61,58 @@ static void phase_base(long long n) {
 }
 
 /* allocpair is the two counted-slab allocations a List<int> literal performs and their releases,
- * with none of the header or element stores. */
+ * with none of the header or element stores. Both values are consumed by ql_free, so the opaque
+ * calls cannot be removed; no uninitialised payload is read. */
 static void phase_allocpair(long long n) {
     for (long long i = 0; i < n; i++) {
         void *header = ql_calloc(1, 16, 0);
         void *buffer = ql_alloc(12, 0);
         sink = header;
-        acc += ((int *)buffer)[0];
+        sink_second = buffer;
+        acc += i & 1;
         ql_free(buffer);
         ql_free(header);
     }
 }
 
-/* header is allocpair plus the %List field and element stores a literal emits and the two reads the
- * checksum performs, so its difference from allocpair is the List header/length bookkeeping. */
+/* header is allocpair plus the %List field and element stores a literal emits and the reads the
+ * checksum performs. The buffer pointer is stored through a pointer-sized field: the old control
+ * stored it through an int, which understated the header phase. */
 static void phase_header(long long n) {
     for (long long i = 0; i < n; i++) {
+        struct ql_list_hdr *header = (struct ql_list_hdr *)ql_calloc(1, sizeof *header, 0);
         int *buffer = (int *)ql_alloc(12, 0);
-        int *header = (int *)ql_calloc(1, 16, 0);
         buffer[0] = (int)(i % 7);
         buffer[1] = (int)(i % 11);
         buffer[2] = (int)(i % 13);
-        header[0] = (int)(intptr_t)buffer; /* buf */
-        header[1] = 0;                     /* head */
-        header[2] = 3;                     /* tail */
+        header->buf = buffer;
+        header->head = 0;
+        header->tail = 3;
         sink = buffer;
-        acc += buffer[0] + buffer[2] + header[2];
+        acc += buffer[0] + buffer[2] + header->tail;
         ql_free(buffer);
         ql_free(header);
+    }
+}
+
+/* listinline is the co-allocated literal shape: one counted-slab block of 16 bytes of header plus
+ * three ints, the buffer pointer aimed at block+16, the same stores and reads, and one release.
+ * Its difference from header is the per-round cost of the second allocation, isolated from the
+ * language surface. */
+static void phase_listinline(long long n) {
+    for (long long i = 0; i < n; i++) {
+        unsigned char *block = (unsigned char *)ql_alloc(16 + 3 * sizeof(int), 0);
+        int *buffer = (int *)(block + 16);
+        struct ql_list_hdr *header = (struct ql_list_hdr *)block;
+        buffer[0] = (int)(i % 7);
+        buffer[1] = (int)(i % 11);
+        buffer[2] = (int)(i % 13);
+        header->buf = buffer;
+        header->head = 0;
+        header->tail = 3;
+        sink = block;
+        acc += buffer[0] + buffer[2] + header->tail;
+        ql_free(block);
     }
 }
 
@@ -155,7 +191,7 @@ static void phase_render(long long n) {
         char *s = ql_list_int_str(buf, 0, 3);
         sink = s;
         acc += s[0];
-        free(s);
+        ql_free(s); /* D1 routed the string builders; libc free here would abort */
     }
 }
 
@@ -170,6 +206,7 @@ int main(int argc, char **argv) {
     if (strcmp(phase, "base") == 0) phase_base(n);
     else if (strcmp(phase, "allocpair") == 0) phase_allocpair(n);
     else if (strcmp(phase, "header") == 0) phase_header(n);
+    else if (strcmp(phase, "listinline") == 0) phase_listinline(n);
     else if (strcmp(phase, "string_alloc") == 0) phase_string_alloc(n);
     else if (strcmp(phase, "int_fmt") == 0) phase_int_fmt(n);
     else if (strcmp(phase, "fast_fmt") == 0) phase_fast_fmt(n);

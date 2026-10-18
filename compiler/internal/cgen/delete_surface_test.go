@@ -105,7 +105,9 @@ func refusalIn(t *testing.T, lang i18n.Lang, src string) string {
 	return lowerErr(t, src).Error()
 }
 
-// TestDeleteOnOwnedListIntStillLowers is the positive half: the supported form keeps its two frees.
+// TestDeleteOnOwnedListIntStillLowers is the positive half: the supported form emits the generated
+// release, whose helper carries both free paths (the inline-buffer path releases the header only, the
+// separate-buffer path releases the buffer and the header).
 func TestDeleteOnOwnedListIntStillLowers(t *testing.T) {
 	ir := transpile(t, "fn main(IOStream io) {\n"+
 		"    List<int> xs = [1, 2, 3];\n"+
@@ -113,12 +115,11 @@ func TestDeleteOnOwnedListIntStillLowers(t *testing.T) {
 		"    delete xs;\n"+
 		"    io.println(9);\n"+
 		"}\n")
-	freeCall := "call void @ql_free(i8*"
-	if hostAllocatorFallback {
-		freeCall = "call void @free(i8*"
+	if got := strings.Count(ir, "call void @ql_list_release("); got != 1 {
+		t.Fatalf("delete on a local List<int> emits %d @ql_list_release call(s), want 1:\n%s", got, ir)
 	}
-	if got := strings.Count(ir, freeCall); got != 2 {
-		t.Fatalf("delete on a local List<int> emits %d %s call(s), want 2 (buffer and header):\n%s", got, freeCall, ir)
+	if got := strings.Count(ir, deleteFreeCall()); got != 2 {
+		t.Fatalf("delete on a local List<int> emits %d free call(s) in the release helper, want 2 (buffer and header):\n%s", got, ir)
 	}
 }
 
@@ -133,12 +134,12 @@ func TestDeleteOnCopydListIntParameterStillLowers(t *testing.T) {
 		"    drop(xs);\n"+
 		"    io.println(xs.size());\n"+
 		"}\n")
-	freeCall := "call void @ql_free(i8*"
-	if hostAllocatorFallback {
-		freeCall = "call void @free(i8*"
+	freeCall := deleteFreeCall()
+	if got := strings.Count(ir, "call void @ql_list_release("); got != 1 {
+		t.Fatalf("delete on a copyd List<int> parameter emits %d @ql_list_release call(s), want 1:\n%s", got, ir)
 	}
 	if got := strings.Count(ir, freeCall); got != 2 {
-		t.Fatalf("delete on a copyd List<int> parameter emits %d %s call(s), want 2:\n%s", got, freeCall, ir)
+		t.Fatalf("delete on a copyd List<int> parameter emits %d free call(s) in the release helper, want 2:\n%s", got, ir)
 	}
 }
 
@@ -150,8 +151,9 @@ func deleteFreeCall() string {
 	return "call void @ql_free(i8*"
 }
 
-// TestDeleteOnListStringAndFloatLowers covers the other two list layouts the compiler emits: every one
-// is a header plus a heap buffer, so release is two frees of the same pair, not a special case.
+// TestDeleteOnListStringAndFloatLowers covers the other two list layouts the compiler emits: all three
+// start with the buffer pointer, so every delete emits the same generated release, and the helper is
+// emitted once.
 func TestDeleteOnListStringAndFloatLowers(t *testing.T) {
 	ir := transpile(t, "fn main(IOStream io) {\n"+
 		"    List<String> s = [\"a\", \"b\"];\n"+
@@ -161,8 +163,11 @@ func TestDeleteOnListStringAndFloatLowers(t *testing.T) {
 		"    io.println(f.get(1));\n"+
 		"    delete f;\n"+
 		"}\n")
-	if got := strings.Count(ir, deleteFreeCall()); got != 4 {
-		t.Fatalf("delete on List<String>/List<float> emits %d release call(s), want 4 (two per list):\n%s", got, ir)
+	if got := strings.Count(ir, "call void @ql_list_release("); got != 2 {
+		t.Fatalf("delete on List<String>/List<float> emits %d @ql_list_release call(s), want 2 (one per list):\n%s", got, ir)
+	}
+	if got := strings.Count(ir, deleteFreeCall()); got != 2 {
+		t.Fatalf("the release helper emits %d free call(s), want 2 (buffer and header paths):\n%s", got, ir)
 	}
 }
 

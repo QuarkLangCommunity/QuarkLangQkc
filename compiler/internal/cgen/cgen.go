@@ -576,6 +576,8 @@ type emitter struct {
 
 	emitted        map[string]bool
 	deepCopied     map[string]bool // deep-copy helpers already emitted (on demand)
+	listReleased   bool            // @ql_list_release has been emitted
+	listGrown      bool            // @ql_list_grow has been emitted
 	rtti           map[string]bool // interface{} type descriptors already emitted (on demand)
 	rttiFns        map[string]bool // struct printing helpers already emitted (on demand)
 	hasList        bool
@@ -650,6 +652,249 @@ func (e *emitter) allocCallExpr(size string) string {
 		return fmt.Sprintf("call i8* @malloc(i64 %s)", size)
 	}
 	return fmt.Sprintf("call i8* @ql_alloc(i64 %s, i32 0)", size)
+}
+
+/* ---------- Small list literals: one counted-slab block for header and buffer ----------
+ *
+ * A list literal knows its element count at compile time. Below the one-block budget below, the
+ * %List header (16 bytes: buf, head, tail) and the element buffer are allocated as one object; the
+ * buffer pointer aims at block+16. delete/release checks that pointer against block+16 and frees
+ * the buffer only when it is a separate allocation. append/appendAll call @ql_list_grow, which
+ * migrates an inline buffer to a separate one before reallocating; from then on the list has the
+ * ordinary two-allocation shape. Above the budget the literal keeps two allocations.
+ *
+ * The budget mirrors qthreads.c.txt's allocator (QL_MEM_OBJ_HDR = 32, classes 16..1024): it picks
+ * the one-block shape only when the slot bytes it reserves are no larger than the two slots the
+ * separate shape reserves. A drift between these constants and the runtime would only change which
+ * shape is chosen, never the ownership or the accounting: one allocation/free either way. */
+
+const (
+	qlListHeaderBytes = 16 // %List/%ListS/%ListF: pointer + two i32s
+	qlObjHeaderBytes  = 32 // QL_MEM_OBJ_HDR in qthreads.c.txt
+)
+
+var qlAllocatorClasses = [...]int{16, 32, 64, 128, 256, 512, 1024} // ql_mem_class_size
+
+// qlAllocatorSlotBytes returns the bytes a counted-slab allocation of n payload bytes occupies,
+// including the 32-byte object header; 0 means the request takes the large path.
+func qlAllocatorSlotBytes(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	for _, c := range qlAllocatorClasses {
+		if n <= c {
+			return qlObjHeaderBytes + c
+		}
+	}
+	return 0
+}
+
+// listLiteralCoallocates reports whether a literal with n elements of elemBytes each should place
+// the header and the buffer in one allocation. It compares the slot bytes both shapes reserve, so
+// the one-block choice never raises the measured footprint.
+func listLiteralCoallocates(n, elemBytes int) bool {
+	cap := n
+	if cap < 1 {
+		cap = 1
+	}
+	combined := qlListHeaderBytes + cap*elemBytes
+	if combined > qlAllocatorClasses[len(qlAllocatorClasses)-1] {
+		return false // far past the small-literal case; the large path is not comparable
+	}
+	separate := qlAllocatorSlotBytes(qlListHeaderBytes) + qlAllocatorSlotBytes(cap*elemBytes)
+	return qlAllocatorSlotBytes(combined) <= separate
+}
+
+// emitListLitAlloc allocates a list literal's header and returns (object pointer, element buffer
+// pointer). zeroBuffer selects calloc for the element area (List<String>/List<float>, whose unused
+// slots must be zero); List<int> uses malloc for the block, matching the old separate buffer.
+func (e *emitter) emitListLitAlloc(llElem, elemPtr string, n, elemBytes int, zeroBuffer bool) (string, string) {
+	cap := n
+	if cap < 1 {
+		cap = 1
+	}
+	lo := ""
+	var buf string
+	if listLiteralCoallocates(n, elemBytes) {
+		raw := e.newReg()
+		size := strconv.Itoa(qlListHeaderBytes + cap*elemBytes)
+		if zeroBuffer {
+			e.emitCalloc(raw, "1", size)
+		} else {
+			e.emitAlloc(raw, size)
+		}
+		lo = e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %s*", lo, raw, llElem)
+		base := e.newReg()
+		e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %d", base, raw, qlListHeaderBytes)
+		buf = e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %s", buf, base, elemPtr)
+	} else {
+		obj := e.newReg()
+		e.emitCalloc(obj, "1", "16")
+		lo = e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %s*", lo, obj, llElem)
+		raw := e.newReg()
+		if zeroBuffer {
+			e.emitCalloc(raw, strconv.Itoa(cap), strconv.Itoa(elemBytes))
+		} else {
+			e.emitAlloc(raw, strconv.Itoa(cap*elemBytes))
+		}
+		buf = e.newReg()
+		e.emitInstr("%s = bitcast i8* %s to %s", buf, raw, elemPtr)
+	}
+	bf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 0", bf, llElem, llElem, lo)
+	e.emitInstr("store %s %s, %s* %s", elemPtr, buf, elemPtr, bf)
+	hf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 1", hf, llElem, llElem, lo)
+	e.emitInstr("store i32 0, i32* %s", hf)
+	tf := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds %s, %s* %s, i32 0, i32 2", tf, llElem, llElem, lo)
+	e.emitInstr("store i32 %d, i32* %s", n, tf)
+	return lo, buf
+}
+
+// emitListRelease emits the call that releases a list object. @ql_list_release (emitted once,
+// internal linkage so a library and its host cannot collide) frees the element buffer only when it
+// is not block+16, then frees the object: exactly one allocation per co-allocated literal and two
+// for the spilled/large/runtime-built shapes.
+func (e *emitter) emitListRelease(obj, objType string) {
+	e.ensureListRelease()
+	c := e.newReg()
+	e.emitInstr("%s = bitcast %s %s to i8*", c, objType, obj)
+	e.emitInstr("call void @ql_list_release(i8* %s)", c)
+}
+
+func (e *emitter) ensureListRelease() {
+	if e.listReleased {
+		return
+	}
+	e.listReleased = true
+	savedBody, savedVars := e.body, e.vars
+	savedTerm, savedRet, savedCur := e.term, e.funcReturned, e.cur
+	savedBlocks := e.blockCount
+	e.body = strings.Builder{}
+	e.vars = map[string]varSlot{}
+	e.blockCount = 0
+	e.term = false
+	e.funcReturned = false
+	e.cur = ""
+	e.body.WriteString("entry:\n")
+	isnull := e.newReg()
+	e.emitInstr("%s = icmp eq i8* %%obj, null", isnull)
+	check, done := e.newBlock(), e.newBlock()
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", isnull, done, check)
+	e.setBlock(check)
+	bufp := e.newReg()
+	e.emitInstr("%s = bitcast i8* %%obj to i8**", bufp)
+	buf := e.newReg()
+	e.emitInstr("%s = load i8*, i8** %s", buf, bufp)
+	limit := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8, i8* %%obj, i64 %d", limit, qlListHeaderBytes)
+	inline := e.newReg()
+	e.emitInstr("%s = icmp eq i8* %s, %s", inline, buf, limit)
+	both, freeobj := e.newBlock(), e.newBlock()
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", inline, freeobj, both)
+	e.setBlock(both)
+	e.emitFree(buf)
+	e.emitInstr("br label %%%s", freeobj)
+	e.setBlock(freeobj)
+	e.emitFree("%obj")
+	e.emitInstr("br label %%%s", done)
+	e.setBlock(done)
+	e.emitInstr("ret void")
+	body := e.body.String()
+	e.body, e.vars = savedBody, savedVars
+	e.blockCount = savedBlocks
+	e.term, e.funcReturned, e.cur = savedTerm, savedRet, savedCur
+	e.helpers.WriteString("define internal void @ql_list_release(i8* noundef %obj) {\n" + body + "}\n")
+}
+
+// emitListGrowCall returns the new element buffer for a list whose tail is already loaded. For an
+// external buffer it is ql_realloc (the allocator preserves the owner and the payload); for a
+// literal's inline buffer it allocates a separate buffer and copies copyBytes elements out, so the
+// list leaves the one-block shape without losing a visible element.
+func (e *emitter) emitListGrowCall(obj, objType, elemPtr, newBytes, copyBytes string) string {
+	e.ensureListGrow()
+	obj8 := e.newReg()
+	e.emitInstr("%s = bitcast %s %s to i8*", obj8, objType, obj)
+	raw := e.newReg()
+	e.emitInstr("%s = call i8* @ql_list_grow(i8* %s, i64 %s, i64 %s)", raw, obj8, newBytes, copyBytes)
+	p := e.newReg()
+	e.emitInstr("%s = bitcast i8* %s to %s", p, raw, elemPtr)
+	return p
+}
+
+func (e *emitter) ensureListGrow() {
+	if e.listGrown {
+		return
+	}
+	e.listGrown = true
+	savedBody, savedVars := e.body, e.vars
+	savedTerm, savedRet, savedCur := e.term, e.funcReturned, e.cur
+	savedBlocks := e.blockCount
+	e.body = strings.Builder{}
+	e.vars = map[string]varSlot{}
+	e.blockCount = 0
+	e.term = false
+	e.funcReturned = false
+	e.cur = ""
+	e.body.WriteString("entry:\n")
+	bufp := e.newReg()
+	e.emitInstr("%s = bitcast i8* %%obj to i8**", bufp)
+	buf := e.newReg()
+	e.emitInstr("%s = load i8*, i8** %s", buf, bufp)
+	limit := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8, i8* %%obj, i64 %d", limit, qlListHeaderBytes)
+	inline := e.newReg()
+	e.emitInstr("%s = icmp eq i8* %s, %s", inline, buf, limit)
+	grow, migrate := e.newBlock(), e.newBlock()
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", inline, migrate, grow)
+	e.setBlock(migrate)
+	fresh := e.newReg()
+	e.emitAlloc(fresh, "%new_bytes")
+	e.emitInlineListCopy(buf, fresh, "%copy_bytes")
+	e.emitInstr("ret i8* %s", fresh)
+	e.setBlock(grow)
+	fresh2 := e.newReg()
+	e.emitRealloc(fresh2, buf, "%new_bytes")
+	e.emitInstr("ret i8* %s", fresh2)
+	body := e.body.String()
+	e.body, e.vars = savedBody, savedVars
+	e.blockCount = savedBlocks
+	e.term, e.funcReturned, e.cur = savedTerm, savedRet, savedCur
+	e.helpers.WriteString("define internal i8* @ql_list_grow(i8* noundef %obj, i64 noundef %new_bytes, i64 noundef %copy_bytes) {\n" + body + "}\n")
+}
+
+// emitInlineListCopy emits the byte loop that moves an inline literal's elements to the separate
+// buffer @ql_list_grow allocated. It is split out so the helper builder stays under the repo's
+// function-length ratchet; the caller closes the copied block with its return.
+func (e *emitter) emitInlineListCopy(src, dst, copyBytes string) {
+	iv := e.newReg()
+	e.emitInstr("%s = alloca i64, align 8", iv)
+	e.emitInstr("store i64 0, i64* %s", iv)
+	cond, loop, copied := e.newBlock(), e.newBlock(), e.newBlock()
+	e.emitInstr("br label %%%s", cond)
+	e.setBlock(cond)
+	i := e.newReg()
+	e.emitInstr("%s = load i64, i64* %s", i, iv)
+	more := e.newReg()
+	e.emitInstr("%s = icmp ult i64 %s, %s", more, i, copyBytes)
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", more, loop, copied)
+	e.setBlock(loop)
+	s := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %s", s, src, i)
+	v := e.newReg()
+	e.emitInstr("%s = load i8, i8* %s", v, s)
+	d := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %s", d, dst, i)
+	e.emitInstr("store i8 %s, i8* %s", v, d)
+	ni := e.newReg()
+	e.emitInstr("%s = add i64 %s, 1", ni, i)
+	e.emitInstr("store i64 %s, i64* %s", ni, iv)
+	e.emitInstr("br label %%%s", cond)
+	e.setBlock(copied)
 }
 
 func (e *emitter) intToStrHelperSrc() string {
@@ -2084,33 +2329,10 @@ func (e *emitter) emitDecl(st *declStmt) {
 			e.vars[st.name] = varSlot{reg: slot, typ: st.typ}
 			return
 		}
-		lit := st.init.lst
-		n := len(lit.items)
-		obj := e.newReg()
-		e.emitCalloc(obj, "1", "16")
-		lo := e.newReg()
-		e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
-		buf := e.newReg()
-		e.emitAlloc(buf, strconv.Itoa(max(1, n)*4))
-		p := e.newReg()
-		e.emitInstr("%s = bitcast i8* %s to i32*", p, buf)
-		for i, it := range lit.items {
-			v, vt := e.compileExpr(it)
-			v = e.coerce(v, vt, "int")
-			if i == 0 {
-				e.emitInstr("store i32 %s, i32* %s", v, p)
-			} else {
-				g2 := e.newReg()
-				e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %d", g2, p, i)
-				e.emitInstr("store i32 %s, i32* %s", v, g2)
-			}
-		}
-		bf := e.newReg()
-		e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, lo)
-		e.emitInstr("store i32* %s, i32** %s", p, bf)
-		tf := e.newReg()
-		e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
-		e.emitInstr("store i32 %d, i32* %s", n, tf)
+		// One literal implementation: the declaration path reuses compileListLit rather than
+		// duplicating the allocation shape (the previous copy was a second place that had to be
+		// kept in step with every header change).
+		lo, _ := e.compileListLit(&expr{kind: kList, typ: st.typ, lst: st.init.lst})
 		e.vars[st.name] = varSlot{reg: e.listSlot(lo), typ: st.typ}
 	default:
 		if e.ifaces[st.typ] {
@@ -2512,19 +2734,12 @@ func (e *emitter) emitDelete(st *deleteStmt) {
 		return
 	}
 	if isListType(st.typ) {
-		// Every list layout is a header plus a heap buffer, and both are counted-slab allocations. The
-		// header's first field is the buffer pointer whatever the element width, so one release covers
-		// List<int>, List<String> and List<float>.
+		// Every list layout starts with the buffer pointer, so one generated release helper covers
+		// List<int>, List<String> and List<float>. A small literal co-allocates the buffer inside the
+		// header block; the helper frees the buffer only when it is not block+16, then frees the header.
+		// Release is per object either way, and the payload is not wiped.
 		lo := e.listObjTyped(st.name, st.typ)
-		llt := e.ir(st.typ)
-		bf := e.newReg()
-		e.emitInstr("%s = bitcast %s %s to i8**", bf, llt, lo)
-		p := e.newReg()
-		e.emitInstr("%s = load i8*, i8** %s", p, bf)
-		e.emitFree(p)
-		c2 := e.newReg()
-		e.emitInstr("%s = bitcast %s %s to i8*", c2, llt, lo)
-		e.emitFree(c2)
+		e.emitListRelease(lo, e.ir(st.typ))
 		return
 	}
 	if e.isStruct(st.typ) {
@@ -3517,14 +3732,7 @@ func (e *emitter) emitBitAssign(st *bitAssignStmt) {
 func (e *emitter) compileListLit(x *expr) (string, string) {
 	e.ensureList()
 	n := len(x.lst.items)
-	obj := e.newReg()
-	e.emitCalloc(obj, "1", "16")
-	lo := e.newReg()
-	e.emitInstr("%s = bitcast i8* %s to %%List*", lo, obj)
-	buf := e.newReg()
-	e.emitAlloc(buf, strconv.Itoa(max(1, n)*4))
-	p := e.newReg()
-	e.emitInstr("%s = bitcast i8* %s to i32*", p, buf)
+	lo, p := e.emitListLitAlloc("%List", "i32*", n, 4, false)
 	for i, it := range x.lst.items {
 		v, vt := e.compileExpr(it)
 		v = e.coerce(v, vt, "int")
@@ -3532,12 +3740,6 @@ func (e *emitter) compileListLit(x *expr) (string, string) {
 		e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %d", g2, p, i)
 		e.emitInstr("store i32 %s, i32* %s", v, g2)
 	}
-	bf := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, lo)
-	e.emitInstr("store i32* %s, i32** %s", p, bf)
-	tf := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 2", tf, lo)
-	e.emitInstr("store i32 %d, i32* %s", n, tf)
 	return lo, "List<int>"
 }
 
@@ -3547,14 +3749,7 @@ func (e *emitter) compileListLit(x *expr) (string, string) {
 func (e *emitter) compileListSLit(x *expr) (string, string) {
 	e.ensureListS()
 	n := len(x.lst.items)
-	obj := e.newReg()
-	e.emitCalloc(obj, "1", "16")
-	lo := e.newReg()
-	e.emitInstr("%s = bitcast i8* %s to %%ListS*", lo, obj)
-	buf := e.newReg()
-	e.emitCalloc(buf, strconv.Itoa(max(1, n)), "8")
-	p := e.newReg()
-	e.emitInstr("%s = bitcast i8* %s to i8**", p, buf)
+	lo, p := e.emitListLitAlloc("%ListS", "i8**", n, 8, true)
 	for i, it := range x.lst.items {
 		v, vt := e.compileExpr(it)
 		v = e.coerce(v, vt, "String")
@@ -3562,12 +3757,6 @@ func (e *emitter) compileListSLit(x *expr) (string, string) {
 		e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %d", g2, p, i)
 		e.emitInstr("store i8* %s, i8** %s", v, g2)
 	}
-	bf := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, lo)
-	e.emitInstr("store i8** %s, i8*** %s", p, bf)
-	tf := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 2", tf, lo)
-	e.emitInstr("store i32 %d, i32* %s", n, tf)
 	return lo, "List<String>"
 }
 
@@ -3578,25 +3767,12 @@ func (e *emitter) compileListSLit(x *expr) (string, string) {
 func (e *emitter) compileListFLit(x *expr) (string, string) {
 	e.ensureListF()
 	n := len(x.lst.items)
-	obj := e.newReg()
-	e.emitCalloc(obj, "1", "16")
-	lo := e.newReg()
-	e.emitInstr("%s = bitcast i8* %s to %%ListF*", lo, obj)
-	buf := e.newReg()
-	e.emitCalloc(buf, strconv.Itoa(max(1, n)), "8")
-	p := e.newReg()
-	e.emitInstr("%s = bitcast i8* %s to i64*", p, buf)
+	lo, p := e.emitListLitAlloc("%ListF", "i64*", n, 8, true)
 	for i, it := range x.lst.items {
 		v, vt := e.compileExpr(it)
 		v = e.coerce(v, vt, "float")
 		e.listFStore(p, strconv.Itoa(i), v)
 	}
-	bf := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 0", bf, lo)
-	e.emitInstr("store i64* %s, i64** %s", p, bf)
-	tf := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 2", tf, lo)
-	e.emitInstr("store i32 %d, i32* %s", n, tf)
 	return lo, "List<float>"
 }
 
@@ -4108,19 +4284,14 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
 			sz := e.newReg()
 			e.emitInstr("%s = mul i64 %s, 8", sz, n64)
-			bf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, recv)
-			lp := e.newReg()
-			e.emitInstr("%s = load i8**, i8*** %s", lp, bf)
-			bc := e.newReg()
-			e.emitInstr("%s = bitcast i8** %s to i8*", bc, lp)
-			rc := e.newReg()
-			e.emitRealloc(rc, bc, sz)
-			np := e.newReg()
-			e.emitInstr("%s = bitcast i8* %s to i8**", np, rc)
-			e.emitInstr("store i8** %s, i8*** %s", np, bf)
 			t1i := e.newReg()
 			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
+			cp := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 8", cp, t1i)
+			np := e.emitListGrowCall(recv, "%ListS*", "i8**", sz, cp)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%ListS, %%ListS* %s, i32 0, i32 0", bf, recv)
+			e.emitInstr("store i8** %s, i8*** %s", np, bf)
 			g2 := e.newReg()
 			e.emitInstr("%s = getelementptr inbounds i8*, i8** %s, i64 %s", g2, np, t1i)
 			v, vt := e.compileExpr(m.args[0])
@@ -4168,16 +4339,13 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
 			sz := e.newReg()
 			e.emitInstr("%s = mul i64 %s, 8", sz, n64)
+			t1i := e.newReg()
+			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
+			cp := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 8", cp, t1i)
+			np := e.emitListGrowCall(recv, "%ListF*", "i64*", sz, cp)
 			bf := e.newReg()
 			e.emitInstr("%s = getelementptr inbounds %%ListF, %%ListF* %s, i32 0, i32 0", bf, recv)
-			lp := e.newReg()
-			e.emitInstr("%s = load i64*, i64** %s", lp, bf)
-			bc := e.newReg()
-			e.emitInstr("%s = bitcast i64* %s to i8*", bc, lp)
-			rc := e.newReg()
-			e.emitRealloc(rc, bc, sz)
-			np := e.newReg()
-			e.emitInstr("%s = bitcast i8* %s to i64*", np, rc)
 			e.emitInstr("store i64* %s, i64** %s", np, bf)
 			v, vt := e.compileExpr(m.args[0])
 			v = e.coerce(v, vt, "float")
@@ -4318,19 +4486,14 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
 			sz := e.newReg()
 			e.emitInstr("%s = mul i64 %s, 4", sz, n64)
-			bf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, recv)
-			cur := e.newReg()
-			e.emitInstr("%s = load i32*, i32** %s", cur, bf)
-			bc := e.newReg()
-			e.emitInstr("%s = bitcast i32* %s to i8*", bc, cur)
-			rc := e.newReg()
-			e.emitRealloc(rc, bc, sz)
-			np := e.newReg()
-			e.emitInstr("%s = bitcast i8* %s to i32*", np, rc)
-			e.emitInstr("store i32* %s, i32** %s", np, bf)
 			t1i := e.newReg()
 			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
+			cp := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 4", cp, t1i)
+			np := e.emitListGrowCall(recv, "%List*", "i32*", sz, cp)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, recv)
+			e.emitInstr("store i32* %s, i32** %s", np, bf)
 			dp := e.newReg()
 			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", dp, np, t1i)
 			e.emitInstr("store i32 %s, i32* %s", val, dp)
@@ -4375,19 +4538,14 @@ func (e *emitter) compileMethod(x *expr) (string, string) {
 			e.emitInstr("%s = sext i32 %s to i64", n64, n1c)
 			sz := e.newReg()
 			e.emitInstr("%s = mul i64 %s, 4", sz, n64)
-			bf := e.newReg()
-			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, recv)
-			lp := e.newReg()
-			e.emitInstr("%s = load i32*, i32** %s", lp, bf)
-			bc := e.newReg()
-			e.emitInstr("%s = bitcast i32* %s to i8*", bc, lp)
-			rc := e.newReg()
-			e.emitRealloc(rc, bc, sz)
-			np := e.newReg()
-			e.emitInstr("%s = bitcast i8* %s to i32*", np, rc)
-			e.emitInstr("store i32* %s, i32** %s", np, bf)
 			t1i := e.newReg()
 			e.emitInstr("%s = sext i32 %s to i64", t1i, t1)
+			cp := e.newReg()
+			e.emitInstr("%s = mul i64 %s, 4", cp, t1i)
+			np := e.emitListGrowCall(recv, "%List*", "i32*", sz, cp)
+			bf := e.newReg()
+			e.emitInstr("%s = getelementptr inbounds %%List, %%List* %s, i32 0, i32 0", bf, recv)
+			e.emitInstr("store i32* %s, i32** %s", np, bf)
 			g2 := e.newReg()
 			e.emitInstr("%s = getelementptr inbounds i32, i32* %s, i64 %s", g2, np, t1i)
 			v, vt := e.compileExpr(m.args[0])

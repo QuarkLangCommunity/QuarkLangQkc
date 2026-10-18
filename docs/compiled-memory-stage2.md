@@ -118,6 +118,32 @@ is released, the main thread's block survives, both slab and large paths) and an
 back at its pre-merge used count). `cases_run/z_task_reclaim.kq` runs a task that allocates/deletes,
 ends, a second task, and the main thread — byte-identical in both engines.
 
+### 3.7 Small list literals co-allocate the header and the element buffer
+
+A list literal's element count is known at compile time. At or below the small-literal budget the
+literal now allocates one counted-slab block of `16 + n*elem` bytes and points `buf` at
+`block + 16`; above it the literal keeps two allocations (the 16-byte `%List` header and the
+buffer). The budget mirrors the allocator's slot arithmetic (`QL_MEM_OBJ_HDR = 32`, classes
+16..1024) and picks the one-block shape only when it reserves no more slot bytes than the two slots
+it replaces: 12 int elements or 6 eight-byte elements at the default classes. `List<String>` and
+`List<float>` use the same path, and their element area stays calloc-zeroed.
+
+Ownership is still per object, and the payload is still not wiped. `delete` emits
+`@ql_list_release`, which frees the element buffer only when it is not `block + 16`, then frees the
+header. `append`/`appendAll` emit `@ql_list_grow`; for an inline buffer it allocates a separate
+buffer and copies the elements already written, then continues with `ql_realloc`, so `ql_realloc`'s
+owner and payload behaviour is untouched and a grown list has the ordinary two-allocation shape.
+Literals above the budget, grown lists, and lists built by runtime helpers (split, keys, any-copy,
+copyd) still release both blocks. The generated helpers have internal linkage, so a library and its
+host can both define them without a link collision.
+
+Accounting honesty: whether the literal is combined or spilled, one list object is one allocation
+and one release, so `alloc_calls`/`free_calls`/`used_bytes` count the real objects; nothing is hidden
+from the counters. Occupancy and fragmentation keep the stage-1 formula (unused bytes inside live
+slabs and large blocks over their bytes). Their values change because the block mix changes, not
+their meaning. Windows has no counted-slab runtime, so the same helpers emit libc calls there and
+`delete` keeps its libc path as before.
+
 ## 4. What still differs, and its size
 
 | Gap | Size / consequence |
@@ -125,7 +151,7 @@ ends, a second task, and the main thread — byte-identical in both engines.
 | `delete` on a by-reference parameter | One form; the compiled path cannot release caller storage. Positioned error, both languages. |
 | `delete` scalar / `String` / non-variable expression | Three forms the interpreter accepts as no-ops or by dereferencing an expression; the compiled path has no owned storage to release. Positioned errors. |
 | `memory.Fragmentation()` | Unexposed in both engines; the compiled accessor is internal (D8). One metric definition decision. |
-| Windows | The compiled runtime is not linked, so no allocator, no `memory.*` lowering, no routing, no task reclaim; `delete` keeps the libc path. Unchanged statement. |
+| Windows | The compiled runtime is not linked, so no allocator, no `memory.*` lowering, no routing, no task reclaim; `delete` keeps the libc path. A small literal co-allocates through the same generated helpers, which emit libc calls there. Unchanged statement. |
 | Escaping values / aliasing | A pointer that escapes a finished task or an aliased `delete` is undefined, as §10 says. No detection. |
 | A task's cross-owner free | `ql_free` of a main-thread object from a task is memory-safe but the object returns to the main slab; the ownership model describes blocks, and reclaim is per owner. Documented, not detected. |
 
@@ -140,14 +166,45 @@ allocations adds the same per-object cost to strings and hash entries that stage
 language allocations (1.4–2.1× libc for small sizes), which is the price of a metric that covers the
 whole artifact.
 
+### 5.1 Small-literal co-allocation (later change)
+
+Measured through the checked-in harness, both records canonical (1e8 rounds, 5 runs). Before, from
+`main` (`10d22e2`, load 0.85): observable **3.07 s** (30.70 ns/round, spread 1.20%), no-sink floor
+**1.19 s**, legacy shape **1.31 s**. After, this change (`--record`, load 1.35): observable
+**2.86 s** (28.64 ns/round, spread 4.47%), no-sink floor **0.63 s**, legacy shape **0.52 s**. The
+observable row's five runs are 2.81–2.94 s against the old record's 3.05–3.09 s, so the row moved
+down; the no-sink (list-only) row moved 47% and the legacy (allocate/delete only) row 60%. The
+observable gain is smaller because the renderer, not the list allocation, is now the exposed
+critical path.
+
+The attribution controls were also repaired for this measurement: D1 had left `--attribution`
+unable to compile (the extracted `ql_list_int_str` was included before the allocator declarations
+and released with libc `free`), and the old `header` control stored the buffer pointer through an
+`int`. The honest isolated numbers (diagnostic, not record) are 13.02 ns/round for the old
+two-allocation list phase and 5.21 ns/round for the one-block phase, with the render control at
+22.00 ns before and 21.19 ns after. The isolated controls are not additive with the real loop: the
+removed allocation/free pair overlaps with the string work, which is why the end-to-end observable
+moves 2.06 ns while the list-only rows move 5.6–7.8 ns. The earlier `32.7% / 9.67 ns` split was
+measured on the pre-D1 tree (the current attribution could not run) and understated the header
+because of the truncated pointer store; it is not the current row's decomposition. On the honest
+pre-change controls the two-allocation list phase is 13.02 ns of the probe row's 31.38 ns (42.4%)
+and the render control is 22.00 ns (70.1%); the phase shares are isolated-control shares, not
+additive ones.
+
+After the change, the additive-by-construction split of the recorded observable row is:
+renderer/sink exposure 22.34 ns (78%), list allocation+release 5.21 ns (18%), loop and reads about
+1.1 ns (4%). The renderer/string path is what remains of the measured gap; the list path itself is no
+longer the second-largest exposed phase.
+
 ## 6. Tests added or extended
 
 | Gate | What it pins |
 |---|---|
 | `compiler/internal/cgen/memory_surface_test.go` | lowering of the wired rows, the setBlock range/error/try control flow, the clear call |
-| `compiler/internal/cgen/delete_surface_test.go` | every enabled form and every remaining refusal, in English and Chinese |
+| `compiler/internal/cgen/delete_surface_test.go` | every enabled form and every remaining refusal, in English and Chinese; delete emits the generated release, whose helper has the inline and separate free paths |
+| `compiler/internal/cgen/list_coalloc_test.go` | the one-block/spilled literal shapes, the single grow helper, the no-more-slot-bytes budget, and an lli run that grows past the inline buffer and reads the moved elements |
 | `compiler/runtime_routing_test.go` | D1: no runtime helper reaches libc, and the routed shapes stay |
-| `compiler/testdata/memory/qthreads_mem_test.c` | clear wipe, routed runtime string, task ownership, task-end reclaim, plus the stage-1 stress |
+| `compiler/testdata/memory/qthreads_mem_test.c` | clear wipe, routed runtime string, task ownership, task-end reclaim, the one-block list's allocation/free accounting, plus the stage-1 stress |
 | `internal/lang/memory_surface_test.go` | interpreter clear/compact/setBlock and the fragmentation refusal |
-| `compiler/testdata/cases*/z_memory_*.kq`, `z_delete_matrix.kq`, `z_task_reclaim.kq` | parity/refusal corpus rows |
-| `spec/status/claims.tsv` 11.1-10, 11.3-08..12 | the status report's claims and evidence |
+| `compiler/testdata/cases*/z_memory_*.kq`, `z_delete_matrix.kq`, `z_task_reclaim.kq`, `z_list_coalloc.kq` | parity/refusal corpus rows, including combined/empty/advanced-head/big int lists and the String/float layouts through `append` and `delete` |
+| `bench/tide/attrib/attrib.c` | the attribution controls compile on the routed runtime and measure the two-allocation and one-block shapes honestly |

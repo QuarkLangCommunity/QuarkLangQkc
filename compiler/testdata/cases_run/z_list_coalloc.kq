@@ -1,0 +1,39 @@
+// Small list literals co-allocate the %List header and the element buffer in one counted-slab
+// block; a literal above the budget (12 int elements / 6 eight-byte elements) keeps two allocations.
+// append/appendAll migrate an inline buffer to a separate one, and delete releases exactly the blocks
+// the list owns. This case exercises both shapes, the migration, an advanced head cursor, and the
+// three lowered element layouts through the real runtime; the interpreter must agree byte for byte.
+fn main(IOStream io) {
+    List<int> small = [1, 2, 3];
+    small.append(4);
+    small.append(5);
+    io.println(small.size(), small.get(0), small.get(4), small.toString());
+    delete small;
+
+    List<int> empty = [];
+    empty.append(7);
+    empty.append(8);
+    io.println(empty.size(), empty.get(0), empty.get(1), empty.toString());
+    delete empty;
+
+    List<int> consumed = [10, 20, 30];
+    io.println(consumed.next(), consumed.head());
+    consumed.append(40); // grows a buffer whose head has already advanced
+    io.println(consumed.head(), consumed.size(), consumed.get(2), consumed.toString());
+    delete consumed;
+
+    List<int> big = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+    big.append(14);
+    io.println(big.size(), big.get(12), big.toString());
+    delete big;
+
+    List<String> names = ["a", "b"];
+    names.append("c");
+    io.println(names.size(), names.get(2), names.toString());
+    delete names;
+
+    List<float> nums = [1.5, 2.5];
+    nums.append(3.5);
+    io.println(nums.size(), nums.get(2), nums.toString());
+    delete nums;
+}
