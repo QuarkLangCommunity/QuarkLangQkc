@@ -932,7 +932,7 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 		switch t := s.Target.(type) {
 		case *Ident:
 			if t.Slot > 0 {
-				if i := int(t.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == t.Name {
+				if i := int(t.Slot) - 1; i < len(sc.slots) {
 					if cur := sc.slots[i]; cur.IsRef() { // pass by reference: write through to the target (consistent with scope.set)
 						if cur.Ref().store(v) {
 							return nil
@@ -1112,9 +1112,10 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		if x.Name == "taskm" {
 			return TaskmV(globalTaskm), nil
 		}
-		// Slot fast path: resolved at compile time and name-verified at runtime → direct index (no linear name scan)
+		// Slot fast path: resolved at compile time (slots.go proves the index stable within the
+		// function scope), so the hot path is one bounds check and a direct slot read.
 		if x.Slot > 0 {
-			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+			if i := int(x.Slot) - 1; i < len(sc.slots) {
 				return sc.slots[i].deref(), nil
 			}
 		}
@@ -1741,7 +1742,7 @@ func (in *interp) storageID(e Expr, sc *scope) (string, bool) {
 	switch x := e.(type) {
 	case *Ident:
 		if x.Slot > 0 {
-			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+			if i := int(x.Slot) - 1; i < len(sc.slots) {
 				return fmt.Sprintf("slot:%p:%d", sc, i), true
 			}
 		}
@@ -1840,7 +1841,7 @@ func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
 	case *Ident:
 		// Declared variable → reference cell (an undeclared name may be a function reference; fall back to by-value)
 		if x.Slot > 0 { // slot already resolved: the owning scope is the current scope, so no chained findScope scan is needed
-			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+			if i := int(x.Slot) - 1; i < len(sc.slots) {
 				return RefV(sc.refHandle(x.Name)), nil
 			}
 		}
