@@ -2735,13 +2735,25 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		if fc.ioName != "" && id.Name == fc.ioName {
 			return nil, l.errfID(me.Pos, i18n.MsgCompilerIoSReturnsNothingCannotUsed, me.Name)
 		}
-		// The memory receiver's runtime entry points exist (stage 1), but lowering memory.* is stage 2.
-		// Refuse with a message that names the supported memory surface rather than the generic
-		// "available in the interpreter" fallback: a runtime that exists but is not wired must not read
-		// like a feature that does not exist.
+		// The memory receiver. On Windows the compiled runtime (which owns the block allocator) is not
+		// linked, so every row is a positioned refusal there rather than a call to a symbol that does
+		// not exist. On the platforms that link the runtime the standard's rows are lowered to their
+		// entry points; `mode` is not part of §10 and stays refused.
 		if id.Name == "memory" {
+			if hostAllocatorFallback {
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotSupportedOnWindows, me.Name)
+			}
 			switch me.Name {
-			case "setBlock", "compact", "clear", "mode":
+			case "setBlock":
+				if len(c.Args) != 1 {
+					return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
+				}
+				x, err := fc.expr(c.Args[0])
+				if err != nil {
+					return nil, err
+				}
+				return &expr{kind: kMem, typ: "void", line: me.Pos.Line, s: me.Name, l: x}, nil
+			case "compact", "clear", "mode":
 				return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
 			}
 		}

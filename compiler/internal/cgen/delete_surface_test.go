@@ -91,13 +91,6 @@ func memoryCallRefusalCases() []memoryRefusal {
 			args: []any{"compact"},
 			line: 2,
 		},
-		{
-			name: "memory.setBlock",
-			src:  "fn main(IOStream io) {\n    memory.setBlock(1024);\n}\n",
-			id:   i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1,
-			args: []any{"setBlock"},
-			line: 2,
-		},
 	}
 }
 

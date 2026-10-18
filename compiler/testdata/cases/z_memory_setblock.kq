@@ -1,0 +1,8 @@
+fn main(IOStream io) {
+    memory.setBlock(64);
+    List<int> xs = [1, 2, 3];
+    io.println(xs.get(1), xs.size());
+    delete xs;
+    memory.setBlock(4096);
+    io.println(9);
+}

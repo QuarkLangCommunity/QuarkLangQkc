@@ -109,6 +109,7 @@ const (
 	kListS    // List<String> literal: a heap %ListS whose buffer holds i8* elements
 	kListF    // List<float> literal: a heap %ListF whose buffer holds i64 slots, each an element's bit-cast
 	kConv     // conversion call T(x) (spec §3.4): s names the destination type
+	kMem      // memory.* primitive (s names it): setBlock takes l; compact/clear take no argument
 )
 
 // expr is a cgen IR expression. typ is filled in by lowering with the language type ("?" = undecided).
@@ -1103,6 +1104,9 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_calloc(i64, i64, i32)\n")
 	e.decls.WriteString("declare i8* @ql_realloc(i8*, i64)\n")
 	e.decls.WriteString("declare void @ql_free(i8*)\n")
+	// The §10 memory primitives. They are defined by the compiled runtime; the Windows fallback never
+	// reaches them because lowering refuses the calls there (the runtime is not linked).
+	e.decls.WriteString("declare i32 @ql_mem_set_block(i32)\n")
 	e.decls.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
 	e.decls.WriteString("declare i8* @ql_strcat(i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @snprintf(i8*, i64, i8*, ...)\n")
@@ -3281,6 +3285,8 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		return e.compileListFLit(x)
 	case kConv:
 		return e.compileConv(x)
+	case kMem:
+		return e.compileMemPrimitive(x)
 	}
 	return "0", "int"
 }
@@ -4753,6 +4759,36 @@ func (e *emitter) emitBitsShift(op, lv, rv, rt, llty string, width int) string {
 func (e *emitter) compileConv(x *expr) (string, string) {
 	v, vt := e.compileExpr(x.l)
 	return e.convToType(v, vt, x.s), x.s
+}
+
+// compileMemPrimitive lowers one memory.* call to its runtime entry point. The standard's surface is
+// exactly what it names: setBlock takes an int and accepts 1 … 2^20 (the interpreter's range), and a
+// value outside it is a runtime error with the interpreter's message and position, catchable by the
+// enclosing try exactly like the interpreter's RunError. No call is ever dropped.
+func (e *emitter) compileMemPrimitive(x *expr) (string, string) {
+	switch x.s {
+	case "setBlock":
+		v, vt := e.compileExpr(x.l)
+		v = e.coerceTo(v, vt, "int")
+		ok := e.newReg()
+		e.emitInstr("%s = call i32 @ql_mem_set_block(i32 %s)", ok, v)
+		bad := e.newReg()
+		e.emitInstr("%s = icmp eq i32 %s, 0", bad, ok)
+		cont := e.newBlock()
+		if e.curTry != "" {
+			e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, e.curTry, cont)
+		} else {
+			e.needPanic = true
+			fail := e.newBlock()
+			e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, fail, cont)
+			e.setBlock(fail)
+			c := e.i8Ptr(e.strConst(msgID(i18n.MsgFieldTypeerrorSetblockNRequiresPositiveInt)))
+			e.emitInstr("call void @ql_panic(i8* %s, i32 %d)", c, x.line)
+			e.emitInstr("unreachable")
+		}
+		e.setBlock(cont)
+	}
+	return "", "void"
 }
 
 // emitZeroCheckI integer division-by-zero check (jump to catch inside try, otherwise a runtime error).

@@ -99,19 +99,24 @@ keeps it in one place so the fix is not mistaken for permission to relax the pin
 ### §10 memory on the compiled path
 
 The four primitive rows and the derived `clear` are the surface §10 defines. The compiled artifact
-implements one row in a narrowed form (`delete` on an owned `List<int>`: a local variable, or a `copyd`
-parameter's callee-owned copy, while a by-reference parameter is refused) and none of the other four;
-the interpreter implements three of the four rows plus `clear`, and `memory.Fragmentation` exists in
-neither. Stage 1 of the design ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) now puts the
-block policy in the runtime: counted slabs with size classes, a per-class free list, per-object release,
-occupancy and fragmentation accessors, `compact`, large-object blocks, and the code generator's 20
-initial allocation sites plus 4 growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/
-`ql_free`. What remains is language surface and ownership: lowering `memory.*`, `__delete__` dispatch
-and the decided `delete` domain in the compiled path, exposing `Fragmentation` in both engines or
-deciding not to, routing the runtime's own C allocations, task-end reclaim, and Windows (the runtime is
-still not linked there; the generator keeps the libc path). Stage 1 changes no normative text and no
-language surface, so this report keeps the divergence honest until stage 2 takes the decisions the
-design lists. Size: large — one design review of its own, not a correction.
+implements `delete` in a narrowed form (an owned `List<int>`: a local variable, or a `copyd` parameter's
+callee-owned copy, while a by-reference parameter is refused) and, as stage 2 lands, has wired
+`memory.setBlock(n)` to the runtime block allocator: the accepted range is the interpreter's `1 … 2^20`,
+a value outside it is the interpreter's runtime error with the same message and position (catchable by
+`try`), and the size applies to slabs created afterwards, as the interpreter reads `BlockSize` when a
+`MemBlock` is created. `memory.compact()`, `memory.clear()` and `memory.Fragmentation()` remain refused
+or unexposed in the compiled path for now; the interpreter implements three of the four rows plus
+`clear`, and `Fragmentation` exists in neither. Stage 1 of the design
+([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
+slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
+accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
+growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. What remains is the rest of
+the language surface and ownership: the other `memory.*` rows, `__delete__` dispatch and the decided
+`delete` domain in the compiled path, exposing `Fragmentation` in both engines or deciding not to,
+routing the runtime's own C allocations, task-end reclaim, and Windows (the runtime is still not linked
+there; the generator keeps the libc path). Stage 2 adds no normative text and no language surface
+beyond the rows the standard already names. Size: large — one design review of its own, not a
+correction.
 
 ### §10 memory on Windows
 

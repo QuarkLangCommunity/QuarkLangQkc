@@ -45,6 +45,12 @@ entry:
   call void @free(i8* %p)
   ret void
 }
+; memory.setBlock's entry point: lli has no allocator, so accept every value here. The real range
+; check and its error are exercised by the linked runtime (compiler/testdata/cases_run).
+define i32 @ql_mem_set_block(i32 %n) {
+entry:
+  ret i32 1
+}
 define i8* @ql_strcat(i8* %a, i8* %b) {
 entry:
   %la = call i64 @strlen(i8* %a)
@@ -78,6 +84,7 @@ func withTestRuntime(ir string) string {
 				strings.Contains(line, "@ql_calloc(") ||
 				strings.Contains(line, "@ql_realloc(") ||
 				strings.Contains(line, "@ql_free(") ||
+				strings.Contains(line, "@ql_mem_set_block(") ||
 				strings.Contains(line, "@ql_strcat(") ||
 				strings.Contains(line, "@strlen(") ||
 				strings.Contains(line, "@memcpy(")) {
