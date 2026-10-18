@@ -27,7 +27,7 @@ while [ "$#" -gt 0 ]; do
     --record) RECORD=1 ;;
     --attribution) ATTR=1 ;;
     --help|-h)
-      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)

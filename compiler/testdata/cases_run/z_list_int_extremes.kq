@@ -2,7 +2,7 @@
 // only on negatives, and the minimum integer without a negation overflow. The renderer formats in
 // place now; this case keeps that formatting honest at the extremes.
 fn main(IOStream io) {
-    List<int> l = [0, -1, 1, 42, -42, 2147483647, -2147483647 - 1];
+    List<int> l = [0, -1, 1, 42, -42, 10, 100, 1000, 999999999, -999999999, 12345, -54321, 2147483647, -2147483647 - 1];
     io.println(l.toString());
     List<int> e = [];
     io.println(e.toString());
