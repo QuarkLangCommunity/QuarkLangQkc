@@ -3280,15 +3280,16 @@ func qkjsonV(v Value) (interface{}, error) {
 		return out, nil
 	case v.IsTable():
 		out := map[string]interface{}{}
-		// Deep-copy values by walking the internal map directly; keys are restored to native keys (stripping hashKey's "TypeName:" prefix)
+		// Deep-copy values by walking the internal map directly; JSON object keys are the string form
+		// without the type prefix (the old code stripped "TypeName:" at the first colon).
 		for k, it := range v.Table().m {
 			got, err := qkjsonV(it)
 			if err != nil {
 				return nil, err
 			}
-			key := k
-			if i := strings.IndexByte(k, ':'); i >= 0 {
-				key = k[i+1:]
+			key := k.str
+			if k.isInt {
+				key = strconv.FormatInt(k.num, 10)
 			}
 			out[key] = got
 		}

@@ -525,17 +525,34 @@ func (l *List) sortInPlace() error {
 // ---- HashTable<K,V> (spec §9: a legacy built-in, see §11.3) ----
 
 type HashTable struct {
-	m map[string]Value
+	m map[tableKey]Value
 }
 
-func NewHashTable() *HashTable { return &HashTable{m: map[string]Value{}} }
+// tableKey is a HashTable key: the runtime type name plus the value's display string, with integer
+// keys kept numeric. Equality is exactly the old "TypeName() + ':' + String()" equality, but a
+// put/get on an integer or String key no longer allocates the concatenated spelling.
+type tableKey struct {
+	typ   string // Value.TypeName()
+	str   string // Value.String() (empty for integer keys)
+	num   int64  // integer value when isInt
+	isInt bool
+}
+
+func (k tableKey) String() string {
+	if k.isInt {
+		return "int:" + strconv.FormatInt(k.num, 10)
+	}
+	return k.typ + ":" + k.str
+}
+
+func NewHashTable() *HashTable { return &HashTable{m: map[tableKey]Value{}} }
 
 func (h *HashTable) TypeName() string { return "HashTable" }
 
 func (h *HashTable) String() string {
 	parts := make([]string, 0, len(h.m))
 	for k, v := range h.m {
-		parts = append(parts, k+" -> "+v.String())
+		parts = append(parts, k.String()+" -> "+v.String())
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
@@ -564,23 +581,26 @@ func (h *HashTable) Size() int { return len(h.m) }
 func (h *HashTable) Keys() []Value {
 	out := make([]Value, 0, len(h.m))
 	for k := range h.m {
-		if i := len("String:"); len(k) > i && k[:i] == "String:" {
-			out = append(out, StrV(k[i:]))
-			continue
+		switch {
+		case k.isInt:
+			out = append(out, IntV(k.num))
+		case k.typ == "String" && k.str != "":
+			out = append(out, StrV(k.str))
+		default:
+			// An empty String key is kept in its prefixed spelling, exactly as before.
+			out = append(out, StrV(k.String()))
 		}
-		if i := len("int:"); len(k) > i && k[:i] == "int:" {
-			if n, err := strconv.Atoi(k[i:]); err == nil {
-				out = append(out, IntV(int64(n)))
-			}
-			continue
-		}
-		out = append(out, StrV(k))
 	}
 	return out
 }
 
 // hashKey builds a stable structural key for any Value.
-func hashKey(v Value) string { return v.TypeName() + ":" + v.String() }
+func hashKey(v Value) tableKey {
+	if v.IsInt() {
+		return tableKey{typ: "int", num: v.Int(), isInt: true}
+	}
+	return tableKey{typ: v.TypeName(), str: v.String()}
+}
 
 // ---- FuncBuffer (interpreter-internal; not a language surface) ----
 
