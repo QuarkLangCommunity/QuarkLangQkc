@@ -1377,8 +1377,28 @@ static int ql_itoa(int v, char* buf) {
     buf[o] = 0;
     return o;
 }
-/* List.toString(): [e0, e1, ...] (only the visible range head..tail); elements format in place, with no per-element allocation. */
+/* List.toString(): [e0, e1, ...] (only the visible range head..tail); elements format in place, with no per-element allocation.
+ *
+ * A short list is rendered into one stack buffer and copied once into a right-sized allocation: the
+ * visible range is bounded, so the framing needs no growth checks and no realloc. A longer range keeps
+ * the growing-buffer path below. The returned spelling is identical on both paths, and the returned
+ * string is still the caller's to release through the runtime allocator. */
 char* ql_list_int_str(const int* buf, int head, int tail) {
+    int count = tail - head;
+    if (count >= 0 && count <= 16) {
+        char out[16 * 11 + 15 * 2 + 3];
+        size_t o = 0;
+        out[o++] = '[';
+        for (int i = head; i < tail; i++) {
+            if (i > head) { out[o++] = ','; out[o++] = ' '; }
+            o += (size_t)ql_itoa(buf[i], out + o);
+        }
+        out[o++] = ']';
+        out[o] = 0;
+        char* r = ql_alloc(o + 1, 0);
+        memcpy(r, out, o + 1);
+        return r;
+    }
     size_t cap = 16, o = 0;
     char* r = ql_alloc(cap, 0);
     r[o++] = '[';

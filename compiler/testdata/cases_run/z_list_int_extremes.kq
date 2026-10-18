@@ -1,6 +1,7 @@
 // List<int>.toString must spell every int32 the way the interpreter does: no leading zeros, a '-'
-// only on negatives, and the minimum integer without a negation overflow. The renderer formats in
-// place now; this case keeps that formatting honest at the extremes.
+// only on negatives, and the minimum integer without a negation overflow. A short list renders into
+// one stack buffer and a longer one grows a buffer, so both shapes are exercised here; this case keeps
+// that formatting honest at the extremes.
 fn main(IOStream io) {
     List<int> l = [0, -1, 1, 42, -42, 10, 100, 1000, 999999999, -999999999, 12345, -54321, 2147483647, -2147483647 - 1];
     io.println(l.toString());
@@ -8,4 +9,6 @@ fn main(IOStream io) {
     io.println(e.toString());
     List<int> one = [-2147483647 - 1];
     io.println(one.toString());
+    List<int> grown = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 2147483647, -2147483647 - 1];
+    io.println(grown.toString());
 }
