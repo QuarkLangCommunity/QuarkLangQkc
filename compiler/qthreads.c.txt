@@ -695,10 +695,22 @@ int ql_mem_set_block(int n) {
     return 1;
 }
 
+/* The caller holds the allocator lock. Rebuilds the per-class partial lists after slabs were removed
+ * or their occupancy changed; every slab with a free slot is linked again. */
+static void ql_mem_rebuild_partial(void) {
+    ql_slab* s;
+    int cls;
+    for (cls = 0; cls < QL_MEM_CLASS_COUNT; cls++) ql_mem_partial[cls] = 0;
+    for (s = ql_mem_slabs; s; s = s->all_next) {
+        s->next_partial = 0;
+        s->in_partial = 0;
+        if (s->free_head) ql_mem_partial_push(s->cls, s);
+    }
+}
+
 void ql_mem_compact(void) {
     ql_slab* s;
     ql_slab* next;
-    int cls;
     int locked = ql_mem_lock();
     s = ql_mem_slabs;
     while (s) {
@@ -713,11 +725,38 @@ void ql_mem_compact(void) {
         }
         s = next;
     }
-    for (cls = 0; cls < QL_MEM_CLASS_COUNT; cls++) ql_mem_partial[cls] = 0;
+    ql_mem_rebuild_partial();
+    ql_mem_unlock(locked);
+}
+
+/* memory.clear(): the derived wipe §10 names. It is release plus zero-fill: every slab nobody
+ * occupies returns to the host, and every slot that is still free in a retained slab has its payload
+ * zeroed, so the next user of that storage cannot see the previous value's bytes. Live payloads are
+ * untouched — clear is not delete. Large blocks are freed per object by ql_free, so they have no free
+ * slot to wipe here. */
+void ql_mem_clear(void) {
+    ql_slab* s;
+    ql_slab* next;
+    int locked = ql_mem_lock();
+    s = ql_mem_slabs;
+    while (s) {
+        next = s->all_next;
+        if (s->used == 0) {
+            if (s->all_prev) s->all_prev->all_next = s->all_next;
+            else ql_mem_slabs = s->all_next;
+            if (s->all_next) s->all_next->all_prev = s->all_prev;
+            ql_mem_slab_count--;
+            ql_mem_slab_bytes -= s->size;
+            ql_mem_host_free(s);
+        }
+        s = next;
+    }
+    ql_mem_rebuild_partial();
     for (s = ql_mem_slabs; s; s = s->all_next) {
-        s->next_partial = 0;
-        s->in_partial = 0;
-        if (s->free_head) ql_mem_partial_push(s->cls, s);
+        ql_obj_hdr* h;
+        for (h = s->free_head; h; h = h->next_free) {
+            memset((char*)h + QL_MEM_OBJ_HDR, 0, ql_mem_class_size[s->cls]);
+        }
     }
     ql_mem_unlock(locked);
 }

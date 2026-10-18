@@ -1,0 +1,11 @@
+fn main(IOStream io) {
+    List<int> xs = [1, 2, 3];
+    delete xs;
+    memory.clear();
+    memory.compact();
+    List<int> ys = [4, 5];
+    io.println(ys.get(1), ys.size());
+    delete ys;
+    memory.clear();
+    io.println(9);
+}

@@ -57,6 +57,12 @@ define void @ql_mem_compact() {
 entry:
   ret void
 }
+; memory.clear: the wipe is observable only through the allocator's payload, so the unit tests stub it
+; and the C allocator test (compiler/memory_runtime_test.go) proves the zero-fill.
+define void @ql_mem_clear() {
+entry:
+  ret void
+}
 define i8* @ql_strcat(i8* %a, i8* %b) {
 entry:
   %la = call i64 @strlen(i8* %a)
@@ -92,6 +98,7 @@ func withTestRuntime(ir string) string {
 				strings.Contains(line, "@ql_free(") ||
 				strings.Contains(line, "@ql_mem_set_block(") ||
 				strings.Contains(line, "@ql_mem_compact(") ||
+				strings.Contains(line, "@ql_mem_clear(") ||
 				strings.Contains(line, "@ql_strcat(") ||
 				strings.Contains(line, "@strlen(") ||
 				strings.Contains(line, "@memcpy(")) {

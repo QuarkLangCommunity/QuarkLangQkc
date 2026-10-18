@@ -16,7 +16,7 @@ be left out silently.
 
 | Construct | Checker | Interpreter | Compiler | Evidence |
 |---|---|---|---|---|
-| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (27 files); `compiler/testdata/cases_run/*.kq` (21 files) |
+| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (28 files); `compiler/testdata/cases_run/*.kq` (21 files) |
 | `bit`, `bits<N>` (1 <= N <= 32), `uchar` | accepts | runs | lowers | `internal/lang:TestBitsValuesAndMasking`; `internal/lang:TestBitsCallSpelling`; `compiler/testdata/cases/z_bits.kq` |
 | raw bits: `& \| ^ ~ << >>`, `b[i]` read/write, the three conversion meanings | accepts | runs | lowers | `internal/lang:TestBitsOperators`; `internal/lang:TestBitIndexing`; `internal/lang:TestBitsConversions`; `compiler/testdata/cases/z_bits.kq` |
 | bitwise family on int views, hex literals | accepts | runs | lowers | `internal/lang:TestBitwiseOperators`; `compiler/testdata/cases/z_bits.kq`; `compiler/testdata/cases/z_precedence.kq` |
@@ -27,7 +27,7 @@ be left out silently.
 | conditional directives: `#ifdef`, `#ifndef`, `#if`, `#endif`, `#define`, `#undef` | accepts | runs | lowers | `internal/lang:TestMacroCompilerBranchDropped`; `compiler/testdata/cases/x_if_family.kq`; `compiler/testdata/cases/x_if_complement.kq`; `compiler/testdata/cases/x_if_pair.kq`; `compiler/testdata/cases/x_if_macro_body.kq` |
 
 
-The parity corpus has **27** cases under `compiler/testdata/cases` and **21** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
+The parity corpus has **28** cases under `compiler/testdata/cases` and **21** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
 
 This table is the corrected form of the old hand-written list. That list grouped `===`, permission
 references, `&lvalue` and `p++` with the constructs both engines implement; the compiler refuses all
@@ -94,7 +94,7 @@ is unimplemented and recorded as a gap in §11.3.
 | `memory.setBlock(n)` | accepts | runs | lowers | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemorySetBlockLowersToRuntimeEntryPoint`; `compiler/internal/cgen:TestMemorySetBlockErrorJoinsTry`; `compiler/testdata/cases/z_memory_setblock.kq`; `compiler/testdata/cases_run/z_memory_setblock_range.kq` | Interpreter runs it with 1 <= n <= 2^20 and reports a RunError outside that range; the compiler lowers the call to ql_mem_set_block, checks the same range at run time and reports the same message and position, catchable by try like the interpreter's RunError. The block size affects slabs created afterwards, as the interpreter reads BlockSize when a MemBlock is created. |
 | `memory.compact()` | accepts | runs | lowers | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryCompactLowersAndReturns`; `compiler/testdata/cases/z_memory_compact.kq` | Interpreter runs it and control continues (D6: the code returns; only its comment says "never returns at all"). The compiler lowers it to ql_mem_compact, which releases every slab nobody occupies; a statement after the call is still reached, and the corpus case prints after two compact() calls in both engines. |
 | `memory.Fragmentation()` | accepts | absent | absent | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptLoweredRows` | The standard names it, but no member exists; the shared type checker refuses it before either engine, now with a message that names the compiled runtime's internal fragmentation counter and the open cross-engine definition (D8). |
-| `memory.clear()` (derived, not a §10 primitive) | accepts | runs | refuses | `internal/lang:TestMemoryPrimitivesRun`; `compiler/internal/cgen:TestMemoryPrimitivesAreRefusedExceptLoweredRows` | Section 10 defines it as the derived wipe (release plus zero-fill); the interpreter runs it, the compiler refuses it with the stage-1 message naming what is supported. |
+| `memory.clear()` (derived, not a §10 primitive) | accepts | runs | lowers | `internal/lang:TestMemoryPrimitivesRun`; `internal/lang:TestMemoryManagerClearDropsEmptyBlocks`; `compiler:TestCompiledAllocatorAssertionsUnderStress`; `compiler/internal/cgen:TestMemoryClearLowersToTheDerivedWipe`; `compiler/testdata/cases/z_memory_clear.kq` | Section 10 defines it as the derived wipe (release plus zero-fill). The interpreter drops the emptied logical blocks (its blocks are Go values, so it has no bytes to zero); the compiled runtime releases empty slabs and zeroes the free slots of retained slabs, leaving live payloads untouched, and the allocator stress test reads the zeroed region back through the next same-class allocation. |
 | `#ifn` | refuses | refuses | refuses | `internal/lang:TestIfnHasNoDefinedMeaning` | The standard names it and defines it nowhere; no engine gives it a meaning, so the following `#endif` is refused. The safer reading is `#if !(condition)`. |
 | `#expand` / `#run` | refuses | refuses | refuses | `internal/lang:TestExpandRunAreNotImplemented` | Both are refused with a top-level ParseError in both engines; the standard's node namespace is undefined (docs/primitives.md Q-3, Q-5). |
 | the compiled path on Windows (no compiled runtime; libc allocator fallback) | accepts | runs | partly | `compiler/internal/cgen:TestRoutedAllocationsUseRuntimeAllocator`; `compiler:TestCompiledAllocatorAssertionsUnderStress` | Section 10 makes the compiled artifact's block policy observable; on Windows the compiled runtime is not linked, so compile and link keep the libc path and `delete` releases host storage, but the stage-1 counted-slab allocator is absent: there is no occupancy or fragmentation accounting and no block-reuse policy. Closing the gap means linking the compiled runtime on Windows (the design's R8/T6) or splitting the allocator into a platform-neutral translation unit: size large, one runtime port or one allocator extraction, not a correction. |
@@ -136,9 +136,11 @@ a value outside it is the interpreter's runtime error with the same message and 
 `try`), and the size applies to slabs created afterwards, as the interpreter reads `BlockSize` when a
 `MemBlock` is created. `memory.compact()` is wired too, and with the interpreter's answer to D6: it
 returns, so control continues after the call in both engines (only the interpreter's comment says
-"never returns at all"). `memory.clear()` and `memory.Fragmentation()` remain refused or unexposed in
-the compiled path for now; the interpreter implements three of the four rows plus `clear`, and
-`Fragmentation` exists in neither. Stage 1 of the design
+"never returns at all"). `memory.clear()`, the derived wipe, is wired to a runtime that releases the
+empty slabs and zeroes every still-free slot of a retained slab, so the region it clears cannot hand
+the previous value's bytes to the next user while a live payload is untouched; the interpreter's clear
+drops the emptied logical blocks, which is the release half without bytes to zero (its blocks are Go
+values, not storage). `memory.Fragmentation()` remains unexposed in both engines. Stage 1 of the design
 ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4

@@ -12,7 +12,6 @@ func TestMemoryPrimitivesAreRefusedExceptLoweredRows(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"delete int", "fn main(IOStream io) { int x = 1; delete x; }\n", "delete"},
 		{"Fragmentation", "fn main(IOStream io) { io.println(memory.Fragmentation()); }\n", "Fragmentation"},
-		{"clear", "fn main(IOStream io) { memory.clear(); }\n", "clear"},
 		{"mode", "fn main(IOStream io) { memory.mode(1); }\n", "mode"},
 	}
 	for _, tc := range cases {
@@ -80,5 +79,19 @@ func TestMemoryCompactLowersAndReturns(t *testing.T) {
 	print := strings.Index(ir[call:], "@printf")
 	if call < 0 || print < 0 {
 		t.Fatalf("memory.compact does not return control to the next statement:\n%s", ir)
+	}
+}
+
+// TestMemoryClearLowersToTheDerivedWipe pins the call: §10 defines clear as release plus zero-fill, so
+// the compiled path emits the runtime wipe. The observable half (free payloads stay wiped and live
+// payloads do not) is in compiler/testdata/memory/qthreads_mem_test.c, because the compiler has no
+// language surface that can read a released region after a delete.
+func TestMemoryClearLowersToTheDerivedWipe(t *testing.T) {
+	ir := transpile(t, "fn main(IOStream io) {\n"+
+		"    memory.clear();\n"+
+		"    io.println(1);\n"+
+		"}\n")
+	if !strings.Contains(ir, "call void @ql_mem_clear()") {
+		t.Fatalf("memory.clear does not call the runtime wipe:\n%s", ir)
 	}
 }

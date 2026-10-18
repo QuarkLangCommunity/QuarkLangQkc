@@ -25,9 +25,10 @@ type memoryRefusal struct {
 	line int
 }
 
-// memoryRefusalCases lists the audited forms: one per declaration kind and one per memory operation.
+// memoryRefusalCases lists the audited forms: one per declaration kind. The memory rows themselves are
+// covered by memory_surface_test.go now that stage 2 lowers them.
 func memoryRefusalCases() []memoryRefusal {
-	return append(deleteRefusalCases(), memoryCallRefusalCases()...)
+	return deleteRefusalCases()
 }
 
 func deleteRefusalCases() []memoryRefusal {
@@ -71,25 +72,6 @@ func deleteRefusalCases() []memoryRefusal {
 			id:   i18n.MsgCompilerDeleteQNotSupportedCompilerHandles,
 			args: []any{"p"},
 			line: 4,
-		},
-	}
-}
-
-func memoryCallRefusalCases() []memoryRefusal {
-	return []memoryRefusal{
-		{
-			name: "memory.clear",
-			src:  "fn main(IOStream io) {\n    memory.clear();\n}\n",
-			id:   i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1,
-			args: []any{"clear"},
-			line: 2,
-		},
-		{
-			name: "memory.compact",
-			src:  "fn main(IOStream io) {\n    memory.compact();\n}\n",
-			id:   i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1,
-			args: []any{"compact"},
-			line: 2,
 		},
 	}
 }

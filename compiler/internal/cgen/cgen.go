@@ -1108,6 +1108,7 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	// reaches them because lowering refuses the calls there (the runtime is not linked).
 	e.decls.WriteString("declare i32 @ql_mem_set_block(i32)\n")
 	e.decls.WriteString("declare void @ql_mem_compact()\n")
+	e.decls.WriteString("declare void @ql_mem_clear()\n")
 	e.decls.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
 	e.decls.WriteString("declare i8* @ql_strcat(i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @snprintf(i8*, i64, i8*, ...)\n")
@@ -4793,6 +4794,10 @@ func (e *emitter) compileMemPrimitive(x *expr) (string, string) {
 		// returns normally (its comment says "never returns at all", the code does), so the compiled
 		// path calls the runtime and control continues.
 		e.emitInstr("call void @ql_mem_compact()")
+	case "clear":
+		// The derived wipe: release every empty slab and zero the released region (free slots kept in
+		// partial slabs). It is not delete — a live object's payload is not touched.
+		e.emitInstr("call void @ql_mem_clear()")
 	}
 	return "", "void"
 }

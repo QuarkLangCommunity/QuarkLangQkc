@@ -21,6 +21,7 @@ void* ql_realloc(void* ptr, size_t size);
 void ql_free(void* ptr);
 int ql_mem_set_block(int n);
 void ql_mem_compact(void);
+void ql_mem_clear(void);
 double ql_mem_fragmentation(void);
 double ql_mem_occupancy(void);
 long long ql_mem_block_count(void);
@@ -280,11 +281,50 @@ static int delete_reallocate_stress(void) {
     return 0;
 }
 
+/* §10's clear is the derived wipe: release keeps the payload (D3), clear removes it from the region it
+ * releases. A partially occupied slab stays cached, so its free slot can be read back by the next
+ * same-class allocation; a live object in the same slab must not be touched. */
+static int clear_wipes_released_region(void) {
+    unsigned char* a;
+    unsigned char* live;
+    unsigned char* b;
+    int i;
+    ql_mem_compact();
+    a = (unsigned char*)ql_alloc(16, 0);
+    live = (unsigned char*)ql_alloc(16, 0);
+    CHECK(a != 0 && live != 0);
+    for (i = 0; i < 16; i++) {
+        a[i] = 0xA5;
+        live[i] = 0x5A;
+    }
+    ql_free(a);
+    b = (unsigned char*)ql_alloc(16, 0);
+    CHECK(b != 0);
+    for (i = 0; i < 16; i++) CHECK(b[i] == 0xA5); /* release does not wipe */
+    ql_free(b);
+    ql_mem_clear();
+    CHECK(ql_mem_check() == 0);
+    for (i = 0; i < 16; i++) CHECK(live[i] == 0x5A); /* live payload untouched */
+    b = (unsigned char*)ql_alloc(16, 0);
+    CHECK(b != 0);
+    for (i = 0; i < 16; i++) CHECK(b[i] == 0); /* the released region was wiped */
+    ql_free(b);
+    ql_free(live);
+    ql_mem_clear();
+    CHECK(ql_mem_check() == 0);
+    CHECK(ql_mem_block_count() == 0); /* clear released the empty slab */
+    CHECK(ql_mem_live_bytes() == 0);
+    CHECK(ql_mem_used_bytes() == 0);
+    CHECK(ql_mem_fragmentation() == 0.0);
+    return 0;
+}
+
 int main(void) {
     long long reuse = 0, blocks = 0, count = 0;
     CHECK(basic_sizes() == 0);
     CHECK(calloc_and_realloc() == 0);
     CHECK(payload_is_preserved() == 0);
+    CHECK(clear_wipes_released_region() == 0);
     CHECK(block_size() == 0);
     CHECK(tide_reuses() == 0);
     CHECK(fragmentation_and_occupancy() == 0);

@@ -106,9 +106,11 @@ a value outside it is the interpreter's runtime error with the same message and 
 `try`), and the size applies to slabs created afterwards, as the interpreter reads `BlockSize` when a
 `MemBlock` is created. `memory.compact()` is wired too, and with the interpreter's answer to D6: it
 returns, so control continues after the call in both engines (only the interpreter's comment says
-"never returns at all"). `memory.clear()` and `memory.Fragmentation()` remain refused or unexposed in
-the compiled path for now; the interpreter implements three of the four rows plus `clear`, and
-`Fragmentation` exists in neither. Stage 1 of the design
+"never returns at all"). `memory.clear()`, the derived wipe, is wired to a runtime that releases the
+empty slabs and zeroes every still-free slot of a retained slab, so the region it clears cannot hand
+the previous value's bytes to the next user while a live payload is untouched; the interpreter's clear
+drops the emptied logical blocks, which is the release half without bytes to zero (its blocks are Go
+values, not storage). `memory.Fragmentation()` remains unexposed in both engines. Stage 1 of the design
 ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
