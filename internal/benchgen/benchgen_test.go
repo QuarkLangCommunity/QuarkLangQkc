@@ -109,6 +109,36 @@ func TestValidateRequiresExplicitSkip(t *testing.T) {
 	}
 }
 
+// TestValidateRequiresLoadMetadata checks that a record without the load it was taken under is refused.
+func TestValidateRequiresLoadMetadata(t *testing.T) {
+	rec, err := Load(repoRoot(t), filepath.Join(repoRoot(t), DefaultTSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(rec.Meta, "load")
+	if err := rec.Validate(); err == nil {
+		t.Fatal("a record without load metadata was accepted")
+	}
+}
+
+// TestSummaryBlockReportsLoad checks that the recorded load reaches the block the README and §10 embed.
+func TestSummaryBlockReportsLoad(t *testing.T) {
+	rec, err := Load(repoRoot(t), filepath.Join(repoRoot(t), DefaultTSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Meta["load"] == "" {
+		t.Fatal("the record has no load metadata")
+	}
+	block, err := SummaryBlock(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(block, rec.Meta["load"]) {
+		t.Fatalf("the generated block does not carry the recorded load %q", rec.Meta["load"])
+	}
+}
+
 // TestMeasurementRecordCoversControls checks that the record still carries the observable language
 // workload, the C control, the dead-code floor and the policy counters, and that the controls did
 // the same work.

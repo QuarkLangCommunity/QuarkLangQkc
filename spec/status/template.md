@@ -108,9 +108,8 @@ non-variable expression keep positioned hard errors. Stage 2 has also wired
 `memory.setBlock(n)` to the runtime block allocator: the accepted range is the interpreter's `1 … 2^20`,
 a value outside it is the interpreter's runtime error with the same message and position (catchable by
 `try`), and the size applies to slabs created afterwards, as the interpreter reads `BlockSize` when a
-`MemBlock` is created. `memory.compact()` is wired too, and with the interpreter's answer to D6: it
-returns, so control continues after the call in both engines (only the interpreter's comment says
-"never returns at all"). `memory.clear()`, the derived wipe, is wired to a runtime that releases the
+`MemBlock` is created. `memory.compact()` is wired too, with the interpreter's answer to D6: the call
+returns no value, so control continues after it in both engines. `memory.clear()`, the derived wipe, is wired to a runtime that releases the
 empty slabs and zeroes every still-free slot of a retained slab, so the region it clears cannot hand
 the previous value's bytes to the next user while a live payload is untouched; the interpreter's clear
 drops the emptied logical blocks, which is the release half without bytes to zero (its blocks are Go

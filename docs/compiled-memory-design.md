@@ -47,7 +47,8 @@ allocator (`spec/STANDARD.md:268-273`):
 > implements that policy as a layer over its host runtime's allocator.
 
 The table that follows is the normative surface (`spec/STANDARD.md:276-281`). Quoting the rows, because
-their exact wording is the subject of this review:
+their exact wording is the subject of this review. The `memory.compact()` row was corrected in 0.8.14;
+the quote records the revision that was reviewed:
 
 | Primitive | Meaning (verbatim, `spec/STANDARD.md:276-281`) |
 |---|---|
@@ -76,7 +77,8 @@ Five problems are visible in the text itself, before any code is read:
    to its caller". The interpreter's own comment reads the second way ("compact() never returns at
    all") and then returns normally (`internal/lang/eval.go:2381-2384`); a probe confirms control
    continues (`memory.compact(); memory.clear(); io.println(1)` prints `1` in the interpreter — A.3).
-   §5 D6.
+   §5 D6. Resolved in 0.8.14: the standard row and the interpreter and type-checker comments now say
+   the call returns no value and control continues.
 4. **`delete` is specified for "x", not for a type.** The interpreter accepts it for any expression
    syntactically and silently does nothing for scalars; the compiler accepts only one static type.
    §5 D4.
@@ -550,7 +552,7 @@ Fragmentation():
 | Proposed symbol | Role |
 |---|---|
 | `ql_mem_set_block(int n)` | set the slab size for blocks created afterwards; validate `1 … 2^20` (match `eval.go:2390-2396`) |
-| `ql_mem_compact(void)` | free empty slabs; return no value (pending D6) |
+| `ql_mem_compact(void)` | free empty slabs; return no value (D6 resolved in 0.8.14) |
 | `ql_mem_fragmentation(void)` | return the ratio; pending D8 |
 | `ql_alloc(size_t, owner)` / `ql_free(void*)` / `ql_realloc(void*, size_t)` | allocation API; the runtime's own C allocations can be macro-routed to these, and cgen emits calls to them instead of libc |
 | `ql_mem_stats(&reuse, &new_blocks, &block_count)` | benchmark/test counters; optional, not language surface |
@@ -679,7 +681,7 @@ to the section that establishes the conflict.
 | D3 | **`delete` granularity and payload safety** | (a) per-object release, payload preserved, next user may see old bytes; (b) per-object release, zero on allocation (or on free); (c) block-granular release (interpreter's accounting) | §10's `delete` row is self-contradictory (§1.1 F5); (a) violates "never hands another value's bytes", (b) costs a wipe, (c) is unsound when a block is shared (`eval.go:244-270,333-342`). | The chosen answer determines whether `delete` is a security boundary and whether `Fragmentation`/`compact` can be block-based. |
 | D4 | **`delete`'s domain** | (a) only heap-owned values (List/struct/`new[]`/String?); (b) any variable, scalars are no-ops (interpreter today); (c) any variable, scalars are hard errors (compiler-ish); (d) one rule per type | The standard says `delete x` for any `x`; the two engines disagree on scalars, `List<String>`, `List<float>`, `new[]`, and structs (`§1.3`). | A test matrix cannot be written, and `compare.sh` cannot cover the surface. |
 | D5 | **Threads/tasks and ownership** | (a) single-threaded only in stage 1, hard-error in tasks; (b) global allocator with a lock; (c) per-thread arenas with owner tags and task-end reclaim; (d) main-thread only, task allocations unchanged | §10 says a task's blocks become reclaimable at task end, but compiled taskm is POSIX-only (`main.go:29-30`) and the interpreter's `ReclaimTask` is scheduling-sensitive (`internal/lang/eval_test.go:348-380`). | (a) is a divergence; (b) may serialize the 8-worker pool; (c) is the faithful design but needs cross-thread `delete` rules; (d) leaves §10's task clause unimplemented on the compiled path. |
-| D6 | **`compact()` returns or not** | (a) returns no value and control continues (interpreter's actual behaviour, probe A.3); (b) never returns (terminates) — a literal reading of "it does not return" | The standard's sentence is ambiguous; the interpreter comment says "never returns at all" but the code and the type checker return | A terminating `compact` is a language-visible control-flow primitive; a void-returning one is a call. The compiler lowering differs completely. |
+| D6 | **`compact()` returns or not** | (a) returns no value and control continues (interpreter's actual behaviour, probe A.3); (b) never returns (terminates) — a literal reading of "it does not return" | The standard's sentence is ambiguous; the interpreter comment says "never returns at all" but the code and the type checker return. Resolved in 0.8.14: the row and both comments now say the call returns no value and control continues | A terminating `compact` is a language-visible control-flow primitive; a void-returning one is a call. The compiler lowering differs completely. |
 | D7 | **`setBlock(n)` semantics** | (a) affects blocks created afterwards only (interpreter, `eval.go:265`); (b) resizes existing blocks; (c) only a hint | The standard says "set the block size" without saying whether existing blocks change; the interpreter's `MemBlock.Size` is fixed at creation; `1 ≤ n ≤ 2^20` (`eval.go:2390-2396`) is an implementation limit, not §10 | Resizing existing blocks can invalidate live pointers; (a) must be written down or users will expect (b). Also define `n` smaller than a slot/header. |
 | D8 | **`Fragmentation()` exposure and definition** | (a) expose in both engines, exact same accounting; (b) expose, implementation-defined, keep out of parity cases; (c) keep it inspection-only, not language surface | The standard lists it as a primitive; neither engine exposes it today; the interpreter's accounting is exact-size logical blocks, a compiled allocator's is class/header-based. `docs/ARCHITECTURE.md:257-260` already says parity cases must avoid it. | (a) forces the compiled allocator to emulate the interpreter's accounting (including its block-sharing bug) and constrains optimization; (b) contradicts "one semantic reference"; (c) is a standard change. |
 | D9 | **`clear()`** | (a) add it to §10 with a definition; (b) remove it (the interpreter keeps a non-standard method); (c) keep it as an interpreter-only extension | It is used in the `delete` row but has no row of its own; the interpreter wipes free blocks only (`eval.go:344-356`), the compiler refuses it | The compiled path cannot be "complete" against an undefined primitive; the interpreter will keep an engine-specific surface. |

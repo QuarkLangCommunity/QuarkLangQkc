@@ -5,11 +5,14 @@
 #
 #   bench/tide/run.sh --quick              # 1e6 rounds, 3 runs: CI smoke
 #   bench/tide/run.sh                      # 1e8 rounds, 5 runs: the recorded measurement
-#   bench/tide/run.sh --record             # write spec/bench/tide.tsv and regenerate the report
+#   bench/tide/run.sh --record             # write spec/bench/tide.tsv on a quiet host and regenerate the report
 #   bench/tide/run.sh --attribution        # add the phase rows that decompose the observable row
 #
 # The output is a TSV record; the first lines are metadata and the rest are the measured rows. A
 # missing Rust or Go toolchain is skipped explicitly and recorded as a skip, never invented.
+#
+# --record is a measurement, so it refuses a busy host: the 1-minute load average must be below
+# 0.25 per logical CPU before the recording starts, and the measured load is written to the record.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -19,6 +22,7 @@ N=100000000
 RUNS=5
 RECORD=0
 ATTR=0
+LOAD_PER_CPU_MAX=0.25
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quick) N=1000000; RUNS=3 ;;
@@ -27,7 +31,7 @@ while [ "$#" -gt 0 ]; do
     --record) RECORD=1 ;;
     --attribution) ATTR=1 ;;
     --help|-h)
-      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -51,6 +55,44 @@ fi
 command -v python3 >/dev/null 2>&1 || { echo "tide: python3 is required for the statistics" >&2; exit 2; }
 command -v clang >/dev/null 2>&1 || { echo "tide: clang is required (qkc lowers to LLVM IR)" >&2; exit 2; }
 command -v go >/dev/null 2>&1 || { echo "tide: go is required (qkc and the policy workload)" >&2; exit 2; }
+
+# load1 prints this platform's 1-minute load average.
+load1() {
+  if [ -r /proc/loadavg ]; then
+    LC_ALL=C awk '{ print $1; exit }' /proc/loadavg
+  elif sysctl -n vm.loadavg >/dev/null 2>&1; then
+    sysctl -n vm.loadavg | tr -d '{}' | LC_ALL=C awk '{ print $1; exit }'
+  else
+    python3 -c 'import os; print("%.2f" % os.getloadavg()[0])' 2>/dev/null
+  fi
+}
+
+# cpu_count prints the logical CPU count, or 0 when no probe knows it.
+cpu_count() {
+  getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 0
+}
+
+# load_below succeeds when the load is strictly below the limit.
+load_below() {
+  LC_ALL=C awk -v measured="$1" -v limit="$2" 'BEGIN { exit !(measured < limit) }'
+}
+
+# check_record_load refuses --record when the host is too busy to measure on.
+check_record_load() {
+  if [ "$RECORD" -eq 0 ]; then return 0; fi
+  CPUS="$(cpu_count)"
+  [[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --record needs a positive logical CPU count" >&2; exit 2; }
+  LOAD_LIMIT="$(LC_ALL=C awk -v cpus="$CPUS" -v per="$LOAD_PER_CPU_MAX" 'BEGIN { printf "%.2f", cpus * per }')"
+  START_LOAD="$(load1)"
+  [[ "$START_LOAD" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "tide: could not read the 1-minute load average for --record" >&2; exit 2; }
+  if ! load_below "$START_LOAD" "$LOAD_LIMIT"; then
+    echo "tide: refusing --record: 1-minute load average $START_LOAD is not below $LOAD_LIMIT ($LOAD_PER_CPU_MAX per logical CPU on $CPUS logical CPUs); wait for a quiet host or use --quick" >&2
+    exit 2
+  fi
+  LOAD_META="1-minute load average $START_LOAD before the run; precondition below $LOAD_LIMIT ($LOAD_PER_CPU_MAX per logical CPU on $CPUS logical CPUs)"
+}
+
+check_record_load
 
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
 mkdir -p "$CACHE"
@@ -263,6 +305,9 @@ done <<< "$POLICY"
 print_record() {
   printf '# record\ttide-v1\n'
   printf '# class\t%s\n' "$CLASS"
+  if [ -n "${LOAD_META:-}" ]; then
+    printf '# load\t%s\n' "$LOAD_META"
+  fi
   printf '# toolchain\t%s\n' "$TOOLCHAIN"
   printf '# flags\t%s\n' "$STRICT"
   printf '# counted\t%s\n' "$COUNTED"

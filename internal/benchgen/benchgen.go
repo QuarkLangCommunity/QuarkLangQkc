@@ -217,7 +217,7 @@ func (r *Record) Validate() error {
 
 // validateMeta checks the required metadata keys and their platform neutrality.
 func validateMeta(meta map[string]string) error {
-	for _, key := range []string{"class", "toolchain", "flags", "counted", "skipped", "evidence"} {
+	for _, key := range []string{"class", "load", "toolchain", "flags", "counted", "skipped", "evidence"} {
 		if strings.TrimSpace(meta[key]) == "" {
 			return fmt.Errorf("metadata is missing %q", key)
 		}
@@ -332,7 +332,7 @@ func Render(rec *Record, template []byte) ([]byte, error) {
 func SummaryBlock(rec *Record) (string, error) {
 	var b strings.Builder
 	b.WriteString(BlockStart + "\n")
-	fmt.Fprintf(&b, "Measured on %s. Toolchain: %s. Flags: %s. Skipped controls: %s.\n\n", rec.Meta["class"], rec.Meta["toolchain"], rec.Meta["flags"], rec.Meta["skipped"])
+	fmt.Fprintf(&b, "Measured on %s. Load: %s. Toolchain: %s. Flags: %s. Skipped controls: %s.\n\n", rec.Meta["class"], rec.Meta["load"], rec.Meta["toolchain"], rec.Meta["flags"], rec.Meta["skipped"])
 	fmt.Fprintf(&b, "What is counted: %s. Evidence: %s.\n\n", rec.Meta["counted"], rec.Meta["evidence"])
 
 	b.WriteString("| Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |\n")
