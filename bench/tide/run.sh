@@ -298,7 +298,7 @@ if [ "$ATTR" -eq 1 ]; then
   printf 'char* ql_list_int_str(const int* buf, int head, int tail);\n' > "$BUILD/attrib_runtime.c"
   cat compiler/internal/rtcat/msg_c.h "$BUILD/attrib_runtime_body.c" >> "$BUILD/attrib_runtime.c"
   clang -O2 -pthread -I"$BUILD" bench/tide/attrib/attrib.c "$BUILD/attrib_runtime.c" -o "$BUILD/tide-attrib"
-  for phase in base allocpair header string_alloc int_fmt fast_fmt bookkeeping render; do
+  for phase in base allocpair header listinline string_alloc int_fmt fast_fmt bookkeeping render; do
     run_timing "attr_$phase" "Attribution control, $phase" C optional "C control for the $phase phase of the observable path; the render control calls the real ql_list_int_str extracted from compiler/qthreads.c.txt" "$BUILD/tide-attrib" "$phase"
   done
   ROWS="$ROWS_MAIN"

@@ -76,10 +76,11 @@ the generator rejects a record whose declarations or timing rows are not the can
 five runs, and `--record --dry-run` validates that shape without measuring or writing. `--attribution`
 adds diagnostic controls:
 the same loop with no allocation, string or sink; the same loop with only the opaque sink; and C
-controls that time the counted-slab List allocations, the List header stores, the counted-slab
-string allocation, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
-rows are printed after the record and are never written to `spec/bench/tide.tsv`, so the recorded
-schema and the embedded claim block stay stable.
+controls that time the counted-slab List allocations, the two-allocation List header shape and the
+one-block header-plus-three-elements shape, the counted-slab string allocation, the integer formatter,
+the buffer framing and the real `ql_list_int_str` helper. Those rows are printed after the record and
+are never written to `spec/bench/tide.tsv`, so the recorded schema and the embedded claim block stay
+stable.
 
 The QuarkLang observable row necessarily includes the `List` header, the buffer and `toString()`,
 because that runtime call is the only opaque sink the compiler exposes. The C control is the minimal
