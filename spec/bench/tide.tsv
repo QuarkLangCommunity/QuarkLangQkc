@@ -2,21 +2,21 @@
 # rounds	100000000
 # runs	5
 # class	Linux x86_64, 16 logical CPUs
-# load	1-minute load average 1.35 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs)
+# load	1-minute load average 0.98 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs)
 # toolchain	clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44)
 # flags	qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default)
 # counted	in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now(); process startup and printing excluded; observable rows call an opaque sink so the allocation cannot be removed
 # skipped	none
 # evidence	the observable QuarkLang binary defines ql_alloc/ql_free and routes the List allocation and the toString string through them; it imports malloc/free only for the allocator's host blocks
 # columns	kind	key	label	language	rounds	runs	median	unit	min	max	stdev	spread_pct	checksum	note
-timing	compiled_observable	QuarkLang compiled, observable	QuarkLang	100000000	5	2864239	us	2809724	2937650	46319	4.47	899999977	`List<int>` literal + `toString` string (both counted slabs since D1) + opaque C sink + release + delete
-timing	c_observable	C control, volatile sink	C	100000000	5	418735	us	412422	424779	4882	2.95	899999977	malloc(12) + 3 writes + volatile sink + free
-timing	rust_observable	Rust control, black_box	Rust	100000000	5	652085	us	636382	659499	8605	3.55	899999977	Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop
-timing	go_observable	Go control, global sink	Go	100000000	5	1229717	us	1183121	1260533	30777	6.30	899999977	make([]int32,3) + global sink + GC
-timing	compiled_floor	QuarkLang compiled, no sink	QuarkLang	100000000	5	630497	us	614533	647923	12395	5.30	899999977	same loop with the sink removed; the checksum keeps the loop alive; the opaque ql_alloc/ql_free calls are not elided
-timing	c_floor	C control, no sink (optimizer floor)	C	100000000	5	96864	us	95433	106284	4341	11.20	899999977	same loop with the volatile sink removed
-timing	rust_floor	Rust control, no black_box (optimizer floor)	Rust	100000000	5	159692	us	155407	160820	2163	3.39	899999977	same loop with black_box removed
-timing	go_floor	Go control, local slice (optimizer floor)	Go	100000000	5	102279	us	97796	115125	6774	16.94	899999977	same loop with the global sink removed
-timing	legacy_floor	QuarkLang compiled, legacy shape (no read/sink)	QuarkLang	100000000	5	520625	us	498699	614601	45285	22.26	-	allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stages 1-2 run it through counted slabs
+timing	compiled_observable	QuarkLang compiled, observable	QuarkLang	100000000	5	1777311	us	1704717	1811145	52549	5.99	899999977	`List<int>` literal + `toString` string (both counted slabs since D1) + opaque C sink + release + delete
+timing	c_observable	C control, volatile sink	C	100000000	5	413440	us	409504	431126	8805	5.23	899999977	malloc(12) + 3 writes + volatile sink + free
+timing	rust_observable	Rust control, black_box	Rust	100000000	5	675985	us	634530	867624	95431	34.48	899999977	Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop
+timing	go_observable	Go control, global sink	Go	100000000	5	1480041	us	1432416	1529792	36528	6.58	899999977	make([]int32,3) + global sink + GC
+timing	compiled_floor	QuarkLang compiled, no sink	QuarkLang	100000000	5	809126	us	660880	987905	117549	40.42	899999977	same loop with the sink removed; the checksum keeps the loop alive; the opaque ql_alloc/ql_free calls are not elided
+timing	c_floor	C control, no sink (optimizer floor)	C	100000000	5	141798	us	94059	220247	50295	88.99	899999977	same loop with the volatile sink removed
+timing	rust_floor	Rust control, no black_box (optimizer floor)	Rust	100000000	5	180746	us	173409	332448	69084	87.99	899999977	same loop with black_box removed
+timing	go_floor	Go control, local slice (optimizer floor)	Go	100000000	5	217911	us	161142	220161	25714	27.08	899999977	same loop with the global sink removed
+timing	legacy_floor	QuarkLang compiled, legacy shape (no read/sink)	QuarkLang	100000000	5	620703	us	535741	699536	62259	26.39	-	allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stages 1-2 run it through counted slabs
 counter	policy_reuse	Interpreter block policy, reuse workload	interpreter	10000	1000000	0.999998	ratio	-	-	-	-	-	ReusedCount/AllocCalls; the block count converges to 2 blocks
 counter	policy_fragmentation	Interpreter block policy, mixed survival	interpreter	1000	1000000	0.001953	ratio	-	-	-	-	-	Fragmentation() after the mixed-size waves; 3005 blocks stay live by design
