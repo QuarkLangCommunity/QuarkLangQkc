@@ -127,7 +127,9 @@ compile_attribution() {
   # The runtime's own allocator prototypes are generated here and included by attrib.c after its
   # hand-written declarations, so a changed signature is a conflicting declaration instead of a silent
   # link against a stale one.
-  grep -E '^void[[:space:]]*\*?[[:space:]]*ql_(alloc|calloc|realloc|free)\(' compiler/qthreads.c.txt | head -n 4 > "$BUILD/ql_alloc_abi.inc"
+  awk '
+    /^void[[:space:]]*\*?[[:space:]]*ql_(alloc|calloc|realloc|free)\(/ { print; n++; if (n == 4) exit }
+  ' compiler/qthreads.c.txt > "$BUILD/ql_alloc_abi.inc"
   for sym in ql_alloc ql_calloc ql_realloc ql_free; do
     grep -Eq "^void[[:space:]]*\*?[[:space:]]*$sym\(" "$BUILD/ql_alloc_abi.inc" || {
       echo "tide: could not extract the allocator prototype for $sym from compiler/qthreads.c.txt" >&2

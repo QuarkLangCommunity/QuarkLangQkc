@@ -51,6 +51,9 @@ the buffer framing and the real `ql_list_int_str` helper. Those rows are printed
 are never written to `spec/bench/tide.tsv`, so the recorded schema and the embedded claim block stay
 stable.
 
+`--compile-only` builds every C control with `-Werror` and exits without measuring; the ordinary
+`go test ./...` runs it, so a stale prototype fails CI instead of waiting for the next measurement.
+
 The QuarkLang observable row necessarily includes the `List` header, the element buffer and
 `toString()`, because that runtime call is the only opaque sink the compiler exposes. A small list
 literal (at most 12 int or 6 eight-byte elements at the default allocator classes) is one
