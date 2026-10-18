@@ -886,12 +886,22 @@ func copyDeep(v Value, deepStruct bool) Value {
 }
 
 // implDefsFor aggregates all impls of a type (no interface + each interface implementation).
+// The index is rebuilt when impls are registered, so a method call is one map read instead of a
+// walk over every impl key plus a fresh slice allocation.
 func (in *interp) implDefsFor(typ string) []*ImplDef {
-	var out []*ImplDef
+	return in.implCache[typ]
+}
+
+// rebuildImplCache groups the registered impl blocks by their type name. Registration is the only
+// writer (it happens before execution), so the cache is read-only while programs run.
+func (in *interp) rebuildImplCache() {
+	cache := make(map[string][]*ImplDef, len(in.impls))
 	for k, d := range in.impls {
-		if strings.HasPrefix(k, typ) && (len(k) == len(typ) || (len(k) > len(typ) && k[len(typ)] == '\x00')) {
-			out = append(out, d)
+		typ := k
+		if i := strings.IndexByte(k, '\x00'); i >= 0 {
+			typ = k[:i]
 		}
+		cache[typ] = append(cache[typ], d)
 	}
-	return out
+	in.implCache = cache
 }

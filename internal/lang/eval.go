@@ -394,6 +394,7 @@ type interp struct {
 	structs     map[string]*StructDef
 	interfaces  map[string]*InterfaceDef
 	impls       map[string]*ImplDef
+	implCache   map[string][]*ImplDef // type name -> its impl blocks (rebuilt on registration; method lookup is one map read)
 	tasks       map[int]*Task
 	taskMu      sync.Mutex
 	nextPid     int
@@ -560,6 +561,7 @@ func (in *interp) registerProgramMode(prog *Program, replace bool) error {
 		}
 	}
 	in.registerIOBuiltins()
+	in.rebuildImplCache()
 	for _, lb := range prog.Libraries {
 		if in.libObjs == nil {
 			in.libObjs = map[string]*libObj{}
@@ -2515,8 +2517,15 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 	} else if obj.IsStruct() {
 		o := obj.Struct()
 		if fn := in.selfMethodOf(o.SType, name); fn != nil {
-			callArgs := append([]Value{obj}, args...)
-			return in.callFunc(fn, callArgs, pos, ctx.depth)
+			// Bind the receiver in the context's argument arena: a fresh []Value{obj, args...}
+			// would allocate on every method call (1M calls in the struct backend).
+			mark := len(ctx.argArena)
+			ctx.argArena = append(ctx.argArena, obj)
+			ctx.argArena = append(ctx.argArena, args...)
+			callArgs := ctx.argArena[mark:]
+			res, err := in.callFunc(fn, callArgs, pos, ctx.depth)
+			ctx.argArena = ctx.argArena[:mark]
+			return res, err
 		}
 		if in.staticMethodOf(o.SType, name) != nil {
 			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorSSStaticMethodCall, o.SType, name, o.SType, name), Pos: pos, Ctx: ctx}
