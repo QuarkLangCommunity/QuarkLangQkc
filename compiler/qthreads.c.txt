@@ -336,11 +336,11 @@ struct ql_slab {
 
 static ql_slab* ql_mem_slabs;
 static ql_slab* ql_mem_partial[QL_MEM_CLASS_COUNT];
-/* The slab the last same-class allocation/release used, per class. It is a hint, never a policy
- * change to the accounting: an allocation takes the cached slab when it still has a free slot and
- * the owner matches, and otherwise falls back to the least-occupied scan over the partial list.
- * Keeping this out of the scan is what keeps the common tide (one cached slab per class) from
- * walking the partial list on every allocation. */
+/* The slab the last same-class allocation/release used, per class. It is a hit only when that slab
+ * is the sole partial slab of its class: then it is trivially the least-occupied block §10 asks
+ * allocation to prefer, so taking it is the same policy as the scan. Whenever a second partial slab
+ * exists the fast path falls back to the least-occupied scan, which keeps the normative policy
+ * intact; the common tide (one slab per class) still avoids walking the list. */
 static ql_slab* ql_mem_current[QL_MEM_CLASS_COUNT];
 static ql_large_meta* ql_mem_larges;
 static size_t ql_mem_block_size = QL_MEM_DEFAULT_BLOCK;
@@ -541,11 +541,13 @@ static void* ql_mem_alloc_locked(size_t n, int owner) {
         /* Fast path: the cached slab is the one the last release returned a slot to, so its free
          * list head is the object just released. The owner check preserves D5: a task's slab is
          * never handed to the main thread (or to another task). */
-        if (cur && cur->owner == (uint32_t)owner && cur->free_head) {
+        if (cur && cur->owner == (uint32_t)owner && cur->free_head &&
+            ql_mem_partial[cls] == cur && cur->next_partial == 0) {
             QL_MEM_ASSERT(cur->magic == QL_MEM_SLAB_MAGIC);
             QL_MEM_ASSERT(cur->cls == (uint16_t)cls);
             QL_MEM_ASSERT(cur->used <= cur->slot_count);
             QL_MEM_ASSERT(cur->size >= ql_mem_slab_hdr() + stride);
+            QL_MEM_ASSERT(cur->in_partial);
             best = cur;
         } else {
             for (s = ql_mem_partial[cls]; s; s = s->next_partial) {
