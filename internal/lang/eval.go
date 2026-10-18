@@ -1513,7 +1513,17 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 			return NilV(), err
 		}
 		mark := len(ctx.argArena)
-		args, err := in.evalCallArgs(c, sc, ctx)
+		var args []Value
+		if obj.IsStruct() || obj.IsCopyd() {
+			// User impl methods keep by-reference arguments (parameters bind by reference);
+			// a Copyd receiver may unwrap to a struct, so it stays on the general path too.
+			args, err = in.evalCallArgs(c, sc, ctx)
+		} else {
+			// Built-in receivers (List/Table/String/IO/…) only ever see values: callMethod
+			// dereferences the argument list immediately. Evaluating by value here skips the
+			// reference-cell creation for lvalue arguments (hash.put(k, ...) on every round).
+			args, err = in.evalArgsValues(c.Args, sc, ctx)
+		}
 		if err != nil {
 			return NilV(), err
 		}
@@ -1812,8 +1822,14 @@ func (in *interp) evalCallArgs(c *CallExpr, sc *scope, ctx *execCtx) ([]Value, e
 	if !c.PlainArgs(isLValueExpr) {
 		return in.evalArgs(c.Args, sc, ctx) // fallback: the general path with lvalue/reference handling
 	}
+	return in.evalArgsValues(c.Args, sc, ctx)
+}
+
+// evalArgsValues evaluates every argument by value, into the ctx arena. Used for call targets that
+// cannot observe references at all (built-in method receivers).
+func (in *interp) evalArgsValues(args []Expr, sc *scope, ctx *execCtx) ([]Value, error) {
 	start := len(ctx.argArena)
-	for _, a := range c.Args {
+	for _, a := range args {
 		v, err := in.evalExpr(a, sc, ctx)
 		if err != nil {
 			ctx.argArena = ctx.argArena[:start]
