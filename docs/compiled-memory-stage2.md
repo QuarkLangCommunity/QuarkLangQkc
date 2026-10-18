@@ -1,5 +1,10 @@
 # Compiled memory, stage 2: the §10 surface on the counted slabs
 
+> **Historical measurements.** The timing figures kept in this note were taken at the revision the
+> note describes. They are not regenerated and are not claims about the current build; the live,
+> generated claims and their load, spread and checksums are in
+> [`performance-claims.md`](performance-claims.md).
+
 **Status.** Implementation note for [`compiled-memory-design.md`](compiled-memory-design.md) and the
 continuation of [`compiled-memory-stage1.md`](compiled-memory-stage1.md). It records which of the
 design's open decisions stage 2 had to take, what each surface now does in the compiled path, what

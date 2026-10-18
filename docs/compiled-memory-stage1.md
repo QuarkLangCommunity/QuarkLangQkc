@@ -1,5 +1,10 @@
 # Compiled memory, stage 1: counted slabs
 
+> **Historical measurements.** The timing figures kept in this note were taken at the revision the
+> note describes. They are not regenerated and are not claims about the current build; the live,
+> generated claims and their load, spread and checksums are in
+> [`performance-claims.md`](performance-claims.md).
+
 **Status.** Implementation note for [`compiled-memory-design.md`](compiled-memory-design.md), not a change to
 `spec/STANDARD.md`. Stage 1 of the design's three-stage plan is the allocator and the code-generator
 routing; it does not change the language surface.

@@ -18,38 +18,47 @@ Status legend:
 The tide block is the one performance claim family that already satisfies the rule: `bench/tide/run.sh`
 writes `spec/bench/tide.tsv` behind a load gate and a canonical-shape guard, `internal/benchgen` renders
 `docs/tide-benchmark.md`, and `TestTideClaimsMatchMeasurement` compares the copies in `README.md` and
-`spec/STANDARD.md` §10 with the record. Everything below the tide block in this inventory is a
-remaining manual claim.
+`spec/STANDARD.md` §10 with the record.
+
+Locations name the revision the inventory was taken from; the README's line numbers moved when the
+manual tables were removed. This inventory records both the original state and the disposition that
+was applied. The `Status`
+column is the final state: **generated** claims are now produced by `bench/claims/run.sh` from
+`spec/bench/claims.tsv` and checked by `TestPerformanceClaimsMatchMeasurement`; **corrected** claims
+survive only as a qualitative pointer to the generated block; **withdrawn** claims had no checked-in
+producer and their numbers were removed from the live text; **historical** figures stay only in notes
+that carry a banner saying they are not claims about the current build; **excluded** rows are
+correctness or status facts, not performance claims.
 
 ## README.md
 
 | ID | Location | Claim as written | Provenance | Harness today | Status |
 |---|---|---|---|---|---|
-| R-01 | `README.md:13` | "performance on par with C on compute-bound code" | README introduction; the numeric backing is R-02/R-05 | none | manual |
-| R-02 | `README.md:15` | "`fib(35)` in 21 ms (C: 22 ms)" | manual cross-language run, carried into the English README by `6f3562c` from the earlier Chinese README; the 2026-09-01 README v2 (`c81ac91`) introduced the performance table | `bench/Makefile` prints raw `time` output; no record, no checksum, no load gate; its QuarkLang target compiles `examples/fib.qk`, not a fib(35) program | harness, no record |
-| R-03 | `README.md:20` | "P99 latency on par with C" | same table, `README.md:20` | none | manual |
-| R-04 | `README.md:281` | "`style.qk` (1,567 lines) → 8 ms to generate 335 lines of Markdown" | manual `qkdoc` run recorded only in the README | `scripts/bench-tools.sh` times `qkdoc` but prints a median only and writes no record | harness, no record |
-| R-05 | `README.md:363` | "fib35 21 ms vs C 22 ms; P99 latency on par at every quantile" | same manual table, restated in Highlights | none | manual |
-| R-06 | `README.md:369` | "1e9 terms in O(1) (2 ms; a Go loop needs 223 ms)" | manual measurement of the closed-form `sum`; no checked-in source for either side | none; `examples/sum.qk` demonstrates the feature but is not a timed workload | manual |
-| R-07 | `README.md:370` | "incremental compilation: two-level IR + binary cache, 16× faster rebuilds" | manual observation recorded only in the README | none | manual |
-| R-08 | `README.md:378-380` | engine table: `BenchmarkEvalLoop1M` 73.95 → 51.09 ms (1.45x), `BenchmarkFib24` 14.64 → 11.13 ms (1.32x), `BenchmarkFuncCalls100K` 17.63 → 13.15 ms (1.34x), "min of 6 runs" | manual `go test -bench` runs from `e697cba` (bytecode VM), copied into the README | the three Go benchmarks exist in `internal/lang/bench_test.go`; nothing runs them into a record, and the "before" engine is no longer selectable | harness, no record |
-| R-09 | `README.md:395` | "fib(30): QuarkLang 3 ms, C 3 ms, Rust 3 ms, Go 6 ms, Erlang 1106 ms" | manual cross-language run; part of the 2026-09-01 performance table (`c81ac91`) | `bench/Makefile`; no record, no load gate, no checksum | harness, no record |
-| R-10 | `README.md:396` | "fib(35): QuarkLang 21 ms, C 22 ms, Rust 17 ms, Go 36 ms" | same manual table | same | harness, no record |
-| R-11 | `README.md:397` | "8-way concurrency ×1e7: QuarkLang 1 ms, Go 6 ms, Erlang 61 s (1e5)" | same manual table; no checked-in source for either workload | none | manual |
-| R-12 | `README.md:398` | "P99 (fib20×1000): QuarkLang 14/27 µs, C 16/25 µs" | same manual table; the two values are not labelled (not stated whether median/P99 or min/max) | none | manual |
-| R-13 | `README.md:399` | "`sum` over 1e9 terms: QuarkLang 2 ms, Go 223 ms" | same manual table | none | manual |
+| R-01 | `README.md:13` | "performance on par with C on compute-bound code" | README introduction; the numeric backing is R-02/R-05 | none | corrected |
+| R-02 | `README.md:15` | "`fib(35)` in 21 ms (C: 22 ms)" | manual cross-language run, carried into the English README by `6f3562c` from the earlier Chinese README; the 2026-09-01 README v2 (`c81ac91`) introduced the performance table | `bench/Makefile` prints raw `time` output; no record, no checksum, no load gate; its QuarkLang target compiles `examples/fib.qk`, not a fib(35) program | generated |
+| R-03 | `README.md:20` | "P99 latency on par with C" | same table, `README.md:20` | none | generated |
+| R-04 | `README.md:281` | "`style.qk` (1,567 lines) → 8 ms to generate 335 lines of Markdown" | manual `qkdoc` run recorded only in the README | `scripts/bench-tools.sh` times `qkdoc` but prints a median only and writes no record | withdrawn |
+| R-05 | `README.md:363` | "fib35 21 ms vs C 22 ms; P99 latency on par at every quantile" | same manual table, restated in Highlights | none | corrected |
+| R-06 | `README.md:369` | "1e9 terms in O(1) (2 ms; a Go loop needs 223 ms)" | manual measurement of the closed-form `sum`; no checked-in source for either side | none; `examples/sum.qk` demonstrates the feature but is not a timed workload | generated |
+| R-07 | `README.md:370` | "incremental compilation: two-level IR + binary cache, 16× faster rebuilds" | manual observation recorded only in the README | none | withdrawn |
+| R-08 | `README.md:378-380` | engine table: `BenchmarkEvalLoop1M` 73.95 → 51.09 ms (1.45x), `BenchmarkFib24` 14.64 → 11.13 ms (1.32x), `BenchmarkFuncCalls100K` 17.63 → 13.15 ms (1.34x), "min of 6 runs" | manual `go test -bench` runs from `e697cba` (bytecode VM), copied into the README | the three Go benchmarks exist in `internal/lang/bench_test.go`; nothing runs them into a record, and the "before" engine is no longer selectable | withdrawn |
+| R-09 | `README.md:395` | "fib(30): QuarkLang 3 ms, C 3 ms, Rust 3 ms, Go 6 ms, Erlang 1106 ms" | manual cross-language run; part of the 2026-09-01 performance table (`c81ac91`) | `bench/Makefile`; no record, no load gate, no checksum | generated |
+| R-10 | `README.md:396` | "fib(35): QuarkLang 21 ms, C 22 ms, Rust 17 ms, Go 36 ms" | same manual table | same | generated |
+| R-11 | `README.md:397` | "8-way concurrency ×1e7: QuarkLang 1 ms, Go 6 ms, Erlang 61 s (1e5)" | same manual table; no checked-in source for either workload | none | withdrawn |
+| R-12 | `README.md:398` | "P99 (fib20×1000): QuarkLang 14/27 µs, C 16/25 µs" | same manual table; the two values are not labelled (not stated whether median/P99 or min/max) | none | generated |
+| R-13 | `README.md:399` | "`sum` over 1e9 terms: QuarkLang 2 ms, Go 223 ms" | same manual table | none | generated |
 | R-14 | `README.md:413-441` | tide measurement block, policy counters, historical 1 ms note | generated by `internal/benchgen` from `spec/bench/tide.tsv` | `bench/tide/run.sh --record`, `go generate ./internal/benchgen`, `TestTideClaimsMatchMeasurement` | generated |
-| R-15 | `README.md:454` | "~3× slower than CPython (224 ms vs 72 ms for fib(30))" | manual local comparison; CPython is not a checked-in control | none | manual |
-| R-16 | `README.md:463-470` | interpreter vs native table: fib(30) 284 ms vs 3.9 ms (74×), loop 827 vs 6.7 ms (124×), list 297 vs 9.4 ms (32×), struct 416 vs 1.9 ms (224×), hash 504 vs 239 ms (2×), string 768 vs 868 ms (1×) | manual run of `scripts/bench-report.sh`, introduced with that script in `3e2e856`; the committed table is a transcript | `scripts/bench-report.sh` prints a median table and asserts output parity, but writes no record, has no load gate and no checksum column | harness, no record |
-| R-17 | `README.md:482-492` | toolchain before/after table: fib(25) 32.7 → 22.4 ms (−31%), loop 108.6 → 62.5 ms (−42%), qkcheck 23.8 → 4.8 ms (−80%), qkdoc 9.7 → 3.9 ms (−60%), qkfmt 5.3 → 3.7 ms (−29%), qkm 40.0 → 26.9 ms (−33%), qkrepl 6.7 → 5.3 ms (−21%), qklsp diagnostics 2.20 → 0.27 ms (−88%), completion 95 → 5.4 µs (−94%), definition 39.6 → 0.33 µs (−99%), startup ~1.9 → ~1.9 ms | one-time before/after observations from the optimization work (`1d25b45` and earlier); the "before" binaries are not checked in and cannot be rebuilt from this tree | `scripts/bench-tools.sh` measures only the current tree (median of 9); it cannot produce the "before" column and writes no record | historical |
-| R-18 | `README.md:498` | "fixed cgo call overhead: 22 ns/call (measured locally)" | one-off local probe recorded only in the README | none | historical |
-| R-19 | `README.md:499` | "whole-file lexing (75 KB): C scan 100 µs vs Go 230 µs, rebuilding tokens 100 µs, +30% allocations" | one-off experiment, explicitly reverted; only the conclusion remains | none | historical |
-| R-20 | `README.md:500` | "regex matching: pure qk 1517 ms vs PCRE2 230 ms, 6.6×" | one-off measurement in the sibling `QuarkLangLibs-Regex` repository | none in this repository; the sibling is the only owner | historical |
-| R-21 | `README.md:507-509` | "parse 3.29 ms / 7.47 MB → 1.02 ms / 1.39 MB; allocations 18,179 → 10,219" | one-off profile comparison from the optimization work | none; no checked-in benchmark for the before/after pair | historical |
-| R-22 | `README.md:514-518` | "1M loop −24%, function calls −11%"; "1M loop −29%, fib −19%" | one-off before/after observations | `internal/lang/bench_test.go` has current benchmarks, no "before" | historical |
-| R-23 | `README.md:520` | "allocations per call 100k → 348, calls −25%" | one-off observation | none | historical |
-| R-24 | `README.md:579` | "Cleg runtime raster kernel (fill4K 2.5 ms, zero-allocation hot path)" | one-off measurement in the sibling `QuarkLangLibs-Cleg` repository | none in this repository | historical |
-| R-25 | `README.md:583` | "regex ... measured 6.6× faster" | duplicate of R-20 in the ecosystem table | none in this repository | historical |
+| R-15 | `README.md:454` | "~3× slower than CPython (224 ms vs 72 ms for fib(30))" | manual local comparison; CPython is not a checked-in control | none | withdrawn |
+| R-16 | `README.md:463-470` | interpreter vs native table: fib(30) 284 ms vs 3.9 ms (74×), loop 827 vs 6.7 ms (124×), list 297 vs 9.4 ms (32×), struct 416 vs 1.9 ms (224×), hash 504 vs 239 ms (2×), string 768 vs 868 ms (1×) | manual run of `scripts/bench-report.sh`, introduced with that script in `3e2e856`; the committed table is a transcript | `scripts/bench-report.sh` prints a median table and asserts output parity, but writes no record, has no load gate and no checksum column | generated |
+| R-17 | `README.md:482-492` | toolchain before/after table: fib(25) 32.7 → 22.4 ms (−31%), loop 108.6 → 62.5 ms (−42%), qkcheck 23.8 → 4.8 ms (−80%), qkdoc 9.7 → 3.9 ms (−60%), qkfmt 5.3 → 3.7 ms (−29%), qkm 40.0 → 26.9 ms (−33%), qkrepl 6.7 → 5.3 ms (−21%), qklsp diagnostics 2.20 → 0.27 ms (−88%), completion 95 → 5.4 µs (−94%), definition 39.6 → 0.33 µs (−99%), startup ~1.9 → ~1.9 ms | one-time before/after observations from the optimization work (`1d25b45` and earlier); the "before" binaries are not checked in and cannot be rebuilt from this tree | `scripts/bench-tools.sh` measures only the current tree (median of 9); it cannot produce the "before" column and writes no record | withdrawn |
+| R-18 | `README.md:498` | "fixed cgo call overhead: 22 ns/call (measured locally)" | one-off local probe recorded only in the README | none | withdrawn |
+| R-19 | `README.md:499` | "whole-file lexing (75 KB): C scan 100 µs vs Go 230 µs, rebuilding tokens 100 µs, +30% allocations" | one-off experiment, explicitly reverted; only the conclusion remains | none | withdrawn |
+| R-20 | `README.md:500` | "regex matching: pure qk 1517 ms vs PCRE2 230 ms, 6.6×" | one-off measurement in the sibling `QuarkLangLibs-Regex` repository | none in this repository; the sibling is the only owner | withdrawn |
+| R-21 | `README.md:507-509` | "parse 3.29 ms / 7.47 MB → 1.02 ms / 1.39 MB; allocations 18,179 → 10,219" | one-off profile comparison from the optimization work | none; no checked-in benchmark for the before/after pair | withdrawn |
+| R-22 | `README.md:514-518` | "1M loop −24%, function calls −11%"; "1M loop −29%, fib −19%" | one-off before/after observations | `internal/lang/bench_test.go` has current benchmarks, no "before" | withdrawn |
+| R-23 | `README.md:520` | "allocations per call 100k → 348, calls −25%" | one-off observation | none | withdrawn |
+| R-24 | `README.md:579` | "Cleg runtime raster kernel (fill4K 2.5 ms, zero-allocation hot path)" | one-off measurement in the sibling `QuarkLangLibs-Cleg` repository | none in this repository | withdrawn |
+| R-25 | `README.md:583` | "regex ... measured 6.6× faster" | duplicate of R-20 in the ecosystem table | none in this repository | withdrawn |
 
 ## docs/
 
@@ -57,8 +66,8 @@ remaining manual claim.
 |---|---|---|---|---|---|
 | D-01 | `docs/compiled-memory-design.md:30`, `:455` | the old "Tide, 1e8 rounds = 1 ms" row is dead-code elimination, not allocation | design review with ad-hoc probes; the replacement is the tide record | the live replacement is R-14; the quoted old figure is explicitly historical | historical |
 | D-02 | `docs/compiled-memory-design.md:464-468`, `:653`, `:766` | "0.00–0.01 s" for the erased loop, "0.42–0.50 s" for a C control with a volatile sink, probe runs 0.42/0.46/0.50 s | ad-hoc probes recorded in the design document | none; the design document is the only record | historical |
-| D-03 | `docs/compiled-memory-stage1.md:150-159` | allocator table: malloc/calloc 16–8192 bytes, libc vs counted-slab ns/op, ratios 1.04x–2.08x | `scripts/bench-mem.sh` output pasted into the document | `scripts/bench-mem.sh` can regenerate the table but writes no record, has no load gate and is not drift-checked | harness, no record |
-| D-04 | `docs/compiled-memory-stage1.md:161-165` | "counted slabs are 1.4–2.1× slower than glibc's tcache"; "1.04–1.45×" for large allocations | summary of D-03 | same as D-03 | harness, no record |
+| D-03 | `docs/compiled-memory-stage1.md:150-159` | allocator table: malloc/calloc 16–8192 bytes, libc vs counted-slab ns/op, ratios 1.04x–2.08x | `scripts/bench-mem.sh` output pasted into the document | `scripts/bench-mem.sh` can regenerate the table but writes no record, has no load gate and is not drift-checked | historical |
+| D-04 | `docs/compiled-memory-stage1.md:161-165` | "counted slabs are 1.4–2.1× slower than glibc's tcache"; "1.04–1.45×" for large allocations | summary of D-03 | same as D-03 | historical |
 | D-05 | `docs/compiled-memory-stage1.md:172-174` | tide DCE 0.55 ms → 24.36 ms (44x); tide loop 31.66 → 63.85 ms (2.02x); list 7.56 → 7.63 ms (1.01x) | one-off runs of `bench/memory/tide_dce.kq`, `tide_loop.kq`, `bench/qk/list.qk` | no checked-in runner for these three rows | historical |
 | D-06 | `docs/compiled-memory-stage1.md:191-193` | tide 8.58 s vs 9.44 s; no-sink 56.25 ms vs 1.07 s; legacy 0 µs vs 983.02 ms | one-off record taken during stage 1 and pasted into the document | superseded by `spec/bench/tide.tsv`; the old numbers are history | historical |
 | D-07 | `docs/compiled-memory-stage1.md:203-205` | "three snprintf calls were about 65 ns of the ~93 ns row"; "2.98 s observable (1.78% spread)", "1.06 s", "399.30 ms" | one-off attribution measurement recorded in prose | the attribution rows can be printed by `run.sh --attribution`, but those numbers are diagnostic and never recorded | historical |
@@ -111,3 +120,50 @@ must stop looking like one.
 
 The standard's revision log records the earlier figures and why they moved, including any claim that
 had to be withdrawn because it could not be put under the machinery.
+
+## Corrections from the measurement
+
+The claims harness replaced the manual figures with one record taken on the reference class
+(Linux x86_64, 16 logical CPUs, 1-minute load average 0.39, five timed runs per row). The complete
+table and its spreads are in [`performance-claims.md`](performance-claims.md); these are the moves
+that matter.
+
+| Claim | Earlier figure | Measured figure | Disposition |
+|---|---|---|---|
+| fib(30), QuarkLang | 3 ms | 4.75 ms | corrected; still slower than the C control |
+| fib(30), C | 3 ms | 2.80 ms | corrected |
+| fib(30), Rust | 3 ms | 2.64 ms | corrected |
+| fib(30), Go | 6 ms | 3.33 ms | corrected |
+| fib(30), Erlang | 1106 ms | 5.57 ms | corrected; the earlier figure is not reproducible from the checked-in control |
+| fib(35), QuarkLang | 21 ms | 46.65 ms | corrected; the "same as C" claim is withdrawn |
+| fib(35), C | 22 ms | 20.25 ms | corrected |
+| fib(35), Rust | 17 ms | 16.59 ms | corrected |
+| fib(35), Go | 36 ms | 36.02 ms | corrected |
+| P99 pair, QuarkLang | 14/27 µs | P50 34 µs, P99 38 µs | corrected; the old pair was unlabelled |
+| P99 pair, C | 16/25 µs | P50 13 µs, P99 15 µs | corrected |
+| sum over 1e9 terms, QuarkLang | 2 ms | below 1 µs (clock resolution) | corrected; 2 ms was process startup |
+| sum over 1e9 terms, Go loop | 223 ms | 215.61 ms | corrected |
+| interpreter fib(30) / native | 284 / 3.9 ms | 211.34 / 5.63 ms | corrected |
+| interpreter loop / native | 827 / 6.7 ms | 680.93 / 4.96 ms | corrected |
+| interpreter list / native | 297 / 9.4 ms | 230.99 / 7.96 ms | corrected |
+| interpreter struct / native | 416 / 1.9 ms | 370.01 / 1.92 ms | corrected |
+| interpreter hash / native | 504 / 239 ms | 424.75 / 192.82 ms | corrected |
+| interpreter string / native | 768 / 868 ms | 243.44 / 653.10 ms | corrected; the native path is now the slower one on this build |
+| fib(35) parity with C | claimed | 2.3x slower in the record | withdrawn |
+| 8-way concurrency | 1 ms vs Go 6 ms, Erlang 61 s | no checked-in workload | withdrawn |
+| incremental compilation | 16x | no checked-in producer | withdrawn |
+| toolchain before/after | 11 rows | the "before" binaries are not in the tree | withdrawn |
+| cgo call overhead | 22 ns/call | one-off probe, no producer | withdrawn |
+| whole-file lexing | 100 us vs 230 us | reverted experiment, no producer | withdrawn |
+| regex matching | 1517 ms vs 230 ms, 6.6x | owned by a sibling repository | withdrawn |
+| parse/allocation deltas | 3.29/1.02 ms, 18,179/10,219 | one-off profile, no producer | withdrawn |
+| qkdoc generation | 8 ms | manual tool, no record | withdrawn |
+| Cleg fill4K | 2.5 ms | owned by a sibling repository | withdrawn |
+| CPython fib(30) | 224 ms vs 72 ms | no checked-in CPython control | withdrawn |
+| VM engine table | 73.95 to 51.09 ms and neighbours | the pre-VM engine is no longer selectable | withdrawn |
+
+The "measured" column is a snapshot for provenance; the generated block in
+[`performance-claims.md`](performance-claims.md) and `README.md` is the authority. The measured rows
+are not adjusted to preserve an earlier narrative. Where the record contradicts the
+prose, the prose was corrected or the claim was withdrawn; the standard's revision log 0.8.15 records
+the same moves.

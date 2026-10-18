@@ -1,0 +1,15 @@
+// fib(30): call-heavy recursion, timed in-process on both backends.
+fn fib(int n) int {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main(IOStream io) void {
+    int t0 = clock();
+    int r = fib(30);
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(r);
+}

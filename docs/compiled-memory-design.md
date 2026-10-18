@@ -1,5 +1,10 @@
 # The compiled path's memory model: a design review
 
+> **Historical measurements.** The timing figures kept in this note were taken at the revision the
+> note describes. They are not regenerated and are not claims about the current build; the live,
+> generated claims and their load, spread and checksums are in
+> [`performance-claims.md`](performance-claims.md).
+
 **Status.** Design review only. This document changes no code, does not edit `spec/STANDARD.md`, and
 decides nothing: §5 lists what the owner must decide *before* code is written, marked as decisions
 rather than resolutions. It is not the standard; where it reports a divergence, the standard is quoted
