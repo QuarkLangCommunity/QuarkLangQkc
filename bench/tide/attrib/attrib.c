@@ -60,8 +60,8 @@ static void phase_allocpair(long long n) {
     }
 }
 
-/* header is allocpair plus the %List field and element stores a literal emits, and the two reads
- * the checksum performs. Its difference from allocpair is the List header/length bookkeeping. */
+/* header is allocpair plus the %List field and element stores a literal emits and the two reads the
+ * checksum performs, so its difference from allocpair is the List header/length bookkeeping. */
 static void phase_header(long long n) {
     for (long long i = 0; i < n; i++) {
         int *buffer = (int *)ql_alloc(12, 0);
