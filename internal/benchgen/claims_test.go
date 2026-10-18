@@ -74,21 +74,16 @@ func TestPerformanceClaimsWithdrawManualNumbers(t *testing.T) {
 	}
 }
 
-// TestClaimsRecordRejectsProbeShapes checks the consumer half of the canonical-shape guard.
-func TestClaimsRecordRejectsProbeShapes(t *testing.T) {
-	root := repoRoot(t)
-	rec, err := Load(root, filepath.Join(root, ClaimsTSV))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := rec.ValidateClaims(root); err != nil {
-		t.Fatalf("the checked-in claims record was rejected: %v", err)
-	}
-	cases := []struct {
-		name   string
-		mutate func(*Record)
-		want   string
-	}{
+// claimsProbe is one mutation of a valid claims record and the text its rejection must contain.
+type claimsProbe struct {
+	name   string
+	mutate func(*Record)
+	want   string
+}
+
+// claimsProbeCases lists the non-canonical shapes the validator must refuse.
+func claimsProbeCases() []claimsProbe {
+	return []claimsProbe{
 		{"probe rounds", func(rec *Record) {
 			for i := range rec.Rows {
 				if rec.Rows[i].Key == "fib30_qk" {
@@ -121,7 +116,19 @@ func TestClaimsRecordRejectsProbeShapes(t *testing.T) {
 		}, "missing \"fib30_erl\""},
 		{"missing load", func(rec *Record) { delete(rec.Meta, "load") }, "missing \"load\""},
 	}
-	for _, c := range cases {
+}
+
+// TestClaimsRecordRejectsProbeShapes checks the consumer half of the canonical-shape guard.
+func TestClaimsRecordRejectsProbeShapes(t *testing.T) {
+	root := repoRoot(t)
+	rec, err := Load(root, filepath.Join(root, ClaimsTSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.ValidateClaims(root); err != nil {
+		t.Fatalf("the checked-in claims record was rejected: %v", err)
+	}
+	for _, c := range claimsProbeCases() {
 		probe, err := Load(root, filepath.Join(root, ClaimsTSV))
 		if err != nil {
 			t.Fatal(err)
