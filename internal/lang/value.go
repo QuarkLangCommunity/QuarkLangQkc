@@ -445,6 +445,19 @@ func (l *List) Reset() { l.head = 0 }
 
 // Append writes v at the tail and moves the tail forward.
 func (l *List) Append(v Value) {
+	if len(l.items) == cap(l.items) {
+		// Double instead of Go's append growth policy (~1.25x above 256 elements). A 1M-element
+		// list is the checked-in list workload; doubling cuts the copied/allocated bytes per
+		// growth sequence from about 4x to about 2x the final size. The visible contents and the
+		// head/tail indices are identical either way.
+		ncap := cap(l.items) * 2
+		if ncap < 8 {
+			ncap = 8
+		}
+		items := make([]Value, len(l.items), ncap)
+		copy(items, l.items)
+		l.items = items
+	}
 	l.items = append(l.items, v)
 	l.tail++
 	if l.mem != nil {
