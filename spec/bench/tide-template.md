@@ -51,14 +51,18 @@ the buffer framing and the real `ql_list_int_str` helper. Those rows are printed
 are never written to `spec/bench/tide.tsv`, so the recorded schema and the embedded claim block stay
 stable.
 
-The QuarkLang observable row necessarily includes the `List` header, the buffer and `toString()`,
-because that runtime call is the only opaque sink the compiler exposes. The C control is the minimal
-`malloc`/`free` shape the old claim compared against, not a rendering-equivalent workload. On the
-pre-stage-1 libc path the `QuarkLang compiled, no sink` row and the legacy row measured LLVM removing
-the allocation and then the whole loop. Stage 1 emits opaque `ql_alloc`/`ql_free` calls, so those two
-rows now measure the counted slabs as well; the historical no-use shape is kept precisely to show
-that the optimizer can no longer erase it. The C/Rust/Go floor rows still measure their own optimizer
-floors.
+The QuarkLang observable row necessarily includes the `List` header, the element buffer and
+`toString()`, because that runtime call is the only opaque sink the compiler exposes. A small list
+literal (at most 12 int or 6 eight-byte elements at the default allocator classes) is one
+counted-slab allocation: the 16-byte `%List` header is followed by the elements and `delete`
+releases that block once. A literal above the budget, a grown list, and a list built by a runtime
+helper keep the two-allocation shape (header plus buffer); the release helper frees the buffer only
+when it is not `block + 16`. The C control is the minimal `malloc`/`free` shape the old claim
+compared against, not a rendering-equivalent workload. On the pre-stage-1 libc path the
+`QuarkLang compiled, no sink` row and the legacy row measured LLVM removing the allocation and then
+the whole loop. Stage 1 emits opaque `ql_alloc`/`ql_free` calls, so those two rows now measure the
+counted slabs as well; the historical no-use shape is kept precisely to show that the optimizer can
+no longer erase it. The C/Rust/Go floor rows still measure their own optimizer floors.
 
 `List<int>.toString()` formats each element in place with a local decimal writer, so it allocates no
 per-element string and calls no libc formatter; the one allocation it still performs is the returned
