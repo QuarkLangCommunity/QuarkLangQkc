@@ -122,7 +122,7 @@ func TestSlotResolutionSemantics(t *testing.T) {
 			// The loop opens its scope before evaluating the condition, so an outer name used in
 			// the condition must not carry a function-scope slot: a body declaration would sit at
 			// that index in the loop scope and the condition would read the wrong variable.
-			"C 风格 for 的条件在子作用域求值",
+			"C-style for condition is evaluated in the loop scope",
 			`fn main(IOStream io) void {
     int n = 3;
     int sum = 0;
