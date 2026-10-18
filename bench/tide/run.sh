@@ -143,8 +143,8 @@ compile_attribution() {
   ' compiler/qthreads.c.txt > "$BUILD/attrib_runtime_body.c"
   printf 'char* ql_list_int_str(const int* buf, int head, int tail);\n' > "$BUILD/attrib_runtime.c"
   cat compiler/internal/rtcat/msg_c.h "$BUILD/attrib_runtime_body.c" >> "$BUILD/attrib_runtime.c"
-  clang -O2 -pthread -Wall -Wextra -Werror -I"$BUILD" -c bench/tide/attrib/attrib.c -o "$BUILD/attrib.o"
-  clang -O2 -pthread -c "$BUILD/attrib_runtime.c" -o "$BUILD/attrib_runtime.o"
+  clang -O2 -Wall -Wextra -Werror -I"$BUILD" -c bench/tide/attrib/attrib.c -o "$BUILD/attrib.o"
+  clang -O2 -c "$BUILD/attrib_runtime.c" -o "$BUILD/attrib_runtime.o"
   clang "$BUILD/attrib.o" "$BUILD/attrib_runtime.o" -pthread -o "$BUILD/tide-attrib"
 }
 
