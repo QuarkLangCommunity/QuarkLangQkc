@@ -815,10 +815,9 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 						if gerr != nil {
 							return &RunError{Msg: gerr.Error(), Pos: s.Pos, Ctx: ctx}
 						}
-						if inner.vars == nil {
-							inner.vars = map[string]Value{}
+						if err := inner.declare(s.Var, item, s.Pos); err != nil {
+							return err
 						}
-						inner.vars[s.Var] = item
 						if err := in.execBlock(s.Body, inner, ctx); err != nil {
 							if errors.Is(err, errLoopBreak) {
 								return nil
@@ -838,10 +837,9 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			if err != nil {
 				return &RunError{Msg: err.Error(), Pos: s.Pos, Ctx: ctx}
 			}
-			if inner.vars == nil {
-				inner.vars = map[string]Value{}
+			if err := inner.declare(s.Var, item, s.Pos); err != nil {
+				return err
 			}
-			inner.vars[s.Var] = item
 			if err := in.execBlock(s.Body, inner, ctx); err != nil {
 				if errors.Is(err, errLoopBreak) {
 					return nil
