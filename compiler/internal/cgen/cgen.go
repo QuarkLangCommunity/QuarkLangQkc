@@ -854,30 +854,7 @@ func (e *emitter) ensureListGrow() {
 	e.setBlock(migrate)
 	fresh := e.newReg()
 	e.emitAlloc(fresh, "%new_bytes")
-	iv := e.newReg()
-	e.emitInstr("%s = alloca i64, align 8", iv)
-	e.emitInstr("store i64 0, i64* %s", iv)
-	cond, loop, copied := e.newBlock(), e.newBlock(), e.newBlock()
-	e.emitInstr("br label %%%s", cond)
-	e.setBlock(cond)
-	i := e.newReg()
-	e.emitInstr("%s = load i64, i64* %s", i, iv)
-	more := e.newReg()
-	e.emitInstr("%s = icmp ult i64 %s, %%copy_bytes", more, i)
-	e.emitInstr("br i1 %s, label %%%s, label %%%s", more, loop, copied)
-	e.setBlock(loop)
-	src := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %s", src, buf, i)
-	v := e.newReg()
-	e.emitInstr("%s = load i8, i8* %s", v, src)
-	dst := e.newReg()
-	e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %s", dst, fresh, i)
-	e.emitInstr("store i8 %s, i8* %s", v, dst)
-	ni := e.newReg()
-	e.emitInstr("%s = add i64 %s, 1", ni, i)
-	e.emitInstr("store i64 %s, i64* %s", ni, iv)
-	e.emitInstr("br label %%%s", cond)
-	e.setBlock(copied)
+	e.emitInlineListCopy(buf, fresh, "%copy_bytes")
 	e.emitInstr("ret i8* %s", fresh)
 	e.setBlock(grow)
 	fresh2 := e.newReg()
@@ -888,6 +865,36 @@ func (e *emitter) ensureListGrow() {
 	e.blockCount = savedBlocks
 	e.term, e.funcReturned, e.cur = savedTerm, savedRet, savedCur
 	e.helpers.WriteString("define internal i8* @ql_list_grow(i8* noundef %obj, i64 noundef %new_bytes, i64 noundef %copy_bytes) {\n" + body + "}\n")
+}
+
+// emitInlineListCopy emits the byte loop that moves an inline literal's elements to the separate
+// buffer @ql_list_grow allocated. It is split out so the helper builder stays under the repo's
+// function-length ratchet; the caller closes the copied block with its return.
+func (e *emitter) emitInlineListCopy(src, dst, copyBytes string) {
+	iv := e.newReg()
+	e.emitInstr("%s = alloca i64, align 8", iv)
+	e.emitInstr("store i64 0, i64* %s", iv)
+	cond, loop, copied := e.newBlock(), e.newBlock(), e.newBlock()
+	e.emitInstr("br label %%%s", cond)
+	e.setBlock(cond)
+	i := e.newReg()
+	e.emitInstr("%s = load i64, i64* %s", i, iv)
+	more := e.newReg()
+	e.emitInstr("%s = icmp ult i64 %s, %s", more, i, copyBytes)
+	e.emitInstr("br i1 %s, label %%%s, label %%%s", more, loop, copied)
+	e.setBlock(loop)
+	s := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %s", s, src, i)
+	v := e.newReg()
+	e.emitInstr("%s = load i8, i8* %s", v, s)
+	d := e.newReg()
+	e.emitInstr("%s = getelementptr inbounds i8, i8* %s, i64 %s", d, dst, i)
+	e.emitInstr("store i8 %s, i8* %s", v, d)
+	ni := e.newReg()
+	e.emitInstr("%s = add i64 %s, 1", ni, i)
+	e.emitInstr("store i64 %s, i64* %s", ni, iv)
+	e.emitInstr("br label %%%s", cond)
+	e.setBlock(copied)
 }
 
 func (e *emitter) intToStrHelperSrc() string {
