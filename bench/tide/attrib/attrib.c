@@ -16,6 +16,7 @@
 /* The counted-slab runtime the compiled tide links. */
 void *ql_alloc(size_t size, int owner);
 void *ql_calloc(size_t count, size_t size, int owner);
+void *ql_realloc(void *ptr, size_t size);
 void ql_free(void *ptr);
 
 /* The module-generated helpers the runtime's interface{} dispatch refers to. The attribution
@@ -79,15 +80,15 @@ static void phase_header(long long n) {
     }
 }
 
-/* string_alloc is the one host malloc/free ql_list_int_str performs per call, with the same touch
- * the helper makes on the returned buffer. */
+/* string_alloc is the one counted-slab allocation ql_list_int_str performs per call (D1 routed the
+ * string builders), with the same touch the helper makes on the returned buffer. */
 static void phase_string_alloc(long long n) {
     for (long long i = 0; i < n; i++) {
-        char *s = (char *)malloc(16);
+        char *s = (char *)ql_alloc(16, 0);
         s[0] = '[';
         sink = s;
         acc += s[0];
-        free(s);
+        ql_free(s);
     }
 }
 
@@ -117,29 +118,29 @@ static void phase_fast_fmt(long long n) {
     }
 }
 
-/* bookkeeping is the helper's buffer framing with fixed-width digits already in hand: one malloc,
- * the brackets and separators, the element copies, and one free. */
+/* bookkeeping is the helper's buffer framing with fixed-width digits already in hand: one counted-slab
+ * allocation, the brackets and separators, the element copies, and one release. */
 static void phase_bookkeeping(long long n) {
     for (long long i = 0; i < n; i++) {
         size_t cap = 16, o = 0;
-        char *r = (char *)malloc(cap);
+        char *r = (char *)ql_alloc(cap, 0);
         r[o++] = '[';
         for (int e = 0; e < 3; e++) {
             const char *nb = "12";
             size_t len = 2;
             if (e > 0) {
-                if (o + 2 > cap) { cap *= 2; r = (char *)realloc(r, cap); }
+                if (o + 2 > cap) { cap *= 2; r = (char *)ql_realloc(r, cap); }
                 r[o++] = ','; r[o++] = ' ';
             }
-            if (o + len + 2 > cap) { cap = (o + len + 2) * 2; r = (char *)realloc(r, cap); }
+            if (o + len + 2 > cap) { cap = (o + len + 2) * 2; r = (char *)ql_realloc(r, cap); }
             memcpy(r + o, nb, len);
             o += len;
         }
-        if (o + 2 > cap) { cap += 2; r = (char *)realloc(r, cap); }
+        if (o + 2 > cap) { cap += 2; r = (char *)ql_realloc(r, cap); }
         r[o++] = ']'; r[o] = 0;
         sink = r;
         acc += r[0];
-        free(r);
+        ql_free(r);
     }
 }
 

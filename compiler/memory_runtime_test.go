@@ -3,8 +3,8 @@ package main
 // The allocator's assertion and stress gate. compiler/qthreads.c.txt is the translation unit qkc
 // embeds and links into every compiled program; this test compiles that exact source (through
 // runtimeSrc(), which prepends the generated message catalog) with the checked-in C harness and
-// runs the T4 shape: delete/reallocate under load, a tide, the large path, compact and the full
-// ql_mem_check() invariant walk.
+// runs the T4 shape: delete/reallocate under load, a tide, the large path, compact, clear, the
+// D1 routed-string check and the full ql_mem_check() invariant walk.
 //
 // The debug build defines QL_MEM_DEBUG=1, so the allocator's hot-path assertions are active. The
 // release build defines it 0; ql_mem_check() still runs, which is what keeps the two builds from

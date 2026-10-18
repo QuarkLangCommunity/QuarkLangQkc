@@ -32,6 +32,9 @@ long long ql_mem_free_calls(void);
 void ql_mem_stats(long long* reuse, long long* new_blocks, long long* block_count);
 int ql_mem_check(void);
 
+/* A routed runtime helper (D1): the harness calls it directly to prove its allocation is counted. */
+char* ql_strcat(const char* a, const char* b);
+
 /* qthreads' task pool: used here only to put the allocator on its multi-threaded lock path. */
 int ql_spawn(void);
 void ql_merge(int id, void* fn, long long a0, long long a1, long long a2, long long a3,
@@ -214,7 +217,11 @@ static int multithreaded_stress(void) {
     CHECK(ql_mem_check() == 0);
     ql_mem_compact();
     CHECK(ql_mem_check() == 0);
-    CHECK(ql_mem_block_count() == 0);
+    /* D1: the task object ql_spawn allocated is a routed allocation and stays live (the runtime keeps
+     * task handles in its table), so the metric does not return to zero. What compact released is the
+     * workers' own empties; the spawned object's slab is not one of them. */
+    CHECK(ql_mem_block_count() > 0);
+    CHECK(ql_mem_live_bytes() > 0);
     return 0;
 }
 
@@ -319,17 +326,39 @@ static int clear_wipes_released_region(void) {
     return 0;
 }
 
+/* D1: a runtime helper's allocation is visible to the same accounting the language allocations use. */
+static int runtime_allocations_are_counted(void) {
+    long long allocs;
+    long long used;
+    char* s;
+    ql_mem_compact();
+    allocs = ql_mem_alloc_calls();
+    used = ql_mem_used_bytes();
+    s = ql_strcat("ab", "cd");
+    CHECK(s != 0);
+    CHECK(strcmp(s, "abcd") == 0);
+    CHECK(ql_mem_alloc_calls() == allocs + 1);
+    CHECK(ql_mem_used_bytes() == used + 5);
+    ql_free(s);
+    CHECK(ql_mem_used_bytes() == used);
+    CHECK(ql_mem_check() == 0);
+    return 0;
+}
+
 int main(void) {
     long long reuse = 0, blocks = 0, count = 0;
     CHECK(basic_sizes() == 0);
     CHECK(calloc_and_realloc() == 0);
     CHECK(payload_is_preserved() == 0);
     CHECK(clear_wipes_released_region() == 0);
+    CHECK(runtime_allocations_are_counted() == 0);
     CHECK(block_size() == 0);
     CHECK(tide_reuses() == 0);
     CHECK(fragmentation_and_occupancy() == 0);
-    CHECK(multithreaded_stress() == 0);
     CHECK(delete_reallocate_stress() == 0);
+    /* Last: ql_spawn leaves a live, routed task object behind, so this is the only test that expects a
+     * non-zero block count after its own allocations have been released (D1). */
+    CHECK(multithreaded_stress() == 0);
     ql_mem_stats(&reuse, &blocks, &count);
     printf("ok reuse=%lld new_blocks=%lld block_count=%lld alloc_calls=%lld free_calls=%lld\n",
            reuse, blocks, count, ql_mem_alloc_calls(), ql_mem_free_calls());

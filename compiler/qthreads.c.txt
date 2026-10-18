@@ -14,6 +14,14 @@
  * single-threaded"); the pool sets this to 1 before creating workers. */
 static volatile int ql_mem_multithreaded;
 
+/* The counted-slab allocator's entry points (defined below, after the task/channel section). The
+ * runtime's own allocations go through the same API as the generated program's (D1), and the task and
+ * channel constructors run before the definitions, so the prototypes come first. */
+void* ql_alloc(size_t size, int owner);
+void* ql_calloc(size_t count, size_t size, int owner);
+void* ql_realloc(void* ptr, size_t size);
+void ql_free(void* ptr);
+
 #ifdef _WIN32
 /* Windows backend: _beginthreadex + SRWLOCK + CONDITION_VARIABLE (user-space API unchanged) */
 #include <process.h>
@@ -21,9 +29,9 @@ static volatile int ql_mem_multithreaded;
 typedef struct { int cap, head, tail, cnt; int* buf; SRWLOCK mu; CONDITION_VARIABLE cv; } ql_channel;
 typedef struct { void (*fn)(long long, long long, long long, long long, long long, long long, long long, long long); long long args[8]; volatile int done; SRWLOCK mu; } ql_task;
 ql_channel* ql_channel_new(int cap) {
-    ql_channel* c = calloc(1, sizeof(ql_channel));
+    ql_channel* c = ql_calloc(1, sizeof(ql_channel), 0);
     if (cap <= 0) cap = 1024;
-    c->cap = cap; c->buf = malloc(sizeof(int) * cap);
+    c->cap = cap; c->buf = ql_alloc(sizeof(int) * cap, 0);
     InitializeSRWLock(&c->mu); InitializeConditionVariable(&c->cv);
     return c;
 }
@@ -46,7 +54,7 @@ int ql_recv(ql_channel* c) {
 static ql_task* qtasks[QMAXTASK]; static int qtasks_n = 0;
 int ql_spawn(void) {
     if (qtasks_n >= QMAXTASK - 1) return 0;
-    ql_task* t = calloc(1, sizeof(ql_task));
+    ql_task* t = ql_calloc(1, sizeof(ql_task), 0);
     InitializeSRWLock(&t->mu);
     t->done = 1; /* a new thread = idle (the interpreter done semantics) */
     int id = ++qtasks_n; qtasks[id] = t; return id;
@@ -156,9 +164,9 @@ static void qpool_ensure(void) {
 }
 /* Channel: mutex + cond bounded FIFO (capacity cap; same semantics as the Windows branch) */
 ql_channel* ql_channel_new(int cap) {
-    ql_channel* c = calloc(1, sizeof(ql_channel));
+    ql_channel* c = ql_calloc(1, sizeof(ql_channel), 0);
     if (cap <= 0) cap = 1024;
-    c->cap = cap; c->buf = malloc(sizeof(int) * cap);
+    c->cap = cap; c->buf = ql_alloc(sizeof(int) * cap, 0);
     pthread_mutex_init(&c->mu, 0); pthread_cond_init(&c->cv, 0);
     return c;
 }
@@ -183,7 +191,7 @@ int ql_recv(ql_channel* c) {
 static ql_task* qtasks[QMAXTASK]; static int qtasks_n = 0;
 int ql_spawn(void) {
     if (qtasks_n >= QMAXTASK - 1) return 0;
-    ql_task* t = calloc(1, sizeof(ql_task));
+    ql_task* t = ql_calloc(1, sizeof(ql_task), 0);
     t->done = 1; /* a new thread = idle (the interpreter done semantics) */
     int id = ++qtasks_n; qtasks[id] = t; return id;
 }
@@ -209,7 +217,7 @@ int ql_done(int id) {
 /* String concatenation: malloc + copy (String variables + operator) */
 char* ql_strcat(const char* a, const char* b) {
     size_t la = strlen(a), lb = strlen(b);
-    char* r = malloc(la + lb + 1);
+    char* r = ql_alloc(la + lb + 1, 0);
     memcpy(r, a, la); memcpy(r + la, b, lb); r[la + lb] = 0;
     return r;
 }
@@ -223,14 +231,17 @@ char* ql_strcat(const char* a, const char* b) {
  * same path, while a request above the largest class gets a dedicated large block (one object, tail
  * waste counted by Fragmentation).
  *
- * The public allocation API keeps the design's owner argument even though stage 1 records the owner
- * rather than enforcing it (D5 is still open):
+ * The public allocation API keeps the design's owner argument:
  *   ql_alloc(size, owner), ql_calloc(count, size, owner), ql_realloc(ptr, size), ql_free(ptr).
  *
- * The language surface is deliberate: stage 1 routes what cgen emits and what an owned `List<int>` can
- * release. The runtime's other C allocations stay on the host allocator until stage 3 decides D1; the
- * one exception is `ql_any_copy_list`, which can hand a `List<int>` to a deletable variable and is
- * routed below.
+ * D1 (stage 2): every allocation this file makes itself — channel and task objects, string builders,
+ * split lists, hash tables and their bucket arrays, interface boxes and the memo table — goes through
+ * the API below, so occupancy and fragmentation describe the whole compiled artifact rather than only
+ * what cgen emits. The one allocation outside the metric is the allocator's own host block storage
+ * (ql_mem_host_alloc/ql_mem_host_free): a block is the unit the metric reports on, so its host
+ * bookkeeping is the one thing that cannot be counted inside it. Static data and the C stack are not
+ * allocations either. `ql_any_copy_list` (which can hand a `List<int>` to a deletable variable) was
+ * the first routed helper and stays routed.
  *
  * D3 reading: release preserves the payload (it does not wipe). `ql_calloc` zeroes because callers
  * asked for calloc; `ql_alloc` does not. A later same-class allocation may therefore see the previous
@@ -596,8 +607,6 @@ static void ql_mem_free_locked(void* p) {
         ql_mem_host_free(m);
     }
 }
-
-void ql_free(void* ptr);
 
 void* ql_alloc(size_t size, int owner) {
     void* p;
@@ -1062,7 +1071,7 @@ char* ql_str_sub(const char* s, int start, int end, int line) {
     }
     int b0 = ql_u8_off(s, start), b1 = ql_u8_off(s, end);
     int len = b1 - b0;
-    char* r = malloc(len + 1);
+    char* r = ql_alloc(len + 1, 0);
     memcpy(r, s + b0, len); r[len] = 0;
     return r;
 }
@@ -1076,7 +1085,7 @@ char* ql_str_charat(const char* s, int i, int line) {
         ql_err_at(msg, line);
     }
     int sz = ql_u8seq((unsigned char)s[b]);
-    char* r = malloc(sz + 1);
+    char* r = ql_alloc(sz + 1, 0);
     memcpy(r, s + b, sz); r[sz] = 0;
     return r;
 }
@@ -1113,7 +1122,7 @@ char* ql_str_trim(const char* s, int mode) { /* 0=both 1=left 2=right */
         }
     }
     int n = e - b;
-    char* r = malloc(n + 1);
+    char* r = ql_alloc(n + 1, 0);
     memcpy(r, s + b, n); r[n] = 0;
     return r;
 }
@@ -1150,7 +1159,7 @@ static int ql_u8enc(int cp, char* out) {
 }
 static char* ql_str_mapcase(const char* s, int upper) {
     size_t l = strlen(s);
-    char* r = malloc(l * 4 + 4);
+    char* r = ql_alloc(l * 4 + 4, 0);
     size_t o = 0;
     for (size_t i = 0; i < l; ) {
         int cp = 0, sz = ql_u8dec(s + i, &cp);
@@ -1168,7 +1177,7 @@ char* ql_str_replace(const char* s, const char* old, const char* nw) {
     size_t lo = strlen(old), ln = strlen(nw);
     if (lo == 0) {
         size_t l = strlen(s), o = 0;
-        char* r = malloc((l + 1) * (ln + 4) + 1);
+        char* r = ql_alloc((l + 1) * (ln + 4) + 1, 0);
         for (size_t i = 0; i < l; ) {
             memcpy(r + o, nw, ln); o += ln;
             int sz = ql_u8seq((unsigned char)s[i]);
@@ -1179,12 +1188,12 @@ char* ql_str_replace(const char* s, const char* old, const char* nw) {
         return r;
     }
     size_t l = strlen(s), cap = l + 1, o = 0;
-    char* r = malloc(cap);
+    char* r = ql_alloc(cap, 0);
     const char* p = s;
     for (;;) {
         const char* hit = strstr(p, old);
         size_t seg = hit ? (size_t)(hit - p) : strlen(p);
-        if (o + seg + ln + 1 > cap) { cap = (o + seg + ln + 1) * 2; r = realloc(r, cap); }
+        if (o + seg + ln + 1 > cap) { cap = (o + seg + ln + 1) * 2; r = ql_realloc(r, cap); }
         memcpy(r + o, p, seg); o += seg;
         if (!hit) break;
         memcpy(r + o, nw, ln); o += ln;
@@ -1267,19 +1276,19 @@ static int ql_itoa(int v, char* buf) {
 /* List.toString(): [e0, e1, ...] (only the visible range head..tail); elements format in place, with no per-element allocation. */
 char* ql_list_int_str(const int* buf, int head, int tail) {
     size_t cap = 16, o = 0;
-    char* r = malloc(cap);
+    char* r = ql_alloc(cap, 0);
     r[o++] = '[';
     for (int i = head; i < tail; i++) {
         char nb[16];
         int n = ql_itoa(buf[i], nb);
         if (i > head) {
-            if (o + 2 > cap) { cap *= 2; r = realloc(r, cap); }
+            if (o + 2 > cap) { cap *= 2; r = ql_realloc(r, cap); }
             r[o++] = ','; r[o++] = ' ';
         }
-        if (o + (size_t)n + 2 > cap) { cap = (o + n + 2) * 2; r = realloc(r, cap); }
+        if (o + (size_t)n + 2 > cap) { cap = (o + n + 2) * 2; r = ql_realloc(r, cap); }
         memcpy(r + o, nb, n); o += (size_t)n;
     }
-    if (o + 2 > cap) { cap += 2; r = realloc(r, cap); }
+    if (o + 2 > cap) { cap += 2; r = ql_realloc(r, cap); }
     r[o++] = ']'; r[o] = 0;
     return r;
 }
@@ -1295,9 +1304,9 @@ static unsigned ql_memo_hash(const int* keys, int n) {
     return h;
 }
 void* ql_memo_new(void) {
-    ql_memo* m = (ql_memo*)calloc(1, sizeof(ql_memo));
+    ql_memo* m = (ql_memo*)ql_calloc(1, sizeof(ql_memo), 0);
     m->cap = 64; m->len = 0;
-    m->b = (ql_memo_ent**)calloc((size_t)m->cap, sizeof(ql_memo_ent*));
+    m->b = (ql_memo_ent**)ql_calloc((size_t)m->cap, sizeof(ql_memo_ent*), 0);
     return m;
 }
 static ql_memo_ent* ql_memo_find(ql_memo* m, const int* keys, int n) {
@@ -1321,9 +1330,9 @@ int ql_memo_get(void* mp, int n, int* keys, int* found) {
 void ql_memo_put(void* mp, int n, int* keys, int val) {
     ql_memo* m = (ql_memo*)mp;
     if (ql_memo_find(m, keys, n)) return; /* already recorded: keep the first result (the interpreter Put overwrites, but same key means same value) */
-    ql_memo_ent* e = (ql_memo_ent*)calloc(1, sizeof(ql_memo_ent));
+    ql_memo_ent* e = (ql_memo_ent*)ql_calloc(1, sizeof(ql_memo_ent), 0);
     e->n = n; e->val = val;
-    e->keys = (int*)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    e->keys = (int*)ql_alloc(sizeof(int) * (size_t)(n > 0 ? n : 1), 0);
     for (int i = 0; i < n; i++) e->keys[i] = keys[i];
     unsigned h = ql_memo_hash(keys, n) % (unsigned)m->cap;
     e->next = m->b[h]; m->b[h] = e; m->len++;
@@ -1337,7 +1346,7 @@ typedef struct ql_rt { char* (*str)(void*); void* (*copy)(void*); const char* na
 char* ql_int_to_str(int v);      /* IR helper generated by qkc (reuses the same formatting) */
 char* ql_float_to_str(double v);
 char* ql_long_to_str(long long v) {
-    char* b = (char*)malloc(24);
+    char* b = (char*)ql_alloc(24, 0);
     snprintf(b, 24, "%lld", v);
     return b;
 }
@@ -1399,10 +1408,10 @@ int ql_any_eq(void* d1, void* rt1, void* d2, void* rt2) {
 /* ---- deep copy of interface{} values (per RTTI; reused by HashTable.Put and copyd) ----
  * semantics aligned with the interpreter deepCopy: List copies the buffer, struct is not copied (pointer shared),
  * String/scalars are snapshotted by value (heap cell copied). */
-void* ql_any_copy_int(void* d) { int* p = (int*)malloc(4); *p = *(int*)d; return p; }
-void* ql_any_copy_float(void* d) { double* p = (double*)malloc(8); *p = *(double*)d; return p; }
-void* ql_any_copy_bool(void* d) { int* p = (int*)malloc(4); *p = *(int*)d; return p; }
-void* ql_any_copy_string(void* d) { char** p = (char**)malloc(8); *p = *(char**)d; return p; }
+void* ql_any_copy_int(void* d) { int* p = (int*)ql_alloc(4, 0); *p = *(int*)d; return p; }
+void* ql_any_copy_float(void* d) { double* p = (double*)ql_alloc(8, 0); *p = *(double*)d; return p; }
+void* ql_any_copy_bool(void* d) { int* p = (int*)ql_alloc(4, 0); *p = *(int*)d; return p; }
+void* ql_any_copy_string(void* d) { char** p = (char**)ql_alloc(8, 0); *p = *(char**)d; return p; }
 void* ql_any_copy_identity(void* d) { return d; }
 void* ql_any_copy_nil(void* d) { (void)d; return 0; }
 
@@ -1410,8 +1419,8 @@ void* ql_any_copy_nil(void* d) { (void)d; return 0; }
 
 /* String.split(sep) → List<String>: same as Go strings.Split (empty sep → per UTF-8 character) */
 static void ql_strlist_push(char*** buf, int* cap, int* n, const char* p, size_t len) {
-    if (*n >= *cap) { *cap = *cap ? *cap * 2 : 4; *buf = (char**)realloc(*buf, sizeof(char*) * (size_t)(*cap)); }
-    char* e = (char*)malloc(len + 1);
+    if (*n >= *cap) { *cap = *cap ? *cap * 2 : 4; *buf = (char**)ql_realloc(*buf, sizeof(char*) * (size_t)(*cap)); }
+    char* e = (char*)ql_alloc(len + 1, 0);
     memcpy(e, p, len); e[len] = 0;
     (*buf)[(*n)++] = e;
 }
@@ -1435,9 +1444,9 @@ void* ql_str_split(const char* s, const char* sep) {
             p = q + sn;
         }
     }
-    if (!buf) buf = (char**)malloc(sizeof(char*));
+    if (!buf) buf = (char**)ql_alloc(sizeof(char*), 0);
     struct ql_split_list { char** buf; int head; int tail; };
-    struct ql_split_list* l = (struct ql_split_list*)calloc(1, sizeof(struct ql_split_list));
+    struct ql_split_list* l = (struct ql_split_list*)ql_calloc(1, sizeof(struct ql_split_list), 0);
     l->buf = buf; l->head = 0; l->tail = n;
     return l;
 }
@@ -1446,19 +1455,19 @@ void* ql_str_split(const char* s, const char* sep) {
 typedef struct { char** buf; int head; int tail; } ql_list_s;
 char* ql_list_str_str(char** buf, int head, int tail) {
     size_t cap = 16, o = 0;
-    char* r = (char*)malloc(cap);
+    char* r = (char*)ql_alloc(cap, 0);
     r[o++] = '[';
     for (int i = head; i < tail; i++) {
         const char* e = buf[i];
         size_t n = strlen(e);
         if (i > head) {
-            if (o + 2 > cap) { cap *= 2; r = (char*)realloc(r, cap); }
+            if (o + 2 > cap) { cap *= 2; r = (char*)ql_realloc(r, cap); }
             r[o++] = ','; r[o++] = ' ';
         }
-        if (o + n + 2 > cap) { while (o + n + 2 > cap) cap *= 2; r = (char*)realloc(r, cap); }
+        if (o + n + 2 > cap) { while (o + n + 2 > cap) cap *= 2; r = (char*)ql_realloc(r, cap); }
         memcpy(r + o, e, n); o += n;
     }
-    if (o + 2 > cap) { cap += 2; r = (char*)realloc(r, cap); }
+    if (o + 2 > cap) { cap += 2; r = (char*)ql_realloc(r, cap); }
     r[o++] = ']'; r[o] = 0;
     return r;
 }
@@ -1470,7 +1479,7 @@ char* ql_list_str_str(char** buf, int head, int tail) {
  * same way. ql_float_to_str is defined by the generated module, which is why the caller also asks for it. */
 char* ql_list_float_str(const long long* buf, int head, int tail) {
     size_t cap = 16, o = 0;
-    char* r = (char*)malloc(cap);
+    char* r = (char*)ql_alloc(cap, 0);
     r[o++] = '[';
     for (int i = head; i < tail; i++) {
         double d;
@@ -1478,13 +1487,13 @@ char* ql_list_float_str(const long long* buf, int head, int tail) {
         char* e = ql_float_to_str(d);
         size_t n = strlen(e);
         if (i > head) {
-            if (o + 2 > cap) { cap *= 2; r = (char*)realloc(r, cap); }
+            if (o + 2 > cap) { cap *= 2; r = (char*)ql_realloc(r, cap); }
             r[o++] = ','; r[o++] = ' ';
         }
-        if (o + n + 2 > cap) { while (o + n + 2 > cap) cap *= 2; r = (char*)realloc(r, cap); }
+        if (o + n + 2 > cap) { while (o + n + 2 > cap) cap *= 2; r = (char*)ql_realloc(r, cap); }
         memcpy(r + o, e, n); o += n;
     }
-    if (o + 2 > cap) { cap += 2; r = (char*)realloc(r, cap); }
+    if (o + 2 > cap) { cap += 2; r = (char*)ql_realloc(r, cap); }
     r[o++] = ']'; r[o] = 0;
     return r;
 }
@@ -1500,9 +1509,9 @@ static unsigned ql_tbl_hash(const char* s) {
     return h;
 }
 void* ql_table_new(void) {
-    ql_table* t = (ql_table*)calloc(1, sizeof(ql_table));
+    ql_table* t = (ql_table*)ql_calloc(1, sizeof(ql_table), 0);
     t->cap = 64;
-    t->b = (ql_tent**)calloc((size_t)t->cap, sizeof(ql_tent*));
+    t->b = (ql_tent**)ql_calloc((size_t)t->cap, sizeof(ql_tent*), 0);
     return t;
 }
 static ql_tent* ql_table_find(ql_table* t, const char* key) {
@@ -1516,7 +1525,7 @@ char* ql_table_key(void* data, void* rt) {
     const char* tn = r ? r->name : "nil";
     const char* sv = (r && data) ? r->str(data) : "nil";
     size_t n = strlen(tn) + strlen(sv) + 2;
-    char* k = (char*)malloc(n);
+    char* k = (char*)ql_alloc(n, 0);
     snprintf(k, n, "%s:%s", tn, sv);
     return k;
 }
@@ -1527,7 +1536,7 @@ void ql_table_put(void* tp, char* key, void* data, void* rt) {
     void* cp = r ? (r->copy ? r->copy(data) : data) : 0;
     ql_tent* e = ql_table_find(t, key);
     if (e) { e->data = cp; e->rt = rt; return; }
-    e = (ql_tent*)calloc(1, sizeof(ql_tent));
+    e = (ql_tent*)ql_calloc(1, sizeof(ql_tent), 0);
     e->key = key; e->data = cp; e->rt = rt;
     unsigned h = ql_tbl_hash(key) % (unsigned)t->cap;
     e->next = t->b[h]; t->b[h] = e; t->len++;
@@ -1535,7 +1544,7 @@ void ql_table_put(void* tp, char* key, void* data, void* rt) {
 }
 static void ql_table_grow(ql_table* t) {
     int nc = t->cap * 2;
-    ql_tent** nb = (ql_tent**)calloc((size_t)nc, sizeof(ql_tent*));
+    ql_tent** nb = (ql_tent**)ql_calloc((size_t)nc, sizeof(ql_tent*), 0);
     for (int i = 0; i < t->cap; i++) {
         ql_tent* e = t->b[i];
         while (e) {
@@ -1545,7 +1554,7 @@ static void ql_table_grow(ql_table* t) {
             e = nx;
         }
     }
-    free(t->b); t->b = nb; t->cap = nc;
+    ql_free(t->b); t->b = nb; t->cap = nc;
 }
 void* ql_table_get(void* tp, char* key, void** out_rt) {
     ql_table* t = (ql_table*)tp;
@@ -1573,7 +1582,7 @@ static int ql_cmp_cstr(const void* a, const void* b) {
 void* ql_table_keys(void* tp) {
     ql_table* t = (ql_table*)tp;
     int n = t->len;
-    char** buf = (char**)malloc(sizeof(char*) * (size_t)(n > 0 ? n : 1));
+    char** buf = (char**)ql_alloc(sizeof(char*) * (size_t)(n > 0 ? n : 1), 0);
     int k = 0;
     for (int i = 0; i < t->cap; i++)
         for (ql_tent* e = t->b[i]; e; e = e->next) {
@@ -1581,7 +1590,7 @@ void* ql_table_keys(void* tp) {
             buf[k++] = (strncmp(e->key, "String:", 7) == 0) ? (e->key + 7) : e->key;
         }
     if (n > 1) qsort(buf, (size_t)n, sizeof(char*), ql_cmp_cstr);
-    ql_strlist* l = (ql_strlist*)calloc(1, sizeof(ql_strlist));
+    ql_strlist* l = (ql_strlist*)ql_calloc(1, sizeof(ql_strlist), 0);
     l->buf = buf; l->head = 0; l->tail = n;
     return l;
 }

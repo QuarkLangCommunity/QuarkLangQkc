@@ -118,9 +118,15 @@ values, not storage). `memory.Fragmentation()` remains unexposed in both engines
 ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
-growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. What remains is exposing
-`Fragmentation` in both engines or deciding not to, routing the runtime's own C allocations, task-end
-reclaim, and Windows (the runtime is still not linked there; the generator keeps the libc path).
+growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. Stage 2 also routes the
+runtime's own C allocations — string builders, split lists, hash tables and their bucket arrays, memo
+entries, interface boxes, channels and task objects — through the same API (D1), so the occupancy and
+fragmentation numbers describe the whole compiled artifact instead of only what the code generator
+emits. What remains outside the metric is the allocator's own host block storage, which is the pair
+(`ql_mem_host_alloc`/`ql_mem_host_free`) the metric measures the inside of; static data and the C
+stack are not allocations. What remains is exposing `Fragmentation` in both engines or deciding not
+to, task-end reclaim, and Windows (the runtime is still not linked there; the generator keeps the
+libc path).
 Stage 2 adds no normative text and no language surface beyond the rows the standard already names.
 Size: large — one design review of its own, not a correction.
 
