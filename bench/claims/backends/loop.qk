@@ -1,0 +1,13 @@
+// 10,000,000-iteration integer loop, timed in-process on both backends.
+fn main(IOStream io) void {
+    int t0 = clock();
+    int i = 0;
+    int sum = 0;
+    while (i < 10000000) {
+        sum = sum + i % 7;
+        i = i + 1;
+    }
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(sum);
+}

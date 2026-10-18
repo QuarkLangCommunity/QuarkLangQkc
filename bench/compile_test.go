@@ -25,6 +25,7 @@ func TestCControlsCompile(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	t.Run("tide controls", func(t *testing.T) { compileTideControls(t, root, dir) })
+	t.Run("claims controls", func(t *testing.T) { compileClaimsControls(t, root, dir) })
 	t.Run("allocator benchmark", func(t *testing.T) { compileAllocBench(t, root, dir) })
 	t.Run("C control", func(t *testing.T) {
 		runClang(t, root, "-O2", "-Wall", "-Wextra", "-Werror",
@@ -62,6 +63,29 @@ func compileTideControls(t *testing.T, root, dir string) {
 	}
 	if !strings.Contains(string(out), "compiled the checked-in C controls") {
 		t.Fatalf("tide compile-only did not report a successful build:\n%s", out)
+	}
+}
+
+// compileClaimsControls runs the claims harness's compile-only mode, which builds the fib and latency
+// C controls with warnings fatal.
+func compileClaimsControls(t *testing.T, root, dir string) {
+	t.Helper()
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+	cache := filepath.Join(dir, "claims-cache")
+	if err := os.Mkdir(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", filepath.Join(root, "bench/claims/run.sh"), "--compile-only")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "XDG_CACHE_HOME="+cache)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("claims compile-only failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "compiled the checked-in C controls") {
+		t.Fatalf("claims compile-only did not report a successful build:\n%s", out)
 	}
 }
 

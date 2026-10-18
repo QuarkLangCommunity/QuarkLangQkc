@@ -1,0 +1,17 @@
+// List<int>: 1,000,000 appends and a full traversal, timed in-process on both backends.
+fn main(IOStream io) void {
+    int t0 = clock();
+    List<int> l = [];
+    int i = 0;
+    while (i < 1000000) {
+        l.append(i % 1000);
+        i = i + 1;
+    }
+    int total = 0;
+    for (int v : l) {
+        total = total + v;
+    }
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(total);
+}

@@ -1,0 +1,17 @@
+// fib(n): call-heavy recursion with the result printed as the checksum. The harness rewrites the
+// argument for fib(30) and fib(35); the elapsed time and then the result go to stdout.
+fn fib(int n) int {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main(IOStream io) void {
+    int n = 30;
+    int t0 = clock();
+    int r = fib(n);
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(r);
+}

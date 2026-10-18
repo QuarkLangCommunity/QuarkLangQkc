@@ -2,7 +2,7 @@
 """Turn one workload's run times into the canonical measurement row.
 
 The values arrive on stdin, one integer microsecond value per line. The output is one tab-separated
-row in the schema spec/bench/tide-template.md documents. The script is deliberately small: the
+row in the schema spec/bench/tide-template.md and spec/bench/claims-template.md document. The script is deliberately small: the
 statistics are the point, and the harness (run.sh) owns the build and the commands.
 """
 

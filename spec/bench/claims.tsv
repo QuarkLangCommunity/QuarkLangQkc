@@ -1,0 +1,37 @@
+# record	claims-v1
+# runs	5
+# class	Linux x86_64, 16 logical CPUs
+# load	1-minute load average 0.39 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs)
+# toolchain	clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44); Erlang/OTP 26
+# flags	qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default); Erlang erlc (default)
+# counted	in-process wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now()/timer:tc(); process startup and printing excluded; every row prints its result as a checksum
+# skipped	none
+# evidence	every workload prints its result as the checksum; the harness fails when the checksum changes between runs; the C, Rust and Go fib controls read the argument from argv so the optimizer cannot constant-fold the recursion
+# columns	kind	key	label	language	rounds	runs	median	unit	min	max	stdev	spread_pct	checksum	note
+timing	fib30_qk	fib(30), QuarkLang compiled	QuarkLang	1	5	4747	us	4211	5992	857	37.52	832040	recursive fib(30), result printed as the checksum
+timing	fib30_c	fib(30), C control	C	1	5	2802	us	1832	2861	510	36.72	832040	recursive fib(30) with a volatile argument
+timing	fib30_rust	fib(30), Rust control	Rust	1	5	2640	us	2084	2817	300	27.77	832040	recursive fib(30), argument from argv
+timing	fib30_go	fib(30), Go control	Go	1	5	3334	us	2910	4136	543	36.77	832040	recursive fib(30), argument from argv
+timing	fib30_erl	fib(30), Erlang control	Erlang	1	5	5566	us	5475	7322	787	33.18	832040	recursive fib(30) timed with timer:tc
+timing	fib35_qk	fib(35), QuarkLang compiled	QuarkLang	1	5	46649	us	46573	47189	254	1.32	9227465	recursive fib(35), result printed as the checksum
+timing	fib35_c	fib(35), C control	C	1	5	20255	us	20100	25894	2545	28.61	9227465	recursive fib(35) with a volatile argument
+timing	fib35_rust	fib(35), Rust control	Rust	1	5	16594	us	16182	23892	3240	46.46	9227465	recursive fib(35), argument from argv
+timing	fib35_go	fib(35), Go control	Go	1	5	36019	us	31323	37289	3023	16.56	9227465	recursive fib(35), argument from argv
+timing	sum_qk	sum over 1e9 terms, QuarkLang closed form	QuarkLang	1000000000	5	0	us	0	0	0	0.00	1565039360	one sum(ident, 0, 1e9) call; the elapsed time is below clock()'s 1 us resolution on this build
+timing	sum_go	sum over 1e9 terms, Go loop	Go	1000000000	5	215612	us	214132	219233	1906	2.37	1565039360	the same terms added by a plain Go loop
+timing	p99_p50_qk	fib(20) P50, QuarkLang compiled	QuarkLang	1000	5	34	us	34	34	0	0.00	6765	P50 of 1000 fib(20) calls, found by counting and binary search
+timing	p99_p50_c	fib(20) P50, C control	C	1000	5	13	us	13	13	0	0.00	6765	P50 of 1000 fib(20) calls, found by counting and binary search
+timing	p99_p99_qk	fib(20) P99, QuarkLang compiled	QuarkLang	1000	5	38	us	37	40	1	7.89	6765	P99 of 1000 fib(20) calls, found by counting and binary search
+timing	p99_p99_c	fib(20) P99, C control	C	1000	5	15	us	14	18	2	26.67	6765	P99 of 1000 fib(20) calls, found by counting and binary search
+timing	back_fib30_qk	fib30, interpreter	QuarkLang interpreter	1	5	211342	us	210785	214841	1908	1.92	832040	the same source run by the interpreter, timed in-process
+timing	back_fib30_native	fib30, native qkc	QuarkLang compiled	1	5	5632	us	4669	5643	420	17.29	832040	the same source compiled by qkc, timed in-process
+timing	back_loop_qk	loop, interpreter	QuarkLang interpreter	10000000	5	680926	us	674321	683485	4111	1.35	29999994	the same source run by the interpreter, timed in-process
+timing	back_loop_native	loop, native qkc	QuarkLang compiled	10000000	5	4964	us	3217	5143	812	38.80	29999994	the same source compiled by qkc, timed in-process
+timing	back_list_qk	list, interpreter	QuarkLang interpreter	1000000	5	230990	us	224130	234046	3686	4.29	499500000	the same source run by the interpreter, timed in-process
+timing	back_list_native	list, native qkc	QuarkLang compiled	1000000	5	7962	us	5235	8559	1598	41.75	499500000	the same source compiled by qkc, timed in-process
+timing	back_struct_qk	struct, interpreter	QuarkLang interpreter	1000000	5	370015	us	364830	372656	3560	2.12	4999997	the same source run by the interpreter, timed in-process
+timing	back_struct_native	struct, native qkc	QuarkLang compiled	1000000	5	1920	us	1328	1927	266	31.20	4999997	the same source compiled by qkc, timed in-process
+timing	back_hash_qk	hash, interpreter	QuarkLang interpreter	1000000	5	424752	us	423177	435402	5109	2.88	499500016	the same source run by the interpreter, timed in-process
+timing	back_hash_native	hash, native qkc	QuarkLang compiled	1000000	5	192818	us	190931	200979	4483	5.21	499500016	the same source compiled by qkc, timed in-process
+timing	back_str_qk	str, interpreter	QuarkLang interpreter	50000	5	243442	us	237551	244912	2951	3.02	100000	the same source run by the interpreter, timed in-process
+timing	back_str_native	str, native qkc	QuarkLang compiled	50000	5	653103	us	650095	659374	3726	1.42	100000	the same source compiled by qkc, timed in-process

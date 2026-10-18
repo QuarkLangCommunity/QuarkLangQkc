@@ -827,6 +827,10 @@ four; the generated report also carries `#ifn`, `#expand`/`#run` and the per-eng
 | G-4 | macro spelling, exceptions and built-in containers still diverge from the standard | generated status report §11.3 (`docs/implementation-status.md`) |
 | G-5 | `bits<N>` layout rounds up rather than aligning to 1 as §3.1 requires; values are exact | generated status report §11.2 (`docs/implementation-status.md`) |
 
+The G-2 and G-3 durations are historical observations copied from `stress/NOTES.md`; no harness records
+them and they are not regenerated. The live performance claims are in
+[`performance-claims.md`](performance-claims.md).
+
 ### 6.2 Gaps found by reading the code in this pass
 
 | # | Gap | Evidence |

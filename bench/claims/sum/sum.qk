@@ -1,0 +1,13 @@
+// Closed-form sum: sum(ident, 0, 1e9) uses the arithmetic-series closed form, so the work is O(1).
+// The elapsed microseconds and the wrapped int checksum go to stdout.
+fn ident(int n) int {
+    return n * 3 + 1;
+}
+
+fn main(IOStream io) void {
+    int t0 = clock();
+    int r = sum(ident, 0, 1000000000);
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(r);
+}

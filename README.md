@@ -10,14 +10,16 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 **QuarkLang is a type-first compiled language with two backends for one source file** — a Go interpreter
-(edit and run) and an LLVM compiler `qkc` (performance on par with C on compute-bound code; the observable tide is measured separately below).
+(edit and run) and an LLVM compiler `qkc` (its performance is measured against C in the generated
+[performance section](#performance-measured-reproducible); the observable tide is measured separately below).
 It targets **compute-heavy, highly concurrent, allocation-heavy CLI and service workloads**:
-`fib(35)` in 21 ms (C: 22 ms), Erlang-style user-space tasks, and an interpreter block allocator with no GC pauses.
+recursive `fib(35)` compiled to native code, Erlang-style user-space tasks, and an interpreter block
+allocator with no GC pauses.
 It ships with a linter, doc generator, REPL, language server and editor support — and **zero third-party Go dependencies**.
 
 | You are… | You get… |
 |---|---|
-| Looking for a language that is genuinely fast once compiled | Compiled path performance = C on compute-bound code (same LLVM backend); P99 latency on par with C |
+| Looking for a language that is genuinely fast once compiled | Compiled-path performance measured against C in the generated block, including the gap; the latency rows are measured there too |
 | Writing CLIs, scripts or long-running services | Instant feedback with the interpreter; one command to compile with `qkc -run` |
 | Needing concurrency without GC pauses | `taskm` user-space tasks + thread pool; block allocation, no GC pauses |
 | Building editor/tooling integrations | Stable CLIs, an LSP server, a tree-sitter grammar, `-json` machine-readable diagnostics |
@@ -278,7 +280,8 @@ go build -o qkdoc ./cmd/qkdoc
 - Only `pub` symbols are exported by default; files without `pub` (e.g. `program main`) export everything.
   `impl`/`space`/`library`/`#macro` are not filtered by `pub` (the language cannot prefix them with `pub`,
   and they are what library APIs consist of; macros are split out before parsing and supplied by `ParseSourceAll`).
-- Measured: `style.qk` (1,567 lines) → 8 ms to generate 335 lines of Markdown (overview table + sections).
+- The checked-in `style.qk` (1,567 lines) generates 335 lines of Markdown (overview table + sections);
+  `scripts/bench-tools.sh` measures the process time, but it writes no record, so no time is quoted.
 
 </details>
 
@@ -360,14 +363,18 @@ git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: nati
 
 ## Highlights
 
-- **Compiled performance = C on compute-bound code**: same LLVM `-O3` backend (fib35 21 ms vs C 22 ms; P99 latency on par at every quantile); allocation-heavy loops are measured separately in the tide block and are not a parity claim.
+- **Compiled performance is measured, not asserted**: the generated block below compares the
+  compiled path with C, Rust, Go and Erlang on the same `fib` workloads and reports the gap; there is
+  no parity slogan. Allocation-heavy loops are measured separately in the tide block.
 - **Erlang-style concurrency**: `spawn/merge/block/done/channel` user-space tasks on a thread pool — Erlang's model with C-level performance.
 - **Zero-GC memory**: the interpreter uses a linear block policy over the host allocator, and the
   compiled path (stage 1) uses counted slabs with per-object release; `delete` preserves the payload,
   `clear` wipes; the checked-in `bench/tide` policy workload measures reuse, fragmentation and block
   count (`docs/tide-benchmark.md`).
-- **Mathematical `sum` optimization**: closed form for linear/periodic/uniform-random sums — 1e9 terms in O(1) (2 ms; a Go loop needs 223 ms).
-- **Incremental compilation**: two-level IR + binary cache, 16× faster rebuilds.
+- **Mathematical `sum` optimization**: closed form for linear/periodic/uniform-random sums — 1e9 terms
+  in O(1), measured against a Go loop in the generated block.
+- **Incremental compilation**: two-level IR + binary cache; the rebuild multiple has no checked-in
+  producer and is not quoted.
 - **Zero third-party dependencies**: lexer, parser, type checker, evaluator and LLVM IR emission are all hand-written.
 
 ### Interpreter execution model
@@ -375,10 +382,14 @@ git tag v2.1.0 && git push origin v2.1.0   # triggers the release workflow: nati
 The interpreter runs functions through two engines, chosen per function and never observable from the
 outside:
 
-| Engine | When | Effect (this machine, min of 6 runs) |
-|---|---|---|
-| **Bytecode VM** | the whole function body fits the compiled subset: int/bool arithmetic and comparisons, `if`/`while`/C-style `for`, direct calls, `return`, `log`, `io.print`/`io.println` | `BenchmarkEvalLoop1M` 73.95 → **51.09 ms** (1.45x), `BenchmarkFib24` 14.64 → **11.13 ms** (1.32x), `BenchmarkFuncCalls100K` 17.63 → **13.15 ms** (1.34x) |
-| **Tree-walker** | everything else — strings, lists, structs, interfaces, macros, taskm, `try/catch`, method calls beyond `io.*`, overload resolution by argument type | the semantic reference |
+| Engine | When |
+|---|---|
+| **Bytecode VM** | the whole function body fits the compiled subset: int/bool arithmetic and comparisons, `if`/`while`/C-style `for`, direct calls, `return`, `log`, `io.print`/`io.println` |
+| **Tree-walker** | everything else — strings, lists, structs, interfaces, macros, taskm, `try/catch`, method calls beyond `io.*`, overload resolution by argument type |
+
+The VM is adopted only for shapes where the engine-equality tests hold it to the tree-walker's output.
+The old three-row speed table compared against an engine this tree no longer selects; it is withdrawn
+and the earlier figures are recorded in the [performance-claims inventory](docs/performance-claims-inventory.md).
 
 The VM reuses the interpreter's own primitives (`wrapI32`, `callFunc`, `ioPrintln`) and its error
 values. When a value's runtime type does not match the statically proven type (the language allows
@@ -390,13 +401,56 @@ to identical output; `QUARK_NO_VM=1` disables the VM entirely.
 
 ## Performance (measured, reproducible)
 
-| Benchmark | QuarkLang (compiled) | C | Rust | Go | Erlang |
-|---|---|---|---|---|---|
-| fib(30) | **3 ms** | 3 ms | 3 ms | 6 ms | 1106 ms |
-| fib(35) | **21 ms** | 22 ms | **17 ms** | 36 ms | — |
-| 8-way concurrency ×1e7 | **1 ms** | — | — | 6 ms | 61 s (1e5) |
-| P99 (fib20×1000) | **14/27 µs** | 16/25 µs | — | — | — |
-| `sum` over 1e9 terms (closed form) | **2 ms** | — | — | 223 ms | — |
+Every number in this section is generated from a checked-in record; the two blocks below are the
+claim, and a test fails when a quoted copy and the record disagree. The claims harness covers the
+cross-language `fib` family, the closed-form `sum`, the `fib(20)` latency percentiles and the
+interpreter-versus-native rows; the tide harness covers allocation. The inventory of earlier figures
+that were corrected or withdrawn is [`docs/performance-claims-inventory.md`](docs/performance-claims-inventory.md).
+
+### Claims: fib, sum, latency and the two backends
+
+`bench/claims/run.sh` builds one workload per row, runs it five times after a warm-up, and reports the
+median, minimum, maximum, standard deviation and spread. Every run prints its result as a checksum,
+and a checksum that changes between runs fails the harness. A recording run is refused unless the
+host's 1-minute load average is below 0.25 per logical CPU, and the block states the load it was taken
+under. `--record` has no `--n` override: the rounds are fixed by the checked-in sources and by
+`spec/bench/claims-shapes.tsv`, and the generator rejects a row that does not match that shape.
+
+<!-- performance-claims -->
+Measured on Linux x86_64, 16 logical CPUs. Load: 1-minute load average 0.39 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs). Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44); Erlang/OTP 26. Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default); Erlang erlc (default). Skipped controls: none.
+
+What is counted: in-process wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now()/timer:tc(); process startup and printing excluded; every row prints its result as a checksum. Evidence: every workload prints its result as the checksum; the harness fails when the checksum changes between runs; the C, Rust and Go fib controls read the argument from argv so the optimizer cannot constant-fold the recursion.
+
+| Workload | Language | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| fib(30), QuarkLang compiled | QuarkLang | 1 | 5 | 4.75 ms | 4.21–5.99 ms | 37.52% | 832,040 | recursive fib(30), result printed as the checksum |
+| fib(30), C control | C | 1 | 5 | 2.80 ms | 1.83–2.86 ms | 36.72% | 832,040 | recursive fib(30) with a volatile argument |
+| fib(30), Rust control | Rust | 1 | 5 | 2.64 ms | 2.08–2.82 ms | 27.77% | 832,040 | recursive fib(30), argument from argv |
+| fib(30), Go control | Go | 1 | 5 | 3.33 ms | 2.91–4.14 ms | 36.77% | 832,040 | recursive fib(30), argument from argv |
+| fib(30), Erlang control | Erlang | 1 | 5 | 5.57 ms | 5.47–7.32 ms | 33.18% | 832,040 | recursive fib(30) timed with timer:tc |
+| fib(35), QuarkLang compiled | QuarkLang | 1 | 5 | 46.65 ms | 46.57–47.19 ms | 1.32% | 9,227,465 | recursive fib(35), result printed as the checksum |
+| fib(35), C control | C | 1 | 5 | 20.25 ms | 20.10–25.89 ms | 28.61% | 9,227,465 | recursive fib(35) with a volatile argument |
+| fib(35), Rust control | Rust | 1 | 5 | 16.59 ms | 16.18–23.89 ms | 46.46% | 9,227,465 | recursive fib(35), argument from argv |
+| fib(35), Go control | Go | 1 | 5 | 36.02 ms | 31.32–37.29 ms | 16.56% | 9,227,465 | recursive fib(35), argument from argv |
+| sum over 1e9 terms, QuarkLang closed form | QuarkLang | 1,000,000,000 | 5 | 0 µs | 0–0 µs | 0.00% | 1,565,039,360 | one sum(ident, 0, 1e9) call; the elapsed time is below clock()'s 1 us resolution on this build |
+| sum over 1e9 terms, Go loop | Go | 1,000,000,000 | 5 | 215.61 ms | 214.13–219.23 ms | 2.37% | 1,565,039,360 | the same terms added by a plain Go loop |
+| fib(20) P50, QuarkLang compiled | QuarkLang | 1,000 | 5 | 34 µs | 34–34 µs | 0.00% | 6,765 | P50 of 1000 fib(20) calls, found by counting and binary search |
+| fib(20) P50, C control | C | 1,000 | 5 | 13 µs | 13–13 µs | 0.00% | 6,765 | P50 of 1000 fib(20) calls, found by counting and binary search |
+| fib(20) P99, QuarkLang compiled | QuarkLang | 1,000 | 5 | 38 µs | 37–40 µs | 7.89% | 6,765 | P99 of 1000 fib(20) calls, found by counting and binary search |
+| fib(20) P99, C control | C | 1,000 | 5 | 15 µs | 14–18 µs | 26.67% | 6,765 | P99 of 1000 fib(20) calls, found by counting and binary search |
+| fib30, interpreter | QuarkLang interpreter | 1 | 5 | 211.34 ms | 210.78–214.84 ms | 1.92% | 832,040 | the same source run by the interpreter, timed in-process |
+| fib30, native qkc | QuarkLang compiled | 1 | 5 | 5.63 ms | 4.67–5.64 ms | 17.29% | 832,040 | the same source compiled by qkc, timed in-process |
+| loop, interpreter | QuarkLang interpreter | 10,000,000 | 5 | 680.93 ms | 674.32–683.49 ms | 1.35% | 29,999,994 | the same source run by the interpreter, timed in-process |
+| loop, native qkc | QuarkLang compiled | 10,000,000 | 5 | 4.96 ms | 3.22–5.14 ms | 38.80% | 29,999,994 | the same source compiled by qkc, timed in-process |
+| list, interpreter | QuarkLang interpreter | 1e6 | 5 | 230.99 ms | 224.13–234.05 ms | 4.29% | 499,500,000 | the same source run by the interpreter, timed in-process |
+| list, native qkc | QuarkLang compiled | 1e6 | 5 | 7.96 ms | 5.24–8.56 ms | 41.75% | 499,500,000 | the same source compiled by qkc, timed in-process |
+| struct, interpreter | QuarkLang interpreter | 1e6 | 5 | 370.01 ms | 364.83–372.66 ms | 2.12% | 4,999,997 | the same source run by the interpreter, timed in-process |
+| struct, native qkc | QuarkLang compiled | 1e6 | 5 | 1.92 ms | 1.33–1.93 ms | 31.20% | 4,999,997 | the same source compiled by qkc, timed in-process |
+| hash, interpreter | QuarkLang interpreter | 1e6 | 5 | 424.75 ms | 423.18–435.40 ms | 2.88% | 499,500,016 | the same source run by the interpreter, timed in-process |
+| hash, native qkc | QuarkLang compiled | 1e6 | 5 | 192.82 ms | 190.93–200.98 ms | 5.21% | 499,500,016 | the same source compiled by qkc, timed in-process |
+| str, interpreter | QuarkLang interpreter | 50,000 | 5 | 243.44 ms | 237.55–244.91 ms | 3.02% | 100,000 | the same source run by the interpreter, timed in-process |
+| str, native qkc | QuarkLang compiled | 50,000 | 5 | 653.10 ms | 650.10–659.37 ms | 1.42% | 100,000 | the same source compiled by qkc, timed in-process |
+<!-- /performance-claims -->
 
 ### Tide: observable allocation
 
@@ -408,7 +462,7 @@ through the counted-slab runtime allocator on POSIX, so the no-sink and no-use r
 optimizer floors; the historical row is kept to show that the optimizer can no longer erase it. A
 recording run is refused unless the host's 1-minute load average is below 0.25 per logical CPU, and
 the generated block states the load the numbers were taken under.
-Reproduce the cross-language fib rows with `bench/Makefile` and the tide block with `bench/tide/run.sh`.
+Reproduce the tide block with `bench/tide/run.sh` and the claims block with `bench/claims/run.sh`.
 
 <!-- tide-measurements -->
 Measured on Linux x86_64, 16 logical CPUs. Load: 1-minute load average 1.35 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs). Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44). Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default). Skipped controls: none.
@@ -446,28 +500,20 @@ The historical `1 ms` claim measured the legacy row on the pre-stage-1 libc path
 > minimal `malloc`/`free` shape; the harness reports both, so the observable path and the floor cannot be
 > confused.
 
-> **On the "as fast as C" numbers.** Both the compiled path and C go through LLVM `-O3`, so parity here is a
-> property of the shared backend — Rust, Swift and Zig can say the same. The IR is not identical either
-> (QuarkLang passes parameters by reference, so its unoptimised `fib` takes `i32*` and loads, where C takes
-> `i32`), but the backend closes the gap. The language's own contribution is the *arrangement*: an interpreter
-> for the development loop, a compiler for deployment, and CI that fails unless the two agree. The interpreter
-> is not a speed feature — on call-heavy code it is ~3× slower than CPython (224 ms vs 72 ms for fib(30) on the
-> reference machine); it exists to remove the compile step and keep REPL state.
+> **On the compiled-path numbers.** The generated claims block is the claim. On the reference class the
+> QuarkLang `fib` rows are slower than the C control (the block shows the medians, ranges and spread),
+> and the latency rows are slower at both percentiles. Both paths use LLVM `-O3`; the gap is in the code
+> the compiler emits, not in the choice of backend. The earlier "same as C" wording and the `21 ms` and
+> `14/27 µs` figures did not survive measurement and were corrected, not footnoted. The interpreter is
+> not a speed feature; it exists to remove the compile step and keep REPL state. It has no checked-in
+> CPython control, so no comparison with CPython is quoted.
 
-`bench/qk/` holds the same program measured **on both backends** (interpreter vs native `qkc`):
-
-```sh
-scripts/bench-report.sh 3      # median of 3 runs per side; asserts the two backends print identical output
-```
-
-| Program | Interpreter | Native qkc | Speedup |
-|---|---|---|---|
-| fib(30) | 284 ms | 3.9 ms | 74× |
-| 10M-iteration loop | 827 ms | 6.7 ms | 124× |
-| List<int>, 1M appends + traversal | 297 ms | 9.4 ms | 32× |
-| struct + impl, 1M method calls | 416 ms | 1.9 ms | 224× |
-| HashTable<String,int>, 1M put/get | 504 ms | 239 ms | 2× |
-| String, 50k concatenations | 768 ms | 868 ms | 1× (quadratic on both paths) |
+The claims block also carries the interpreter-versus-native rows: the same checked-in programs, timed
+in-process on both backends, with output parity required. Two rows contradict the earlier table and
+are left visible: the Erlang `fib(30)` control is far faster than the withdrawn four-digit figure, and
+the native `str` binary is slower than the interpreter on this build, so the old "quadratic on both
+paths" note did not survive. `scripts/bench-report.sh` remains a manual report; it writes no record,
+so its output is not quoted here.
 
 <details>
 <summary>Toolchain performance work (including a measured rule for when to offload work to C libraries)</summary>
@@ -477,27 +523,18 @@ scripts/bench-tools.sh 9          # real process-level timings (median of 9 runs
 go test ./internal/lang/ -run XXX -bench . -benchmem    # library-level benchmarks (interpreter)
 ```
 
-| Scenario | Before | After | Change |
-|---|---|---|---|
-| quark fib(25) | 32.7 ms | **22.4 ms** | −31% |
-| quark 1M-iteration loop | 108.6 ms | **62.5 ms** | −42% |
-| qkcheck (1,567-line file) | 23.8 ms | **4.8 ms** | **−80%** |
-| qkdoc (same file → Markdown) | 9.7 ms | **3.9 ms** | −60% |
-| qkfmt -l (same file) | 5.3 ms | **3.7 ms** | −29% |
-| qkm build (small project, includes an interpreter compile check) | 40.0 ms | **26.9 ms** | −33% |
-| qkrepl batch (200 statements) | 6.7 ms | **5.3 ms** | −21% |
-| qklsp diagnostics (per keystroke, 1,500 lines) | 2.20 ms | **0.27 ms** | **−88%** |
-| qklsp completion | 95 µs | **5.4 µs** | −94% |
-| qklsp go-to-definition | 39.6 µs | **0.33 µs** | −99% |
-| quark/qkc/qkrepl startup | ~1.9 ms | ~1.9 ms | process-creation floor |
+The before/after table this section used to show compared binaries that are not in the tree: the
+"before" column cannot be rebuilt from this checkout, so the table was withdrawn rather than restated.
+`scripts/bench-tools.sh 9` measures the current tree (median of 9 runs per scenario), but it writes no
+record, so no number from it is a claim.
 
-**When is it worth offloading a service to a C library? (measured here)**
+**When is it worth offloading a service to a C library? (one-off observations, no recorded claim)**
 
-| Criterion | Data | Conclusion |
+| Criterion | Finding | Conclusion |
 |---|---|---|
-| Fixed cgo call overhead | **22 ns/call** (measured locally) | Offloading "one small step" services (per-token lexing, per-key hashing, short string builtins) **always loses** |
-| Whole-file lexing (75 KB) | C scan 100 µs vs Go 230 µs, but rebuilding Go tokens costs another 100 µs | Net ≈ 0, and +30% allocations → **rejected** (the experiment was reverted; only benchmarks and the conclusion remain) |
-| Regex matching (600 × `findAll` over 300 words) | pure qk 1517 ms vs PCRE2 230 ms | **6.6×** → adopted (PCRE2 backend in QuarkLangLibs-Regex) |
+| Fixed cgo call overhead | a one-off local probe; no checked-in producer | Offloading "one small step" services (per-token lexing, per-key hashing, short string builtins) always loses |
+| Whole-file lexing | the C scan was not enough faster than the Go scan to pay for rebuilding tokens; the experiment was reverted | rejected |
+| Regex matching | the sibling `QuarkLangLibs-Regex` repository owns the comparison; this repository records no number | the PCRE2 backend is adopted there |
 
 In one sentence: **coarse-grained services that do a whole pass per call** (regex, codecs, graphics, compression)
 are worth offloading; **fine-grained services interleaved with the interpreter** (lexing, evaluation, hashing) are better left in Go.
@@ -506,18 +543,15 @@ Key optimizations (all profile-driven):
 
 1. **Copy-free lexing / macro splitting**: `SplitMacroDefs` returns the original token slice when a file has no `#`;
    `lex` preallocates token capacity; single-character tokens use a precomputed string table.
-   → parse 3.29 ms / 7.47 MB → **1.02 ms / 1.39 MB** (allocations 18,179 → 10,219).
 2. **No duplicate parsing**: files without imports are type-checked directly from the already-parsed AST (`Typecheck(prog)`);
    qklsp does the same.
 3. **Compile-time variable slot resolution** (`slots.go`): locally provable variables become slot indices
    (parameters plus prefix top-level declarations only, and only where no `for-in`/`catch`/C-style `for` scope intervenes),
    with a runtime `paramNames[slot] == name` guard that falls back to the slow path if the inference is ever wrong.
-   → 1M loop −24%, function calls −11%.
 4. **`Value.deref` split into fast/slow paths**: the hot sentinel check inlines; the deref loop moved to `derefSlow`.
-   → 1M loop −29%, fib −19%.
 5. **Argument arena + interned reference handles**: argument slices are borrowed from the context's `argArena`
    and returned by watermark after the call (the async taskm path copies explicitly); `refIdent` handles are
-   stateless and interned per (scope, name). → allocations per call 100k → **348**, calls −25%.
+   stateless and interned per (scope, name).
 6. **Editor-side caches**: the symbol table and completion candidates are cached per document version;
    diagnostics reuse the AST; rendering avoids `fmt` and preallocates.
 
@@ -576,11 +610,11 @@ Key optimizations (all profile-driven):
 
 | Project | Description | Repository |
 |---|---|---|
-| QuarkLangLibs-Cleg | Certified `cleg` GUI framework: `ClegNode` interface (dynamic dispatch) + `ClegWindow`/`ClegLabel`/`ClegButton`, every node driven by Style(HashTable) rendering; runtime raster kernel (fill4K 2.5 ms, zero-allocation hot path) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Cleg |
+| QuarkLangLibs-Cleg | Certified `cleg` GUI framework: `ClegNode` interface (dynamic dispatch) + `ClegWindow`/`ClegLabel`/`ClegButton`, every node driven by Style(HashTable) rendering; runtime raster kernel with a zero-allocation hot path | https://github.com/QuarkLangCommunity/QuarkLangLibs-Cleg |
 | QuarkLangLibs-GL | Certified `gl` library: **OpenGL declaration set** (`library gl { ... }` binds system GL exports directly; `glc::` constant space; cross-platform dlopen/LoadLibrary + libffi) | https://github.com/QuarkLangCommunity/QuarkLangLibs-GL |
 | QuarkLangLibs-Vulkan | Certified `vulkan` library: **Vulkan declaration set** (instance/device/swapchain/memory/buffer surface + `vk::` constants) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Vulkan |
 | QuarkLangLibs-Json | Certified `json` library: Python-style `json::dumps` / `json::loads` (objects → HashTable, arrays → List, integers → int; malformed input raises `JSONError`) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Json |
-| QuarkLangLibs-Regex | Certified `regex` library: pure-qk engine **or** a PCRE2-backed backend with the same API (measured 6.6× faster) | https://github.com/QuarkLangCommunity/QuarkLangLibs-Regex |
+| QuarkLangLibs-Regex | Certified `regex` library: pure-qk engine **or** a PCRE2-backed backend with the same API | https://github.com/QuarkLangCommunity/QuarkLangLibs-Regex |
 | QuarkLangLibs-Actions | Certified `actions` library (two levels): `space` system functions (`system`/`network`, `exec`/`execv`/`popen`/`get`/`post`) + `Command`/`Network` classes implementing the `Executor` interface | https://github.com/QuarkLangCommunity/QuarkLangLibs-Actions |
 | QuarkLangPlayground | **Web playground**: the interpreter compiled to WebAssembly (`cmd/quarkwasm`, `GOOS=js GOARCH=wasm`), running in a Web Worker with live diagnostics, stdin, examples and share-by-URL | https://github.com/QuarkLangCommunity/QuarkLangPlayground |
 
@@ -606,7 +640,7 @@ Usage: put the library's `.qk` file next to your source and `import "json";` / `
 | `main` | Integration (interpreter + compiler + bench) |
 | `interpreter` | Interpreter history |
 | `examples` | Examples |
-| `docs` | Design docs, independently maintained (includes `benchmarks.md`); also served as the project site |
+| `docs` | Design docs and generated measurement reports; also served as the project site |
 | `design` | XMind design blueprint (read-only) |
 
 ## Contributing
@@ -633,9 +667,10 @@ PRs and issues are welcome. The three lowest-friction ways to get involved:
 
 ## Status
 
-The v2 syntax surface is complete (interpreter and compiler agree); compiled performance is on par with C
-on compute-bound code, while the allocation-heavy tide is measured separately in `docs/tide-benchmark.md`
-on the stage-1 counted-slab allocator.
+The v2 syntax surface is complete (interpreter and compiler agree). Compiled performance is measured
+against the C controls in [`docs/performance-claims.md`](docs/performance-claims.md); the comparison is
+shown there rather than asserted. The allocation-heavy tide is measured separately in
+[`docs/tide-benchmark.md`](docs/tide-benchmark.md) on the counted-slab allocator.
 
 ## Known gaps
 

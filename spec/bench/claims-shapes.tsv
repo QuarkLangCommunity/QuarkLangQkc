@@ -1,0 +1,15 @@
+# Canonical shape of every claims row: the rounds a workload performs and the timed runs the record
+# is taken with. bench/claims/run.sh refuses --record at any other shape, and internal/benchgen
+# rejects a record whose rows do not match this table.
+# family	rounds	runs
+fib30	1	5
+fib35	1	5
+sum	1000000000	5
+p99_p50	1000	5
+p99_p99	1000	5
+back_fib30	1	5
+back_loop	10000000	5
+back_list	1000000	5
+back_struct	1000000	5
+back_hash	1000000	5
+back_str	50000	5

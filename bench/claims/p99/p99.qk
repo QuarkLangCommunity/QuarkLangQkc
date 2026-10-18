@@ -1,0 +1,42 @@
+// fib(20) latency: count how many calls finish at or below a threshold, then binary-search the
+// threshold for the requested percentile. countLE times only fib(20), so the histogram search does
+// not inflate the sample. The harness rewrites target to 500 (P50) or 990 (P99).
+fn fib(int n) int {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn countLE(int limit, int rounds) int {
+    int i = 0;
+    int c = 0;
+    while (i < rounds) {
+        int t0 = clock();
+        int r = fib(20);
+        int t1 = clock();
+        if (t1 - t0 <= limit) {
+            c = c + 1;
+        }
+        i = i + 1;
+    }
+    return c;
+}
+
+fn main(IOStream io) void {
+    int rounds = 1000;
+    int target = 500;
+    int lo = 0;
+    int hi = 1000000;
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (countLE(mid, rounds) >= target) {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    int checksum = fib(20);
+    io.println(lo);
+    io.println(checksum);
+}
