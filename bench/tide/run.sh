@@ -69,7 +69,7 @@ load1() {
 
 # cpu_count prints the logical CPU count, or 0 when no probe knows it.
 cpu_count() {
-  getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 0
+  getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 0
 }
 
 # load_below succeeds when the load is strictly below the limit.
