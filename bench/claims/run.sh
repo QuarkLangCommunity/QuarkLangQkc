@@ -215,18 +215,18 @@ measure() { # usage: measure <key> <label> <language> <rounds> <note> <command..
 CHECKSUM=""
 measure fib30_qk "fib(30), QuarkLang compiled" QuarkLang 1 "recursive fib(30), result printed as the checksum" "$BUILD/fib30-qk"
 measure fib30_c "fib(30), C control" C 1 "recursive fib(30) with a volatile argument" "$BUILD/fib-c" 30
-if command -v rustc >/dev/null 2>&1; then
+if [ -x "$BUILD/fib-rs" ]; then
   measure fib30_rust "fib(30), Rust control" Rust 1 "recursive fib(30), argument from argv" "$BUILD/fib-rs" 30
 fi
 measure fib30_go "fib(30), Go control" Go 1 "recursive fib(30), argument from argv" "$BUILD/fib-go" 30
-if command -v erl >/dev/null 2>&1; then
+if [ -f "$BUILD/fib.beam" ]; then
   measure fib30_erl "fib(30), Erlang control" Erlang 1 "recursive fib(30) timed with timer:tc" erl -noshell -pa "$BUILD" -run fib main -s init stop
 fi
 
 CHECKSUM=""
 measure fib35_qk "fib(35), QuarkLang compiled" QuarkLang 1 "recursive fib(35), result printed as the checksum" "$BUILD/fib35-qk"
 measure fib35_c "fib(35), C control" C 1 "recursive fib(35) with a volatile argument" "$BUILD/fib-c" 35
-if command -v rustc >/dev/null 2>&1; then
+if [ -x "$BUILD/fib-rs" ]; then
   measure fib35_rust "fib(35), Rust control" Rust 1 "recursive fib(35), argument from argv" "$BUILD/fib-rs" 35
 fi
 measure fib35_go "fib(35), Go control" Go 1 "recursive fib(35), argument from argv" "$BUILD/fib-go" 35
