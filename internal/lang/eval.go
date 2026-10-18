@@ -383,6 +383,7 @@ type ImplDef struct {
 }
 
 type interp struct {
+	vmDisabled  bool // QUARK_NO_VM read once per Run (the per-call getenv took the environment lock: 24% of fib30)
 	ctxHead     atomic.Pointer[execCtx]
 	fns         map[string]*Func
 	overloads   map[string][]*Func
@@ -416,6 +417,7 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 		return nil, err
 	}
 	in := &interp{
+		vmDisabled: os.Getenv("QUARK_NO_VM") != "",
 		fns:        map[string]*Func{},
 		sigs:       map[string]*signDef{},
 		builtins:   map[string]builtinFn{},
