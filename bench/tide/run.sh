@@ -351,6 +351,6 @@ else
   print_record
   if [ "$ATTR" -eq 1 ]; then
     echo "→ attribution rows (diagnostic; not part of the record)" >&2
-    cat "$ROWS" "$ATTR_ROWS"
+    cat "$ATTR_ROWS"
   fi
 fi

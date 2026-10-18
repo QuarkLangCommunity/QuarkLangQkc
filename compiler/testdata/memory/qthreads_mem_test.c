@@ -187,6 +187,40 @@ static int fragmentation_and_occupancy(void) {
     return 0;
 }
 
+/* A small list literal is one counted-slab block: 16 bytes of %List header followed by the elements.
+ * The point of the co-allocation is that the accounting sees one allocation and one release, not two
+ * of each; this is the C half of the IR tests (the generated release/grow helpers themselves are
+ * exercised by cases_run/z_list_coalloc.kq through the real runtime). */
+static int combined_list_is_one_counted_block(void) {
+    long long a0, f0, u0;
+    struct ql_list_like { void* buf; int head; int tail; }* l;
+    int* buf;
+    ql_mem_compact();
+    a0 = ql_mem_alloc_calls();
+    f0 = ql_mem_free_calls();
+    u0 = ql_mem_used_bytes();
+    l = (struct ql_list_like*)ql_alloc(16 + 3 * sizeof(int), 0);
+    CHECK(l != 0);
+    CHECK(((uintptr_t)l % 16) == 0);
+    buf = (int*)((char*)l + 16);
+    l->buf = buf;
+    l->head = 0;
+    l->tail = 3;
+    buf[0] = 7;
+    buf[1] = 11;
+    buf[2] = 13;
+    CHECK(ql_mem_alloc_calls() == a0 + 1);
+    CHECK(ql_mem_free_calls() == f0);
+    CHECK(ql_mem_used_bytes() == u0 + 16 + 3 * sizeof(int));
+    CHECK(ql_mem_check() == 0);
+    ql_free(l);
+    CHECK(ql_mem_free_calls() == f0 + 1);
+    CHECK(ql_mem_used_bytes() == u0);
+    CHECK(ql_mem_check() == 0);
+    ql_mem_compact();
+    return 0;
+}
+
 /* The task pool enables the allocator lock before its workers start. Run one worker and the main
  * thread concurrently through alloc/free/realloc; the debug build's assertions and the final
  * ql_mem_check() then cover the lock path, not just the single-threaded fast path. */
@@ -413,6 +447,7 @@ int main(void) {
     CHECK(block_size() == 0);
     CHECK(tide_reuses() == 0);
     CHECK(fragmentation_and_occupancy() == 0);
+    CHECK(combined_list_is_one_counted_block() == 0);
     CHECK(delete_reallocate_stress() == 0);
     /* The task tests spawn, and ql_spawn leaves a live, routed task object behind, so everything from
      * here on expects a non-zero block count after its own allocations have been released (D1). */
