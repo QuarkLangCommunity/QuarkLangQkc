@@ -88,10 +88,7 @@ func TestMemorySetBlockErrorJoinsTry(t *testing.T) {
 	}
 }
 
-// TestMemoryCompactLowersAndReturns pins D6 from the interpreter's behaviour: eval.go calls
-// MemoryManager.Compact() and returns normally (the comment "never returns at all" is not what the
-// code does), so the compiled call returns too. A terminating lowering would be a language-visible
-// control-flow primitive the standard does not describe.
+// TestMemoryCompactLowersAndReturns pins D6: the interpreter returns from compact() and continues, and the compiled call does the same.
 func TestMemoryCompactLowersAndReturns(t *testing.T) {
 	src := "fn main(IOStream io) {\n" +
 		"    memory.compact();\n" +

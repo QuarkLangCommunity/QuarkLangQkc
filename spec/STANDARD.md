@@ -291,7 +291,7 @@ implements that policy as a layer over its host runtime's allocator.
 |---|---|
 | `delete x;` | release `x`'s storage: run `__delete__()` if the type declares it, then return the storage to the free pool. The payload is **not** wiped — wiping is `clear`'s job, so a released block never hands another value's bytes to the next user |
 | `memory.setBlock(n)` | set the block size, the unit the runtime allocates and reuses |
-| `memory.compact()` | free the blocks nobody occupies; it does not return |
+| `memory.compact()` | free the blocks nobody occupies; the call returns no value and control continues |
 | `memory.Fragmentation()` | the unused space inside live blocks, as a ratio (inspection) |
 
 `memory.clear()` is the wiping operation the `delete` row refers to: it is derived — release plus
@@ -304,15 +304,17 @@ temporary data arrives in *tides* — allocate, use, delete, repeat — reuses a
 instead of growing the heap. The policy above is normative; the numbers are generated measurements.
 The reference interpreter implements the policy as a logical layer over the host allocator. Stage 1 of
 the compiled memory design (`docs/compiled-memory-stage1.md`) routes the code generator's allocations
-through the counted-slab runtime allocator on POSIX; the runtime's other C allocations, including the
-string returned by `toString()`, remain on the host allocator, and Windows keeps the libc path because
-the runtime is not linked there. The checked-in `bench/tide` harness makes the compiled `List`
-allocation observable with an opaque sink, reports the no-sink and historical no-use rows (no longer
-optimizer floors on POSIX after stage 1), and drives the interpreter's counters. The earlier compiled
-`1 ms` figure measured the legacy dead-code floor on the pre-stage-1 libc path, not allocation. The
-block below is generated from `spec/bench/tide.tsv`; `TestTideClaimsMatchMeasurement` fails when this
-copy, the copy in `README.md`, or `docs/tide-benchmark.md` disagrees. When a task ends, the blocks it
-owns become reclaimable.
+through the counted-slab runtime allocator on POSIX; stage 2 (`docs/compiled-memory-stage2.md`) routes
+the runtime's own C allocations through the same allocator, so the allocator's own host block storage
+is the only allocation outside the metric, and Windows keeps the libc path because the runtime is not
+linked there. The checked-in `bench/tide` harness makes the compiled `List` allocation observable with
+an opaque sink, reports the no-sink and historical no-use rows (no longer optimizer floors on POSIX
+after stage 1), and drives the interpreter's counters. A recording run is refused unless the host's
+1-minute load average is below 0.25 per logical CPU, and the generated block states the load the table
+was taken under. The earlier compiled `1 ms` figure measured the legacy dead-code floor on the
+pre-stage-1 libc path, not allocation. The block below is generated from `spec/bench/tide.tsv`;
+`TestTideClaimsMatchMeasurement` fails when this copy, the copy in `README.md`, or
+`docs/tide-benchmark.md` disagrees. When a task ends, the blocks it owns become reclaimable.
 
 <!-- tide-measurements -->
 Measured on Linux x86_64, 16 logical CPUs. Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44). Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default). Skipped controls: none.

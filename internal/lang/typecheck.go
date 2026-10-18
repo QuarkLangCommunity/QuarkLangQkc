@@ -2484,7 +2484,7 @@ func (c *checker) methodType(recv *Type, name string, args []*Type, pos Pos) (*T
 			if err := c.checkArity(name, 0, len(args), pos); err != nil {
 				return nil, err
 			}
-			return tNilV, nil // compact() does not return at all
+			return tNilV, nil // compact() returns no value; control continues
 		case "setBlock":
 			if err := c.checkArity(name, 1, len(args), pos); err != nil {
 				return nil, err

@@ -2379,7 +2379,7 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 			if err := wantArity(name, 0, len(args), pos, ctx); err != nil {
 				return NilV(), err
 			}
-			// compact() never returns at all (spec §10); it actually cleans blocks nobody occupies
+			// compact() frees the blocks nobody occupies and returns; control continues (spec §10).
 			in.mem.Compact()
 			return NilV(), nil
 		case "setBlock":

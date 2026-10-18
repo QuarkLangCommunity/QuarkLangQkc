@@ -29,6 +29,21 @@ func TestMemoryPrimitivesRun(t *testing.T) {
 	}
 }
 
+// TestMemoryCompactReturnsControl pins D6's answer: compact() returns no value and the next statement runs.
+func TestMemoryCompactReturnsControl(t *testing.T) {
+	withLocalizer(t, i18n.New(i18n.EN))
+	out, err := runSrc(t, `fn main(IOStream io) {
+    memory.compact();
+    io.println(7);
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "7\n" {
+		t.Fatalf("got %q", out)
+	}
+}
+
 // TestFragmentationRefusalNamesTheSituation pins the shared type checker's message for the one
 // standard primitive neither engine exposes. Stage 1 gives the compiled runtime an internal
 // fragmentation accessor, but exposing it (and making the two engines agree) is still D8.
