@@ -1366,8 +1366,17 @@ static int ql_cmp_int(const void* a, const void* b) {
 void ql_list_int_sort(int* buf, int head, int tail) {
     if (tail - head > 1) qsort(buf + head, tail - head, sizeof(int), ql_cmp_int);
 }
-/* ql_itoa writes v's decimal spelling, byte-for-byte the same as snprintf("%d"), into buf and returns its length. */
+/* ql_itoa writes v's decimal spelling, byte-for-byte the same as snprintf("%d"), into buf and returns its length.
+ * The 0..99 case is branchless: it is the common one in a list, and a digit loop plus a reversed copy is
+ * expensive for one or two digits. */
 static int ql_itoa(int v, char* buf) {
+    if ((unsigned)v < 100u) {
+        unsigned u = (unsigned)v, tens = u / 10u, ones = u % 10u;
+        buf[0] = (char)('0' + (u < 10u ? u : tens));
+        buf[1] = (char)(u < 10u ? 0 : '0' + ones);
+        buf[2] = 0;
+        return u < 10u ? 1 : 2;
+    }
     char digits[12];
     int n = 0, o = 0;
     unsigned u = v < 0 ? (unsigned)(-(long long)v) : (unsigned)v;
