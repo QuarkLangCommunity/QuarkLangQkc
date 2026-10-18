@@ -1,4 +1,6 @@
 # record	tide-v1
+# rounds	100000000
+# runs	5
 # class	Linux x86_64, 16 logical CPUs
 # load	1-minute load average 0.85 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs)
 # toolchain	clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44)
