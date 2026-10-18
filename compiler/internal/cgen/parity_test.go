@@ -8,6 +8,16 @@ import (
 	"testing"
 )
 
+// skipWindowsMemoryCase skips a corpus case that uses memory.* on Windows: the compiled runtime is
+// not linked there, so lowering gives the positioned Windows refusal instead of IR, and the case is
+// covered by compare.sh on the platforms that link the runtime. The case stays in the corpus.
+func skipWindowsMemoryCase(t *testing.T, src string) {
+	t.Helper()
+	if hostAllocatorFallback && strings.Contains(src, "memory.") {
+		t.Skip("the compiled runtime is not linked on Windows; memory.* is a positioned refusal there")
+	}
+}
+
 // parityCases returns compiler/testdata/cases/*.kq (the test working directory is internal/cgen).
 // These cases use only libc + the in-module ql_strcat, so lli can run them directly.
 func parityCases(t *testing.T) []string {
@@ -44,6 +54,7 @@ func TestParityCaseIRSyntax(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			skipWindowsMemoryCase(t, string(src))
 			ir, err := Transpile(string(src), f)
 			if err != nil {
 				t.Fatalf("Transpile: %v", err)
@@ -76,6 +87,7 @@ func TestParityCaseOutput(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			skipWindowsMemoryCase(t, string(src))
 			want, err := os.ReadFile(strings.TrimSuffix(f, ".kq") + ".out")
 			if err != nil {
 				t.Fatalf("missing expected output fixture: %v", err)

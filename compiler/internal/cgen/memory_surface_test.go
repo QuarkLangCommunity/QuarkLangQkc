@@ -3,7 +3,26 @@ package cgen
 import (
 	"strings"
 	"testing"
+
+	"github.com/QuarkLangCommunity/QuarkLangQkc/internal/i18n"
 )
+
+// requireMemoryRefusalOnWindows pins the one honest answer on Windows, where the compiled runtime (and
+// with it the block allocator) is not linked: every memory.* call is the positioned refusal naming the
+// missing runtime. The lowered-call assertions below therefore branch to this on that platform instead
+// of requiring a call to a symbol the link does not have.
+func requireMemoryRefusalOnWindows(t *testing.T, method, src string) bool {
+	t.Helper()
+	if !hostAllocatorFallback {
+		return false
+	}
+	err := lowerErr(t, src)
+	want := msgID(i18n.MsgCompilerMemoryPrimitiveSNotSupportedOnWindows, method)
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("on Windows memory.%s must be the positioned refusal %q, got:\n%s", method, want, err)
+	}
+	return true
+}
 
 // TestMemoryPrimitivesAreRefusedExceptLoweredRows pins the compiler's half of §10: the rows the
 // lowering layer does not implement are refused explicitly (never dropped), and the rows stage 2 has
@@ -30,10 +49,14 @@ func TestMemoryPrimitivesAreRefusedExceptLoweredRows(t *testing.T) {
 // error carrying the interpreter's message for a value outside it. The call is opaque to the optimizer,
 // so the block granularity the interpreter accepts is the one the compiled path honours.
 func TestMemorySetBlockLowersToRuntimeEntryPoint(t *testing.T) {
-	ir := transpile(t, "fn main(IOStream io) {\n"+
-		"    memory.setBlock(1024);\n"+
-		"    io.println(1);\n"+
-		"}\n")
+	src := "fn main(IOStream io) {\n" +
+		"    memory.setBlock(1024);\n" +
+		"    io.println(1);\n" +
+		"}\n"
+	if requireMemoryRefusalOnWindows(t, "setBlock", src) {
+		return
+	}
+	ir := transpile(t, src)
 	if !strings.Contains(ir, "call i32 @ql_mem_set_block(i32 1024)") {
 		t.Fatalf("memory.setBlock does not call the runtime entry point:\n%s", ir)
 	}
@@ -49,10 +72,14 @@ func TestMemorySetBlockLowersToRuntimeEntryPoint(t *testing.T) {
 // try/catch around the call catches it, and the compiled path must branch to the catch block rather
 // than terminating the process.
 func TestMemorySetBlockErrorJoinsTry(t *testing.T) {
-	ir := transpile(t, "fn main(IOStream io) {\n"+
-		"    try { memory.setBlock(0); } catch (void e) { io.println(7); }\n"+
-		"    io.println(8);\n"+
-		"}\n")
+	src := "fn main(IOStream io) {\n" +
+		"    try { memory.setBlock(0); } catch (void e) { io.println(7); }\n" +
+		"    io.println(8);\n" +
+		"}\n"
+	if requireMemoryRefusalOnWindows(t, "setBlock", src) {
+		return
+	}
+	ir := transpile(t, src)
 	if strings.Contains(ir, "call void @ql_panic(") {
 		t.Fatalf("a setBlock call inside try emits an uncatchable panic:\n%s", ir)
 	}
@@ -66,10 +93,14 @@ func TestMemorySetBlockErrorJoinsTry(t *testing.T) {
 // code does), so the compiled call returns too. A terminating lowering would be a language-visible
 // control-flow primitive the standard does not describe.
 func TestMemoryCompactLowersAndReturns(t *testing.T) {
-	ir := transpile(t, "fn main(IOStream io) {\n"+
-		"    memory.compact();\n"+
-		"    io.println(1);\n"+
-		"}\n")
+	src := "fn main(IOStream io) {\n" +
+		"    memory.compact();\n" +
+		"    io.println(1);\n" +
+		"}\n"
+	if requireMemoryRefusalOnWindows(t, "compact", src) {
+		return
+	}
+	ir := transpile(t, src)
 	if !strings.Contains(ir, "call void @ql_mem_compact()") {
 		t.Fatalf("memory.compact does not call the runtime entry point:\n%s", ir)
 	}
@@ -87,10 +118,14 @@ func TestMemoryCompactLowersAndReturns(t *testing.T) {
 // payloads do not) is in compiler/testdata/memory/qthreads_mem_test.c, because the compiler has no
 // language surface that can read a released region after a delete.
 func TestMemoryClearLowersToTheDerivedWipe(t *testing.T) {
-	ir := transpile(t, "fn main(IOStream io) {\n"+
-		"    memory.clear();\n"+
-		"    io.println(1);\n"+
-		"}\n")
+	src := "fn main(IOStream io) {\n" +
+		"    memory.clear();\n" +
+		"    io.println(1);\n" +
+		"}\n"
+	if requireMemoryRefusalOnWindows(t, "clear", src) {
+		return
+	}
+	ir := transpile(t, src)
 	if !strings.Contains(ir, "call void @ql_mem_clear()") {
 		t.Fatalf("memory.clear does not call the runtime wipe:\n%s", ir)
 	}
