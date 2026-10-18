@@ -13,11 +13,17 @@
 
 /* The counted-slab runtime the compiled tide links. These declarations must precede the extracted
  * helper because D1 routed ql_list_int_str through ql_alloc/ql_realloc; the helper is compiled into
- * this translation unit, so an implicit declaration here would be a conflicting one. */
+ * this translation unit, so an implicit declaration here would be a conflicting one. A runtime-produced
+ * string belongs to this allocator: release it with ql_free, never libc free. */
 void *ql_alloc(size_t size, int owner);
 void *ql_calloc(size_t count, size_t size, int owner);
 void *ql_realloc(void *ptr, size_t size);
 void ql_free(void *ptr);
+
+/* The runtime's own prototypes, generated from compiler/qthreads.c.txt. Their redeclaration here makes
+ * a stale harness declaration a compile error under -Werror instead of a silent call through the old
+ * signature. */
+#include "ql_alloc_abi.inc"
 
 #include "ql_list_int_str.inc"
 
@@ -191,7 +197,7 @@ static void phase_render(long long n) {
         char *s = ql_list_int_str(buf, 0, 3);
         sink = s;
         acc += s[0];
-        ql_free(s); /* D1 routed the string builders; libc free here would abort */
+        ql_free(s); /* the runtime's own release; libc free on a counted-slab string aborts */
     }
 }
 
