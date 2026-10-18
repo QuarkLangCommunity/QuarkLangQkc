@@ -59,3 +59,6 @@ go.work.sum
 
 # the compiled-memory stage 2 design note (the stage 2 deliverable)
 !docs/compiled-memory-stage2.md
+
+# the inventory this task edits: every remaining manual performance claim and its disposition
+!docs/performance-claims-inventory.md
