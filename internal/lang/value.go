@@ -620,17 +620,16 @@ func hashKey(v Value) tableKey {
 // Func is a compiled QuarkLang function. Ret != "" means the call yields the
 // value of `return expr;`; otherwise the call yields the whole FuncBuffer.
 type Func struct {
-	Name          string
-	TypeParams    []string // generic function func<T,...> (xmind §functions)
-	Params        []Param
-	Ret           string
-	Body          *Block
-	Pos           Pos
-	paramNames    []string // parameter-name cache (for slot binding, shared, zero allocation)
-	paramCopyd    []bool   // Copyd parameter flags (lazy cache, avoids string scanning on the call hot path)
-	paramCopydSet bool     // the cache above was computed (paramCopyd stays nil when no parameter is copyd)
-	vm            *vmProg  // bytecode for the hot subset (nil = tree-walk; see vm.go)
-	vmTried       bool     // compilation attempted
+	Name       string
+	TypeParams []string // generic function func<T,...> (xmind §functions)
+	Params     []Param
+	Ret        string
+	Body       *Block
+	Pos        Pos
+	paramNames []string // parameter-name cache (for slot binding, shared, zero allocation)
+	paramCopyd []bool   // Copyd parameter flags (lazy cache, avoids string scanning on the call hot path)
+	vm         *vmProg  // bytecode for the hot subset (nil = tree-walk; see vm.go)
+	vmTried    bool     // compilation attempted
 }
 
 // ParamNames returns the parameter-name array (lazily cached and shared by every call).
@@ -647,18 +646,11 @@ func (f *Func) ParamNames() []string {
 // CopydFlags returns the parameter Copyd flags (lazily cached, same idea as ParamNames).
 // copyd is a parameter modifier: `fn f(copyd int a)`, `copyd List<int> a`. There is no Copyd<T> type
 // and no T[Copyd] spelling: copyd modifies a declaration, it does not construct a type.
-// nil means no parameter is copyd: callers skip the per-call flag loop entirely (the common case).
 func (f *Func) CopydFlags() []bool {
-	if f.paramCopyd == nil && !f.paramCopydSet {
-		f.paramCopydSet = true
-		flags := make([]bool, len(f.Params))
-		any := false
+	if f.paramCopyd == nil {
+		f.paramCopyd = make([]bool, len(f.Params))
 		for i, p := range f.Params {
-			flags[i] = isCopydType(p.Type) || p.Decor == "copyd"
-			any = any || flags[i]
-		}
-		if any {
-			f.paramCopyd = flags
+			f.paramCopyd[i] = isCopydType(p.Type) || p.Decor == "copyd"
 		}
 	}
 	return f.paramCopyd
