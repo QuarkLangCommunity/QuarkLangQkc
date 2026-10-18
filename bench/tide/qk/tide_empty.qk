@@ -1,0 +1,16 @@
+// Tide attribution, base loop: the same loop arith and checksum as tide.qk without any allocation,
+// string or sink. Subtracting this row from the other attribution rows isolates each phase instead
+// of charging the loop arithmetic to the first phase measured.
+fn main(IOStream io) {
+    int rounds = 100000000;
+    long acc = 0;
+    int i = 0;
+    int t0 = clock();
+    while (i < rounds) {
+        acc = acc + (i % 7) + (i % 13);
+        i = i + 1;
+    }
+    int t1 = clock();
+    io.println(t1 - t0);
+    io.println(acc);
+}

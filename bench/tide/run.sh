@@ -6,6 +6,7 @@
 #   bench/tide/run.sh --quick              # 1e6 rounds, 3 runs: CI smoke
 #   bench/tide/run.sh                      # 1e8 rounds, 5 runs: the recorded measurement
 #   bench/tide/run.sh --record             # write spec/bench/tide.tsv and regenerate the report
+#   bench/tide/run.sh --attribution        # add the phase rows that decompose the observable row
 #
 # The output is a TSV record; the first lines are metadata and the rest are the measured rows. A
 # missing Rust or Go toolchain is skipped explicitly and recorded as a skip, never invented.
@@ -17,14 +18,16 @@ cd "$ROOT"
 N=100000000
 RUNS=5
 RECORD=0
+ATTR=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quick) N=1000000; RUNS=3 ;;
     --n) N="${2:?--n needs a value}"; shift ;;
     --runs) RUNS="${2:?--runs needs a value}"; shift ;;
     --record) RECORD=1 ;;
+    --attribution) ATTR=1 ;;
     --help|-h)
-      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -39,6 +42,10 @@ done
 [[ "$RUNS" =~ ^[1-9][0-9]*$ ]] || { echo "tide: --runs must be a positive integer" >&2; exit 2; }
 if [ "$RECORD" -eq 1 ] && [ "$RUNS" -lt 3 ]; then
   echo "tide: --record needs at least 3 runs so the recorded spread is meaningful" >&2
+  exit 2
+fi
+if [ "$RECORD" -eq 1 ] && [ "$ATTR" -eq 1 ]; then
+  echo "tide: --attribution is a diagnostic and cannot be recorded as the canonical measurement" >&2
   exit 2
 fi
 command -v python3 >/dev/null 2>&1 || { echo "tide: python3 is required for the statistics" >&2; exit 2; }
@@ -71,10 +78,23 @@ for src in tide tide_floor tide_legacy_floor; do
     exit 1
   }
 done
+if [ "$ATTR" -eq 1 ]; then
+  for src in tide_empty tide_sink; do
+    sed -E "s/^    int rounds = [0-9]+;$/    int rounds = $N;/" "bench/tide/qk/$src.qk" > "$BUILD/$src.qk"
+    grep -q "int rounds = $N;" "$BUILD/$src.qk" || {
+      echo "tide: the round count in $src.qk was not replaced (expected $N)" >&2
+      exit 1
+    }
+  done
+fi
 
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk" "$BUILD/tide.qk") >/dev/null
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-floor" "$BUILD/tide_floor.qk") >/dev/null
 (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-legacy" "$BUILD/tide_legacy_floor.qk") >/dev/null
+if [ "$ATTR" -eq 1 ]; then
+  (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-empty" "$BUILD/tide_empty.qk") >/dev/null
+  (cd "$BUILD" && ./qkc -c -o "$BUILD/tide-qk-sink" "$BUILD/tide_sink.qk") >/dev/null
+fi
 
 EVIDENCE="not checked on this platform"
 if command -v nm >/dev/null 2>&1; then
@@ -187,6 +207,40 @@ fi
 run_timing go_floor "Go control, local slice (optimizer floor)" Go required "same loop with the global sink removed" "$BUILD/tide-go-floor"
 run_timing legacy_floor "QuarkLang compiled, legacy shape (no read/sink)" QuarkLang optional "allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs" "$BUILD/tide-qk-legacy"
 
+# Attribution rows are diagnostic: they decompose the observable row and are not written to the
+# canonical record, whose schema and claim block must stay stable.
+ATTR_ROWS=""
+if [ "$ATTR" -eq 1 ]; then
+  ATTR_ROWS="$BUILD/attribution.tsv"
+  : > "$ATTR_ROWS"
+  ROWS_MAIN="$ROWS"
+  ROWS="$ATTR_ROWS"
+  run_timing attribution_empty "Attribution base: loop arith and checksum only" QuarkLang required "the tide.qk loop and checksum with no allocation, string or sink; every phase below is measured against this row" "$BUILD/tide-qk-empty"
+  run_timing attribution_sink "Attribution base + opaque C sink" QuarkLang required "the base loop plus the opaque sink call on a constant string; no allocation and no release" "$BUILD/tide-qk-sink"
+
+  # C controls that split the phases the language surface cannot isolate: the real runtime helper is
+  # extracted verbatim, and the List allocations go through the same counted-slab runtime.
+  # Extract the real helper together with the formatter it uses, verbatim.
+  awk '
+    /^static int ql_itoa\(int v, char\* buf\) \{/ { copy = 1 }
+    copy { print }
+    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { in_list = 1 }
+    in_list && /^\}/ { exit }
+  ' compiler/qthreads.c.txt > "$BUILD/ql_list_int_str.inc"
+  awk '
+    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { skip = 1 }
+    skip == 0 { print }
+    skip == 1 && /^\}/ { skip = 0 }
+  ' compiler/qthreads.c.txt > "$BUILD/attrib_runtime_body.c"
+  printf 'char* ql_list_int_str(const int* buf, int head, int tail);\n' > "$BUILD/attrib_runtime.c"
+  cat compiler/internal/rtcat/msg_c.h "$BUILD/attrib_runtime_body.c" >> "$BUILD/attrib_runtime.c"
+  clang -O2 -pthread -I"$BUILD" bench/tide/attrib/attrib.c "$BUILD/attrib_runtime.c" -o "$BUILD/tide-attrib"
+  for phase in base allocpair header string_alloc int_fmt fast_fmt bookkeeping render; do
+    run_timing "attr_$phase" "Attribution control, $phase" C optional "C control for the $phase phase of the observable path; the render control calls the real ql_list_int_str extracted from compiler/qthreads.c.txt" "$BUILD/tide-attrib" "$phase"
+  done
+  ROWS="$ROWS_MAIN"
+fi
+
 # Interpreter block-policy unit workload: counters, not wall time.
 POLICY="$(go run ./bench/tide/policy -waves 10000 -frag-waves 1000)"
 while IFS=$'\t' read -r kind waves allocs rate newblocks blocks frag; do
@@ -227,4 +281,8 @@ if [ "$RECORD" -eq 1 ]; then
   echo "→ recorded spec/bench/tide.tsv and regenerated docs/tide-benchmark.md" >&2
 else
   print_record
+  if [ "$ATTR" -eq 1 ]; then
+    echo "→ attribution rows (diagnostic; not part of the record)" >&2
+    cat "$ROWS" "$ATTR_ROWS"
+  fi
 fi

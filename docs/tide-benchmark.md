@@ -18,20 +18,20 @@ What is counted: in-process loop wall time: clock()/clock_gettime(CLOCK_MONOTONI
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, observable | 1e8 | 5 | 9.44 s | 9.33–9.63 s | 3.27% | 899,999,977 | `List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete |
-| C control, volatile sink | 1e8 | 5 | 394.56 ms | 392.21–400.18 ms | 2.02% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
-| Rust control, black_box | 1e8 | 5 | 628.88 ms | 623.44–641.71 ms | 2.90% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
-| Go control, global sink | 1e8 | 5 | 1.20 s | 1.17–1.22 s | 4.50% | 899,999,977 | make([]int32,3) + global sink + GC |
+| QuarkLang compiled, observable | 1e8 | 5 | 2.98 s | 2.95–3.00 s | 1.78% | 899,999,977 | `List<int>` literal (stage-1 counted slabs) + toString (host string) + opaque C sink + release + delete |
+| C control, volatile sink | 1e8 | 5 | 399.30 ms | 395.60–412.61 ms | 4.26% | 899,999,977 | malloc(12) + 3 writes + volatile sink + free |
+| Rust control, black_box | 1e8 | 5 | 629.99 ms | 625.90–637.44 ms | 1.83% | 899,999,977 | Vec::with_capacity(3) + 3 pushes + black_box(ptr) + drop |
+| Go control, global sink | 1e8 | 5 | 1.23 s | 1.18–1.24 s | 4.92% | 899,999,977 | make([]int32,3) + global sink + GC |
 
 The same loops without the sink. The checksum keeps the loop alive; on the pre-stage-1 libc path the legacy row removed the use entirely. Since stage 1 the QuarkLang rows call the opaque counted-slab allocator, so they measure allocation too; the C/Rust/Go floor rows still measure their own optimizer floors.
 
 | Workload | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---:|---:|---:|---:|---:|---:|---|
-| QuarkLang compiled, no sink | 1e8 | 5 | 1.07 s | 1.01–1.12 s | 10.23% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided |
-| C control, no sink (optimizer floor) | 1e8 | 5 | 91.85 ms | 91.19–96.09 ms | 5.33% | 899,999,977 | same loop with the volatile sink removed |
-| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 145.98 ms | 144.41–152.15 ms | 5.30% | 899,999,977 | same loop with black_box removed |
-| Go control, local slice (optimizer floor) | 1e8 | 5 | 96.12 ms | 94.40–96.76 ms | 2.45% | 899,999,977 | same loop with the global sink removed |
-| QuarkLang compiled, legacy shape (no read/sink) | 1e8 | 5 | 983.02 ms | 960.52–1058.45 ms | 9.96% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs |
+| QuarkLang compiled, no sink | 1e8 | 5 | 1.06 s | 1.02–1.08 s | 5.97% | 899,999,977 | same loop with the sink removed; the checksum keeps the loop alive; stage 1's opaque ql_alloc/ql_free calls are not elided |
+| C control, no sink (optimizer floor) | 1e8 | 5 | 92.22 ms | 91.53–97.45 ms | 6.42% | 899,999,977 | same loop with the volatile sink removed |
+| Rust control, no black_box (optimizer floor) | 1e8 | 5 | 147.84 ms | 146.96–154.54 ms | 5.13% | 899,999,977 | same loop with black_box removed |
+| Go control, local slice (optimizer floor) | 1e8 | 5 | 95.87 ms | 94.49–96.94 ms | 2.55% | 899,999,977 | same loop with the global sink removed |
+| QuarkLang compiled, legacy shape (no read/sink) | 1e8 | 5 | 1.01 s | 0.98–1.07 s | 8.71% | - | allocate/delete with no read, sink or checksum: the shape the old 1 ms claim measured on the pre-stage-1 libc path; stage 1 runs it through counted slabs |
 
 The historical `1 ms` claim measured the legacy row on the pre-stage-1 libc path, where LLVM removed the loop; that is what `0 µs` meant. On the stage-1 tree the same row is no longer erased (the allocator call is opaque), so the recorded value is a real allocation measurement and the label no longer calls it a dead-code floor.
 
@@ -66,7 +66,12 @@ block policy:
 reports the median, minimum, maximum, standard deviation and `(max-min)/median` spread. No run is
 presented as "the best"; a single best run is not the result. `--record` writes
 `spec/bench/tide.tsv`, the authored input to this generated report. `--quick` uses 1e6 rounds for CI
-smoke; the checked-in record uses 1e8 rounds and five runs.
+smoke; the checked-in record uses 1e8 rounds and five runs. `--attribution` adds diagnostic controls:
+the same loop with no allocation, string or sink; the same loop with only the opaque sink; and C
+controls that time the counted-slab List allocations, the List header stores, the host string
+malloc/free, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
+rows are printed after the record and are never written to `spec/bench/tide.tsv`, so the recorded
+schema and the embedded claim block stay stable.
 
 The QuarkLang observable row necessarily includes the `List` header, the buffer and `toString()`,
 because that runtime call is the only opaque sink the compiler exposes. The C control is the minimal
@@ -76,6 +81,11 @@ the allocation and then the whole loop. Stage 1 emits opaque `ql_alloc`/`ql_free
 rows now measure the counted slabs as well; the historical no-use shape is kept precisely to show
 that the optimizer can no longer erase it. The C/Rust/Go floor rows still measure their own optimizer
 floors.
+
+`List<int>.toString()` formats each element in place with a local decimal writer, so it allocates no
+per-element string and calls no libc formatter; the one host `malloc` it still performs is the
+returned string the caller owns and releases. The attribution controls retain the `snprintf` path as
+a comparison row, which is why the rejected direction is still measured rather than assumed.
 
 The interpreter implements the block policy as a logical layer over the host allocator; its policy
 rows describe that accounting and not the compiled tide. The compiled artifact's `List` allocations
@@ -88,6 +98,7 @@ interpreter's logical blocks.
 
 ```sh
 ./bench/tide/run.sh                 # 1e8 rounds, 5 runs, prints the TSV record
+./bench/tide/run.sh --attribution   # adds the phase rows that decompose the observable row
 ./bench/tide/run.sh --record        # writes spec/bench/tide.tsv, then regenerates this report
 ./bench/tide/run.sh --quick         # 1e6 rounds, 3 runs: CI smoke
 go generate ./internal/benchgen     # renders docs/tide-benchmark.md from the record and template

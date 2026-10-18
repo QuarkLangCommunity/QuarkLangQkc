@@ -35,7 +35,12 @@ block policy:
 reports the median, minimum, maximum, standard deviation and `(max-min)/median` spread. No run is
 presented as "the best"; a single best run is not the result. `--record` writes
 `spec/bench/tide.tsv`, the authored input to this generated report. `--quick` uses 1e6 rounds for CI
-smoke; the checked-in record uses 1e8 rounds and five runs.
+smoke; the checked-in record uses 1e8 rounds and five runs. `--attribution` adds diagnostic controls:
+the same loop with no allocation, string or sink; the same loop with only the opaque sink; and C
+controls that time the counted-slab List allocations, the List header stores, the host string
+malloc/free, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
+rows are printed after the record and are never written to `spec/bench/tide.tsv`, so the recorded
+schema and the embedded claim block stay stable.
 
 The QuarkLang observable row necessarily includes the `List` header, the buffer and `toString()`,
 because that runtime call is the only opaque sink the compiler exposes. The C control is the minimal
@@ -45,6 +50,11 @@ the allocation and then the whole loop. Stage 1 emits opaque `ql_alloc`/`ql_free
 rows now measure the counted slabs as well; the historical no-use shape is kept precisely to show
 that the optimizer can no longer erase it. The C/Rust/Go floor rows still measure their own optimizer
 floors.
+
+`List<int>.toString()` formats each element in place with a local decimal writer, so it allocates no
+per-element string and calls no libc formatter; the one host `malloc` it still performs is the
+returned string the caller owns and releases. The attribution controls retain the `snprintf` path as
+a comparison row, which is why the rejected direction is still measured rather than assumed.
 
 The interpreter implements the block policy as a logical layer over the host allocator; its policy
 rows describe that accounting and not the compiled tide. The compiled artifact's `List` allocations
@@ -57,6 +67,7 @@ interpreter's logical blocks.
 
 ```sh
 ./bench/tide/run.sh                 # 1e8 rounds, 5 runs, prints the TSV record
+./bench/tide/run.sh --attribution   # adds the phase rows that decompose the observable row
 ./bench/tide/run.sh --record        # writes spec/bench/tide.tsv, then regenerates this report
 ./bench/tide/run.sh --quick         # 1e6 rounds, 3 runs: CI smoke
 go generate ./internal/benchgen     # renders docs/tide-benchmark.md from the record and template

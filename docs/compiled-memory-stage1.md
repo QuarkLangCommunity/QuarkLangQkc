@@ -191,6 +191,14 @@ paragraph and the generated block in `README.md`, `spec/STANDARD.md` and `docs/t
 updated together (revision 0.8.12; measurement text only, no normative change), and the existing
 `TestTideClaimsMatchMeasurement`/`TestGeneratedTideBenchmarkIsCurrent` gates are green.
 
+**Later attribution (not a stage-1 change).** `bench/tide/run.sh --attribution` now adds the base loop,
+the sink-only loop and C controls for the counted-slab List allocations, the List header stores, the
+host string malloc/free, the integer formatter, the buffer framing and the real `ql_list_int_str`. On
+that attribution, three `snprintf("%d")` calls per round were about 65 ns of the ~93 ns observable row.
+Replacing them with an in-place decimal writer and re-recording gives a 2.98 s observable row (1.78%
+spread), while the no-sink floor stays at 1.06 s and the C control at 399.30 ms. The table above is the
+stage-1 landing record; this later change is measured, re-recorded and kept by the same drift gates.
+
 ## 8. What still hard-errors
 
 | Surface | Status after stage 1 |
