@@ -6,15 +6,18 @@ package lang
 // and every identifier read/write scans the names (measured at 27% of interpreter time). A slot index is stable within a **function scope**,
 // so it can be resolved once at compile time and written back into the AST (Ident.Slot).
 //
-// Conservative subset (mark only where the index is **provably stable**; everything else stays 0 and takes the original path):
-//   - mark only parameters and prefix top-level declarations: the stretch from the start of the function body up to any "declaration inside a nested block".
-//     Once a nested declaration appears (`T x` inside if/while/for/for-in/try, a catch variable, a for initializer declaration),
-//     later slot numbers may disagree with the static derivation depending on whether the branch ran -> stop marking from that point on.
-//   - mark only uses "outside a for-in / catch / C-style for body": those three push a new scope at runtime,
-//     so the current scope is not the function scope (if / while push no scope and can be marked).
+// Marked (everything else stays 0 and takes the lookup-by-name path):
+//   - the reliable prefix: parameters followed by the top-level declarations up to the first statement that can
+//     skip a declaration (a declaration inside if/while/for/for-in/try, a catch variable, a for initializer).
+//     Those names are declared unconditionally in source order before any index can drift, so their slots are stable.
+//   - uses of those names anywhere the current runtime scope is the function scope: top-level code and if/while/try
+//     bodies (if / while push no scope; a try's try-block runs in the current scope). for-in / catch / C-style for
+//     bodies push a new scope and are never marked against the function scope.
 //
-// At runtime paramNames[slot] is still checked against the name before use, so even a wrong inference only falls back to the slow path
-// and never reads the wrong variable (safety fallback).
+// The invariant that makes the runtime path a plain slot read (no name check): a marked identifier always executes
+// with sc == the function scope, and the type checker rejects re-declaring one of these names in a block that opens
+// no scope (if/while/try), so the slot cannot be shadowed between the declaration and the use. REPL chunks never go
+// through resolveSlots (they are parsed, not compiled), so they keep Slot == 0.
 
 // resolveSlots marks identifier slots for the program's functions and methods.
 func resolveSlots(prog *Program) {
@@ -32,47 +35,40 @@ func resolveFuncSlots(fn *FuncDecl) {
 	if fn == nil || fn.Body == nil {
 		return
 	}
-	// 1) Reliable prefix: parameters -> top-level declarations (stop at the first nested declaration)
+	// 1) Reliable prefix: parameters -> top-level declarations (stop at the first statement that can
+	// skip a declaration). Every name in this prefix is declared unconditionally, in this order,
+	// before any index can drift, so its slot is stable for the whole function.
 	slot := map[string]int32{}
+	seen := map[string]bool{}
 	var next int32
-	for i := range fn.Params {
-		if _, dup := slot[fn.Params[i].Name]; dup {
-			continue
+	add := func(name string) {
+		if _, dup := slot[name]; dup {
+			return
 		}
-		slot[fn.Params[i].Name] = next // 0-based index; +1 when written back to the AST (0 means unresolved)
+		slot[name] = next // 0-based index; +1 when written back to the AST (0 means unresolved)
+		seen[name] = true
 		next++
 	}
-	poisoned := false
+	for i := range fn.Params {
+		add(fn.Params[i].Name)
+	}
 	for _, st := range fn.Body.Stmts {
-		if hasNestedDecl(st) { // this statement (and everything after it) may have unstable slots -> stop extending the prefix
-			poisoned = true
+		if hasNestedDecl(st) { // this statement (and everything after it) may declare at a different index -> stop extending the prefix
 			break
 		}
 		if ds, ok := st.(*DeclStmt); ok {
-			if _, dup := slot[ds.Name]; !dup {
-				slot[ds.Name] = next
-				next++
-			}
+			add(ds.Name)
 		}
 	}
 
-	// 2) Traversal marking: mark only where "current scope == function scope"
-	// Top-level statements: parameters and top-level declarations take effect one by one (forward), guaranteeing "declare before use"
-	seen := map[string]bool{}
-	for i := range fn.Params {
-		seen[fn.Params[i].Name] = true
-	}
+	// 2) Traversal marking: mark only where "current scope == function scope". Names outside the
+	// prefix are never marked: a declaration that can be skipped (nested block, loop initializer,
+	// catch variable) may or may not have executed, so the index it would take is not knowable
+	// statically. Uses of the prefix names are safe anywhere at depth 0 — the prefix is declared
+	// before every statement that follows it, and the type checker rejects re-declaring one of
+	// these names in a block that opens no scope (if/while/try), so a marked name always denotes
+	// the function-scope slot.
 	for _, st := range fn.Body.Stmts {
-		if !poisoned {
-			if ds, ok := st.(*DeclStmt); ok {
-				seen[ds.Name] = true
-			}
-		} else {
-			// already poisoned: top-level declarations beyond the prefix no longer guarantee an index -> stop marking new names
-			if ds, ok := st.(*DeclStmt); ok {
-				delete(slot, ds.Name)
-			}
-		}
 		resolveStmtSlotsFiltered(st, 0, slot, seen)
 	}
 }
@@ -105,8 +101,10 @@ func resolveStmtSlotsFiltered(st Stmt, depth int, slot map[string]int32, seen ma
 		mark(t.Iter) // loop variable and loop body live in a new scope -> depth +1, no more marking
 		resolveBlockSlots(t.Body, depth+1, slot, seen)
 	case *ForCStmt:
+		// The executor opens one scope for the loop and runs init, cond, step and body inside it:
+		// nothing here may be marked against the function scope (including the condition).
 		resolveStmtSlotsFiltered(t.Init, depth+1, slot, seen)
-		mark(t.Cond)
+		resolveExprSlots(t.Cond, depth+1, slot, seen)
 		resolveStmtSlotsFiltered(t.Step, depth+1, slot, seen)
 		resolveBlockSlots(t.Body, depth+1, slot, seen)
 	case *TryStmt:

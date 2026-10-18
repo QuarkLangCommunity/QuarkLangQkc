@@ -11,39 +11,39 @@ The inventory of every claim, including the ones this report replaces or withdra
 [`performance-claims-inventory.md`](performance-claims-inventory.md).
 
 <!-- performance-claims -->
-Measured on Linux x86_64, 16 logical CPUs. Load: 1-minute load average 0.39 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs). Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44); Erlang/OTP 26. Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default); Erlang erlc (default). Skipped controls: none.
+Measured on Linux x86_64, 16 logical CPUs. Load: 1-minute load average 1.66 before the run; precondition below 4.00 (0.25 per logical CPU on 16 logical CPUs). Toolchain: clang version 22.1.8 (Fedora 22.1.8-4.fc44); go version go1.26.9-X:nodwarf5 linux/amd64; rustc 1.99.0 (b940084d7 2026-09-28) (Fedora 1.99.0-1.fc44); Erlang/OTP 26. Flags: qkc default -O3 -flto=thin; C clang -O3 -flto=thin; Rust rustc -O; Go go build (default); Erlang erlc (default). Skipped controls: none.
 
 What is counted: in-process wall time: clock()/clock_gettime(CLOCK_MONOTONIC)/Instant::now()/time.Now()/timer:tc(); process startup and printing excluded; every row prints its result as a checksum. Evidence: every workload prints its result as the checksum; the harness fails when the checksum changes between runs; the C, Rust and Go fib controls read the argument from argv so the optimizer cannot constant-fold the recursion.
 
 | Workload | Language | Rounds | Runs | Median | Min–max | Spread | Checksum | What is counted |
 |---|---|---:|---:|---:|---:|---:|---:|---|
-| fib(30), QuarkLang compiled | QuarkLang | 1 | 5 | 4.75 ms | 4.21–5.99 ms | 37.52% | 832,040 | recursive fib(30), result printed as the checksum |
-| fib(30), C control | C | 1 | 5 | 2.80 ms | 1.83–2.86 ms | 36.72% | 832,040 | recursive fib(30) with a volatile argument |
-| fib(30), Rust control | Rust | 1 | 5 | 2.64 ms | 2.08–2.82 ms | 27.77% | 832,040 | recursive fib(30), argument from argv |
-| fib(30), Go control | Go | 1 | 5 | 3.33 ms | 2.91–4.14 ms | 36.77% | 832,040 | recursive fib(30), argument from argv |
-| fib(30), Erlang control | Erlang | 1 | 5 | 5.57 ms | 5.47–7.32 ms | 33.18% | 832,040 | recursive fib(30) timed with timer:tc |
-| fib(35), QuarkLang compiled | QuarkLang | 1 | 5 | 46.65 ms | 46.57–47.19 ms | 1.32% | 9,227,465 | recursive fib(35), result printed as the checksum |
-| fib(35), C control | C | 1 | 5 | 20.25 ms | 20.10–25.89 ms | 28.61% | 9,227,465 | recursive fib(35) with a volatile argument |
-| fib(35), Rust control | Rust | 1 | 5 | 16.59 ms | 16.18–23.89 ms | 46.46% | 9,227,465 | recursive fib(35), argument from argv |
-| fib(35), Go control | Go | 1 | 5 | 36.02 ms | 31.32–37.29 ms | 16.56% | 9,227,465 | recursive fib(35), argument from argv |
+| fib(30), QuarkLang compiled | QuarkLang | 1 | 5 | 4.77 ms | 4.69–5.86 ms | 24.61% | 832,040 | recursive fib(30), result printed as the checksum |
+| fib(30), C control | C | 1 | 5 | 2.32 ms | 2.01–2.95 ms | 40.36% | 832,040 | recursive fib(30) with a volatile argument |
+| fib(30), Rust control | Rust | 1 | 5 | 1.91 ms | 1.56–2.86 ms | 68.08% | 832,040 | recursive fib(30), argument from argv |
+| fib(30), Go control | Go | 1 | 5 | 3.01 ms | 2.83–4.73 ms | 62.79% | 832,040 | recursive fib(30), argument from argv |
+| fib(30), Erlang control | Erlang | 1 | 5 | 7.57 ms | 5.81–8.89 ms | 40.66% | 832,040 | recursive fib(30) timed with timer:tc |
+| fib(35), QuarkLang compiled | QuarkLang | 1 | 5 | 49.68 ms | 47.95–50.37 ms | 4.87% | 9,227,465 | recursive fib(35), result printed as the checksum |
+| fib(35), C control | C | 1 | 5 | 21.90 ms | 21.43–22.73 ms | 5.92% | 9,227,465 | recursive fib(35) with a volatile argument |
+| fib(35), Rust control | Rust | 1 | 5 | 21.43 ms | 16.71–24.23 ms | 35.11% | 9,227,465 | recursive fib(35), argument from argv |
+| fib(35), Go control | Go | 1 | 5 | 35.06 ms | 32.86–35.28 ms | 6.90% | 9,227,465 | recursive fib(35), argument from argv |
 | sum over 1e9 terms, QuarkLang closed form | QuarkLang | 1,000,000,000 | 5 | 0 µs | 0–0 µs | 0.00% | 1,565,039,360 | one sum(ident, 0, 1e9) call; the elapsed time is below clock()'s 1 us resolution on this build |
-| sum over 1e9 terms, Go loop | Go | 1,000,000,000 | 5 | 215.61 ms | 214.13–219.23 ms | 2.37% | 1,565,039,360 | the same terms added by a plain Go loop |
-| fib(20) P50, QuarkLang compiled | QuarkLang | 1,000 | 5 | 34 µs | 34–34 µs | 0.00% | 6,765 | P50 of 1000 fib(20) calls, found by counting and binary search |
-| fib(20) P50, C control | C | 1,000 | 5 | 13 µs | 13–13 µs | 0.00% | 6,765 | P50 of 1000 fib(20) calls, found by counting and binary search |
-| fib(20) P99, QuarkLang compiled | QuarkLang | 1,000 | 5 | 38 µs | 37–40 µs | 7.89% | 6,765 | P99 of 1000 fib(20) calls, found by counting and binary search |
-| fib(20) P99, C control | C | 1,000 | 5 | 15 µs | 14–18 µs | 26.67% | 6,765 | P99 of 1000 fib(20) calls, found by counting and binary search |
-| fib30, interpreter | QuarkLang interpreter | 1 | 5 | 211.34 ms | 210.78–214.84 ms | 1.92% | 832,040 | the same source run by the interpreter, timed in-process |
-| fib30, native qkc | QuarkLang compiled | 1 | 5 | 5.63 ms | 4.67–5.64 ms | 17.29% | 832,040 | the same source compiled by qkc, timed in-process |
-| loop, interpreter | QuarkLang interpreter | 10,000,000 | 5 | 680.93 ms | 674.32–683.49 ms | 1.35% | 29,999,994 | the same source run by the interpreter, timed in-process |
-| loop, native qkc | QuarkLang compiled | 10,000,000 | 5 | 4.96 ms | 3.22–5.14 ms | 38.80% | 29,999,994 | the same source compiled by qkc, timed in-process |
-| list, interpreter | QuarkLang interpreter | 1e6 | 5 | 230.99 ms | 224.13–234.05 ms | 4.29% | 499,500,000 | the same source run by the interpreter, timed in-process |
-| list, native qkc | QuarkLang compiled | 1e6 | 5 | 7.96 ms | 5.24–8.56 ms | 41.75% | 499,500,000 | the same source compiled by qkc, timed in-process |
-| struct, interpreter | QuarkLang interpreter | 1e6 | 5 | 370.01 ms | 364.83–372.66 ms | 2.12% | 4,999,997 | the same source run by the interpreter, timed in-process |
-| struct, native qkc | QuarkLang compiled | 1e6 | 5 | 1.92 ms | 1.33–1.93 ms | 31.20% | 4,999,997 | the same source compiled by qkc, timed in-process |
-| hash, interpreter | QuarkLang interpreter | 1e6 | 5 | 424.75 ms | 423.18–435.40 ms | 2.88% | 499,500,016 | the same source run by the interpreter, timed in-process |
-| hash, native qkc | QuarkLang compiled | 1e6 | 5 | 192.82 ms | 190.93–200.98 ms | 5.21% | 499,500,016 | the same source compiled by qkc, timed in-process |
-| str, interpreter | QuarkLang interpreter | 50,000 | 5 | 243.44 ms | 237.55–244.91 ms | 3.02% | 100,000 | the same source run by the interpreter, timed in-process |
-| str, native qkc | QuarkLang compiled | 50,000 | 5 | 653.10 ms | 650.10–659.37 ms | 1.42% | 100,000 | the same source compiled by qkc, timed in-process |
+| sum over 1e9 terms, Go loop | Go | 1,000,000,000 | 5 | 241.58 ms | 240.52–253.26 ms | 5.27% | 1,565,039,360 | the same terms added by a plain Go loop |
+| fib(20) P50, QuarkLang compiled | QuarkLang | 1,000 | 5 | 36 µs | 34–37 µs | 8.33% | 6,765 | P50 of 1000 fib(20) calls, found by counting and binary search |
+| fib(20) P50, C control | C | 1,000 | 5 | 14 µs | 14–16 µs | 14.29% | 6,765 | P50 of 1000 fib(20) calls, found by counting and binary search |
+| fib(20) P99, QuarkLang compiled | QuarkLang | 1,000 | 5 | 42 µs | 41–46 µs | 11.90% | 6,765 | P99 of 1000 fib(20) calls, found by counting and binary search |
+| fib(20) P99, C control | C | 1,000 | 5 | 20 µs | 16–31 µs | 75.00% | 6,765 | P99 of 1000 fib(20) calls, found by counting and binary search |
+| fib30, interpreter | QuarkLang interpreter | 1 | 5 | 193.77 ms | 188.80–208.06 ms | 9.94% | 832,040 | the same source run by the interpreter, timed in-process |
+| fib30, native qkc | QuarkLang compiled | 1 | 5 | 4.86 ms | 4.59–5.27 ms | 13.86% | 832,040 | the same source compiled by qkc, timed in-process |
+| loop, interpreter | QuarkLang interpreter | 10,000,000 | 5 | 559.49 ms | 554.17–591.48 ms | 6.67% | 29,999,994 | the same source run by the interpreter, timed in-process |
+| loop, native qkc | QuarkLang compiled | 10,000,000 | 5 | 4.47 ms | 3.33–5.53 ms | 49.19% | 29,999,994 | the same source compiled by qkc, timed in-process |
+| list, interpreter | QuarkLang interpreter | 1e6 | 5 | 168.21 ms | 159.86–183.79 ms | 14.23% | 499,500,000 | the same source run by the interpreter, timed in-process |
+| list, native qkc | QuarkLang compiled | 1e6 | 5 | 7.33 ms | 6.00–8.87 ms | 39.15% | 499,500,000 | the same source compiled by qkc, timed in-process |
+| struct, interpreter | QuarkLang interpreter | 1e6 | 5 | 273.16 ms | 260.75–283.94 ms | 8.49% | 4,999,997 | the same source run by the interpreter, timed in-process |
+| struct, native qkc | QuarkLang compiled | 1e6 | 5 | 2.06 ms | 1.31–2.11 ms | 38.59% | 4,999,997 | the same source compiled by qkc, timed in-process |
+| hash, interpreter | QuarkLang interpreter | 1e6 | 5 | 280.03 ms | 268.96–302.59 ms | 12.01% | 499,500,016 | the same source run by the interpreter, timed in-process |
+| hash, native qkc | QuarkLang compiled | 1e6 | 5 | 213.20 ms | 207.89–238.65 ms | 14.43% | 499,500,016 | the same source compiled by qkc, timed in-process |
+| str, interpreter | QuarkLang interpreter | 50,000 | 5 | 293.84 ms | 281.50–304.80 ms | 7.93% | 100,000 | the same source run by the interpreter, timed in-process |
+| str, native qkc | QuarkLang compiled | 50,000 | 5 | 726.92 ms | 704.27–753.56 ms | 6.78% | 100,000 | the same source compiled by qkc, timed in-process |
 <!-- /performance-claims -->
 
 

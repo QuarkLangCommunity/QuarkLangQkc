@@ -445,6 +445,19 @@ func (l *List) Reset() { l.head = 0 }
 
 // Append writes v at the tail and moves the tail forward.
 func (l *List) Append(v Value) {
+	if len(l.items) == cap(l.items) {
+		// Double instead of Go's append growth policy (~1.25x above 256 elements). A 1M-element
+		// list is the checked-in list workload; doubling cuts the copied/allocated bytes per
+		// growth sequence from about 4x to about 2x the final size. The visible contents and the
+		// head/tail indices are identical either way.
+		ncap := cap(l.items) * 2
+		if ncap < 8 {
+			ncap = 8
+		}
+		items := make([]Value, len(l.items), ncap)
+		copy(items, l.items)
+		l.items = items
+	}
 	l.items = append(l.items, v)
 	l.tail++
 	if l.mem != nil {
@@ -525,17 +538,34 @@ func (l *List) sortInPlace() error {
 // ---- HashTable<K,V> (spec §9: a legacy built-in, see §11.3) ----
 
 type HashTable struct {
-	m map[string]Value
+	m map[tableKey]Value
 }
 
-func NewHashTable() *HashTable { return &HashTable{m: map[string]Value{}} }
+// tableKey is a HashTable key: the runtime type name plus the value's display string, with integer
+// keys kept numeric. Equality is exactly the old "TypeName() + ':' + String()" equality, but a
+// put/get on an integer or String key no longer allocates the concatenated spelling.
+type tableKey struct {
+	typ   string // Value.TypeName()
+	str   string // Value.String() (empty for integer keys)
+	num   int64  // integer value when isInt
+	isInt bool
+}
+
+func (k tableKey) String() string {
+	if k.isInt {
+		return "int:" + strconv.FormatInt(k.num, 10)
+	}
+	return k.typ + ":" + k.str
+}
+
+func NewHashTable() *HashTable { return &HashTable{m: map[tableKey]Value{}} }
 
 func (h *HashTable) TypeName() string { return "HashTable" }
 
 func (h *HashTable) String() string {
 	parts := make([]string, 0, len(h.m))
 	for k, v := range h.m {
-		parts = append(parts, k+" -> "+v.String())
+		parts = append(parts, k.String()+" -> "+v.String())
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
@@ -564,23 +594,26 @@ func (h *HashTable) Size() int { return len(h.m) }
 func (h *HashTable) Keys() []Value {
 	out := make([]Value, 0, len(h.m))
 	for k := range h.m {
-		if i := len("String:"); len(k) > i && k[:i] == "String:" {
-			out = append(out, StrV(k[i:]))
-			continue
+		switch {
+		case k.isInt:
+			out = append(out, IntV(k.num))
+		case k.typ == "String" && k.str != "":
+			out = append(out, StrV(k.str))
+		default:
+			// An empty String key is kept in its prefixed spelling, exactly as before.
+			out = append(out, StrV(k.String()))
 		}
-		if i := len("int:"); len(k) > i && k[:i] == "int:" {
-			if n, err := strconv.Atoi(k[i:]); err == nil {
-				out = append(out, IntV(int64(n)))
-			}
-			continue
-		}
-		out = append(out, StrV(k))
 	}
 	return out
 }
 
 // hashKey builds a stable structural key for any Value.
-func hashKey(v Value) string { return v.TypeName() + ":" + v.String() }
+func hashKey(v Value) tableKey {
+	if v.IsInt() {
+		return tableKey{typ: "int", num: v.Int(), isInt: true}
+	}
+	return tableKey{typ: v.TypeName(), str: v.String()}
+}
 
 // ---- FuncBuffer (interpreter-internal; not a language surface) ----
 
@@ -866,12 +899,22 @@ func copyDeep(v Value, deepStruct bool) Value {
 }
 
 // implDefsFor aggregates all impls of a type (no interface + each interface implementation).
+// The index is rebuilt when impls are registered, so a method call is one map read instead of a
+// walk over every impl key plus a fresh slice allocation.
 func (in *interp) implDefsFor(typ string) []*ImplDef {
-	var out []*ImplDef
+	return in.implCache[typ]
+}
+
+// rebuildImplCache groups the registered impl blocks by their type name. Registration is the only
+// writer (it happens before execution), so the cache is read-only while programs run.
+func (in *interp) rebuildImplCache() {
+	cache := make(map[string][]*ImplDef, len(in.impls))
 	for k, d := range in.impls {
-		if strings.HasPrefix(k, typ) && (len(k) == len(typ) || (len(k) > len(typ) && k[len(typ)] == '\x00')) {
-			out = append(out, d)
+		typ := k
+		if i := strings.IndexByte(k, '\x00'); i >= 0 {
+			typ = k[:i]
 		}
+		cache[typ] = append(cache[typ], d)
 	}
-	return out
+	in.implCache = cache
 }

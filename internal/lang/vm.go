@@ -102,7 +102,7 @@ type vmLoop struct {
 }
 
 func (in *interp) vmFor(fn *Func) *vmProg {
-	if os.Getenv("QUARK_NO_VM") != "" {
+	if in.vmDisabled {
 		return nil
 	}
 	if fn.vmTried {

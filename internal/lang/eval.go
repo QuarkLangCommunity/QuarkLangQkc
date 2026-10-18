@@ -383,6 +383,7 @@ type ImplDef struct {
 }
 
 type interp struct {
+	vmDisabled  bool // QUARK_NO_VM read once per Run (the per-call getenv took the environment lock: 24% of fib30)
 	ctxHead     atomic.Pointer[execCtx]
 	fns         map[string]*Func
 	overloads   map[string][]*Func
@@ -393,6 +394,7 @@ type interp struct {
 	structs     map[string]*StructDef
 	interfaces  map[string]*InterfaceDef
 	impls       map[string]*ImplDef
+	implCache   map[string][]*ImplDef // type name -> its impl blocks (rebuilt on registration; method lookup is one map read)
 	tasks       map[int]*Task
 	taskMu      sync.Mutex
 	nextPid     int
@@ -416,6 +418,7 @@ func runWithInterp(prog *Program, filename string, args []string, stdin io.Reade
 		return nil, err
 	}
 	in := &interp{
+		vmDisabled: os.Getenv("QUARK_NO_VM") != "",
 		fns:        map[string]*Func{},
 		sigs:       map[string]*signDef{},
 		builtins:   map[string]builtinFn{},
@@ -558,6 +561,7 @@ func (in *interp) registerProgramMode(prog *Program, replace bool) error {
 		}
 	}
 	in.registerIOBuiltins()
+	in.rebuildImplCache()
 	for _, lb := range prog.Libraries {
 		if in.libObjs == nil {
 			in.libObjs = map[string]*libObj{}
@@ -813,10 +817,9 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 						if gerr != nil {
 							return &RunError{Msg: gerr.Error(), Pos: s.Pos, Ctx: ctx}
 						}
-						if inner.vars == nil {
-							inner.vars = map[string]Value{}
+						if err := inner.declare(s.Var, item, s.Pos); err != nil {
+							return err
 						}
-						inner.vars[s.Var] = item
 						if err := in.execBlock(s.Body, inner, ctx); err != nil {
 							if errors.Is(err, errLoopBreak) {
 								return nil
@@ -836,10 +839,9 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 			if err != nil {
 				return &RunError{Msg: err.Error(), Pos: s.Pos, Ctx: ctx}
 			}
-			if inner.vars == nil {
-				inner.vars = map[string]Value{}
+			if err := inner.declare(s.Var, item, s.Pos); err != nil {
+				return err
 			}
-			inner.vars[s.Var] = item
 			if err := in.execBlock(s.Body, inner, ctx); err != nil {
 				if errors.Is(err, errLoopBreak) {
 					return nil
@@ -932,7 +934,7 @@ func (in *interp) execStmt(st Stmt, sc *scope, ctx *execCtx) error {
 		switch t := s.Target.(type) {
 		case *Ident:
 			if t.Slot > 0 {
-				if i := int(t.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == t.Name {
+				if i := int(t.Slot) - 1; i < len(sc.slots) {
 					if cur := sc.slots[i]; cur.IsRef() { // pass by reference: write through to the target (consistent with scope.set)
 						if cur.Ref().store(v) {
 							return nil
@@ -1112,9 +1114,10 @@ func (in *interp) evalExpr(e Expr, sc *scope, ctx *execCtx) (Value, error) {
 		if x.Name == "taskm" {
 			return TaskmV(globalTaskm), nil
 		}
-		// Slot fast path: resolved at compile time and name-verified at runtime → direct index (no linear name scan)
+		// Slot fast path: resolved at compile time (slots.go proves the index stable within the
+		// function scope), so the hot path is one bounds check and a direct slot read.
 		if x.Slot > 0 {
-			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+			if i := int(x.Slot) - 1; i < len(sc.slots) {
 				return sc.slots[i].deref(), nil
 			}
 		}
@@ -1510,7 +1513,17 @@ func (in *interp) evalCall(c *CallExpr, sc *scope, ctx *execCtx) (Value, error) 
 			return NilV(), err
 		}
 		mark := len(ctx.argArena)
-		args, err := in.evalCallArgs(c, sc, ctx)
+		var args []Value
+		if obj.IsStruct() || obj.IsCopyd() {
+			// User impl methods keep by-reference arguments (parameters bind by reference);
+			// a Copyd receiver may unwrap to a struct, so it stays on the general path too.
+			args, err = in.evalCallArgs(c, sc, ctx)
+		} else {
+			// Built-in receivers (List/Table/String/IO/…) only ever see values: callMethod
+			// dereferences the argument list immediately. Evaluating by value here skips the
+			// reference-cell creation for lvalue arguments (hash.put(k, ...) on every round).
+			args, err = in.evalArgsValues(c.Args, sc, ctx)
+		}
 		if err != nil {
 			return NilV(), err
 		}
@@ -1741,7 +1754,7 @@ func (in *interp) storageID(e Expr, sc *scope) (string, bool) {
 	switch x := e.(type) {
 	case *Ident:
 		if x.Slot > 0 {
-			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+			if i := int(x.Slot) - 1; i < len(sc.slots) {
 				return fmt.Sprintf("slot:%p:%d", sc, i), true
 			}
 		}
@@ -1809,8 +1822,14 @@ func (in *interp) evalCallArgs(c *CallExpr, sc *scope, ctx *execCtx) ([]Value, e
 	if !c.PlainArgs(isLValueExpr) {
 		return in.evalArgs(c.Args, sc, ctx) // fallback: the general path with lvalue/reference handling
 	}
+	return in.evalArgsValues(c.Args, sc, ctx)
+}
+
+// evalArgsValues evaluates every argument by value, into the ctx arena. Used for call targets that
+// cannot observe references at all (built-in method receivers).
+func (in *interp) evalArgsValues(args []Expr, sc *scope, ctx *execCtx) ([]Value, error) {
 	start := len(ctx.argArena)
-	for _, a := range c.Args {
+	for _, a := range args {
 		v, err := in.evalExpr(a, sc, ctx)
 		if err != nil {
 			ctx.argArena = ctx.argArena[:start]
@@ -1840,7 +1859,7 @@ func (in *interp) evalArg(a Expr, sc *scope, ctx *execCtx) (Value, error) {
 	case *Ident:
 		// Declared variable → reference cell (an undeclared name may be a function reference; fall back to by-value)
 		if x.Slot > 0 { // slot already resolved: the owning scope is the current scope, so no chained findScope scan is needed
-			if i := int(x.Slot) - 1; i < len(sc.slots) && i < len(sc.paramNames) && sc.paramNames[i] == x.Name {
+			if i := int(x.Slot) - 1; i < len(sc.slots) {
 				return RefV(sc.refHandle(x.Name)), nil
 			}
 		}
@@ -2514,8 +2533,15 @@ func (in *interp) callMethod(obj Value, name string, args []Value, ctx *execCtx,
 	} else if obj.IsStruct() {
 		o := obj.Struct()
 		if fn := in.selfMethodOf(o.SType, name); fn != nil {
-			callArgs := append([]Value{obj}, args...)
-			return in.callFunc(fn, callArgs, pos, ctx.depth)
+			// Bind the receiver in the context's argument arena: a fresh []Value{obj, args...}
+			// would allocate on every method call (1M calls in the struct backend).
+			mark := len(ctx.argArena)
+			ctx.argArena = append(ctx.argArena, obj)
+			ctx.argArena = append(ctx.argArena, args...)
+			callArgs := ctx.argArena[mark:]
+			res, err := in.callFunc(fn, callArgs, pos, ctx.depth)
+			ctx.argArena = ctx.argArena[:mark]
+			return res, err
 		}
 		if in.staticMethodOf(o.SType, name) != nil {
 			return NilV(), &RunError{Msg: msgID(i18n.MsgFieldTypeerrorSSStaticMethodCall, o.SType, name, o.SType, name), Pos: pos, Ctx: ctx}
@@ -3279,15 +3305,16 @@ func qkjsonV(v Value) (interface{}, error) {
 		return out, nil
 	case v.IsTable():
 		out := map[string]interface{}{}
-		// Deep-copy values by walking the internal map directly; keys are restored to native keys (stripping hashKey's "TypeName:" prefix)
+		// Deep-copy values by walking the internal map directly; JSON object keys are the string form
+		// without the type prefix (the old code stripped "TypeName:" at the first colon).
 		for k, it := range v.Table().m {
 			got, err := qkjsonV(it)
 			if err != nil {
 				return nil, err
 			}
-			key := k
-			if i := strings.IndexByte(k, ':'); i >= 0 {
-				key = k[i+1:]
+			key := k.str
+			if k.isInt {
+				key = strconv.FormatInt(k.num, 10)
 			}
 			out[key] = got
 		}
