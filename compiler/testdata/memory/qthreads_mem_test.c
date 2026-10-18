@@ -22,6 +22,8 @@ void ql_free(void* ptr);
 int ql_mem_set_block(int n);
 void ql_mem_compact(void);
 void ql_mem_clear(void);
+void ql_mem_task_begin(int owner);
+void ql_mem_task_end(int owner);
 double ql_mem_fragmentation(void);
 double ql_mem_occupancy(void);
 long long ql_mem_block_count(void);
@@ -345,6 +347,62 @@ static int runtime_allocations_are_counted(void) {
     return 0;
 }
 
+/* D5: a block allocated by a task belongs to it; ending the task releases it, while the main
+ * thread's block stays. */
+static int task_owned_blocks_are_reclaimed(void) {
+    long long before_used;
+    long long before_blocks;
+    void* keep;
+    void* task;
+    ql_mem_compact();
+    before_used = ql_mem_used_bytes();
+    before_blocks = ql_mem_block_count();
+    keep = ql_alloc(32, 0);
+    CHECK(keep != 0);
+    ql_mem_task_begin(11);
+    task = ql_alloc(32, 0); /* owner 0 inside a task means "this task" */
+    CHECK(task != 0);
+    CHECK(ql_alloc(50000, 0) != 0); /* the large path carries the owner in its metadata too */
+    CHECK(ql_mem_used_bytes() == before_used + 64 + 50000);
+    ql_mem_task_end(11);
+    CHECK(ql_mem_used_bytes() == before_used + 32);
+    CHECK(ql_mem_block_count() == before_blocks + 1);
+    CHECK(ql_mem_check() == 0);
+    ql_free(keep);
+    ql_mem_compact();
+    CHECK(ql_mem_used_bytes() == 0);
+    CHECK(ql_mem_block_count() == 0);
+    return 0;
+}
+
+/* The worker allocates and frees nothing: the task's end is what must reclaim its storage. */
+static void reclaim_worker(long long iterations, long long a1, long long a2, long long a3,
+                           long long a4, long long a5, long long a6, long long a7) {
+    long long i;
+    (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; (void)a7;
+    for (i = 0; i < iterations; i++) {
+        size_t size = (i % 2) ? 5000 : 64; /* both the slab and the large path */
+        void* p = ql_alloc(size, 0);
+        if (!p) abort();
+        ((unsigned char*)p)[0] = 1;
+    }
+}
+
+/* The integration half of D5: the real task pool runs a worker that allocates without releasing, and
+ * ql_block observes the allocator back at the pre-merge used count because the worker reclaimed at the
+ * task boundary before publishing done. */
+static int task_end_reclaims_its_allocations(void) {
+    long long before_used;
+    int id = ql_spawn();
+    CHECK(id > 0);
+    before_used = ql_mem_used_bytes();
+    ql_merge(id, (void*)reclaim_worker, 1000, 0, 0, 0, 0, 0, 0, 0);
+    ql_block(id);
+    CHECK(ql_mem_used_bytes() == before_used);
+    CHECK(ql_mem_check() == 0);
+    return 0;
+}
+
 int main(void) {
     long long reuse = 0, blocks = 0, count = 0;
     CHECK(basic_sizes() == 0);
@@ -356,8 +414,10 @@ int main(void) {
     CHECK(tide_reuses() == 0);
     CHECK(fragmentation_and_occupancy() == 0);
     CHECK(delete_reallocate_stress() == 0);
-    /* Last: ql_spawn leaves a live, routed task object behind, so this is the only test that expects a
-     * non-zero block count after its own allocations have been released (D1). */
+    /* The task tests spawn, and ql_spawn leaves a live, routed task object behind, so everything from
+     * here on expects a non-zero block count after its own allocations have been released (D1). */
+    CHECK(task_owned_blocks_are_reclaimed() == 0);
+    CHECK(task_end_reclaims_its_allocations() == 0);
     CHECK(multithreaded_stress() == 0);
     ql_mem_stats(&reuse, &blocks, &count);
     printf("ok reuse=%lld new_blocks=%lld block_count=%lld alloc_calls=%lld free_calls=%lld\n",

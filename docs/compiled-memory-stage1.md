@@ -8,6 +8,12 @@ The design document remains the review that names the open decisions. This note 
 decisions stage 1 had to take, which it deliberately left open, and what is therefore true of the built
 artifact after the change.
 
+**Later stages.** Stage 2 ([`compiled-memory-stage2.md`](compiled-memory-stage2.md)) wires the surfaces
+this note records as hard errors — `memory.setBlock`, `memory.compact`, the derived `memory.clear`, the
+wider `delete` matrix with `__delete__` dispatch — routes the runtime's own C allocations (D1) and
+implements task-end reclaim (D5). The tables below describe the stage-1 artifact at the revision they
+were written; §8 is that stage's refusal list, not the current one.
+
 ## 1. Boundary
 
 | In stage 1 | Not in stage 1 |

@@ -16,7 +16,7 @@ be left out silently.
 
 | Construct | Checker | Interpreter | Compiler | Evidence |
 |---|---|---|---|---|
-| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (29 files); `compiler/testdata/cases_run/*.kq` (21 files) |
+| the parity corpus | accepts | runs | lowers | `internal/lang:TestHello`; `compiler/internal/cgen:TestPhaseACompile`; `compiler/testdata/cases/*.kq` (29 files); `compiler/testdata/cases_run/*.kq` (22 files) |
 | `bit`, `bits<N>` (1 <= N <= 32), `uchar` | accepts | runs | lowers | `internal/lang:TestBitsValuesAndMasking`; `internal/lang:TestBitsCallSpelling`; `compiler/testdata/cases/z_bits.kq` |
 | raw bits: `& \| ^ ~ << >>`, `b[i]` read/write, the three conversion meanings | accepts | runs | lowers | `internal/lang:TestBitsOperators`; `internal/lang:TestBitIndexing`; `internal/lang:TestBitsConversions`; `compiler/testdata/cases/z_bits.kq` |
 | bitwise family on int views, hex literals | accepts | runs | lowers | `internal/lang:TestBitwiseOperators`; `compiler/testdata/cases/z_bits.kq`; `compiler/testdata/cases/z_precedence.kq` |
@@ -25,9 +25,10 @@ be left out silently.
 | section 5 precedence, including the shift level | accepts | runs | lowers | `internal/lang:TestPrecedenceMatchesTheStandard`; `compiler/testdata/cases/z_precedence.kq` |
 | `List<float>` and its `List<double>` spelling | accepts | runs | lowers | `compiler/internal/cgen:TestListDoubleIsLoweredLikeListInt`; `compiler/testdata/cases/z_list_double.kq`; `compiler/testdata/cases_run/z_list_double_print.kq` |
 | conditional directives: `#ifdef`, `#ifndef`, `#if`, `#endif`, `#define`, `#undef` | accepts | runs | lowers | `internal/lang:TestMacroCompilerBranchDropped`; `compiler/testdata/cases/x_if_family.kq`; `compiler/testdata/cases/x_if_complement.kq`; `compiler/testdata/cases/x_if_pair.kq`; `compiler/testdata/cases/x_if_macro_body.kq` |
+| a task's blocks become reclaimable when it ends (§10 policy) | accepts | runs | lowers | `internal/lang:TestMemoryCompactReclaims`; `compiler:TestCompiledAllocatorAssertionsUnderStress`; `compiler:TestRuntimeAllocationsStayRouted`; `compiler/testdata/cases_run/z_task_reclaim.kq` |
 
 
-The parity corpus has **29** cases under `compiler/testdata/cases` and **21** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
+The parity corpus has **29** cases under `compiler/testdata/cases` and **22** under `compiler/testdata/cases_run`; every one is matched by the evidence above. The two engines agree on all of them (`compare.sh`), which is why they can pin both paths at once.
 
 This table is the corrected form of the old hand-written list. That list grouped `===`, permission
 references, `&lvalue` and `p++` with the constructs both engines implement; the compiler refuses all
@@ -97,7 +98,7 @@ is unimplemented and recorded as a gap in §11.3.
 | `memory.clear()` (derived, not a §10 primitive) | accepts | runs | lowers | `internal/lang:TestMemoryPrimitivesRun`; `internal/lang:TestMemoryManagerClearDropsEmptyBlocks`; `compiler:TestCompiledAllocatorAssertionsUnderStress`; `compiler/internal/cgen:TestMemoryClearLowersToTheDerivedWipe`; `compiler/testdata/cases/z_memory_clear.kq` | Section 10 defines it as the derived wipe (release plus zero-fill). The interpreter drops the emptied logical blocks (its blocks are Go values, so it has no bytes to zero); the compiled runtime releases empty slabs and zeroes the free slots of retained slabs, leaving live payloads untouched, and the allocator stress test reads the zeroed region back through the next same-class allocation. |
 | `#ifn` | refuses | refuses | refuses | `internal/lang:TestIfnHasNoDefinedMeaning` | The standard names it and defines it nowhere; no engine gives it a meaning, so the following `#endif` is refused. The safer reading is `#if !(condition)`. |
 | `#expand` / `#run` | refuses | refuses | refuses | `internal/lang:TestExpandRunAreNotImplemented` | Both are refused with a top-level ParseError in both engines; the standard's node namespace is undefined (docs/primitives.md Q-3, Q-5). |
-| the compiled path on Windows (no compiled runtime; libc allocator fallback) | accepts | runs | partly | `compiler/internal/cgen:TestRoutedAllocationsUseRuntimeAllocator`; `compiler:TestCompiledAllocatorAssertionsUnderStress` | Section 10 makes the compiled artifact's block policy observable; on Windows the compiled runtime is not linked, so compile and link keep the libc path and `delete` releases host storage, but the stage-1 counted-slab allocator is absent: there is no occupancy or fragmentation accounting and no block-reuse policy. Closing the gap means linking the compiled runtime on Windows (the design's R8/T6) or splitting the allocator into a platform-neutral translation unit: size large, one runtime port or one allocator extraction, not a correction. |
+| the compiled path on Windows (no compiled runtime; libc allocator fallback) | accepts | runs | partly | `compiler/internal/cgen:TestRoutedAllocationsUseRuntimeAllocator`; `compiler:TestCompiledAllocatorAssertionsUnderStress` | Section 10 makes the compiled artifact's block policy observable; on Windows the compiled runtime is not linked, so compile and link keep the libc path and `delete` releases host storage, but the counted-slab allocator is absent: there is no occupancy or fragmentation accounting, no block-reuse policy, no `memory.*` lowering, no runtime-wide routing (D1) and no task-end reclaim (D5). Closing the gap means linking the compiled runtime on Windows (the design's R8/T6) or splitting the allocator into a platform-neutral translation unit: size large, one runtime port or one allocator extraction, not a correction. |
 
 
 The interpreter-only rows are the project's hard-error policy: when the compiler cannot reproduce the
@@ -144,7 +145,11 @@ returns, so control continues after the call in both engines (only the interpret
 empty slabs and zeroes every still-free slot of a retained slab, so the region it clears cannot hand
 the previous value's bytes to the next user while a live payload is untouched; the interpreter's clear
 drops the emptied logical blocks, which is the release half without bytes to zero (its blocks are Go
-values, not storage). `memory.Fragmentation()` remains unexposed in both engines. Stage 1 of the design
+values, not storage). A task's blocks are reclaimed when the task ends: the compiled runtime tags
+each block with the task that allocated it, and the worker releases every block with that tag before
+it publishes the task as done, so `ql_block` cannot observe a finished task whose storage is still
+counted; the interpreter does the same in `ReclaimTask`. `memory.Fragmentation()` remains unexposed
+in both engines. Stage 1 of the design
 ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
@@ -155,8 +160,8 @@ fragmentation numbers describe the whole compiled artifact instead of only what 
 emits. What remains outside the metric is the allocator's own host block storage, which is the pair
 (`ql_mem_host_alloc`/`ql_mem_host_free`) the metric measures the inside of; static data and the C
 stack are not allocations. What remains is exposing `Fragmentation` in both engines or deciding not
-to, task-end reclaim, and Windows (the runtime is still not linked there; the generator keeps the
-libc path).
+to, and Windows (the runtime is still not linked there; the generator keeps the libc path). The
+design note for this stage is [`compiled-memory-stage2.md`](compiled-memory-stage2.md).
 Stage 2 adds no normative text and no language surface beyond the rows the standard already names.
 Size: large — one design review of its own, not a correction.
 

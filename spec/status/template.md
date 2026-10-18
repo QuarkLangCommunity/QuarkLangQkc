@@ -114,7 +114,11 @@ returns, so control continues after the call in both engines (only the interpret
 empty slabs and zeroes every still-free slot of a retained slab, so the region it clears cannot hand
 the previous value's bytes to the next user while a live payload is untouched; the interpreter's clear
 drops the emptied logical blocks, which is the release half without bytes to zero (its blocks are Go
-values, not storage). `memory.Fragmentation()` remains unexposed in both engines. Stage 1 of the design
+values, not storage). A task's blocks are reclaimed when the task ends: the compiled runtime tags
+each block with the task that allocated it, and the worker releases every block with that tag before
+it publishes the task as done, so `ql_block` cannot observe a finished task whose storage is still
+counted; the interpreter does the same in `ReclaimTask`. `memory.Fragmentation()` remains unexposed
+in both engines. Stage 1 of the design
 ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
@@ -125,8 +129,8 @@ fragmentation numbers describe the whole compiled artifact instead of only what 
 emits. What remains outside the metric is the allocator's own host block storage, which is the pair
 (`ql_mem_host_alloc`/`ql_mem_host_free`) the metric measures the inside of; static data and the C
 stack are not allocations. What remains is exposing `Fragmentation` in both engines or deciding not
-to, task-end reclaim, and Windows (the runtime is still not linked there; the generator keeps the
-libc path).
+to, and Windows (the runtime is still not linked there; the generator keeps the libc path). The
+design note for this stage is [`compiled-memory-stage2.md`](compiled-memory-stage2.md).
 Stage 2 adds no normative text and no language surface beyond the rows the standard already names.
 Size: large — one design review of its own, not a correction.
 

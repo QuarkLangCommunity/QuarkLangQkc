@@ -1,0 +1,33 @@
+// D5: a task allocates and releases lists, then ends; §10 makes the blocks it owned reclaimable at
+// that point. The next task in the same process and the main thread must keep working, and both
+// engines must print the same work.
+fn work(int n) int {
+    int i = 0;
+    int acc = 0;
+    while (i < n) {
+        List<int> a = [i % 7, i % 11, i % 13];
+        acc = acc + a.get(0) + a.get(2);
+        delete a;
+        i = i + 1;
+    }
+    return acc;
+}
+fn main(IOStream io) {
+    thread t = taskm.spawn();
+    t.merge(work, 1000);
+    taskm.block(t.pid());
+    io.println(taskm.done(t.pid()), work(1000));
+    thread t2 = taskm.spawn();
+    t2.merge(work, 500);
+    taskm.block(t2.pid());
+    io.println(taskm.done(t2.pid()));
+    int i = 0;
+    int acc = 0;
+    while (i < 1000) {
+        List<int> b = [i % 5, i % 3];
+        acc = acc + b.get(1);
+        delete b;
+        i = i + 1;
+    }
+    io.println(acc);
+}
