@@ -1,0 +1,6 @@
+// The accepted range is the interpreter's 1 ... 2^20. A value outside it is a RunError there and a
+// positioned runtime error here, so the corpus can compare the message, the position and the exit code.
+fn main(IOStream io) {
+    memory.setBlock(0);
+    io.println(1);
+}

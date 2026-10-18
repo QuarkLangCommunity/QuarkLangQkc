@@ -99,19 +99,40 @@ keeps it in one place so the fix is not mistaken for permission to relax the pin
 ### §10 memory on the compiled path
 
 The four primitive rows and the derived `clear` are the surface §10 defines. The compiled artifact
-implements one row in a narrowed form (`delete` on an owned `List<int>`: a local variable, or a `copyd`
-parameter's callee-owned copy, while a by-reference parameter is refused) and none of the other four;
-the interpreter implements three of the four rows plus `clear`, and `memory.Fragmentation` exists in
-neither. Stage 1 of the design ([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) now puts the
-block policy in the runtime: counted slabs with size classes, a per-class free list, per-object release,
-occupancy and fragmentation accessors, `compact`, large-object blocks, and the code generator's 20
-initial allocation sites plus 4 growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/
-`ql_free`. What remains is language surface and ownership: lowering `memory.*`, `__delete__` dispatch
-and the decided `delete` domain in the compiled path, exposing `Fragmentation` in both engines or
-deciding not to, routing the runtime's own C allocations, task-end reclaim, and Windows (the runtime is
-still not linked there; the generator keeps the libc path). Stage 1 changes no normative text and no
-language surface, so this report keeps the divergence honest until stage 2 takes the decisions the
-design lists. Size: large — one design review of its own, not a correction.
+implements `delete` for an owned variable of every heap-backed type it lowers — a list of any element
+type it supports (`List<int>`, `List<String>`, `List<float>`), released through the counted-slab
+allocator as a buffer plus a header, or a struct, whose `__delete__()` runs before its cell is
+returned — for a local variable or a `copyd` parameter's callee-owned copy. A by-reference parameter
+(the storage belongs to the caller), a scalar or a `String` (no heap storage to release) and a
+non-variable expression keep positioned hard errors. Stage 2 has also wired
+`memory.setBlock(n)` to the runtime block allocator: the accepted range is the interpreter's `1 … 2^20`,
+a value outside it is the interpreter's runtime error with the same message and position (catchable by
+`try`), and the size applies to slabs created afterwards, as the interpreter reads `BlockSize` when a
+`MemBlock` is created. `memory.compact()` is wired too, and with the interpreter's answer to D6: it
+returns, so control continues after the call in both engines (only the interpreter's comment says
+"never returns at all"). `memory.clear()`, the derived wipe, is wired to a runtime that releases the
+empty slabs and zeroes every still-free slot of a retained slab, so the region it clears cannot hand
+the previous value's bytes to the next user while a live payload is untouched; the interpreter's clear
+drops the emptied logical blocks, which is the release half without bytes to zero (its blocks are Go
+values, not storage). A task's blocks are reclaimed when the task ends: the compiled runtime tags
+each block with the task that allocated it, and the worker releases every block with that tag before
+it publishes the task as done, so `ql_block` cannot observe a finished task whose storage is still
+counted; the interpreter does the same in `ReclaimTask`. `memory.Fragmentation()` remains unexposed
+in both engines. Stage 1 of the design
+([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
+slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
+accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
+growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. Stage 2 also routes the
+runtime's own C allocations — string builders, split lists, hash tables and their bucket arrays, memo
+entries, interface boxes, channels and task objects — through the same API (D1), so the occupancy and
+fragmentation numbers describe the whole compiled artifact instead of only what the code generator
+emits. What remains outside the metric is the allocator's own host block storage, which is the pair
+(`ql_mem_host_alloc`/`ql_mem_host_free`) the metric measures the inside of; static data and the C
+stack are not allocations. What remains is exposing `Fragmentation` in both engines or deciding not
+to, and Windows (the runtime is still not linked there; the generator keeps the libc path). The
+design note for this stage is [`compiled-memory-stage2.md`](compiled-memory-stage2.md).
+Stage 2 adds no normative text and no language surface beyond the rows the standard already names.
+Size: large — one design review of its own, not a correction.
 
 ### §10 memory on Windows
 

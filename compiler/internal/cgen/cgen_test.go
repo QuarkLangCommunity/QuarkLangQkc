@@ -45,6 +45,24 @@ entry:
   call void @free(i8* %p)
   ret void
 }
+; memory.setBlock's entry point: lli has no allocator, so accept every value here. The real range
+; check and its error are exercised by the linked runtime (compiler/testdata/cases_run).
+define i32 @ql_mem_set_block(i32 %n) {
+entry:
+  ret i32 1
+}
+; memory.compact: releasing empty slabs is a no-op for the unit tests; the C allocator test and the
+; linked parity case exercise the real one.
+define void @ql_mem_compact() {
+entry:
+  ret void
+}
+; memory.clear: the wipe is observable only through the allocator's payload, so the unit tests stub it
+; and the C allocator test (compiler/memory_runtime_test.go) proves the zero-fill.
+define void @ql_mem_clear() {
+entry:
+  ret void
+}
 define i8* @ql_strcat(i8* %a, i8* %b) {
 entry:
   %la = call i64 @strlen(i8* %a)
@@ -78,6 +96,9 @@ func withTestRuntime(ir string) string {
 				strings.Contains(line, "@ql_calloc(") ||
 				strings.Contains(line, "@ql_realloc(") ||
 				strings.Contains(line, "@ql_free(") ||
+				strings.Contains(line, "@ql_mem_set_block(") ||
+				strings.Contains(line, "@ql_mem_compact(") ||
+				strings.Contains(line, "@ql_mem_clear(") ||
 				strings.Contains(line, "@ql_strcat(") ||
 				strings.Contains(line, "@strlen(") ||
 				strings.Contains(line, "@memcpy(")) {

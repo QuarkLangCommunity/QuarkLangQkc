@@ -1,7 +1,8 @@
 /* The opaque sink the QuarkLang tide program calls: it stores the pointer in a volatile global, so
  * the compiler cannot prove the string dead, and releases the string the language's toString()
- * allocated. Built as libtide.a so qkc can link it through `library tide { ... }`. */
-#include <stdlib.h>
+ * allocated. The compiled runtime's string builders are counted-slab allocations (stage 2, D1), so
+ * the owner of the bytes is ql_free — libc free would abort with "invalid size". */
+void ql_free(void* p);
 
 void *volatile qtide_sink_keep;
 
@@ -10,5 +11,5 @@ void qtide_sink(char *s) {
 }
 
 void qtide_release(char *s) {
-    free(s);
+    ql_free(s);
 }

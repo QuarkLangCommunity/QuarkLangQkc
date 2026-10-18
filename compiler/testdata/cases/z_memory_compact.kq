@@ -1,0 +1,10 @@
+// D6 answered from the interpreter: compact() returns and control continues (eval.go calls
+// MemoryManager.Compact and falls through), so a listing after it must still print.
+fn main(IOStream io) {
+    memory.compact();
+    io.println(1);
+    List<int> xs = [1, 2, 3];
+    delete xs;
+    memory.compact();
+    io.println(9);
+}

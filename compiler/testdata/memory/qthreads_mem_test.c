@@ -21,6 +21,9 @@ void* ql_realloc(void* ptr, size_t size);
 void ql_free(void* ptr);
 int ql_mem_set_block(int n);
 void ql_mem_compact(void);
+void ql_mem_clear(void);
+void ql_mem_task_begin(int owner);
+void ql_mem_task_end(int owner);
 double ql_mem_fragmentation(void);
 double ql_mem_occupancy(void);
 long long ql_mem_block_count(void);
@@ -30,6 +33,9 @@ long long ql_mem_alloc_calls(void);
 long long ql_mem_free_calls(void);
 void ql_mem_stats(long long* reuse, long long* new_blocks, long long* block_count);
 int ql_mem_check(void);
+
+/* A routed runtime helper (D1): the harness calls it directly to prove its allocation is counted. */
+char* ql_strcat(const char* a, const char* b);
 
 /* qthreads' task pool: used here only to put the allocator on its multi-threaded lock path. */
 int ql_spawn(void);
@@ -213,7 +219,11 @@ static int multithreaded_stress(void) {
     CHECK(ql_mem_check() == 0);
     ql_mem_compact();
     CHECK(ql_mem_check() == 0);
-    CHECK(ql_mem_block_count() == 0);
+    /* D1: the task object ql_spawn allocated is a routed allocation and stays live (the runtime keeps
+     * task handles in its table), so the metric does not return to zero. What compact released is the
+     * workers' own empties; the spawned object's slab is not one of them. */
+    CHECK(ql_mem_block_count() > 0);
+    CHECK(ql_mem_live_bytes() > 0);
     return 0;
 }
 
@@ -280,16 +290,135 @@ static int delete_reallocate_stress(void) {
     return 0;
 }
 
+/* §10's clear is the derived wipe: release keeps the payload (D3), clear removes it from the region it
+ * releases. A partially occupied slab stays cached, so its free slot can be read back by the next
+ * same-class allocation; a live object in the same slab must not be touched. */
+static int clear_wipes_released_region(void) {
+    unsigned char* a;
+    unsigned char* live;
+    unsigned char* b;
+    int i;
+    ql_mem_compact();
+    a = (unsigned char*)ql_alloc(16, 0);
+    live = (unsigned char*)ql_alloc(16, 0);
+    CHECK(a != 0 && live != 0);
+    for (i = 0; i < 16; i++) {
+        a[i] = 0xA5;
+        live[i] = 0x5A;
+    }
+    ql_free(a);
+    b = (unsigned char*)ql_alloc(16, 0);
+    CHECK(b != 0);
+    for (i = 0; i < 16; i++) CHECK(b[i] == 0xA5); /* release does not wipe */
+    ql_free(b);
+    ql_mem_clear();
+    CHECK(ql_mem_check() == 0);
+    for (i = 0; i < 16; i++) CHECK(live[i] == 0x5A); /* live payload untouched */
+    b = (unsigned char*)ql_alloc(16, 0);
+    CHECK(b != 0);
+    for (i = 0; i < 16; i++) CHECK(b[i] == 0); /* the released region was wiped */
+    ql_free(b);
+    ql_free(live);
+    ql_mem_clear();
+    CHECK(ql_mem_check() == 0);
+    CHECK(ql_mem_block_count() == 0); /* clear released the empty slab */
+    CHECK(ql_mem_live_bytes() == 0);
+    CHECK(ql_mem_used_bytes() == 0);
+    CHECK(ql_mem_fragmentation() == 0.0);
+    return 0;
+}
+
+/* D1: a runtime helper's allocation is visible to the same accounting the language allocations use. */
+static int runtime_allocations_are_counted(void) {
+    long long allocs;
+    long long used;
+    char* s;
+    ql_mem_compact();
+    allocs = ql_mem_alloc_calls();
+    used = ql_mem_used_bytes();
+    s = ql_strcat("ab", "cd");
+    CHECK(s != 0);
+    CHECK(strcmp(s, "abcd") == 0);
+    CHECK(ql_mem_alloc_calls() == allocs + 1);
+    CHECK(ql_mem_used_bytes() == used + 5);
+    ql_free(s);
+    CHECK(ql_mem_used_bytes() == used);
+    CHECK(ql_mem_check() == 0);
+    return 0;
+}
+
+/* D5: a block allocated by a task belongs to it; ending the task releases it, while the main
+ * thread's block stays. */
+static int task_owned_blocks_are_reclaimed(void) {
+    long long before_used;
+    long long before_blocks;
+    void* keep;
+    void* task;
+    ql_mem_compact();
+    before_used = ql_mem_used_bytes();
+    before_blocks = ql_mem_block_count();
+    keep = ql_alloc(32, 0);
+    CHECK(keep != 0);
+    ql_mem_task_begin(11);
+    task = ql_alloc(32, 0); /* owner 0 inside a task means "this task" */
+    CHECK(task != 0);
+    CHECK(ql_alloc(50000, 0) != 0); /* the large path carries the owner in its metadata too */
+    CHECK(ql_mem_used_bytes() == before_used + 64 + 50000);
+    ql_mem_task_end(11);
+    CHECK(ql_mem_used_bytes() == before_used + 32);
+    CHECK(ql_mem_block_count() == before_blocks + 1);
+    CHECK(ql_mem_check() == 0);
+    ql_free(keep);
+    ql_mem_compact();
+    CHECK(ql_mem_used_bytes() == 0);
+    CHECK(ql_mem_block_count() == 0);
+    return 0;
+}
+
+/* The worker allocates and frees nothing: the task's end is what must reclaim its storage. */
+static void reclaim_worker(long long iterations, long long a1, long long a2, long long a3,
+                           long long a4, long long a5, long long a6, long long a7) {
+    long long i;
+    (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; (void)a7;
+    for (i = 0; i < iterations; i++) {
+        size_t size = (i % 2) ? 5000 : 64; /* both the slab and the large path */
+        void* p = ql_alloc(size, 0);
+        if (!p) abort();
+        ((unsigned char*)p)[0] = 1;
+    }
+}
+
+/* The integration half of D5: the real task pool runs a worker that allocates without releasing, and
+ * ql_block observes the allocator back at the pre-merge used count because the worker reclaimed at the
+ * task boundary before publishing done. */
+static int task_end_reclaims_its_allocations(void) {
+    long long before_used;
+    int id = ql_spawn();
+    CHECK(id > 0);
+    before_used = ql_mem_used_bytes();
+    ql_merge(id, (void*)reclaim_worker, 1000, 0, 0, 0, 0, 0, 0, 0);
+    ql_block(id);
+    CHECK(ql_mem_used_bytes() == before_used);
+    CHECK(ql_mem_check() == 0);
+    return 0;
+}
+
 int main(void) {
     long long reuse = 0, blocks = 0, count = 0;
     CHECK(basic_sizes() == 0);
     CHECK(calloc_and_realloc() == 0);
     CHECK(payload_is_preserved() == 0);
+    CHECK(clear_wipes_released_region() == 0);
+    CHECK(runtime_allocations_are_counted() == 0);
     CHECK(block_size() == 0);
     CHECK(tide_reuses() == 0);
     CHECK(fragmentation_and_occupancy() == 0);
-    CHECK(multithreaded_stress() == 0);
     CHECK(delete_reallocate_stress() == 0);
+    /* The task tests spawn, and ql_spawn leaves a live, routed task object behind, so everything from
+     * here on expects a non-zero block count after its own allocations have been released (D1). */
+    CHECK(task_owned_blocks_are_reclaimed() == 0);
+    CHECK(task_end_reclaims_its_allocations() == 0);
+    CHECK(multithreaded_stress() == 0);
     ql_mem_stats(&reuse, &blocks, &count);
     printf("ok reuse=%lld new_blocks=%lld block_count=%lld alloc_calls=%lld free_calls=%lld\n",
            reuse, blocks, count, ql_mem_alloc_calls(), ql_mem_free_calls());

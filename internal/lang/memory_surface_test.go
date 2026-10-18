@@ -45,3 +45,29 @@ func TestFragmentationRefusalNamesTheSituation(t *testing.T) {
 		}
 	}
 }
+
+// TestMemoryManagerClearDropsEmptyBlocks pins the interpreter's half of the derived wipe: clear is the
+// operation that removes the storage nobody occupies, and it must not touch a block with a live amount
+// in it. The compiled runtime's zero-fill half is exercised by
+// compiler/testdata/memory/qthreads_mem_test.c: the interpreter's blocks are logical (Go values), so it
+// has no released bytes to zero, and the status report records that gap rather than inventing a wipe.
+func TestMemoryManagerClearDropsEmptyBlocks(t *testing.T) {
+	m := NewMemoryManager()
+	id := m.Alloc(100, 0)
+	if m.BlockCount() != 1 {
+		t.Fatalf("Alloc made %d blocks, want 1", m.BlockCount())
+	}
+	m.Delete(id)
+	m.Clear()
+	if m.BlockCount() != 0 {
+		t.Fatalf("Clear kept an empty block: %d blocks remain", m.BlockCount())
+	}
+	live := m.Alloc(100, 0)
+	if live == 0 {
+		t.Fatal("Alloc after Clear failed")
+	}
+	m.Clear()
+	if m.BlockCount() != 1 {
+		t.Fatalf("Clear dropped a block with a live allocation: %d blocks remain", m.BlockCount())
+	}
+}

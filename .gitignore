@@ -56,3 +56,6 @@ go.work.sum
 !cmd/qkcheck/README.md
 # the measured roles of the organisation's sibling repositories and the drift contract
 !docs/sibling-repositories.md
+
+# the compiled-memory stage 2 design note (the stage 2 deliverable)
+!docs/compiled-memory-stage2.md

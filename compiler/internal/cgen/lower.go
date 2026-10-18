@@ -1184,17 +1184,41 @@ func (fc *funcCtx) stmt(s lang.Stmt) (stmt, error) {
 		if !ok {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnNonVariableExpressionNot)
 		}
-		// A by-reference parameter names the caller's list; releasing it here would free storage this
+		// A by-reference parameter names the caller's storage; releasing it here would free storage this
 		// callee does not own, and dropping the release silently would be a no-op the interpreter does
 		// not share. Refuse it with a position instead (a copyd parameter is a callee-owned copy and
 		// keeps the supported path).
 		if fc.byRefParams[id.Name] {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteOnByReferenceParameterQNotSupported, id.Name)
 		}
-		if t, _ := fc.lookup(id.Name); t != "List<int>" {
+		t, found := fc.lookup(id.Name)
+		if !found {
 			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteQNotSupportedCompilerHandles, id.Name)
 		}
-		return &deleteStmt{name: id.Name}, nil
+		d := &deleteStmt{name: id.Name, typ: t}
+		switch {
+		case t == "List<int>", t == "List<String>", t == "List<float>":
+			// Every list layout cgen emits is a header plus a heap buffer, and both are counted-slab
+			// allocations, so release is the same two frees whichever element type the header carries.
+		case l.isStructType(t):
+			// §10's release order: run __delete__() if the type declares it, then return the storage.
+			// The dispatch is the ordinary self-method call the language already has, so it is the same
+			// call a direct `p.__delete__()` makes, including its by-value receiver convention.
+			if mi := l.lookupSelf(t, "__delete__"); mi != nil {
+				imi, err := l.instantiateFor(mi, t, nil, fc, st.Pos)
+				if err != nil {
+					return nil, err
+				}
+				call, err := fc.methodCall(imi, t, st.X, nil, st.Pos)
+				if err != nil {
+					return nil, err
+				}
+				d.del = call
+			}
+		default:
+			return nil, l.errfID(st.Pos, i18n.MsgCompilerDeleteQNotSupportedCompilerHandles, id.Name)
+		}
+		return d, nil
 	}
 	return nil, l.errfID(lang.Pos{Line: 1, Col: 1}, i18n.MsgCompilerCompilerInternalErrorUnknownStatementType, s)
 }
@@ -2735,13 +2759,35 @@ func (fc *funcCtx) callMethod(c *lang.CallExpr, me *lang.MemberExpr) (*expr, err
 		if fc.ioName != "" && id.Name == fc.ioName {
 			return nil, l.errfID(me.Pos, i18n.MsgCompilerIoSReturnsNothingCannotUsed, me.Name)
 		}
-		// The memory receiver's runtime entry points exist (stage 1), but lowering memory.* is stage 2.
-		// Refuse with a message that names the supported memory surface rather than the generic
-		// "available in the interpreter" fallback: a runtime that exists but is not wired must not read
-		// like a feature that does not exist.
+		// The memory receiver. On Windows the compiled runtime (which owns the block allocator) is not
+		// linked, so every row is a positioned refusal there rather than a call to a symbol that does
+		// not exist. On the platforms that link the runtime the standard's rows are lowered to their
+		// entry points; `mode` is not part of §10 and stays refused.
 		if id.Name == "memory" {
+			if hostAllocatorFallback {
+				return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotSupportedOnWindows, me.Name)
+			}
 			switch me.Name {
-			case "setBlock", "compact", "clear", "mode":
+			case "setBlock":
+				if len(c.Args) != 1 {
+					return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
+				}
+				x, err := fc.expr(c.Args[0])
+				if err != nil {
+					return nil, err
+				}
+				return &expr{kind: kMem, typ: "void", line: me.Pos.Line, s: me.Name, l: x}, nil
+			case "compact":
+				if len(c.Args) != 0 {
+					return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
+				}
+				return &expr{kind: kMem, typ: "void", line: me.Pos.Line, s: me.Name}, nil
+			case "clear":
+				if len(c.Args) != 0 {
+					return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
+				}
+				return &expr{kind: kMem, typ: "void", line: me.Pos.Line, s: me.Name}, nil
+			case "mode":
 				return nil, l.errfID(me.Pos, i18n.MsgCompilerMemoryPrimitiveSNotLoweredStage1, me.Name)
 			}
 		}

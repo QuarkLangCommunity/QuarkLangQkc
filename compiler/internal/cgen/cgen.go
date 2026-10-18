@@ -109,6 +109,7 @@ const (
 	kListS    // List<String> literal: a heap %ListS whose buffer holds i8* elements
 	kListF    // List<float> literal: a heap %ListF whose buffer holds i64 slots, each an element's bit-cast
 	kConv     // conversion call T(x) (spec §3.4): s names the destination type
+	kMem      // memory.* primitive (s names it): setBlock takes l; compact/clear take no argument
 )
 
 // expr is a cgen IR expression. typ is filled in by lowering with the language type ("?" = undecided).
@@ -242,7 +243,11 @@ type tryStmt struct {
 	catch []stmt
 }
 
-type deleteStmt struct{ name string }
+type deleteStmt struct {
+	name string
+	typ  string // the variable's static type: a list layout or a struct
+	del  *expr  // the __delete__ call to run before release, nil when the type declares none
+}
 
 type logStmt struct{ x *expr }
 
@@ -1103,6 +1108,11 @@ func (e *emitter) emitProgram(lp *lowered) string {
 	e.decls.WriteString("declare i8* @ql_calloc(i64, i64, i32)\n")
 	e.decls.WriteString("declare i8* @ql_realloc(i8*, i64)\n")
 	e.decls.WriteString("declare void @ql_free(i8*)\n")
+	// The §10 memory primitives. They are defined by the compiled runtime; the Windows fallback never
+	// reaches them because lowering refuses the calls there (the runtime is not linked).
+	e.decls.WriteString("declare i32 @ql_mem_set_block(i32)\n")
+	e.decls.WriteString("declare void @ql_mem_compact()\n")
+	e.decls.WriteString("declare void @ql_mem_clear()\n")
 	e.decls.WriteString("declare i32 @gettimeofday({ i64, i64 }*, i8*)\n")
 	e.decls.WriteString("declare i8* @ql_strcat(i8*, i8*)\n")
 	e.decls.WriteString("declare i32 @snprintf(i8*, i64, i8*, ...)\n")
@@ -2383,7 +2393,14 @@ func (e *emitter) emitFieldAssign(st *fieldAssignStmt) {
 
 // listObj returns the object pointer of a List variable.
 func (e *emitter) listObj(name string) string {
-	e.ensureList()
+	return e.listObjTyped(name, "List<int>")
+}
+
+// listObjTyped returns the header pointer of a list variable of any element type. The three layouts
+// (%List, %ListS, %ListF) all start with a pointer, so callers that only free the storage can treat
+// the header uniformly; element access still goes through the typed paths.
+func (e *emitter) listObjTyped(name, typ string) string {
+	llt := e.ir(typ) // %List* / %ListS* / %ListF* (ir() also declares the layout type)
 	info, ok := e.vars[name]
 	if !ok {
 		return "null"
@@ -2392,7 +2409,7 @@ func (e *emitter) listObj(name string) string {
 		return info.reg
 	}
 	r := e.newReg()
-	e.emitInstr("%s = load %%List*, %%List** %s", r, info.reg)
+	e.emitInstr("%s = load %s, %s* %s", r, llt, llt, info.reg)
 	return r
 }
 
@@ -2481,21 +2498,45 @@ func (e *emitter) failID(id i18n.Msg, args ...any) {
 }
 
 func (e *emitter) emitDelete(st *deleteStmt) {
+	if st.del != nil {
+		// §10 release order: run __delete__() first. The call is the ordinary self-method call, so a
+		// method that mutates a field of a struct the deleted value aliases has the same effect it has
+		// in the interpreter (a mutation of the deleted value's own storage is unobservable by contract).
+		e.compileExpr(st.del)
+	}
 	info, ok := e.vars[st.name]
-	if !ok || info.ref || info.param || info.direct || info.typ != "List<int>" {
-		// Lowering accepts only an owned local List<int> variable, so this is unreachable for a program
-		// it accepted; it is still an error rather than a dropped release.
+	if !ok || info.ref || info.param || info.direct || info.typ != st.typ {
+		// Lowering accepts only owned variables, so this is unreachable for a program it accepted; it is
+		// still an error rather than a dropped release.
 		e.failID(i18n.MsgCompilerInternalDeleteQReachedCodeGeneration, st.name)
 		return
 	}
-	lo := e.listObj(st.name)
-	p := e.listBuf(lo)
-	c := e.newReg()
-	e.emitInstr("%s = bitcast i32* %s to i8*", c, p)
-	e.emitFree(c)
-	c2 := e.newReg()
-	e.emitInstr("%s = bitcast %%List* %s to i8*", c2, lo)
-	e.emitFree(c2)
+	if isListType(st.typ) {
+		// Every list layout is a header plus a heap buffer, and both are counted-slab allocations. The
+		// header's first field is the buffer pointer whatever the element width, so one release covers
+		// List<int>, List<String> and List<float>.
+		lo := e.listObjTyped(st.name, st.typ)
+		llt := e.ir(st.typ)
+		bf := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8**", bf, llt, lo)
+		p := e.newReg()
+		e.emitInstr("%s = load i8*, i8** %s", p, bf)
+		e.emitFree(p)
+		c2 := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8*", c2, llt, lo)
+		e.emitFree(c2)
+		return
+	}
+	if e.isStruct(st.typ) {
+		// A struct variable owns its cell (a local's literal/zero cell or a copyd parameter's deep
+		// copy); release the cell after the dispatch above.
+		v, _ := e.loadVar(st.name, false)
+		c := e.newReg()
+		e.emitInstr("%s = bitcast %s %s to i8*", c, e.ir(st.typ), v)
+		e.emitFree(c)
+		return
+	}
+	e.failID(i18n.MsgCompilerInternalDeleteQReachedCodeGeneration, st.name)
 }
 
 func (e *emitter) emitIf(st *ifStmt) {
@@ -3281,6 +3322,8 @@ func (e *emitter) compileExprRaw(x *expr) (string, string) {
 		return e.compileListFLit(x)
 	case kConv:
 		return e.compileConv(x)
+	case kMem:
+		return e.compileMemPrimitive(x)
 	}
 	return "0", "int"
 }
@@ -4753,6 +4796,45 @@ func (e *emitter) emitBitsShift(op, lv, rv, rt, llty string, width int) string {
 func (e *emitter) compileConv(x *expr) (string, string) {
 	v, vt := e.compileExpr(x.l)
 	return e.convToType(v, vt, x.s), x.s
+}
+
+// compileMemPrimitive lowers one memory.* call to its runtime entry point. The standard's surface is
+// exactly what it names: setBlock takes an int and accepts 1 … 2^20 (the interpreter's range), and a
+// value outside it is a runtime error with the interpreter's message and position, catchable by the
+// enclosing try exactly like the interpreter's RunError. No call is ever dropped.
+func (e *emitter) compileMemPrimitive(x *expr) (string, string) {
+	switch x.s {
+	case "setBlock":
+		v, vt := e.compileExpr(x.l)
+		v = e.coerceTo(v, vt, "int")
+		ok := e.newReg()
+		e.emitInstr("%s = call i32 @ql_mem_set_block(i32 %s)", ok, v)
+		bad := e.newReg()
+		e.emitInstr("%s = icmp eq i32 %s, 0", bad, ok)
+		cont := e.newBlock()
+		if e.curTry != "" {
+			e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, e.curTry, cont)
+		} else {
+			e.needPanic = true
+			fail := e.newBlock()
+			e.emitInstr("br i1 %s, label %%%s, label %%%s", bad, fail, cont)
+			e.setBlock(fail)
+			c := e.i8Ptr(e.strConst(msgID(i18n.MsgFieldTypeerrorSetblockNRequiresPositiveInt)))
+			e.emitInstr("call void @ql_panic(i8* %s, i32 %d)", c, x.line)
+			e.emitInstr("unreachable")
+		}
+		e.setBlock(cont)
+	case "compact":
+		// D6 answered by the interpreter, not by choosing: eval.go calls MemoryManager.Compact and
+		// returns normally (its comment says "never returns at all", the code does), so the compiled
+		// path calls the runtime and control continues.
+		e.emitInstr("call void @ql_mem_compact()")
+	case "clear":
+		// The derived wipe: release every empty slab and zero the released region (free slots kept in
+		// partial slabs). It is not delete — a live object's payload is not touched.
+		e.emitInstr("call void @ql_mem_clear()")
+	}
+	return "", "void"
 }
 
 // emitZeroCheckI integer division-by-zero check (jump to catch inside try, otherwise a runtime error).

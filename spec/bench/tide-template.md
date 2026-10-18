@@ -18,7 +18,9 @@ block policy:
 
 - `bench/tide/qk/tide.qk` — the language's tide: a `List<int>` literal, a read of both ends, and
   `delete`, repeated. The compiler has no address-of, so the opaque sink is the string returned by
-  `toString()`: `tide.qtide_sink` stores it in a volatile global and `tide.qtide_release` frees it.
+  `toString()`: `tide.qtide_sink` stores it in a volatile global and `tide.qtide_release` releases it
+  through the compiled runtime's `ql_free`, because since stage 2 (D1) the string builders are
+  counted-slab allocations too.
   `bench/tide/qk/tide_floor.qk` is the same loop with the sink removed, and
   `bench/tide/qk/tide_legacy_floor.qk` is the historical shape with no read, sink or checksum.
 - `bench/tide/c/tide.c` — the C control: `malloc(12)`, three writes, a volatile sink, and `free`.
@@ -37,8 +39,8 @@ presented as "the best"; a single best run is not the result. `--record` writes
 `spec/bench/tide.tsv`, the authored input to this generated report. `--quick` uses 1e6 rounds for CI
 smoke; the checked-in record uses 1e8 rounds and five runs. `--attribution` adds diagnostic controls:
 the same loop with no allocation, string or sink; the same loop with only the opaque sink; and C
-controls that time the counted-slab List allocations, the List header stores, the host string
-malloc/free, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
+controls that time the counted-slab List allocations, the List header stores, the counted-slab
+string allocation, the integer formatter, the buffer framing and the real `ql_list_int_str` helper. Those
 rows are printed after the record and are never written to `spec/bench/tide.tsv`, so the recorded
 schema and the embedded claim block stay stable.
 
@@ -52,14 +54,16 @@ that the optimizer can no longer erase it. The C/Rust/Go floor rows still measur
 floors.
 
 `List<int>.toString()` formats each element in place with a local decimal writer, so it allocates no
-per-element string and calls no libc formatter; the one host `malloc` it still performs is the
-returned string the caller owns and releases. The attribution controls retain the `snprintf` path as
+per-element string and calls no libc formatter; the one allocation it still performs is the returned
+string, which has been a counted-slab allocation since stage 2 (D1) and is released through
+`ql_free`. The attribution controls retain the `snprintf` path as
 a comparison row, which is why the rejected direction is still measured rather than assumed.
 
 The interpreter implements the block policy as a logical layer over the host allocator; its policy
 rows describe that accounting and not the compiled tide. The compiled artifact's `List` allocations
-go through the stage-1 counted-slab allocator on POSIX, while its runtime helper strings (including
-the `toString()` string) remain on the host allocator; Windows keeps the libc path because the
+go through the counted-slab allocator on POSIX, and since stage 2 (D1) so do the runtime's own
+helper allocations (strings, split lists, hash tables, task and channel objects); the only host
+allocations left are the allocator's own block storage. Windows keeps the libc path because the
 runtime is not linked there. The compiled rows therefore measure the counted-slab path, not the
 interpreter's logical blocks.
 
