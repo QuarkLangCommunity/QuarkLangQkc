@@ -663,20 +663,20 @@ func (e *emitter) allocCallExpr(size string) string {
  * migrates an inline buffer to a separate one before reallocating; from then on the list has the
  * ordinary two-allocation shape. Above the budget the literal keeps two allocations.
  *
- * The budget mirrors qthreads.c.txt's allocator (QL_MEM_OBJ_HDR = 32, classes 16..1024): it picks
+ * The budget mirrors qthreads.c.txt's allocator (QL_MEM_OBJ_HDR = 16, classes 16..1024): it picks
  * the one-block shape only when the slot bytes it reserves are no larger than the two slots the
  * separate shape reserves. A drift between these constants and the runtime would only change which
  * shape is chosen, never the ownership or the accounting: one allocation/free either way. */
 
 const (
 	qlListHeaderBytes = 16 // %List/%ListS/%ListF: pointer + two i32s
-	qlObjHeaderBytes  = 32 // QL_MEM_OBJ_HDR in qthreads.c.txt
+	qlObjHeaderBytes  = 16 // QL_MEM_OBJ_HDR in qthreads.c.txt
 )
 
 var qlAllocatorClasses = [...]int{16, 32, 64, 128, 256, 512, 1024} // ql_mem_class_size
 
 // qlAllocatorSlotBytes returns the bytes a counted-slab allocation of n payload bytes occupies,
-// including the 32-byte object header; 0 means the request takes the large path.
+// including the 16-byte object header; 0 means the request takes the large path.
 func qlAllocatorSlotBytes(n int) int {
 	if n < 1 {
 		n = 1
