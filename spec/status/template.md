@@ -113,6 +113,19 @@ still not linked there; the generator keeps the libc path). Stage 1 changes no n
 language surface, so this report keeps the divergence honest until stage 2 takes the decisions the
 design lists. Size: large — one design review of its own, not a correction.
 
+### §10 memory on Windows
+
+`spec/status/claims.tsv` 11.3-15 records the platform gap. The compiled runtime is not linked on Windows,
+so stage 1's counted-slab allocator is absent there: compile and link keep the libc path and `delete` on an
+owned `List<int>` still releases host storage. What a Windows user loses is the policy itself — there is no
+occupancy or fragmentation accounting and no block-reuse policy, so the allocator's stable block set
+cannot be observed; the `memory.setBlock`, `memory.compact` and `memory.Fragmentation` accessors have no
+compiled implementation on any platform yet, and on Windows there is not even the internal counter they
+would read. This is the accepted position, not a promise. Closing it means linking the compiled runtime on
+Windows (the design's R8/T6) or splitting the allocator into a platform-neutral translation unit compiled
+on all three; either is stage 3 work. Size: large — one runtime port or one allocator extraction, not a
+correction.
+
 ## 11.4 What `docs/primitives.md` §7.6 asks for, and what this revision does not do
 
 §7.6 lists twelve changes, smallest first, and calls the first nine pure restatement. This revision adopts
