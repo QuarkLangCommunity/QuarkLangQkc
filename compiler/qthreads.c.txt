@@ -1214,14 +1214,25 @@ static int ql_cmp_int(const void* a, const void* b) {
 void ql_list_int_sort(int* buf, int head, int tail) {
     if (tail - head > 1) qsort(buf + head, tail - head, sizeof(int), ql_cmp_int);
 }
-/* List.toString(): [e0, e1, ...] (only the visible range head..tail) */
+/* ql_itoa writes v's decimal spelling, byte-for-byte the same as snprintf("%d"), into buf and returns its length. */
+static int ql_itoa(int v, char* buf) {
+    char digits[12];
+    int n = 0, o = 0;
+    unsigned u = v < 0 ? (unsigned)(-(long long)v) : (unsigned)v;
+    do { digits[n++] = (char)('0' + u % 10u); u /= 10u; } while (u != 0);
+    if (v < 0) buf[o++] = '-';
+    while (n > 0) buf[o++] = digits[--n];
+    buf[o] = 0;
+    return o;
+}
+/* List.toString(): [e0, e1, ...] (only the visible range head..tail); elements format in place, with no per-element allocation. */
 char* ql_list_int_str(const int* buf, int head, int tail) {
     size_t cap = 16, o = 0;
     char* r = malloc(cap);
     r[o++] = '[';
     for (int i = head; i < tail; i++) {
         char nb[16];
-        int n = snprintf(nb, sizeof nb, "%d", buf[i]);
+        int n = ql_itoa(buf[i], nb);
         if (i > head) {
             if (o + 2 > cap) { cap *= 2; r = realloc(r, cap); }
             r[o++] = ','; r[o++] = ' ';

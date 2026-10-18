@@ -217,6 +217,27 @@ if [ "$ATTR" -eq 1 ]; then
   ROWS="$ATTR_ROWS"
   run_timing attribution_empty "Attribution base: loop arith and checksum only" QuarkLang required "the tide.qk loop and checksum with no allocation, string or sink; every phase below is measured against this row" "$BUILD/tide-qk-empty"
   run_timing attribution_sink "Attribution base + opaque C sink" QuarkLang required "the base loop plus the opaque sink call on a constant string; no allocation and no release" "$BUILD/tide-qk-sink"
+
+  # C controls that split the phases the language surface cannot isolate: the real runtime helper is
+  # extracted verbatim, and the List allocations go through the same counted-slab runtime.
+  # Extract the real helper together with the formatter it uses, verbatim.
+  awk '
+    /^static int ql_itoa\(int v, char\* buf\) \{/ { copy = 1 }
+    copy { print }
+    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { in_list = 1 }
+    in_list && /^\}/ { exit }
+  ' compiler/qthreads.c.txt > "$BUILD/ql_list_int_str.inc"
+  awk '
+    /^char\* ql_list_int_str\(const int\* buf, int head, int tail\) \{/ { skip = 1 }
+    skip == 0 { print }
+    skip == 1 && /^\}/ { skip = 0 }
+  ' compiler/qthreads.c.txt > "$BUILD/attrib_runtime_body.c"
+  printf 'char* ql_list_int_str(const int* buf, int head, int tail);\n' > "$BUILD/attrib_runtime.c"
+  cat compiler/internal/rtcat/msg_c.h "$BUILD/attrib_runtime_body.c" >> "$BUILD/attrib_runtime.c"
+  clang -O2 -pthread -I"$BUILD" bench/tide/attrib/attrib.c "$BUILD/attrib_runtime.c" -o "$BUILD/tide-attrib"
+  for phase in base allocpair header string_alloc int_fmt fast_fmt bookkeeping render; do
+    run_timing "attr_$phase" "Attribution control, $phase" C optional "C control for the $phase phase of the observable path; the render control calls the real ql_list_int_str extracted from compiler/qthreads.c.txt" "$BUILD/tide-attrib" "$phase"
+  done
   ROWS="$ROWS_MAIN"
 fi
 
