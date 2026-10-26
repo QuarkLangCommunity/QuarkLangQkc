@@ -7,7 +7,7 @@ README row `Tide, 1e8 rounds = 1 ms` had no checked-in source, and a design revi
 1 ms was LLVM dead-code elimination: at `-O3` the allocation was removed, while the same IR at `-O0`
 still referenced `malloc`/`calloc`/`free`. This report and the harness behind it replace the claim
 with a measurement the optimizer cannot erase. Since stage 1 of the compiled memory design
-([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) the compiled `List` allocation goes through
+([`compiled-memory.md`](compiled-memory.md), Part II) the compiled `List` allocation goes through
 the counted-slab runtime allocator on POSIX, so the QuarkLang rows below measure that allocator, and
 the historical no-use shape is no longer erased by the optimizer.
 

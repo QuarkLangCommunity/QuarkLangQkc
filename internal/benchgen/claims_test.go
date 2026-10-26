@@ -257,9 +257,7 @@ func TestREADMENumbersStayInMarkedBlocks(t *testing.T) {
 // TestHistoricalDocsCarryTheBanner keeps the one-off measurements from reading as current claims.
 func TestHistoricalDocsCarryTheBanner(t *testing.T) {
 	for _, path := range []string{
-		"docs/compiled-memory-design.md",
-		"docs/compiled-memory-stage1.md",
-		"docs/compiled-memory-stage2.md",
+		"docs/compiled-memory.md",
 	} {
 		b, err := os.ReadFile(filepath.Join(repoRoot(t), path))
 		if err != nil {

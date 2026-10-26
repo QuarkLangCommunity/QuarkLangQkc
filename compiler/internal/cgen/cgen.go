@@ -607,7 +607,7 @@ type emitter struct {
 // source there, so the counted-slab allocator in qthreads.c.txt is not linked and ql_alloc/ql_free have
 // no definition. The Windows IR keeps the libc allocation path it had before stage 1; the allocator's
 // tests and the occupancy/fragmentation accounting are therefore absent on Windows. See
-// docs/compiled-memory-stage1.md §5.
+// docs/compiled-memory.md Part II §5.
 const hostAllocatorFallback = runtime.GOOS == "windows"
 
 // emitAlloc / emitCalloc / emitRealloc / emitFree are the one place where cgen chooses between the

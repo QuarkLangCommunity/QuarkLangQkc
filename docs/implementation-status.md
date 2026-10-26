@@ -149,7 +149,7 @@ each block with the task that allocated it, and the worker releases every block 
 it publishes the task as done, so `ql_block` cannot observe a finished task whose storage is still
 counted; the interpreter does the same in `ReclaimTask`. `memory.Fragmentation()` remains unexposed
 in both engines. Stage 1 of the design
-([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) put the block policy in the runtime: counted
+([`compiled-memory.md`](compiled-memory.md), Part II) put the block policy in the runtime: counted
 slabs with size classes, a per-class free list, per-object release, occupancy and fragmentation
 accessors, `compact`, large-object blocks, and the code generator's 20 initial allocation sites plus 4
 growth sites routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free`. Stage 2 also routes the
@@ -160,7 +160,7 @@ emits. What remains outside the metric is the allocator's own host block storage
 (`ql_mem_host_alloc`/`ql_mem_host_free`) the metric measures the inside of; static data and the C
 stack are not allocations. What remains is exposing `Fragmentation` in both engines or deciding not
 to, and Windows (the runtime is still not linked there; the generator keeps the libc path). The
-design note for this stage is [`compiled-memory-stage2.md`](compiled-memory-stage2.md).
+design note for this stage is [`compiled-memory.md`](compiled-memory.md), Part III.
 Stage 2 adds no normative text and no language surface beyond the rows the standard already names.
 Size: large — one design review of its own, not a correction.
 
