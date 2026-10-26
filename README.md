@@ -389,7 +389,7 @@ outside:
 
 The VM is adopted only for shapes where the engine-equality tests hold it to the tree-walker's output.
 The old three-row speed table compared against an engine this tree no longer selects; it is withdrawn
-and the earlier figures are recorded in the [performance-claims inventory](docs/performance-claims-inventory.md).
+and the earlier figures are recorded in the [provenance section of the performance claims](docs/performance-claims.md#provenance-every-earlier-performance-claim).
 
 The VM reuses the interpreter's own primitives (`wrapI32`, `callFunc`, `ioPrintln`) and its error
 values. When a value's runtime type does not match the statically proven type (the language allows
@@ -405,7 +405,7 @@ Every number in this section is generated from a checked-in record; the two bloc
 claim, and a test fails when a quoted copy and the record disagree. The claims harness covers the
 cross-language `fib` family, the closed-form `sum`, the `fib(20)` latency percentiles and the
 interpreter-versus-native rows; the tide harness covers allocation. The inventory of earlier figures
-that were corrected or withdrawn is [`docs/performance-claims-inventory.md`](docs/performance-claims-inventory.md).
+that were corrected or withdrawn is the [provenance section of `docs/performance-claims.md`](docs/performance-claims.md#provenance-every-earlier-performance-claim).
 
 ### Claims: fib, sum, latency and the two backends
 
