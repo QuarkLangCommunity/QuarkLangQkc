@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Performance-claims harness: the fib, closed-form sum and fib(20) latency claims in README.md, plus
+# Performance-claims harness: the fib, closed-form sum and fib(20) latency claims in the single
+# report docs/performance-claims.md, plus
 # the interpreter-versus-native table, measured as one record.
 #
 #   bench/claims/run.sh                    # print the record (5 timed runs per row)

@@ -4,6 +4,11 @@
 owner's document and is untouched by this work: where this document proposes a change to the standard
 it says so and leaves the ruling to the owner (§8).
 
+The compiled path's current state is not this review's snapshot: Part III of
+[`compiled-memory.md`](compiled-memory.md) records the implemented memory surface, and the generated
+[`implementation-status.md`](implementation-status.md) records the per-engine status. This document owns
+the primitive analysis and the proposal, not those facts.
+
 **Analysed at** `923784b` (tip of `main` when this document was written), against
 `spec/STANDARD.md` **v0.8.2** (`spec/STANDARD.md:3`), and against
 `github.com/QuarkLangCommunity/QuarkLangQkparser v0.0.0-20261011044519-5316b66c4d5b`, the syntax module

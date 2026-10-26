@@ -1,4 +1,4 @@
-// Command qkbench renders the measured benchmark reports the README and the standard embed.
+// Command qkbench renders the single measured benchmark reports that the documentation links.
 //
 // The reports are generated, committed and checked: `go generate ./internal/benchgen` writes
 // docs/tide-benchmark.md and docs/performance-claims.md, and `-check` regenerates them in memory and

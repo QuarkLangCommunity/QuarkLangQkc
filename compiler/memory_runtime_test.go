@@ -9,7 +9,7 @@ package main
 // The debug build defines QL_MEM_DEBUG=1, so the allocator's hot-path assertions are active. The
 // release build defines it 0; ql_mem_check() still runs, which is what keeps the two builds from
 // drifting. Windows is skipped: compiler/main.go's runtimeSrc returns no source there, so the
-// allocator is not linked into Windows programs at all (docs/compiled-memory-stage1.md §5).
+// allocator is not linked into Windows programs at all (docs/compiled-memory.md Part II §5).
 
 import (
 	"context"

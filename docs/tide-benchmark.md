@@ -7,7 +7,7 @@ README row `Tide, 1e8 rounds = 1 ms` had no checked-in source, and a design revi
 1 ms was LLVM dead-code elimination: at `-O3` the allocation was removed, while the same IR at `-O0`
 still referenced `malloc`/`calloc`/`free`. This report and the harness behind it replace the claim
 with a measurement the optimizer cannot erase. Since stage 1 of the compiled memory design
-([`compiled-memory-stage1.md`](compiled-memory-stage1.md)) the compiled `List` allocation goes through
+([`compiled-memory.md`](compiled-memory.md), Part II) the compiled `List` allocation goes through
 the counted-slab runtime allocator on POSIX, so the QuarkLang rows below measure that allocator, and
 the historical no-use shape is no longer erased by the optimizer.
 
@@ -79,7 +79,7 @@ the same loop with no allocation, string or sink; the same loop with only the op
 controls that time the counted-slab List allocations, the two-allocation List header shape and the
 one-block header-plus-three-elements shape, the counted-slab string allocation, the integer formatter,
 the buffer framing and the real `ql_list_int_str` helper. Those rows are printed after the record and
-are never written to `spec/bench/tide.tsv`, so the recorded schema and the embedded claim block stay
+are never written to `spec/bench/tide.tsv`, so the recorded schema and the marked claim block stay
 stable.
 
 `--compile-only` builds every C control with `-Werror` and exits without measuring; the ordinary
@@ -124,12 +124,13 @@ go generate ./internal/benchgen     # renders docs/tide-benchmark.md from the re
 go run ./cmd/qkbench -check         # fails when the committed report is stale
 ```
 
-After `--record`, copy the marked measurement block into `README.md` and `spec/STANDARD.md` §10 as well;
-the report and those two claims are checked against the record, and the test fails until all three agree.
+After `--record`, run `go generate ./internal/benchgen`; this report is the only document that carries
+the marked block. `README.md` and `spec/STANDARD.md` §10 link here instead of embedding a copy.
 
 `TestGeneratedTideBenchmarkIsCurrent` runs the check in the ordinary `go test ./...` gate.
-`TestTideClaimsMatchMeasurement` extracts the marked block below from this report, `README.md` and
-`spec/STANDARD.md` §10 and fails when the three copies differ, so a hand-edited number cannot survive.
+`TestTideClaimsMatchMeasurement` extracts the marked block below and compares it with the record, and
+`TestTimingNumbersStayInAuthoritativeReports` fails when a timing number appears outside this report
+and the claims report, so a hand-edited or copied number cannot survive.
 A toolchain that is missing is skipped explicitly and listed under `skipped` in the record; no number
 is invented for it. The record is generated once on the reference class named in the block and
 checked in; CI runs the quick harness to keep it working, and the drift gate compares the generated

@@ -9,6 +9,9 @@ through them (`internal/lang/localizer.go:30`, `compiler/msg.go:17`,
 `compiler/internal/cgen/localizer.go:17`, and `qkparser`'s own `msg`), and the coverage/ratchet tests
 in `internal/i18n/coverage_test.go`.
 
+The interface contract for this package is catalogued in [`ARCHITECTURE.md`](ARCHITECTURE.md) I-10;
+this document owns the design, the prototype and the migration plan rather than repeating that contract.
+
 **Everything below was re-verified on `origin/main` = `7e8e366`.** Claims that could not be verified
 are marked ⚠ and listed in §9.
 

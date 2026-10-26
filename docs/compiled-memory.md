@@ -1,14 +1,34 @@
-# The compiled path's memory model: a design review
+# The compiled path's memory model
 
-> **Historical measurements.** The timing figures kept in this note were taken at the revision the
-> note describes. They are not regenerated and are not claims about the current build; the live,
+> **Historical measurements.** The timing figures kept in this document were taken at the revisions
+> each part describes. They are not regenerated and are not claims about the current build; the live,
 > generated claims and their load, spread and checksums are in
-> [`performance-claims.md`](performance-claims.md).
+> [`performance-claims.md`](performance-claims.md) and [`tide-benchmark.md`](tide-benchmark.md).
 
-**Status.** Design review only. This document changes no code, does not edit `spec/STANDARD.md`, and
-decides nothing: §5 lists what the owner must decide *before* code is written, marked as decisions
+**Status.** This is the single document for the compiled path's memory model; it merges the design
+review, the stage-1 implementation note and the stage-2 implementation note that used to be three
+files. Part I is the design review and records the decisions the owner had to make; Part II records
+which readings stage 1 implemented; Part III records stage 2, which completed the §10 surface and is
+the current state. Section numbers restart in each part, so a bare `§n` refers to the current part and
+a cross-part reference names the part explicitly.
+
+| Part | What it records | State |
+|---|---|---|
+| I | Design review: the recorded gap, the allocation sites, the allocator options, the recommendation and the owner decisions | Historical review (2026-10-16); its recommendation was adopted |
+| II | Stage 1: the counted-slab allocator and the code-generator routing | Landed; historical implementation note |
+| III | Stage 2: the `memory.*` surface, the delete matrix, runtime-wide routing and task ownership | Current compiled-path state |
+
+Part III supersedes the "what still hard-errors" and "what stage 2 needs" lists of Part II; the rest of
+Part II still describes the allocator that Part III builds on. Where a part says a number is
+historical, the live number is in the generated report named above.
+
+## Part I — Design review (2026-10-16)
+
+**Status.** Design review only. This part changes no code, does not edit `spec/STANDARD.md`, and
+decides nothing: §5 lists what the owner had to decide *before* code was written, marked as decisions
 rather than resolutions. It is not the standard; where it reports a divergence, the standard is quoted
-and the ruling is left to the owner.
+and the ruling was left to the owner. Part II records the readings stage 1 took and Part III the
+readings stage 2 took.
 
 **Reviewed at** `ad7a98c` (tip of `origin/main` when this review was written, 2026-10-16), against
 `spec/STANDARD.md` **0.8.3** as its header says (`spec/STANDARD.md:3`) even though the revision log
@@ -38,9 +58,9 @@ line number.
 
 ---
 
-## 1. What the standard promises, and what each path does today
+### 1. What the standard promises, and what each path does today
 
-### 1.1 The promise (§10)
+#### 1.1 The promise (§10)
 
 §10 scopes itself to the compiled artifact and makes the interpreter an emulation layer over its host
 allocator (`spec/STANDARD.md:268-273`):
@@ -90,7 +110,7 @@ Five problems are visible in the text itself, before any code is read:
 5. **`Fragmentation()` is normative surface but has no definition of "live" or of what is counted**
    (internal waste? rounding? metadata? external fragmentation?). §5 D8.
 
-### 1.2 The recorded gap, and where the record is itself stale
+#### 1.2 The recorded gap, and where the record is itself stale
 
 §11.3 states the divergence this review is about (`spec/STANDARD.md:425-443`). Its measured table is
 quoted here because it is the baseline this document verifies:
@@ -122,7 +142,7 @@ Three corrections to that record, all measured in this review:
   (`compiler/internal/cgen/cgen.go:2395-2397`). That is a defensible choice, but it is not §10's
   "release x's storage"; it is a no-op, and it is another shape the standard does not describe.
 
-### 1.3 Measured behaviour today
+#### 1.3 Measured behaviour today
 
 The table below is first-hand: each row was produced by running the interpreter and compiler binaries
 built from `ad7a98c` (A.3). Errors are quoted in English (`LANG=C.UTF-8`).
@@ -148,7 +168,7 @@ naming `memory`. This is a diagnostic defect in its own right, but the design co
 important one: **the front end accepts the call and the lowering layer refuses it**, so a feature that
 the type checker has already admitted cannot be caught earlier.
 
-### 1.4 Why the parity gate does not see this
+#### 1.4 Why the parity gate does not see this
 
 `compiler/testdata/compare.sh` runs both engines over `compiler/testdata/cases/*.kq` and
 `cases_run/*.kq` and requires byte-identical output (`compiler/testdata/compare.sh:1-40`). At this
@@ -174,9 +194,9 @@ produce the same number or the case must be excluded (which is itself a standard
 
 ---
 
-## 2. What a compiled program actually allocates today
+### 2. What a compiled program actually allocates today
 
-### 2.1 Pipeline and counting rule
+#### 2.1 Pipeline and counting rule
 
 A compiled program is Go lowering to LLVM IR plus an embedded C runtime (`compiler/embed.go:11-19`):
 `cgen` emits `malloc`/`calloc`/`realloc`/`free` calls directly into the IR, and `clang` links the IR
@@ -198,7 +218,7 @@ Totals at this revision: **57 initial allocation call sites, 15 `realloc`, 4 `fr
 not in `qthreads.c.txt` at all, so a "runtime allocation count" is not a count of what a compiled
 program actually allocates. Appendix A.1 gives the commands; Appendix B lists every line.
 
-### 2.2 The runtime's allocation sites
+#### 2.2 The runtime's allocation sites
 
 `compiler/qthreads.c.txt` is 870 lines. Its 37 initial allocations group as follows. "Never" in the
 last column means the storage is still live at process exit; only explicit release would change that,
@@ -239,7 +259,7 @@ Two details matter to the design more than the raw count:
   forbid it and rewrite the growth paths to allocate-copy-free. This is not mentioned in §11.3's
   "new allocator with a free list and an occupancy rule", but it is a required piece (§4.4 R6).
 
-### 2.3 The allocations cgen emits (per compiled program)
+#### 2.3 The allocations cgen emits (per compiled program)
 
 These are emitted into every program that uses the construct, regardless of the runtime. Sizes are the
 LLVM-level constants at the cited line; struct sizes are computed (`e.sizeOf`).
@@ -263,7 +283,7 @@ LLVM-level constants at the cited line; struct sizes are computed (`e.sizeOf`).
 (`cgen.go:815,824,837`), i.e. a pointer plus two cursors; there is no size or owner word in the
 object, which is exactly what a block allocator would need at `free`.
 
-### 2.4 `delete`'s lowering, in full
+#### 2.4 `delete`'s lowering, in full
 
 The lowerer's gate is three lines (`compiler/internal/cgen/lower.go:1176-1184`):
 
@@ -293,7 +313,7 @@ that `free` can read. The current `List` layout has no room for a header inside 
 buffer pointer is handed to user code as `i32*`, so a header would have to sit *before* the pointer
 (§4.4 R5).
 
-### 2.5 Lifetimes, and what this means for §10
+#### 2.5 Lifetimes, and what this means for §10
 
 The compiled program's de facto lifetime model is "allocate, use, optionally delete a `List<int>`, exit".
 There is no scope cleanup, no escaping analysis-based free, and no runtime reclamation other than the
@@ -320,9 +340,9 @@ one hash-table growth `free`. Consequently:
 
 ---
 
-## 3. Design options for a block allocator behind the compiled runtime
+### 3. Design options for a block allocator behind the compiled runtime
 
-### 3.0 Requirements the options are judged against
+#### 3.0 Requirements the options are judged against
 
 Derived from §10 and the constraints above; each is cited to its source.
 
@@ -342,7 +362,7 @@ Derived from §10 and the constraints above; each is cited to its source.
 | C2 | `realloc` is used on hot growth paths; the allocator must support it or the growth paths must change | §2.2 |
 | C3 | Windows does not link `qthreads.c.txt` today (`runtimeSrc` returns `""` on Windows) | `compiler/main.go:27-30` |
 
-### 3.1 Option A — flat free list per size class
+#### 3.1 Option A — flat free list per size class
 
 **Mechanics.** Round each request to a size class (e.g. 16, 32, 64 …); keep one singly-linked free
 list per class; `alloc` pops, `free` pushes; large requests go to the host. This is the simplest
@@ -370,7 +390,7 @@ allocator and the closest to what a libc `malloc` fast path does.
 `setBlock`/`Fragmentation`/`compact` as specified without recreating blocks. It is a useful fast path
 inside a counted block design, not a complete option.
 
-### 3.2 Option B — one sorted free list (address-ordered extents)
+#### 3.2 Option B — one sorted free list (address-ordered extents)
 
 **Mechanics.** Keep free extents sorted by address; allocation searches for a fit (first-fit or
 best-fit), splits the extent, and `free` inserts and coalesces with neighbours. Blocks are extents
@@ -399,7 +419,7 @@ carved from a heap region; a header per extent records size and block.
 O(number of extents) search/coalesce, pointer stability means no compaction, and the standard's metric
 does not measure its main risk.
 
-### 3.3 Option C — slabs (fixed-size slots per size class, block = slab)
+#### 3.3 Option C — slabs (fixed-size slots per size class, block = slab)
 
 **Mechanics.** A block is a slab of `setBlock(n)` bytes dedicated to one size class. It has a header
 (size, class, used count, next) and a free list of slots. `alloc` takes the least-occupied slab of the
@@ -434,7 +454,7 @@ or larger than a slab) get a dedicated block with one object and a tail.
 all mean what §10 says, while keeping the implementation small enough to review. Its price is a
 class-partitioned interpretation of "block", rounding waste in the metric, and a large-object path.
 
-### 3.4 Comparison
+#### 3.4 Comparison
 
 | Dimension | A: flat size-class free list | B: one sorted free list | C: counted slabs |
 |---|---|---|---|
@@ -452,7 +472,7 @@ class-partitioned interpretation of "block", rounding waste in the metric, and a
 | Implementation size | small | large | moderate |
 | Windows (C3) | platform-neutral possible | same | same |
 
-### 3.5 The tide benchmark: what it measures now, and what it must measure next
+#### 3.5 The tide benchmark: what it measures now, and what it must measure next
 
 The current situation is worse than "the compiled benchmark is missing". It is **measuring the wrong
 thing**:
@@ -493,7 +513,7 @@ The 1 ms number should not be used as evidence for or against any option here. T
 what the allocator does when it is *not* optimized away; the current benchmark cannot see that
 difference at all.
 
-### 3.6 What breaks for programs that allocate in loops
+#### 3.6 What breaks for programs that allocate in loops
 
 - **Today, such loops can be free.** If the compiler can see that a loop's allocation never escapes and
   is deleted every iteration, LLVM removes the malloc/free pair (A.3). Any out-of-line allocator
@@ -520,9 +540,9 @@ difference at all.
 
 ---
 
-## 4. Recommendation, cost, tests, risks
+### 4. Recommendation, cost, tests, risks
 
-### 4.1 Recommendation: Option C, counted slabs, in two stages
+#### 4.1 Recommendation: Option C, counted slabs, in two stages
 
 **Recommend Option C.** It is the smallest design that makes all four §10 primitives mean what the
 standard says, and the only one whose `Fragmentation()` is the quantity §10 actually names ("unused
@@ -583,7 +603,7 @@ Fragmentation():
 | 2 | `delete` for the decided domain + `__delete__` dispatch + `memory.*` lowering + `Fragmentation` exposure | the language-visible part; needs the §5 decisions |
 | 3 | Runtime-wide allocation routing and task ownership/reclamation | §5 D1/D5; can ship later without changing stage 1–2 semantics |
 
-### 4.2 Cost
+#### 4.2 Cost
 
 Line counts are **ESTIMATE**s based on the measured site counts; they are not code. The measured inputs
 are the 57 initial allocation sites, 15 `realloc`s, 4 `free`s, 20 cgen emission sites, and the
@@ -609,7 +629,7 @@ that review's size estimate. It is larger than the 24-site count suggests becaus
 runtime sites and not the cgen emission sites, `realloc`, parity cases or the benchmark. It is not a
 one-sitting change.
 
-### 4.3 Tests that would prove it
+#### 4.3 Tests that would prove it
 
 | # | Test | What it proves | Shape |
 |---|---|---|---|
@@ -651,7 +671,7 @@ escape is needed because the `toString` branch is only taken once per 1000 itera
 may still hoist or split the loop. The test must fail if the allocator is bypassed (e.g. if a raw
 `@malloc` remains on the delete path). This is the case that would have caught every one of F3–F5.
 
-### 4.4 Risks, especially "slower than the current malloc/calloc path"
+#### 4.4 Risks, especially "slower than the current malloc/calloc path"
 
 | # | Risk | Why / evidence | Mitigation or decision |
 |---|---|---|---|
@@ -673,7 +693,7 @@ before the benchmark is rerun.
 
 ---
 
-## 5. Decisions the owner must make before code is written
+### 5. Decisions the owner must make before code is written
 
 None of these is resolved by this document. Each changes the standard, the language surface, or the
 acceptance tests; picking one silently is how the next §11.3 entry gets written. The "why" column points
@@ -695,9 +715,9 @@ to the section that establishes the conflict.
 
 ---
 
-## Appendix A — measurements and commands
+### Appendix A — measurements and commands
 
-### A.1 Counts
+#### A.1 Counts
 
 ```sh
 git show 0895b53:compiler/qthreads.c.txt > "$HOME/.cache/q-0895b53.c"   # the recording commit
@@ -718,7 +738,7 @@ grep -nE '@(malloc|calloc|realloc|free)' compiler/internal/cgen/cgen.go
 `realloc` lines in the runtime: 451, 529, 532, 535, 666, 708, 711, 714, 734, 737, 740. The single
 `free` is line 801.
 
-### A.2 Interpreter accounting numbers
+#### A.2 Interpreter accounting numbers
 
 ```sh
 go test ./internal/lang -run '^$' \
@@ -731,7 +751,7 @@ Measured on this machine (2026-10-17): `reuse-rate 1.000`, `new-blocks 2`, `frag
 (`internal/lang/bench_test.go:84-145`), not a compiled program; `ReportMetric` prints three significant
 digits, so 99.96% appears as `1.000` here.
 
-### A.3 Probes
+#### A.3 Probes
 
 All probes were built from `ad7a98c`; the interpreter was `go build -o quark .`, the compiler
 `(cd compiler && go build -o qkc .)`. Errors below are English (`LANG=C.UTF-8`).
@@ -770,7 +790,7 @@ int main(void){ for (long i=0;i<100000000L;i++){ void* p=malloc(12); sink=p; fre
 
 `clang -O2`, three runs: 0.42 s, 0.46 s, 0.50 s.
 
-### A.4 Gate results
+#### A.4 Gate results
 
 Run in a linked worktree on `ad7a98c` plus this document, 2026-10-17 (A.5 has the commands):
 
@@ -784,7 +804,7 @@ Run in a linked worktree on `ad7a98c` plus this document, 2026-10-17 (A.5 has th
 | `go generate ./internal/i18n` + `go run ./cmd/qki18n -check` + `git diff --exit-code` | clean |
 | stress subset (`qkstress run`, `-timeout 90s`, `-skip path_fn_10k_params\|res_few_mb`, `-known stress/known-failures.txt`) | exit 0 (28 cases: AGREE 14, REJECT_AGREE 11, REJECT_DIFF 3) |
 
-### A.5 Gate commands
+#### A.5 Gate commands
 
 ```sh
 # root and compiler, both locales
@@ -812,7 +832,7 @@ go run ./cmd/qkstress run -cases stress-out/cases \
   -timeout 90s -skip 'path_fn_10k_params|res_few_mb' -known stress/known-failures.txt
 ```
 
-### A.6 What remains unverified
+#### A.6 What remains unverified
 
 - **✘ Runtime cost of a candidate allocator.** No allocator was implemented; the only cost data are
   the DCE measurement and the glibc control. The 1.5–3× estimate in §4.4 R2 is an estimate.
@@ -830,3 +850,472 @@ go run ./cmd/qkstress run -cases stress-out/cases \
   allocator yet). The RSS bound in T4 is a test design, not a measurement.
 - **✘ `Fragmentation()` equality across engines.** Not possible to test before the surface exists; the
   analysis in §3.3/§5 D8 says the numbers will differ unless accounting is aligned.
+
+---
+
+## Part II — Stage 1: counted slabs
+
+**Status.** Stage 1 of the three-stage plan in Part I, not a change to `spec/STANDARD.md`. It is the
+allocator and the code-generator routing; it does not change the language surface.
+
+Part I remains the review that names the open decisions. This part records which of those decisions
+stage 1 had to take, which it deliberately left open, and what is therefore true of the built artifact
+after the change.
+
+**Later stages.** Stage 2 (Part III) wires the surfaces this part records as hard errors —
+`memory.setBlock`, `memory.compact`, the derived `memory.clear`, the wider `delete` matrix with
+`__delete__` dispatch — routes the runtime's own C allocations (D1) and implements task-end reclaim
+(D5). The tables below describe the stage-1 artifact at the revision they were written; §8 is that
+stage's refusal list, not the current one.
+
+### 1. Boundary
+
+| In stage 1 | Not in stage 1 |
+|---|---|
+| A counted-slab allocator in `compiler/qthreads.c.txt` with a size class per object, a free list, a per-object release, an occupancy counter, large-object blocks, `compact` and a fragmentation accessor | Lowering `memory.setBlock` / `memory.compact` / `memory.clear` / `memory.Fragmentation` |
+| Routing the allocations the code generator emits through the allocator (`ql_alloc` / `ql_calloc` / `ql_realloc` / `ql_free`) | Routing the runtime's own C allocations (`ql_strcat`, hash tables, split, memo, tasks) through it |
+| Releasing an owned `List<int>` (a local, or a `copyd` parameter's callee-owned copy) through `ql_free` | Widening `delete` to other types, or `__delete__` dispatch in the compiled path |
+| Compiler IR-shape tests, an allocator assertion/stress test, a parity churn case, and a checked-in benchmark | `memory.*` language surface, cross-engine `Fragmentation` equality, task ownership/reclaim |
+| A build-time Windows fallback to libc (the runtime is still not linked there) | Enabling the compiled runtime on Windows |
+
+The lowerer keeps exactly the `delete` domain 0.8.10 pinned: an owned local `List<int>` variable, or a
+`copyd List<int>` parameter's callee-owned copy. A by-reference parameter, a struct, a scalar, a
+`List<String>` and a `List<float>` keep their positioned hard errors. No accepted form emits nothing.
+
+### 2. Decisions stage 1 had to take
+
+The design leaves eleven decisions to the owner. Stage 1 cannot be written without taking a reading of
+some of them; this table says which reading the code implements and which decisions stay open.
+
+| # | Reading implemented in stage 1 | Why this reading | Still open |
+|---|---|---|---|
+| D1 | **Staged (c), language allocations first.** The code generator's 20 initial allocation sites and 4 growth sites go through the allocator. The runtime's own C allocations stay on the host allocator, except `ql_any_copy_list`, which can return a `List<int>` that `delete` releases and is therefore routed too. | The design's stage 1 is "allocator in the runtime + cgen routing"; routing every C helper is stage 3. `ql_any_copy_list` is the one runtime allocation that can cross into a deletable language value. | Runtime-wide routing (D1 b/c) and the scope sentence in §10. |
+| D2 | **Option C, class-partitioned slabs.** A block is one slab of `setBlock(n)` bytes dedicated to one size class. | This is the design's recommendation and the only option that makes all four §10 rows meaningful. | The owner's blessing of the class-partitioned reading of "block" (D2 a vs b). |
+| D3 | **(a) per-object release, payload preserved, no zero on `ql_alloc`.** `ql_calloc` zeroes because callers asked for `calloc`; `ql_free` does not wipe. A later same-class allocation may therefore see the previous payload. | The standard's `delete` row says the payload is **not** wiped, and `memory.clear()` is named as the wiping operation. Stage 1 must not silently turn `delete` into a wiping operation. | The contradiction in §10's "so a released block never hands another value's bytes to the next user" (F5) is still a normative decision. If the owner chooses "never hand over old bytes", the allocator needs a zero-on-allocate or a generation/clear rule; that is a stage 2 change. |
+| D5 | **One global allocator lock, engaged when the task pool starts.** Before the first task pool exists the process cannot allocate from two threads, so the fast path is lock-free (Part I's R2 mitigation). Once `qpool_ensure` runs, every allocation takes the global lock. The `owner` argument is accepted; stage 1 records it only in large-block metadata and does not enforce or reclaim by owner. | Correctness before ownership, without paying for an uncontended atomic on every single-threaded allocation. The pool store happens before any worker exists or any task is queued. | Per-thread arenas, cross-thread `delete`, task-end reclaim (D5). |
+| D8 | **`ql_mem_fragmentation()` implements Part I's §3.3 formula** (unused bytes inside live slabs and live large blocks, over those blocks' bytes) and is **not exposed to the language**. `ql_mem_occupancy()` is its complement. | Part I's formula is the only definition that matches §10's "unused space inside live blocks". Exposing it or claiming cross-engine equality is a decision stage 1 does not take. | Exposure and cross-engine equality (D8 a/b/c). |
+| D10 | **(b) every routed allocation is observable.** The compiler emits an opaque `ql_alloc`/`ql_free` call for every routed allocation and never elides one. D10(a) is rejected for the routed surface. | The standard makes `delete`, `compact` and `Fragmentation` observable; an allocation that the optimizer removes is not part of the memory policy the standard describes. The benchmark must be able to see the allocator (T5). | Whether the owner wants (a) for some shapes, or (c) with an escape analysis. Stage 1 takes the conservative reading and accepts the measured cost (R1). |
+| D11 | **OOM and misuse are undefined at language level; assertions exist only under `QL_MEM_DEBUG`.** Release builds do not promise double-free/use-after-free detection. | §10 says releasing referenced storage is a programming error the runtime does not detect; adding a language-visible panic or generation check is a new guarantee. | The failure policy (D11 a/b/c). |
+
+The allocation API keeps the design's owner parameter even though stage 1 only records it on large blocks and never acts on it:
+`ql_alloc(size, owner)`, `ql_calloc(count, size, owner)`, `ql_realloc(ptr, size)`, `ql_free(ptr)`.
+
+### 3. Allocator shape
+
+```
+ql_slab  (a block: one size class)
+  header: magic | class | slot_count | used | used_bytes | size | free_head
+          next_partial | all_prev | all_next | raw
+  slots : [object header 32 B][payload class_size] ...
+  free list: per-slot `next_free` in the object header (payload is never overwritten)
+
+object header (32 B)
+  magic | kind (slab/large) | flags | requested | block | next_free
+  payload starts at header + 32, so every payload is 16-byte aligned
+
+large object
+  [large header][object header][rounded payload]   (one object per block, tail waste counted)
+
+state
+  partial[class] : slabs with at least one free slot, scanned for the least-occupied slab
+  all slabs      : for compact/check
+  large live list: for check/fragmentation
+  counters       : alloc_calls, free_calls, reuse, new_blocks, live_bytes, used_bytes
+```
+
+Size classes are 16, 32, 64, 128, 256, 512 and 1024 payload bytes. A request above 1024 bytes, or one
+that cannot fit a slab of the current block size, goes to the large path. The default block size is 4096
+bytes, matching the interpreter's `globalMemory.BlockSize`; `ql_mem_set_block(n)` accepts `1 … 2^20` and
+affects slabs created afterwards. When `n` is smaller than the minimum a class needs, the created slab is
+enlarged to hold one slot; that limit is recorded here because D7 (what a too-small `n` means) is still
+open.
+
+`ql_realloc` keeps the requested size in the header but may keep a larger capacity: on the large path it doubles the capacity when it moves, which is ordinary realloc slack and stops the list append loop from copying the whole buffer on every element once the tail passes half the capacity (design R6). `ql_free` reads the 32-byte object header immediately before the payload. Payloads from the host
+allocator are not accepted: every code-generator allocation is routed, and `ql_any_copy_list` is the only
+runtime C allocation routed. A release build treats a foreign pointer as undefined (D11); the debug build
+asserts.
+
+### 4. Entry points
+
+| Symbol | Contract |
+|---|---|
+| `void* ql_alloc(size_t size, int owner)` | One object; payload preserved from previous use, 16-byte aligned; `size == 0` behaves like `size == 1`; returns NULL on host OOM. |
+| `void* ql_calloc(size_t count, size_t size, int owner)` | Zeroes `count * size` bytes; overflow returns NULL. |
+| `void* ql_realloc(void* ptr, size_t size)` | Same class (or same large capacity) keeps the pointer; otherwise allocate/copy/min/free. `ptr == NULL` allocates; `size == 0` releases and returns NULL. |
+| `void ql_free(void* ptr)` | Per-object release back to the class slab; `NULL` is a no-op; does not wipe the payload. |
+| `int ql_mem_set_block(int n)` | 1 for an accepted future slab size (`1 … 2^20`), 0 otherwise; existing slabs unchanged. (`memory.setBlock` still refuses; the language lowering is stage 2.) |
+| `void ql_mem_compact(void)` | Releases every slab with `used == 0` to the host; never moves a live object. |
+| `double ql_mem_fragmentation(void)` | `(live_bytes - used_bytes) / live_bytes`, or 0 when nothing is live. |
+| `double ql_mem_occupancy(void)` | `used_bytes / live_bytes`, or 0 when nothing is live. |
+| `long long ql_mem_block_count(void)` | Cached slabs plus live large blocks. |
+| `long long ql_mem_live_bytes(void)` / `ql_mem_used_bytes(void)` | Sum of live block bytes / sum of requested bytes. |
+| `long long ql_mem_alloc_calls(void)` / `ql_mem_free_calls(void)` | Allocation and release calls (a realloc that moves counts one of each). |
+| `void ql_mem_stats(long long* reuse, long long* new_blocks, long long* block_count)` | Counter accessor named by the design; NULL outputs are ignored. |
+| `int ql_mem_check(void)` | Walks every slab/large block and the free lists; 0 when the invariants hold, non-zero otherwise. |
+
+`QL_MEM_DEBUG=1` adds assertions on the object/slab magic, occupancy bounds, free-list membership,
+alignment, double release and counter consistency. The ordinary compiled runtime is built without it.
+The checked-in C stress test (`compiler/testdata/memory/qthreads_mem_test.c`, driven by
+`compiler/memory_runtime_test.go`) runs it twice (debug and release), covers a deterministic
+delete/reallocate loop, the tide reuse, the large path, compact, and a concurrent worker + main loop
+through the task pool so the multi-threaded lock path is exercised too. It is also run under
+ThreadSanitizer in the stage-1 audit (clean); the gate itself uses clang without a sanitizer.
+
+### 5. Windows
+
+`compiler/main.go` still returns no runtime source on Windows: the compiled runtime is not linked there.
+The allocator lives in that runtime, so stage 1's allocator is absent on Windows. The code generator keeps
+its libc path on Windows (`malloc` / `calloc` / `realloc` / `free`), which is the behaviour Windows had
+before this change: compile and link keep working, `delete` on an owned `List<int>` still releases host
+storage, and none of the occupancy/fragmentation accounting exists. The allocator assertion test skips on
+Windows for the same reason.
+
+This is not a claim that stage 1 works on Windows. Making it work means either enabling the runtime there
+(Part I's R8/T6) or moving the allocator to a platform-neutral translation unit compiled on all three;
+both are stage 3 work. The Windows libc path is deliberately not a silent no-op: `delete` still releases,
+and every unwired `memory.*` surface still hard-errors.
+
+### 6. Optimisation contract
+
+Stage 1 implements D10(b) for the routed surface: every allocation emitted by the code generator is an
+opaque call to the runtime allocator, and the compiler does not elide it. LLVM can no longer delete a
+`malloc`/`free` pair that the language cannot observe, because there is no longer a malloc/free pair to
+delete. This is the deliberate trade in R1: a memory policy that the optimizer erases is not observable,
+and the design's own tide measurement was a measurement of dead-code elimination.
+
+The cost is measured, not assumed: see §7 and the checked-in benchmark under `bench/memory/`. The DCE
+floor is reported separately from the real allocator path.
+
+### 7. Measurements
+
+Measured on 2026-10-17 on Linux 7.2.10 (x86-64), clang 22.1.8, with the checked-in workload
+`bench/memory/alloc_bench.c` (a `volatile` sink stores every returned pointer and the payload is
+touched, so the optimizer cannot delete the allocation). Reproduce with:
+
+```sh
+scripts/bench-mem.sh            # n=15 runs x 2,000,000 iterations per cell, ns/op
+```
+
+Before = the pre-stage-1 libc path; after = `ql_alloc`/`ql_calloc` + `ql_free`. The values are medians
+with the sample standard deviation across the 15 runs (full min/max in the script output).
+
+| op | bytes | libc median (sd) | counted-slab median (sd) | ratio |
+|---|---:|---:|---:|---:|
+| malloc | 16 | 4.15 (0.90) | 7.41 (0.95) | 1.79x |
+| malloc | 64 | 4.26 (0.59) | 5.89 (1.48) | 1.38x |
+| malloc | 512 | 4.00 (0.80) | 7.03 (1.38) | 1.76x |
+| malloc | 4096 | 12.82 (0.72) | 18.41 (1.29) | 1.44x |
+| malloc | 8192 | 12.41 (1.42) | 18.00 (1.07) | 1.45x |
+| calloc | 16 | 4.49 (0.68) | 9.36 (0.73) | 2.08x |
+| calloc | 64 | 4.64 (0.74) | 8.78 (1.00) | 1.89x |
+| calloc | 512 | 6.40 (0.52) | 10.70 (0.97) | 1.67x |
+| calloc | 4096 | 32.21 (3.37) | 33.64 (2.46) | 1.04x |
+| calloc | 8192 | 45.88 (1.52) | 48.63 (2.20) | 1.06x |
+
+**R2 is real.** For ordinary small allocations the counted slabs are **1.4–2.1× slower than glibc's
+tcache**, the range the design predicted (1.5–3×). The overhead is the per-object header, the free-list
+walk through the object header (the payload must not be overwritten, so the link cannot live in it), the
+class lookup, and the atomic fast path when the task pool is enabled. Large blocks and zeroed 4–8 KiB
+allocations are close to libc (1.04–1.45×). This is the price of an allocator the program can observe;
+stage 2/3 can inline the fast path or add per-thread arenas if the owner wants it back.
+
+The end-to-end shapes use two checked-in programs:
+
+| program | before (origin/main `0fc0808`) | after | ratio |
+|---|---:|---:|---:|
+| `bench/memory/tide_dce.kq` (allocate/delete, nothing observed) | 0.55 ms (sd 0.07, n=15) | 24.36 ms (sd 1.30) | 44x |
+| `bench/memory/tide_loop.kq` (allocate, append, read, toString every 1000th) | 31.66 ms (sd 8.34, n=15; min 15.57, max 31.95) | 63.85 ms (sd 0.15) | 2.02x (median) |
+| `bench/qk/list.qk` (1,000,000 appends) | 7.56 ms (sd 4.08) | 7.63 ms (sd 3.94) | 1.01x |
+
+The first row is Part I's R1 in one line: the old binary was fast because LLVM erased the allocation
+(the DCE floor), not because the allocator was good. The second row is the same program with an
+observable use; the after path is not just slower, it is **stable**, which is what a real allocator looks
+like. The append shape does not regress: `ql_realloc`'s large-path slack avoids the O(n²) copy an
+exactly-sized realloc would have caused once the list tail passed half its capacity.
+
+The parity churn case `compiler/testdata/cases_run/z_delete_churn.kq` exercises the same delete/reallocate
+path under `compare.sh`; its output is byte-identical in both engines.
+
+**Coordination with the merged `bench/tide` harness (PR #125).** The harness landed on `main` while
+stage 1 was in review. Its record was measured on the pre-stage-1 libc path. Re-running
+`bench/tide/run.sh --record` on the stage-1 tree (1e8 rounds, 5 runs) gives:
+
+| row | pre-stage-1 record (`0fc0808` + #125) | stage-1 re-record | what happened |
+|---|---:|---:|---|
+| QuarkLang compiled, observable | 8.58 s | 9.44 s (spread 3.27%) | the `List` allocation now goes through the counted slabs; C control unchanged at 394.56 ms |
+| QuarkLang compiled, no sink | 56.25 ms (optimizer floor) | 1.07 s | the opaque `ql_alloc`/`ql_free` calls cannot be erased, so this is no longer an optimizer floor |
+| QuarkLang compiled, legacy shape | 0 µs (dead-code floor) | 983.02 ms | same: D10(b) keeps the allocation in the historical shape |
+
+This is the D10(b) reading in action, not an accidental benchmark change. At that revision the
+standard's §10 measurement paragraph and the generated block in `README.md`, `spec/STANDARD.md` and
+`docs/tide-benchmark.md` were updated together (revision 0.8.12; measurement text only, no normative
+change). Since the documentation consolidation the block lives only in
+[`tide-benchmark.md`](tide-benchmark.md); `TestTideClaimsMatchMeasurement` and
+`TestGeneratedTideBenchmarkIsCurrent` keep the single copy tied to the record.
+
+**Later attribution (not a stage-1 change).** `bench/tide/run.sh --attribution` now adds the base loop,
+the sink-only loop and C controls for the counted-slab List allocations, the List header stores, the
+host string malloc/free, the integer formatter, the buffer framing and the real `ql_list_int_str`. On
+that attribution, three `snprintf("%d")` calls per round were about 65 ns of the ~93 ns observable row.
+Replacing them with an in-place decimal writer and re-recording gives a 2.98 s observable row (1.78%
+spread), while the no-sink floor stays at 1.06 s and the C control at 399.30 ms. The table above is the
+stage-1 landing record; this later change is measured, re-recorded and kept by the same drift gates.
+
+### 8. What still hard-errors
+
+| Surface | Status after stage 1 |
+|---|---|
+| `memory.setBlock(n)` | Hard error in lowering, naming the stage-1 runtime entry point and the one supported memory operation (`delete` on an owned `List<int>`), not the generic "available in the interpreter" fallback. |
+| `memory.compact()` | Same. |
+| `memory.clear()` | Same. |
+| `memory.Fragmentation()` | Refused by the shared type checker; the compiled runtime has the accessor, no engine exposes it yet. |
+| `delete` on a by-reference parameter, a struct, a scalar, `List<String>`, `List<float>` | Unchanged positioned hard errors; the supported domain is named in the message. |
+| `memory.mode(...)` | Refused; not part of §10. |
+
+### 8b. Known limitations of this boundary
+
+- **Pre-stage-1 `.qklib` artifacts are refused, not migrated.** A library built by an older qkc emits
+  `malloc`/`free`; a new program's `delete` calls `ql_free`, and old library code can call `free` on a
+  `ql_alloc` pointer. Every artifact now carries `allocator_abi = "counted-slab/1"` in its manifest, and
+  `readQKLib` refuses an artifact with no stamp or a different one before it picks a variant, with a
+  message that names the change (libc `malloc`/`free` to counted slabs) and tells the user to rebuild the
+  library with this qkc. The qkc cache/engine version is 15; the artifact format gained one manifest field.
+  This closes the ABI side of R5/D1 at the artifact boundary and is pinned by
+  `TestQKLibWithoutAllocatorStampIsRefusedBothLocales`.
+- **Aliasing `delete` is still undefined.** `List<int> a = [1]; List<int> b = a; delete b;` releases
+  storage `a` still refers to. The standard says releasing referenced storage is a programming error
+  the runtime does not detect; stage 1 does not add detection. The allocator's debug build catches a
+  double release of the same object, not an alias.
+- **Runtime C allocations remain outside the metric.** Strings, split lists, hash tables, memo buffers
+  and task/channel objects are still host allocations (D1 staged). `Fragmentation()` counts the routed
+  language allocations only.
+- **Failure/misuse behavior is undefined in release** (D11): OOM returns NULL (the old libc path did
+  not check it either), a foreign pointer is not accepted by `ql_free`, and only `QL_MEM_DEBUG` asserts.
+- **Windows has no allocator at all** (§5); a pre-stage-1 `.qklib` is refused everywhere by its
+  missing allocator stamp (§8b).
+
+### 9. What stage 2 needs
+
+1. The owner's ruling on D2 (class-partitioned block), D3 (payload/reuse safety), D4 (delete domain),
+   D8 (Fragmentation exposure/definition) and D10 (optimisation contract).
+2. Lowering `memory.*` to the entry points above (including the D6 return reading and D7 `setBlock`
+   semantics), adding `Fragmentation` to the shared type checker and to both engines, or deciding not to
+   expose it.
+3. `__delete__` dispatch before release in the compiled path and a delete matrix (List/struct/new[]/String)
+   that both engines can run byte-for-byte.
+4. A task-ownership answer (D5) before routing task allocations, and a runtime-wide routing decision (D1)
+   before claiming §10 covers the whole artifact.
+5. A Windows decision: enable the runtime or split the allocator into a platform-neutral unit (R8).
+
+---
+
+## Part III — Stage 2: the §10 surface on the counted slabs
+
+**Status.** Stage 2 of the three-stage plan in Part I and the continuation of Part II. It records
+which of Part I's open decisions stage 2 had to take, what each surface now does in the compiled path,
+what the accounting covers and does not, and where the two engines still differ. Stage 2 changes no
+`spec/STANDARD.md` primitive: it wires rows the standard already names (`memory.setBlock`,
+`memory.compact`, `memory.clear` — the derived wipe — and the `delete` matrix), routes the runtime's
+own allocations (D1), and gives a task's blocks the reclaim-on-end behaviour §10 states (D5). The
+interspersed measurement-wording revision is `spec/STANDARD.md` 0.8.13.
+
+The governing rule for every surface was: open it either end to end or as a positioned hard error
+that names what is supported. Where the standard and the compiled path disagree about *semantics*
+rather than support, the reference interpreter's behaviour wins; where the interpreter has no answer,
+the gap is recorded with its size instead of invented.
+
+### 1. Boundary
+
+| In stage 2 | Not in stage 2 |
+|---|---|
+| `memory.setBlock(n)` lowered to `ql_mem_set_block` with the interpreter's `1 … 2^20` range and the interpreter's error | Exposing `memory.Fragmentation()` in either engine (D8 stays internal) |
+| `memory.compact()` lowered to `ql_mem_compact`, with the interpreter's answer to D6 (it returns) | A per-thread arena allocator or a lock-free fast path beyond stage 1's pool-started lock |
+| `memory.clear()` lowered to a new `ql_mem_clear` (release + zero-fill) | `memory.mode`, which §10 does not name and both engines refuse |
+| The delete matrix: every lowered list element type, an owned struct with `__delete__` dispatch, a `copyd` copy | Releasing a by-reference parameter's storage, a scalar/String (no heap storage), or a non-variable expression |
+| D1: the runtime's own C allocations routed through `ql_alloc`/`ql_calloc`/`ql_realloc`/`ql_free` | Routing what is not an allocation: static data, the C stack, the allocator's host block storage |
+| D5: per-task block ownership and reclaim at task end, proven by C harness + a task parity case | Cross-thread `delete` rules, or detection of a pointer that escaped a finished task |
+| A parity or refusal case per row of the matrix, plus allocator-harness tests | Windows: the runtime is still not linked there (unchanged) |
+
+### 2. Decisions stage 2 had to take
+
+Stage 1 recorded D1 as staged, D2 Option C, D3(a), D5's global lock, D8 internal, D10(b) and D11
+undefined. Stage 2 takes the next reading of the ones it touches; the others stand.
+
+| # | Reading implemented in stage 2 | Why this reading |
+|---|---|---|
+| D1 | **(c) completed: every allocation in the compiled artifact is routed.** Channel and task objects, string builders, split lists, hash tables and their bucket arrays, memo entries and interface boxes all call the counted-slab API. The only libc allocation left is the allocator's host block storage (`ql_mem_host_alloc`/`ql_mem_host_free`), which is the pair the metric measures the inside of. | §10 scopes itself to the compiled artifact; leaving the runtime on malloc would make `Fragmentation()` a partial metric. The audit test `TestRuntimeAllocationsStayRouted` fails if a helper reaches for libc again, and the C harness reads `ql_mem_alloc_calls`/`ql_mem_used_bytes` around a routed string. |
+| D4 | **The matrix, not one type.** An owned variable releases: `List<int>`, `List<String>`, `List<float>` (header + buffer), and a struct (its cell, after `__delete__()`), whether locally declared or a `copyd` parameter's callee-owned copy. A by-reference parameter, a scalar, a `String`, and a non-variable expression keep positioned hard errors naming the widened domain. | The interpreter accepts any variable; the compiled path can honestly release exactly the storage it allocated. A scalar or String has no heap storage to release, so a no-op would be silent acceptance; a by-reference parameter's storage belongs to the caller, so releasing it would free someone else's cell. Each remaining row has a refusal test in both shipped languages. |
+| D5 | **(c) block ownership, task-end release.** A block (slab, or large block) records the owner that created it. While a task runs, the worker sets a thread-local owner and `ql_alloc(size, 0)` inside it belongs to that task; main-thread storage stays owner 0 and is never shared with a task's slabs. When the task ends, the worker releases every block with its owner *before* publishing `done`, so `ql_block` never observes a finished task whose storage is still counted. | §10 says "when a task ends, the blocks it owns become reclaimable". The interpreter's `ReclaimTask` zeroes the block's occupancy at the same point; the compiled allocator's block is the slab, so the slab is the ownership unit. An object that escapes a finished task dangles, exactly as the interpreter's accounted-for value survives a block it no longer owns — §10 calls releasing referenced storage a programming error the runtime does not detect. |
+| D6 | **(a) it returns.** Read from the interpreter, not chosen: `eval.go` calls `MemoryManager.Compact()` and returns normally; only its comment says "never returns at all". The compiled path emits `ql_mem_compact` and falls through, and the parity case prints before and after two calls. | A terminating lowering would be a control-flow primitive the standard does not describe. |
+| D8 | **Stays internal.** `ql_mem_fragmentation()` and `ql_mem_occupancy()` exist for tests and the benchmark; no engine exposes `Fragmentation`, and the shared checker keeps refusing it. | Cross-engine equality is still an owner decision; printing two different numbers would be worse than the current honest gap. |
+| D10 | **(b) unchanged.** Every routed allocation is an opaque call; the optimizer cannot elide the memory policy. D1 extends the same rule to the runtime's helpers. | The tide record is a measurement of the policy, not of dead-code elimination. |
+| D11 | **Unchanged: undefined in release, asserted under `QL_MEM_DEBUG`.** A foreign pointer, a double release, use after release and a pointer escaping a finished task are undefined. | §10 says the runtime does not detect releasing referenced storage; adding detection is a new guarantee. |
+
+### 3. Surface by surface
+
+#### 3.1 `memory.setBlock(n)`
+
+The interpreter validates at run time and accepts `1 ≤ n ≤ 2^20`; the compiled lowering calls
+`ql_mem_set_block`, branches to a positioned runtime error carrying the interpreter's message for a
+value outside the range, and the error is catchable by `try` exactly like the interpreter's
+`RunError`. The size applies to slabs created afterwards, matching the interpreter reading
+`BlockSize` when a `MemBlock` is created (D7(a)). Windows keeps a positioned refusal that names the
+missing runtime.
+
+Parity: `compiler/testdata/cases/z_memory_setblock.kq` (accepted values, byte-identical), and
+`cases_run/z_memory_setblock_range.kq` (the `0` case: message, position and exit code compared).
+Tests: `TestMemorySetBlockLowersToRuntimeEntryPoint`, `TestMemorySetBlockErrorJoinsTry`,
+`TestCompiledMemorySurfaceRefusesBothLocales` (the refusal surface in English and Chinese).
+
+#### 3.2 `memory.compact()`
+
+`ql_mem_compact` releases every slab with no live object and never moves a live one. D6 is answered
+above: control continues. Parity: `cases/z_memory_compact.kq`.
+
+#### 3.3 `memory.clear()`, the derived wipe
+
+`ql_mem_clear` is the pair §10 names: every slab nobody occupies returns to the host, and every slot
+that is still free in a retained slab has its payload zeroed. A live object's bytes are untouched —
+clear is not delete. The interpreter's clear drops the emptied logical blocks; because its blocks are
+Go values rather than storage, it has no released bytes to zero, a gap of one semantic half in a layer
+that has no bytes (recorded, not invented).
+
+Tests: the allocator harness's `clear_wipes_released_region` (release keeps the payload, clear zeroes
+it, a live payload survives, the empty slab is released), the interpreter's
+`TestMemoryManagerClearDropsEmptyBlocks`, and the parity case `cases/z_memory_clear.kq`.
+
+#### 3.4 The delete matrix
+
+| Form | Interpreter | Compiled after stage 2 | Pinned by |
+|---|---|---|---|
+| owned local `List<int>` | releases the block | buffer + header through `ql_free` | `TestDeleteOnOwnedListIntStillLowers`, `z_delete_local.kq` |
+| owned local `List<String>` / `List<float>` | releases the block | same release path (header + buffer) | `TestDeleteOnListStringAndFloatLowers`, `z_delete_matrix.kq` |
+| `copyd List<int>` parameter | releases the callee's copy | same | `TestDeleteOnCopydListIntParameterStillLowers` |
+| owned local struct, with or without `__delete__` | runs `__delete__()`, no storage accounting | runs `__delete__()` (ordinary self-method call), then releases the cell | `TestDeleteOnStructRunsDeleteMethodThenReleases`, `TestDeleteOnStructWithoutDeleteMethodReleases`, `z_delete_matrix.kq` |
+| `copyd` struct parameter | same, on the copy | same | `TestDeleteOnCopydStructParameterLowers` |
+| by-reference parameter | releases the caller's block | **positioned hard error** (storage belongs to the caller) | `TestCompiledMemorySurfaceRefusesBothLocales` (list and struct), `cases_run/z_delete_churn.kq` for the accepted churn |
+| scalar / `String` local | silent no-op | **positioned hard error** (no heap storage to release) | `TestCompiledMemorySurfaceRefusesBothLocales` |
+| field / call / `new[]` expression | accepts (releases a block or does nothing) | **positioned hard error** (the compiler releases owned variables only) | `TestCompiledMemorySurfaceRefusesBothLocales` |
+| `pointer T` from `new T[n]` | accepts as a no-op | the construction is refused before `delete` is reached | existing `new` refusal tests |
+
+`z_delete_matrix.kq` is the parity case. `__delete__`'s effect is observed through a field that
+aliases another struct (not through released storage), and a `copyd` copy is released without touching
+the caller's value. The interpreter test `TestDeleteRunsStructDeleteMethod` keeps pinning its half.
+
+#### 3.5 D1: the runtime's own allocations
+
+All 37 historical runtime allocation sites and the 11 reallocation sites now go through the counted
+slabs; so do the channel/task objects and the boxed `interface{}` copies. The audit test
+`TestRuntimeAllocationsStayRouted` scans `compiler/qthreads.c.txt`: only the two host-block lines may
+call libc. The C harness proves a routed string's allocation is counted and released.
+
+**What the accounting covers now:** every byte the compiled artifact allocates from the heap, except
+the allocator's own host block storage — the block header and the aligned host chunk are what the
+metric measures the inside of, so counting them inside themselves would be circular. Static data and
+the C stack are not allocations.
+
+**ABI consequence, recorded:** a `String` returned by `toString`/`split`/`replace` and the other
+runtime builders is a counted-slab pointer, not a libc one. A linked C library that receives such a
+string must release it with `ql_free`; the tide sink did call libc `free` and aborted with
+`invalid size`, and now calls `ql_free`. QL code is unaffected (it never hands a string to libc free).
+
+#### 3.6 D5: task ownership
+
+The runtime worker marks the task, executes the compiled function, releases every block owned by the
+task, and only then publishes `done`. The C harness has two proofs: a direct owner test (a task block
+is released, the main thread's block survives, both slab and large paths) and an integration test
+(the real pool runs a worker that allocates without releasing, and `ql_block` observes the allocator
+back at its pre-merge used count). `cases_run/z_task_reclaim.kq` runs a task that allocates/deletes,
+ends, a second task, and the main thread — byte-identical in both engines.
+
+#### 3.7 Small list literals co-allocate the header and the element buffer
+
+A list literal's element count is known at compile time. At or below the small-literal budget the
+literal now allocates one counted-slab block of `16 + n*elem` bytes and points `buf` at
+`block + 16`; above it the literal keeps two allocations (the 16-byte `%List` header and the
+buffer). The budget mirrors the allocator's slot arithmetic (`QL_MEM_OBJ_HDR = 32`, classes
+16..1024) and picks the one-block shape only when it reserves no more slot bytes than the two slots
+it replaces: 12 int elements or 6 eight-byte elements at the default classes. `List<String>` and
+`List<float>` use the same path, and their element area stays calloc-zeroed.
+
+Ownership is still per object, and the payload is still not wiped. `delete` emits
+`@ql_list_release`, which frees the element buffer only when it is not `block + 16`, then frees the
+header. `append`/`appendAll` emit `@ql_list_grow`; for an inline buffer it allocates a separate
+buffer and copies the elements already written, then continues with `ql_realloc`, so `ql_realloc`'s
+owner and payload behaviour is untouched and a grown list has the ordinary two-allocation shape.
+Literals above the budget, grown lists, and lists built by runtime helpers (split, keys, any-copy,
+copyd) still release both blocks. The generated helpers have internal linkage, so a library and its
+host can both define them without a link collision.
+
+Accounting honesty: whether the literal is combined or spilled, one list object is one allocation
+and one release, so `alloc_calls`/`free_calls`/`used_bytes` count the real objects; nothing is hidden
+from the counters. Occupancy and fragmentation keep the stage-1 formula (unused bytes inside live
+slabs and large blocks over their bytes). Their values change because the block mix changes, not
+their meaning. Windows has no counted-slab runtime, so the same helpers emit libc calls there and
+`delete` keeps its libc path as before.
+
+### 4. What still differs, and its size
+
+| Gap | Size / consequence |
+|---|---|
+| `delete` on a by-reference parameter | One form; the compiled path cannot release caller storage. Positioned error, both languages. |
+| `delete` scalar / `String` / non-variable expression | Three forms the interpreter accepts as no-ops or by dereferencing an expression; the compiled path has no owned storage to release. Positioned errors. |
+| `memory.Fragmentation()` | Unexposed in both engines; the compiled accessor is internal (D8). One metric definition decision. |
+| Windows | The compiled runtime is not linked, so no allocator, no `memory.*` lowering, no routing, no task reclaim; `delete` keeps the libc path. A small literal co-allocates through the same generated helpers, which emit libc calls there. Unchanged statement. |
+| Escaping values / aliasing | A pointer that escapes a finished task or an aliased `delete` is undefined, as §10 says. No detection. |
+| A task's cross-owner free | `ql_free` of a main-thread object from a task is memory-safe but the object returns to the main slab; the ownership model describes blocks, and reclaim is per owner. Documented, not detected. |
+
+### 5. Measurements
+
+The D1 routing moved the tide observable row: its `toString` string is now a counted-slab allocation
+instead of a host one. The record was re-recorded through `bench/tide/run.sh --record`, the standard's
+measurement wording moved to 0.8.13, and the generated report is
+[`tide-benchmark.md`](tide-benchmark.md); the rows and their spreads are the record's, not a claim of a
+fast machine. The
+allocator's own overhead was measured in stage 1 and is unchanged; routing the runtime's small
+allocations adds the same per-object cost to strings and hash entries that stage 1 measured for
+language allocations (1.4–2.1× libc for small sizes), which is the price of a metric that covers the
+whole artifact.
+
+#### 5.1 Small-literal co-allocation (later change)
+
+Measured through the checked-in harness, both records canonical (1e8 rounds, 5 runs). Before, from
+`main` (`10d22e2`, load 0.85): observable **3.07 s** (30.70 ns/round, spread 1.20%), no-sink floor
+**1.19 s**, legacy shape **1.31 s**. After, this change (`--record`, load 1.35): observable
+**2.86 s** (28.64 ns/round, spread 4.47%), no-sink floor **0.63 s**, legacy shape **0.52 s**. The
+observable row's five runs are 2.81–2.94 s against the old record's 3.05–3.09 s, so the row moved
+down; the no-sink (list-only) row moved 47% and the legacy (allocate/delete only) row 60%. The
+observable gain is smaller because the renderer, not the list allocation, is now the exposed
+critical path.
+
+The attribution controls were also repaired for this measurement: D1 had left `--attribution`
+unable to compile (the extracted `ql_list_int_str` was included before the allocator declarations
+and released with libc `free`), and the old `header` control stored the buffer pointer through an
+`int`. The honest isolated numbers (diagnostic, not record) are 13.02 ns/round for the old
+two-allocation list phase and 5.21 ns/round for the one-block phase, with the render control at
+22.00 ns before and 21.19 ns after. The isolated controls are not additive with the real loop: the
+removed allocation/free pair overlaps with the string work, which is why the end-to-end observable
+moves 2.06 ns while the list-only rows move 5.6–7.8 ns. The earlier `32.7% / 9.67 ns` split was
+measured on the pre-D1 tree (the current attribution could not run) and understated the header
+because of the truncated pointer store; it is not the current row's decomposition. On the honest
+pre-change controls the two-allocation list phase is 13.02 ns of the probe row's 31.38 ns (42.4%)
+and the render control is 22.00 ns (70.1%); the phase shares are isolated-control shares, not
+additive ones.
+
+After the change, the additive-by-construction split of the recorded observable row is:
+renderer/sink exposure 22.34 ns (78%), list allocation+release 5.21 ns (18%), loop and reads about
+1.1 ns (4%). The renderer/string path is what remains of the measured gap; the list path itself is no
+longer the second-largest exposed phase.
+
+### 6. Tests added or extended
+
+| Gate | What it pins |
+|---|---|
+| `compiler/internal/cgen/memory_surface_test.go` | lowering of the wired rows, the setBlock range/error/try control flow, the clear call |
+| `compiler/internal/cgen/delete_surface_test.go` | every enabled form and every remaining refusal, in English and Chinese; delete emits the generated release, whose helper has the inline and separate free paths |
+| `compiler/internal/cgen/list_coalloc_test.go` | the one-block/spilled literal shapes, the single grow helper, the no-more-slot-bytes budget, and an lli run that grows past the inline buffer and reads the moved elements |
+| `compiler/runtime_routing_test.go` | D1: no runtime helper reaches libc, and the routed shapes stay |
+| `compiler/testdata/memory/qthreads_mem_test.c` | clear wipe, routed runtime string, task ownership, task-end reclaim, the one-block list's allocation/free accounting, plus the stage-1 stress |
+| `internal/lang/memory_surface_test.go` | interpreter clear/compact/setBlock and the fragmentation refusal |
+| `compiler/testdata/cases*/z_memory_*.kq`, `z_delete_matrix.kq`, `z_task_reclaim.kq`, `z_list_coalloc.kq` | parity/refusal corpus rows, including combined/empty/advanced-head/big int lists and the String/float layouts through `append` and `delete` |
+| `bench/tide/attrib/attrib.c` | the attribution controls compile on the routed runtime and measure the two-allocation and one-block shapes honestly |

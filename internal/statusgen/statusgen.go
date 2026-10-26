@@ -1,8 +1,9 @@
 // Package statusgen renders the implementation-status report from machine-checkable claims.
 //
-// The standard's §11 used to be hand-written prose, and it drifted: this package derives the report
-// from spec/status/claims.tsv, where every claim names the test or corpus case that pins it, and from
-// spec/status/template.md, the prose that cannot be generated. Evidence is resolved against the tree
+// The standard's §11 used to be hand-written prose, and it drifted: this package derives the single
+// status report from spec/status/claims.tsv, where every claim names the test or corpus case that pins
+// it, and from spec/status/template.md, the prose that cannot be generated; §11 cites the report
+// instead of repeating its tables. Evidence is resolved against the tree
 // before anything is rendered, so a claim cannot cite a test that no longer exists and a corpus case
 // cannot be silently left out.
 package statusgen

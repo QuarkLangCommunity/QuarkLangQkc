@@ -237,7 +237,7 @@ char* ql_strcat(const char* a, const char* b) {
 }
 #endif
 
-/* ================= Counted-slab allocator (stage 1 of docs/compiled-memory-design.md) =================
+/* ================= Counted-slab allocator (Part II of docs/compiled-memory.md) =================
  *
  * This is the compiled runtime's memory policy: a block is a slab of `ql_mem_block_size` bytes
  * dedicated to one size class; an allocation occupies one slot of that class; release is per object.
@@ -260,7 +260,7 @@ char* ql_strcat(const char* a, const char* b) {
  * D3 reading: release preserves the payload (it does not wipe). `ql_calloc` zeroes because callers
  * asked for calloc; `ql_alloc` does not. A later same-class allocation may therefore see the previous
  * payload; the standard's contradictory "never hands another value's bytes" sentence is still an owner
- * decision, recorded in docs/compiled-memory-stage1.md.
+ * decision, recorded in Part II of docs/compiled-memory.md.
  *
  * D10 reading: every routed allocation is an opaque call. The compiler never elides one and LLVM cannot
  * see through it, which is what makes occupancy/fragmentation observable. The cost is measured, not
