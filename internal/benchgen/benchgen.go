@@ -1,9 +1,9 @@
 // Package benchgen renders the measured reports and is the drift gate for their claims.
 //
 // Each suite has a measured record (spec/bench/*.tsv), an authored prose template
-// (spec/bench/*-template.md) and a committed generated report (docs/*.md). A marked block from the
-// report is embedded in README.md (and, for the tide suite, spec/STANDARD.md §10), so a hand-edited
-// number fails a claim test instead of drifting away from the record.
+// (spec/bench/*-template.md) and a committed generated report (docs/*.md). The report is the single
+// document that carries the numbers: README.md and spec/STANDARD.md link it instead of embedding a
+// copy, so a hand-edited number fails a claim test instead of drifting away from the record.
 package benchgen
 
 import (
@@ -21,7 +21,7 @@ const (
 	DefaultTemplate = "spec/bench/tide-template.md"
 	// DefaultOut is the committed tide report, relative to the checkout root.
 	DefaultOut = "docs/tide-benchmark.md"
-	// BlockStart and BlockEnd delimit the tide block the README and the standard embed.
+	// BlockStart and BlockEnd delimit the marked block inside the single tide report.
 	BlockStart = "<!-- tide-measurements -->"
 	BlockEnd   = "<!-- /tide-measurements -->"
 	// ClaimsTSV is the measured performance-claims record, relative to the checkout root.
@@ -34,7 +34,7 @@ const (
 	ClaimsShapes = "spec/bench/claims-shapes.tsv"
 	// ClaimsRecord is the record format the claims validator accepts.
 	ClaimsRecord = "claims-v1"
-	// ClaimsBlockStart and ClaimsBlockEnd delimit the block README embeds.
+	// ClaimsBlockStart and ClaimsBlockEnd delimit the marked block inside the single claims report.
 	ClaimsBlockStart = "<!-- performance-claims -->"
 	ClaimsBlockEnd   = "<!-- /performance-claims -->"
 )
@@ -60,13 +60,13 @@ type Suite struct {
 	TSV         string                        // measured record, relative to the checkout root
 	Template    string                        // authored prose template, relative to the checkout root
 	Out         string                        // committed generated report, relative to the checkout root
-	BlockStart  string                        // marker that opens the embedded block
-	BlockEnd    string                        // marker that closes the embedded block
+	BlockStart  string                        // marker that opens the marked block
+	BlockEnd    string                        // marker that closes the marked block
 	Validate    func(*Record, string) error   // record validation, with the checkout root for shape tables
-	RenderBlock func(*Record) (string, error) // renders the embedded block
+	RenderBlock func(*Record) (string, error) // renders the marked block
 }
 
-// TideSuite is the tide report; its block is embedded in README.md and spec/STANDARD.md §10.
+// TideSuite is the tide report; it is the single document that carries the tide block.
 var TideSuite = Suite{
 	Name:        "tide",
 	TSV:         DefaultTSV,
@@ -78,7 +78,7 @@ var TideSuite = Suite{
 	RenderBlock: SummaryBlock,
 }
 
-// ClaimsSuite is the fib/sum/latency/backend report; its block is embedded in README.md.
+// ClaimsSuite is the fib/sum/latency/backend report; it is the single document that carries the claims block.
 var ClaimsSuite = Suite{
 	Name:        "claims",
 	TSV:         ClaimsTSV,
@@ -434,7 +434,7 @@ func renderReport(rec *Record, template []byte, s Suite) ([]byte, error) {
 	return []byte(text), nil
 }
 
-// SummaryBlock renders the marked block that is embedded in the report, README.md and §10.
+// SummaryBlock renders the marked block inside the single tide report.
 func SummaryBlock(rec *Record) (string, error) {
 	var b strings.Builder
 	b.WriteString(BlockStart + "\n")
@@ -795,7 +795,7 @@ func validateClaimsCoverage(seen map[string]bool, skipped string) error {
 	return nil
 }
 
-// ClaimsBlock renders the marked block the README's performance section embeds.
+// ClaimsBlock renders the marked block inside the single claims report.
 func ClaimsBlock(rec *Record) (string, error) {
 	var b strings.Builder
 	b.WriteString(ClaimsBlockStart + "\n")

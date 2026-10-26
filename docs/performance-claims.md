@@ -114,7 +114,8 @@ not in the choice of backend. The earlier "same as C" wording did not survive me
 corrected, not footnoted. The interpreter is not a speed feature; it exists to remove the compile step
 and keep REPL state. There is no checked-in CPython control, so no comparison with CPython is quoted.
 The block reports the medians, ranges and spread for every row; no workload was reshaped to restore an
-earlier ordering.
+earlier ordering. `scripts/bench-report.sh` remains a manual report: it writes no record, so its output
+is not quoted.
 
 ## Provenance: every earlier performance claim
 

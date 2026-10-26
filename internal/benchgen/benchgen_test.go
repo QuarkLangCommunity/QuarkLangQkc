@@ -45,44 +45,43 @@ func measuredBlock(t *testing.T, path string) string {
 	return text[start : end+len(BlockEnd)]
 }
 
-// TestTideClaimsMatchMeasurement fails when README or §10 shows a number that the generated record
-// does not contain, which is the drift this task exists to stop.
+// TestTideClaimsMatchMeasurement compares the single tide document with the record and fails when any
+// other document embeds a second copy of the block.
 func TestTideClaimsMatchMeasurement(t *testing.T) {
 	root := repoRoot(t)
-	doc := measuredBlock(t, filepath.Join(root, DefaultOut))
-	for _, path := range []string{"README.md", "spec/STANDARD.md"} {
-		got := measuredBlock(t, filepath.Join(root, path))
-		if got != doc {
-			t.Errorf("%s: the tide block differs from %s; run `go generate ./internal/benchgen` and copy the generated block", path, DefaultOut)
-		}
+	rec, err := Load(root, filepath.Join(root, DefaultTSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := SummaryBlock(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := measuredBlock(t, filepath.Join(root, DefaultOut)); got != strings.TrimRight(want, "\n") {
+		t.Errorf("%s: the tide block differs from the record; run `go generate ./internal/benchgen`", DefaultOut)
 	}
 	for _, path := range []string{"README.md", "spec/STANDARD.md"} {
-		b, err := os.ReadFile(filepath.Join(root, path))
-		if err != nil {
-			t.Fatal(err)
+		text := readText(t, filepath.Join(root, path))
+		if strings.Contains(text, BlockStart) || strings.Contains(text, BlockEnd) {
+			t.Errorf("%s embeds a second tide block; link %s instead", path, DefaultOut)
 		}
-		text := string(b)
-		if path == "spec/STANDARD.md" {
-			// The revision log quotes the superseded figures as history; only §10 is a live claim.
-			text = between(t, text, "## 10. Memory and lifetime", "## 11. Implementation status")
+		if strings.Contains(text, "| QuarkLang compiled, observable |") {
+			t.Errorf("%s copies the tide measurement table; link %s instead", path, DefaultOut)
 		}
-		for _, stale := range []string{"| Tide, 1e8 rounds |", "99.96% reuse", "0.195% fragmentation"} {
-			if strings.Contains(text, stale) {
-				t.Errorf("%s still contains the stale claim %q", path, stale)
-			}
+		if !strings.Contains(text, DefaultOut) {
+			t.Errorf("%s does not link the single tide document %s", path, DefaultOut)
 		}
 	}
 }
 
-// between returns the text between two markers, or fails when either is missing.
-func between(t *testing.T, text, start, end string) string {
+// readText returns one file's normalized contents.
+func readText(t *testing.T, path string) string {
 	t.Helper()
-	i := strings.Index(text, start)
-	j := strings.Index(text, end)
-	if i < 0 || j < 0 || j <= i {
-		t.Fatalf("missing section between %q and %q", start, end)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return text[i:j]
+	return normalize(string(b))
 }
 
 // TestValidateRequiresExplicitSkip checks that a missing Rust or Go control is accepted only when the
@@ -121,7 +120,7 @@ func TestValidateRequiresLoadMetadata(t *testing.T) {
 	}
 }
 
-// TestSummaryBlockReportsLoad checks that the recorded load reaches the block the README and §10 embed.
+// TestSummaryBlockReportsLoad checks that the recorded load reaches the single tide report.
 func TestSummaryBlockReportsLoad(t *testing.T) {
 	rec, err := Load(repoRoot(t), filepath.Join(repoRoot(t), DefaultTSV))
 	if err != nil {

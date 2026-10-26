@@ -36,43 +36,82 @@ func performanceClaimsBlock(t *testing.T, path string) string {
 	return text[start : end+len(ClaimsBlockEnd)]
 }
 
-// TestPerformanceClaimsMatchMeasurement fails when the README's copy differs from the generated one.
+// TestPerformanceClaimsMatchMeasurement compares the single claims document with the record and fails
+// when any other document embeds a second copy of the block.
 func TestPerformanceClaimsMatchMeasurement(t *testing.T) {
 	root := repoRoot(t)
-	doc := performanceClaimsBlock(t, filepath.Join(root, ClaimsOut))
-	got := performanceClaimsBlock(t, filepath.Join(root, "README.md"))
-	if got != doc {
-		t.Errorf("README.md: the claims block differs from %s; run `go generate ./internal/benchgen` and copy the generated block", ClaimsOut)
-	}
-}
-
-// TestPerformanceClaimsWithdrawManualNumbers fails when a withdrawn figure returns to the README.
-func TestPerformanceClaimsWithdrawManualNumbers(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join(repoRoot(t), "README.md"))
+	rec, err := Load(root, filepath.Join(root, ClaimsTSV))
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(b)
-	for _, stale := range []string{
-		"| fib(30) | **3 ms**",
-		"| fib(35) | **21 ms**",
-		"P99 (fib20×1000)",
-		"223 ms",
-		"16× faster rebuilds",
-		"22 ns/call",
-		"1517 ms",
-		"6.6×",
-		"fill4K 2.5 ms",
-		"8 ms to generate",
-		"284 ms",
-		"73.95",
-		"51.09",
-		"parity with C",
-	} {
-		if strings.Contains(text, stale) {
-			t.Errorf("README.md still contains the withdrawn claim %q", stale)
+	want, err := ClaimsBlock(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := performanceClaimsBlock(t, filepath.Join(root, ClaimsOut)); got != strings.TrimRight(want, "\n") {
+		t.Errorf("%s: the claims block differs from the record; run `go generate ./internal/benchgen`", ClaimsOut)
+	}
+	for _, path := range []string{"README.md", "spec/STANDARD.md"} {
+		text := readText(t, filepath.Join(root, path))
+		if strings.Contains(text, ClaimsBlockStart) || strings.Contains(text, ClaimsBlockEnd) {
+			t.Errorf("%s embeds a second claims block; link %s instead", path, ClaimsOut)
+		}
+		if strings.Contains(text, "| Workload | Language | Rounds | Runs | Median |") {
+			t.Errorf("%s copies the claims measurement table; link %s instead", path, ClaimsOut)
+		}
+		if !strings.Contains(text, ClaimsOut) {
+			t.Errorf("%s does not link the single claims document %s", path, ClaimsOut)
 		}
 	}
+}
+
+// TestPerformanceClaimsWithdrawManualNumbers fails when a withdrawn figure returns to live text, and
+// fails when the provenance section loses an earlier figure instead of keeping it as history.
+func TestPerformanceClaimsWithdrawManualNumbers(t *testing.T) {
+	root := repoRoot(t)
+	for _, path := range []string{"README.md", "spec/STANDARD.md", "docs/ARCHITECTURE.md", "compiler/README.md", "CONTRIBUTING.md"} {
+		text := readText(t, filepath.Join(root, path))
+		if path == "spec/STANDARD.md" {
+			// The revision log quotes superseded figures as history; the live text above it must not.
+			text = beforeRevisionLog(t, text)
+		}
+		for _, stale := range []string{
+			"| fib(30) | **3 ms**",
+			"| fib(35) | **21 ms**",
+			"P99 (fib20×1000)",
+			"223 ms",
+			"16× faster rebuilds",
+			"22 ns/call",
+			"1517 ms",
+			"6.6×",
+			"fill4K 2.5 ms",
+			"8 ms to generate",
+			"284 ms",
+			"73.95",
+			"51.09",
+			"parity with C",
+		} {
+			if strings.Contains(text, stale) {
+				t.Errorf("%s still contains the withdrawn claim %q", path, stale)
+			}
+		}
+	}
+	provenance := readText(t, filepath.Join(root, ClaimsOut))
+	for _, kept := range []string{"`fib(35)` in 21 ms", "P99 (fib20×1000)", "223 ms", "73.95", "1517 ms"} {
+		if !strings.Contains(provenance, kept) {
+			t.Errorf("%s no longer records the earlier figure %q; provenance is content, not duplication", ClaimsOut, kept)
+		}
+	}
+}
+
+// beforeRevisionLog returns the live standard text, excluding the historical revision log.
+func beforeRevisionLog(t *testing.T, text string) string {
+	t.Helper()
+	if at := strings.Index(text, "## 12. Change policy and revision log"); at >= 0 {
+		return text[:at]
+	}
+	t.Fatal("spec/STANDARD.md has no revision log section")
+	return ""
 }
 
 // claimsProbe is one mutation of a valid claims record and the text its rejection must contain.
@@ -228,43 +267,96 @@ func TestClaimsHarnessRefusesProbesAndAcceptsCanonical(t *testing.T) {
 	}
 }
 
-// TestREADMENumbersStayInMarkedBlocks fails when a timing value appears outside the generated blocks.
-func TestREADMENumbersStayInMarkedBlocks(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join(repoRoot(t), "README.md"))
+// TestTimingNumbersStayInAuthoritativeReports fails when a timing value appears outside the single
+// report that owns it; history, the generator inputs and the stress measurement records are the only
+// allowed exceptions, each named here so a new copy fails instead of joining an implicit allow-list.
+func TestTimingNumbersStayInAuthoritativeReports(t *testing.T) {
+	root := repoRoot(t)
+	allowed := map[string]bool{
+		"docs/tide-benchmark.md":        true,
+		"docs/performance-claims.md":    true,
+		"docs/compiled-memory.md":       true, // historical figures under the banner
+		"CHANGELOG.md":                  true, // release history
+		"stress/NOTES.md":               true,
+		"stress/REPORT.md":              true,
+		"spec/bench/claims-template.md": true, // generator input of the claims report
+		"spec/bench/tide-template.md":   true, // generator input of the tide report
+	}
+	timing := regexp.MustCompile(`[0-9]+(\.[0-9]+)? ?(ms|µs|ns)\b`)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if allowed[rel] {
+			return nil
+		}
+		text := readText(t, path)
+		if rel == "spec/STANDARD.md" {
+			text = beforeRevisionLog(t, text)
+		}
+		for n, line := range strings.Split(text, "\n") {
+			if timing.MatchString(line) {
+				t.Errorf("%s line %d has a timing value outside the single reports: %s", rel, n+1, line)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := normalize(string(b))
-	for _, block := range [][2]string{{BlockStart, BlockEnd}, {ClaimsBlockStart, ClaimsBlockEnd}} {
-		start := strings.Index(text, block[0])
-		end := strings.Index(text, block[1])
-		if start < 0 || end < start {
-			t.Fatalf("README.md has no complete %s block", block[0])
-		}
-		text = text[:start] + text[end+len(block[1]):]
-	}
-	timing := regexp.MustCompile(`[0-9]+(\.[0-9]+)? ?(ms|µs|ns)\b`)
-	for n, line := range strings.Split(text, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), ">") {
-			continue
-		}
-		if timing.MatchString(line) {
-			t.Errorf("README.md line %d has a timing value outside the generated blocks: %s", n+1, line)
-		}
-	}
 }
 
-// TestHistoricalDocsCarryTheBanner keeps the one-off measurements from reading as current claims.
-func TestHistoricalDocsCarryTheBanner(t *testing.T) {
-	for _, path := range []string{
-		"docs/compiled-memory.md",
+// TestSingleCopyLayout enforces the consolidation: the old files are gone, every surviving topic has
+// exactly one document, and the two reports carry the only embedded blocks.
+func TestSingleCopyLayout(t *testing.T) {
+	root := repoRoot(t)
+	for _, gone := range []string{
+		"docs/compiled-memory-design.md",
+		"docs/compiled-memory-stage1.md",
+		"docs/compiled-memory-stage2.md",
+		"docs/performance-claims-inventory.md",
 	} {
-		b, err := os.ReadFile(filepath.Join(repoRoot(t), path))
-		if err != nil {
-			t.Fatal(err)
+		if _, err := os.Stat(filepath.Join(root, gone)); !os.IsNotExist(err) {
+			t.Errorf("%s still exists; its content belongs to the single document that owns the topic", gone)
 		}
-		if !strings.Contains(string(b), "**Historical measurements.**") {
-			t.Errorf("%s carries timing figures without the historical banner", path)
+	}
+	for _, path := range []string{"README.md", "spec/STANDARD.md"} {
+		text := readText(t, filepath.Join(root, path))
+		for _, doc := range []string{DefaultOut, ClaimsOut} {
+			if !strings.Contains(text, doc) {
+				t.Errorf("%s does not link %s", path, doc)
+			}
 		}
+		for _, marker := range []string{BlockStart, ClaimsBlockStart} {
+			if strings.Contains(text, marker) {
+				t.Errorf("%s embeds the copy marker %q", path, marker)
+			}
+		}
+	}
+	merged := readText(t, filepath.Join(root, "docs/compiled-memory.md"))
+	for _, want := range []string{"## Part I", "## Part II", "## Part III", "**Historical measurements.**"} {
+		if !strings.Contains(merged, want) {
+			t.Errorf("docs/compiled-memory.md lacks %q", want)
+		}
+	}
+	if strings.Count(merged, "**Historical measurements.**") != 1 {
+		t.Errorf("docs/compiled-memory.md must carry one historical-measurement banner")
+	}
+	if !strings.Contains(readText(t, filepath.Join(root, ClaimsOut)), "## Provenance: every earlier performance claim") {
+		t.Errorf("%s does not own the claim provenance section", ClaimsOut)
 	}
 }
