@@ -63,21 +63,13 @@ go build -o qklsp   ./cmd/qklsp   && ./qklsp                      # editor integ
 go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.1
 ```
 
-`v1.1.1` is the current Go module version, and the module is the supported distribution path for the
-compiler: the tag carries the public module path with the compiler inside the root module. The `v2.x`
-project tags are not Go module versions for this path, so `@latest` resolves to `v1.1.1`; see
-`docs/module-consumability.md` for the measurements and the tag rule.
-
-`v1.1.0` was the first consumable module tag but has **no release assets**: its tag-triggered
-`release.yml` run failed because the workflow pinned Go 1.21 while `go.mod` requires Go 1.26. `v1.1.1`
-was tagged after that pin was fixed, so it is the first tag that is both consumable as a module and has
-published assets. The Go module line advances independently of the project's `VERSION`/release numbering
-(`2.1.0`).
+`v1.1.1` is the current Go module version. [`docs/module-consumability.md`](docs/module-consumability.md)
+owns the tag rule — why `@latest` resolves to `v1.1.1`, why the module line advances independently of the
+project's `VERSION`/release numbering (`2.1.0`), and the release-assets history.
 
 > Project releases such as `v2.1.0` ship both **versioned** assets (`quark-2.1.0-linux-amd64`) and
 > **version-less aliases** (`quark-linux-amd64`) so scripts can pin a stable URL. Verify downloads against
-> `MANIFEST-<version>-<platform>.txt` (sha256). The `v1.1.1` module release publishes the version-less
-> binaries built by `release.yml`.
+> `MANIFEST-<version>-<platform>.txt` (sha256).
 
 <details>
 <summary>Building from source: full notes (interpreter / compiler dependencies)</summary>
@@ -576,6 +568,8 @@ shown there rather than asserted. The allocation-heavy tide is measured separate
 ## Known gaps
 
 Written down on purpose — a young language is better judged by what it admits than by what it advertises.
+The full catalogue, with evidence and the closed items, is in
+[`docs/ARCHITECTURE.md` §6](docs/ARCHITECTURE.md#6-known-gaps); this list is the user-facing summary.
 
 - **Compiler parity is per-construct, not per-program.** The interpreter and `qkc` are held to byte-identical output
   on the checked-in corpus (`compiler/testdata/compare.sh`, enforced in CI). Constructs the compiler cannot lower yet

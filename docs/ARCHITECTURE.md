@@ -278,6 +278,8 @@ The three Go modules in play:
   `TestDecouplingRatchet` (`:240`), `TestEnglishSourceRatchet` (`:267`),
   `TestTRendersTheCatalogForTheRequestedLanguage` (`:294`),
   `TestCatalogDirectionFollowsTheSourceLanguage` (`:319`) — plus `verborder_test.go:19`.
+- **Design and migration**: [`i18n-design.md`](i18n-design.md) owns the design rationale and the
+  migration plan; this entry owns the interface contract.
 - **Failure modes**: the substitution-verb multiset must match between the two languages
   (`coverage_test.go:190`). A template absent from the catalog renders in its own source language and
   **is counted, not refused** (`i18n.go:206-207`), so silent fallback is observable but not blocking.
@@ -812,8 +814,10 @@ under `-count=200` (also `-count=2000`).
 | `stress/NOTES.md` | all three findings of the first full run are **closed**; the 3 fixed defects are the front-end crash, the quadratic VM compilation, and the engines disagreeing at the recursion limit |
 | `stress/known-failures.txt` | empty, with the rules for adding an entry, and the reason a stale entry is itself reported as a warning |
 
-The §11 rows above quote the hand-written status at `67ce88c`. §11 of the standard is now a citation to
-the generated `docs/implementation-status.md`, and the generated §11.1 corrects the old list: `===`,
+The table above is a historical snapshot of the hand-written status at `67ce88c`, kept as the record of
+this cross-check. The live rows are maintained only in the generated
+[`implementation-status.md`](implementation-status.md); §11 of the standard cites that report, and its
+§11.1 corrects the old list: `===`,
 permission references, `&lvalue` and `p++` are **interpreter-only**, because the compiler refuses all
 four; the generated report also carries `#ifn`, `#expand`/`#run` and the per-engine memory rows.
 
@@ -822,13 +826,14 @@ four; the generated report also carries `#ifn`, `#expand`/`#run` and the per-eng
 | # | Gap | Where it is stated |
 |---|---|---|
 | G-1 | a caller's `try` does not catch a runtime error raised inside a callee, in the compiled engine | `stress/NOTES.md:102-105` |
-| G-2 | cgen's IR generation is superlinear on one deep chain: 6.0 s @20k, 29.2 s @40k, 175.5 s @80k additions, while the shared frontend is 0.15 s @80k | `stress/NOTES.md:107-112` |
-| G-3 | `path_fn_10k_params` sits just inside the 10 s default bound (9.18 s, 1660 MiB peak) — deliberately *not* in the allow-list, and CI skips it | `stress/NOTES.md:116-121`, `ci.yml:49-53` |
+| G-2 | cgen's IR generation is superlinear on one deep chain, while the shared frontend is not; the measured durations are recorded in the single stress log | `stress/NOTES.md:107-112` |
+| G-3 | `path_fn_10k_params` sits just inside the default bound, so it is deliberately *not* in the allow-list and CI skips it; the measured duration and peak RSS are in the stress log | `stress/NOTES.md:116-121`, `ci.yml:49-53` |
 | G-4 | macro spelling, exceptions and built-in containers still diverge from the standard | generated status report §11.3 (`docs/implementation-status.md`) |
 | G-5 | `bits<N>` layout rounds up rather than aligning to 1 as §3.1 requires; values are exact | generated status report §11.2 (`docs/implementation-status.md`) |
 
-The G-2 and G-3 durations are historical observations copied from `stress/NOTES.md`; no harness records
-them and they are not regenerated. The live performance claims are in
+The G-2 and G-3 measurements are recorded only in `stress/NOTES.md`, the single stress log; this
+catalogue names the gap and links that log instead of copying its figures. They are historical
+observations, not regenerated claims. The live performance claims are in
 [`performance-claims.md`](performance-claims.md).
 
 ### 6.2 Gaps found by reading the code in this pass

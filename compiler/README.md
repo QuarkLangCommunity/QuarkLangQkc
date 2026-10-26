@@ -25,11 +25,8 @@ that module is the supported distribution path:
 go install github.com/QuarkLangCommunity/QuarkLangQkc/compiler@v1.1.1
 ~~~
 
-`v1.1.1` is the current module version; `@latest` resolves to it because the project's `v2.x` tags are not
-Go module versions for a path without `/v2`. `v1.1.0` was the first consumable tag but has no GitHub
-release assets: its tag-triggered run failed on the old Go 1.21 pin, before the workflow was corrected.
-The project's `VERSION`/release numbering (`2.1.0`) is independent of the Go module line. See
-[`docs/module-consumability.md`](../docs/module-consumability.md) for the measurements and the tag rule.
+`v1.1.1` is the current module version. [`docs/module-consumability.md`](../docs/module-consumability.md)
+owns the tag rule and the release-assets history; this page only states what to install.
 
 ## Usage
 
