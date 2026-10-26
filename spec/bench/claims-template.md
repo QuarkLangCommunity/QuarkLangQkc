@@ -172,7 +172,7 @@ correctness or status facts, not performance claims.
 
 ## Why this matters
 
-Three of the README claims are wrong or unsupportable as written:
+Three of the README claims were wrong or unsupportable as written:
 
 1. R-02/R-09/R-10 mix different source programs. `bench/qk/fib.qk` computes `fib(30)`, while the C,
    Rust, Go and Erlang sources compute `fib(35)`, and `bench/Makefile` compiles `examples/fib.qk` for
@@ -208,8 +208,7 @@ had to be withdrawn because it could not be put under the machinery.
 
 The claims harness replaced the manual figures with one record taken on the reference class
 (Linux x86_64, 16 logical CPUs, 1-minute load average 0.39, five timed runs per row). The complete
-table and its spreads are in [`performance-claims.md`](performance-claims.md); these are the moves
-that matter.
+table and its spreads are in the generated block above; these are the moves that matter.
 
 | Claim | Earlier figure | Measured figure | Disposition |
 |---|---|---|---|
@@ -251,5 +250,5 @@ prose, the prose was corrected or the claim was withdrawn; the standard's revisi
 the same moves.
 
 A claim that can be measured again belongs in the record above. A claim that cannot is recorded
-below with the reason it moved, and it does not keep a number where a reader could take it as a fact
+above with the reason it moved, and it does not keep a number where a reader could take it as a fact
 about the current build.
