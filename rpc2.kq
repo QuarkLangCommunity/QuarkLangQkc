@@ -1,1 +1,0 @@
-fn main(IOStream io) { int x = 5; io.println(x); }
