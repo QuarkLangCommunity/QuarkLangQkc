@@ -3,6 +3,9 @@
 # and Linguist reads the .inc suffix as C++, which made the language bar report 57% C++; marking it generated keeps it out of the statistics.
 internal/lang/ffi_win.inc linguist-generated=true
 
+# The tree-sitter parser under editors/ is generated from grammar.js; keep it out of the language statistics.
+editors/tree-sitter-quarklang/src/** linguist-generated=true
+
 # Compiled artefacts: excluded from diffs
 compiler/qkc binary
 
