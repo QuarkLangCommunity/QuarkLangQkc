@@ -137,7 +137,12 @@ jobs:
         run: |
           if command -v tree-sitter >/dev/null 2>&1; then
             cd editors/tree-sitter-quarklang
+            [ "$(tree-sitter --version)" = "tree-sitter 0.26.11" ] || {
+              echo "tree-sitter $(tree-sitter --version), but the checked-in parser was generated with 0.26.11"
+              exit 1
+            }
             tree-sitter generate
+            git diff --exit-code -- src
             tree-sitter test -p .
           else
             echo "tree-sitter CLI not installed, skipping"

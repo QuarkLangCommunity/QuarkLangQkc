@@ -17,7 +17,6 @@ module.exports = grammar({
   word: $ => $.identifier,
 
   conflicts: $ => [
-    [$.new_expression],
     [$.primary, $.type_base],
   ],
 

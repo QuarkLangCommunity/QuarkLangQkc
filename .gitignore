@@ -19,6 +19,7 @@ out2.txt
 *.swp
 *.xmind
 lang.test
+node_modules/
 
 dist/
 dist-ci/
